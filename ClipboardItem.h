@@ -13,9 +13,23 @@
 class ClipboardItem {
 
 public:
-    ClipboardItem(const QString &text, const QPixmap &image, const QString &html, const QList<QUrl> &urls);
+    ClipboardItem(const QPixmap &icon, const QString &text, const QPixmap &image, const QString &html, const QList<QUrl> &urls);
+
+    ClipboardItem() = default;
+
+    const QString &getText() const;
+
+    const QPixmap &getImage() const;
+
+    const QString &getHtml() const;
+
+    const QList<QUrl> &getUrls() const;
+
+    const QPixmap &getIcon() const;
 
 private:
+    QPixmap icon;
+
     QString text;
     QPixmap image;
     QString html;

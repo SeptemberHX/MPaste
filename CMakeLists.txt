@@ -21,7 +21,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DQT_DEBUG")
 set(BIN_NAME MPaste)
 
 # Sources files
-file(GLOB SRCS "*.h" "*.cpp")
+file(GLOB SRCS "*.h" "*.cpp" "widget/*.ui" "widget/*.h" "widget/*.cpp")
 
 # Find the library
 find_package(PkgConfig REQUIRED)

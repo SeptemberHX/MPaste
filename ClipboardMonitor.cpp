@@ -10,10 +10,11 @@
 #include <QGuiApplication>
 #include <QMimeData>
 #include <QUrl>
+#include "XUtils.h"
 
 void ClipboardMonitor::clipboardChanged() {
     int wId = KWindowSystem::activeWindow();
-    std::cout << wId << std::endl;
+    std::cout << wId << XUtils::getWindowAppName(wId).toStdString() << std::endl;
 
     const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
 
@@ -40,7 +41,7 @@ void ClipboardMonitor::clipboardChanged() {
         urls = mimeData->urls();
     }
 
-    Q_EMIT clipboardUpdated(ClipboardItem(text, image, html, urls), wId);
+    Q_EMIT clipboardUpdated(ClipboardItem(XUtils::getWindowIconName(wId), text, image, html, urls), wId);
 }
 
 ClipboardMonitor::ClipboardMonitor() {

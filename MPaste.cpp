@@ -4,11 +4,13 @@
 
 #include <QApplication>
 #include "ClipboardMonitor.h"
+#include "widget/ClipboardItemWidget.h"
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
 
-    ClipboardMonitor monitor;
+    ClipboardItemWidget widget;
+    widget.show();
 
     return app.exec();
 }
