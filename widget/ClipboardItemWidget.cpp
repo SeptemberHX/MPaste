@@ -25,11 +25,6 @@ ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
     effect->setBlurRadius(20);
     this->innerShadowedWidget->setGraphicsEffect(effect);
     this->innerShadowedWidget->setAttribute(Qt::WA_TranslucentBackground, false);
-
-    this->monitor = new ClipboardMonitor();
-    connect(this->monitor, &ClipboardMonitor::clipboardUpdated, this, [this] (ClipboardItem nItem, int wId) {
-        this->showItem(nItem);
-    });
 }
 
 void ClipboardItemWidget::showItem(ClipboardItem nItem) {

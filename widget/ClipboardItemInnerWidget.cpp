@@ -21,6 +21,10 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     this->mLayout->addWidget(this->textEdit);
     this->textEdit->hide();
 
+    this->textBrowser = new QTextBrowser(ui->bodyWidget);
+    this->mLayout->addWidget(this->textBrowser);
+    this->textBrowser->hide();
+
     this->setStyleSheet(genStyleSheetStr(this->bgColor, this->bgColor));
 }
 
@@ -57,9 +61,12 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
     this->setIcon(item.getIcon());
 
     if (!item.getHtml().isEmpty()) {
-        this->textEdit->show();
-        this->textEdit->setHtml(item.getHtml());
-        this->textEdit->setAcceptRichText(true);
+        this->textBrowser->show();
+        this->textBrowser->setHtml(item.getHtml());
+//        this->textEdit->show();
+//        this->textEdit->setHtml(item.getHtml());
+//        this->textEdit->document()->setHtml(item.getHtml());
+//        this->textEdit->setAcceptRichText(true);
     } else if (!item.getText().isEmpty()) {
         this->textEdit->show();
         this->textEdit->setPlainText(item.getText());

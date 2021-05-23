@@ -3,13 +3,12 @@
 //
 
 #include <QApplication>
-#include "ClipboardMonitor.h"
-#include "widget/ClipboardItemWidget.h"
+#include "widget/MPasteWidget.h"
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
 
-    ClipboardItemWidget widget;
+    MPasteWidget widget;
     widget.show();
 
     return app.exec();

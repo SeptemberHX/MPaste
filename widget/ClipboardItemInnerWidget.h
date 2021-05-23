@@ -5,6 +5,7 @@
 #include <QHBoxLayout>
 #include <QPlainTextEdit>
 #include <QTextEdit>
+#include <QTextBrowser>
 #include "ClipboardItem.h"
 
 namespace Ui {
@@ -30,6 +31,7 @@ private:
 
     QPlainTextEdit *plainTextEdit;
     QTextEdit *textEdit;
+    QTextBrowser *textBrowser;
     QHBoxLayout *mLayout;
 };
 
