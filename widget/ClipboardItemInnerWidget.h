@@ -3,7 +3,7 @@
 
 #include <QWidget>
 #include <QHBoxLayout>
-#include <QPlainTextEdit>
+#include <QLabel>
 #include <QTextEdit>
 #include "MTextBrowser.h"
 #include "ClipboardItem.h"
@@ -30,6 +30,7 @@ private:
     QColor bgColor;
 
     MTextBrowser *textBrowser;
+    QLabel *imageLabel;
     QHBoxLayout *mLayout;
 };
 
