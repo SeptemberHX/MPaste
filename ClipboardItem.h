@@ -9,6 +9,7 @@
 #include <QPixmap>
 #include <QList>
 #include <QUrl>
+#include <QDateTime>
 
 class ClipboardItem {
 
@@ -31,6 +32,8 @@ public:
 
     const QPixmap &getIcon() const;
 
+    const QDateTime &getTime() const;
+
 private:
     QPixmap icon;
 
@@ -38,6 +41,7 @@ private:
     QPixmap image;
     QString html;
     QList<QUrl> urls;
+    QDateTime time;
 };
 
 

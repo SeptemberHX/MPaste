@@ -158,6 +158,11 @@
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
+     <property name="font">
+      <font>
+       <pointsize>9</pointsize>
+      </font>
+     </property>
      <property name="text">
       <string>50 characters</string>
      </property>

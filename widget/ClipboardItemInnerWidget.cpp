@@ -16,6 +16,7 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     this->mLayout->setMargin(0);
 
     this->textBrowser = new MTextBrowser(ui->bodyWidget);
+    this->textBrowser->setFrameStyle(QFrame::NoFrame);
     this->textBrowser->setReadOnly(true);
     this->textBrowser->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->textBrowser->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -89,6 +90,7 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
             if (bgColorExp.indexIn(item.getHtml()) != -1) {
                 QString colorStr = bgColorExp.cap(1);
                 ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr));
+                ui->countLabel->setStyleSheet(QString("#countLabel {background-color:%1;}").arg(colorStr));
             }
             ui->countLabel->setText(QString("%1 Characters").arg(item.getText().size()));
         }
@@ -102,6 +104,8 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
         ui->countLabel->setText(QString("%1 x %2 Pixels").arg(item.getImage().height()).arg(item.getImage().width()));
         ui->typeLabel->setText(tr("Image"));
     }
+
+    ui->timeLabel->setText(item.getTime().toString(Qt::SystemLocaleShortDate));
 }
 
 void ClipboardItemInnerWidget::showBorder(bool flag) {
@@ -124,3 +128,23 @@ QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topCol
                    "#typeLabel, #timeLabel { color: #FFFFFF; } "
                    "QFrame#innerWidget {border: %3px solid #1684fc;} ").arg(bgColor.name(), topColor.name(), QString::number(borderWidth));
 }
+
+//void ClipboardItemInnerWidget::refreshTimeGap() {
+//    // calculate time
+//    qlonglong sec = item.getTime().secsTo(QDateTime::currentDateTime());
+//    QString timStr;
+//    if (sec < 60) {
+//        timStr = QString("%1 seconds ago").arg(sec);
+//    } else if (sec < 3600) {
+//        timStr = QString("%1 minutes ago").arg(sec / 60);
+//    } else if (sec < 60 * 60 * 24) {
+//        timStr = QString("%1 hours ago").arg(sec / (60 * 60));
+//    } else if (sec < 60 * 60 * 24 * 7) {
+//        timStr = QString("%1 days ago").arg(sec / (60 * 60 * 24));
+//    } else if (sec < 60 * 60 * 24 * 30) {
+//        timStr = QString("%1 weeks ago").arg(sec / (60 * 60 * 24 * 7));
+//    } else {
+//        timStr = QString("%1 months ago").arg(sec / (60 * 60 * 24 * 30));
+//    }
+//    ui->timeLabel->setText(timStr);
+//}

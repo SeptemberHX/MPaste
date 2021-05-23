@@ -12,7 +12,7 @@ ClipboardItem::ClipboardItem(const QPixmap &icon, const QString &text, const QPi
     , html(html)
     , urls(urls)
 {
-
+    this->time = QDateTime::currentDateTime();
 }
 
 const QString &ClipboardItem::getText() const {
@@ -44,4 +44,8 @@ const bool ClipboardItem::sameContent(ClipboardItem item) const {
 
 const bool ClipboardItem::isEmpty() const {
     return this->getHtml().isEmpty() && this->getText().isEmpty() && this->getImage().isNull() && this->getUrls().isEmpty();
+}
+
+const QDateTime &ClipboardItem::getTime() const {
+    return time;
 }

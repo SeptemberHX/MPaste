@@ -7,6 +7,7 @@
 #include "ClipboardItem.h"
 #include <QHBoxLayout>
 #include <QMimeData>
+#include <QMenu>
 
 namespace Ui {
 class MPasteWidget;
@@ -21,6 +22,9 @@ public:
     ~MPasteWidget();
 
     bool eventFilter(QObject *watched, QEvent *event) override;
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
 
 private slots:
     void itemClicked();
@@ -38,6 +42,8 @@ private:
 
     ClipboardItemWidget *currItemWidget;
     QMimeData *mimeData;
+
+    QMenu *menu;
 };
 
 #endif // MPASTEWIDGET_H

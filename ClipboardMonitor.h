@@ -17,7 +17,7 @@ public:
 signals:
     void clipboardUpdated(ClipboardItem item, int wId);
 
-private slots:
+public slots:
     void clipboardChanged();
 };
 
