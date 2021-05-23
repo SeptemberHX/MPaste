@@ -27,6 +27,8 @@ public:
     void showItem(ClipboardItem item);
 
     void showBorder(bool flag);
+    void setShortkeyInfo(int num);
+    void clearShortkeyInfo();
 
 private:
     void refreshStyleSheet();

@@ -35,6 +35,7 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     ui->widget_2->setAttribute(Qt::WA_TranslucentBackground);
     ui->typeLabel->setAttribute(Qt::WA_TranslucentBackground);
     ui->timeLabel->setAttribute(Qt::WA_TranslucentBackground);
+    ui->infoWidget->setStyleSheet("{color: #666666;}");
 
     this->refreshStyleSheet();
 }
@@ -90,7 +91,7 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
             if (bgColorExp.indexIn(item.getHtml()) != -1) {
                 QString colorStr = bgColorExp.cap(1);
                 ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr));
-                ui->countLabel->setStyleSheet(QString("#countLabel {background-color:%1;}").arg(colorStr));
+                ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr));
             }
             ui->countLabel->setText(QString("%1 Characters").arg(item.getText().size()));
         }
@@ -127,6 +128,14 @@ QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topCol
                    "#topWidget { background-color: %2;} "
                    "#typeLabel, #timeLabel { color: #FFFFFF; } "
                    "QFrame#innerWidget {border: %3px solid #1684fc;} ").arg(bgColor.name(), topColor.name(), QString::number(borderWidth));
+}
+
+void ClipboardItemInnerWidget::setShortkeyInfo(int num) {
+    ui->shortkeyLabel->setText(QString("Alt+%1").arg(num));
+}
+
+void ClipboardItemInnerWidget::clearShortkeyInfo() {
+    ui->shortkeyLabel->setText("");
 }
 
 //void ClipboardItemInnerWidget::refreshTimeGap() {

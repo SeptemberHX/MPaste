@@ -53,3 +53,11 @@ void ClipboardItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
 const ClipboardItem &ClipboardItemWidget::getItem() const {
     return item;
 }
+
+void ClipboardItemWidget::setShortcutInfo(int num) {
+    this->innerShadowedWidget->setShortkeyInfo(num);
+}
+
+void ClipboardItemWidget::clearShortcutInfo() {
+    this->innerShadowedWidget->clearShortkeyInfo();
+}

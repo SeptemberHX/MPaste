@@ -13,6 +13,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     mimeData(nullptr)
 {
     ui->setupUi(this);
+    this->numKeyList << Qt::Key_1 << Qt::Key_2 << Qt::Key_3 << Qt::Key_4 << Qt::Key_5 << Qt::Key_6 << Qt::Key_7 << Qt::Key_8 << Qt::Key_9 << Qt::Key_0;
 
     std::cout << "Init media player..." << std::endl;
     this->player = new QMediaPlayer(this, QMediaPlayer::LowLatency);
@@ -50,7 +51,13 @@ MPasteWidget::~MPasteWidget()
 
 bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::Wheel) {
+
+        // it seems to crash with 5.11 on UOS, but work well on Deepin V20
+#if (QT_VERSION >= QT_VERSION_CHECK(5,12,0))
         QCoreApplication::sendEvent(ui->scrollArea->horizontalScrollBar(), event);
+        return true;
+#endif
+
     }
 
     return QObject::eventFilter(watched, event);
@@ -69,9 +76,7 @@ void MPasteWidget::setCurrentItem(ClipboardItemWidget *widget) {
 
 void MPasteWidget::itemDoubleClicked() {
     ClipboardItemWidget *widget = dynamic_cast<ClipboardItemWidget*>(sender());
-    this->hide();
-    this->setCurrentItem(widget);
-    this->setClipboard(widget->getItem());
+    this->setCurrentItemAndClipboard(widget);
 }
 
 void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
@@ -125,5 +130,37 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         this->hide();
     }
 
+    if (event->key() == Qt::Key_Alt) {
+        for (int i = 0; i < this->layout->count() - 1; ++i) {
+            auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+            widget->setShortcutInfo((i + 1) % 10);
+        }
+    }
+
+    if (event->modifiers() & Qt::AltModifier) {
+        int keyIndex = this->numKeyList.indexOf(event->key());
+        if (keyIndex >= 0 && keyIndex < this->layout->count() - 1) {
+            auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(keyIndex)->widget());
+            this->setCurrentItemAndClipboard(widget);
+        }
+    }
+
     QWidget::keyPressEvent(event);
+}
+
+void MPasteWidget::setCurrentItemAndClipboard(ClipboardItemWidget *widget) {
+    this->setCurrentItem(widget);
+    this->setClipboard(widget->getItem());
+    this->hide();
+}
+
+void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Alt) {
+        for (int i = 0; i < this->layout->count() - 1; ++i) {
+            auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+            widget->clearShortcutInfo();
+        }
+    }
+
+    QWidget::keyReleaseEvent(event);
 }

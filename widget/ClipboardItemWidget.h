@@ -20,6 +20,8 @@ public:
     explicit ClipboardItemWidget(QWidget *parent= nullptr);
 
     const ClipboardItem &getItem() const;
+    void setShortcutInfo(int num);
+    void clearShortcutInfo();
 
 signals:
     void clicked();

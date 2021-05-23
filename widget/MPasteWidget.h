@@ -23,9 +23,10 @@ public:
     ~MPasteWidget();
 
     bool eventFilter(QObject *watched, QEvent *event) override;
-
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+
+    void keyReleaseEvent(QKeyEvent *event) override;
 
 private slots:
     void itemClicked();
@@ -36,6 +37,7 @@ private:
     void setCurrentItem(ClipboardItemWidget *item);
     void setSelectedItem(ClipboardItemWidget *item);
     void setClipboard(const ClipboardItem &item);
+    void setCurrentItemAndClipboard(ClipboardItemWidget *item);
 
     Ui::MPasteWidget *ui;
     QHBoxLayout *layout;
@@ -47,6 +49,7 @@ private:
     QMenu *menu;
 
     QMediaPlayer *player;
+    QList<int> numKeyList;
 };
 
 #endif // MPASTEWIDGET_H
