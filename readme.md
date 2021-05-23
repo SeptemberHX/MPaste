@@ -6,6 +6,10 @@ A clipboard manager for Deepin V20.
 
 > Still working in progress
 
+## Shortcut
+
+* `ctrl-alt-q`: show/hide window
+
 ## Screenshot
 
 ![s1](./images/s1.png)
