@@ -17,3 +17,4 @@ A clipboard manager for Deepin V20.
 ##
 
 * [QHotKey](https://github.com/Skycoder42/QHotkey.git)
+* sound effect from https://www.zapsplat.com/
