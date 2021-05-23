@@ -18,3 +18,9 @@ A clipboard manager for Deepin V20.
 
 * [QHotKey](https://github.com/Skycoder42/QHotkey.git)
 * sound effect from https://www.zapsplat.com/
+
+## Todo
+
+* Use image instead of widget in scroll area to speed up
+* Save to file
+* Categories

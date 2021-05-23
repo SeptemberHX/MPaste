@@ -131,7 +131,7 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
     }
 
     if (event->key() == Qt::Key_Alt) {
-        for (int i = 0; i < this->layout->count() - 1; ++i) {
+        for (int i = 0; i < this->layout->count() - 1 && i < 10; ++i) {
             auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
             widget->setShortcutInfo((i + 1) % 10);
         }
