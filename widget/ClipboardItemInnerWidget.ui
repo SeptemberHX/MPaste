@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>ClipboardItemInnerWidget</class>
- <widget class="QWidget" name="ClipboardItemInnerWidget">
+ <widget class="QFrame" name="ClipboardItemInnerWidget">
   <property name="geometry">
    <rect>
     <x>0</x>

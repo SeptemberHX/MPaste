@@ -34,3 +34,14 @@ const QList<QUrl> &ClipboardItem::getUrls() const {
 const QPixmap &ClipboardItem::getIcon() const {
     return icon;
 }
+
+const bool ClipboardItem::sameContent(ClipboardItem item) const {
+    if (this->getHtml() != item.getHtml()) return false;
+    if (this->getText() != item.getText()) return false;
+    if (this->getImage().toImage() != item.getImage().toImage()) return false;
+    return true;
+}
+
+const bool ClipboardItem::isEmpty() const {
+    return this->getHtml().isEmpty() && this->getText().isEmpty() && this->getImage().isNull() && this->getUrls().isEmpty();
+}

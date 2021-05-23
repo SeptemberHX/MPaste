@@ -15,6 +15,10 @@ class ClipboardItem {
 public:
     ClipboardItem(const QPixmap &icon, const QString &text, const QPixmap &image, const QString &html, const QList<QUrl> &urls);
 
+    const bool sameContent(ClipboardItem item) const;
+
+    const bool isEmpty() const;
+
     ClipboardItem() = default;
 
     const QString &getText() const;

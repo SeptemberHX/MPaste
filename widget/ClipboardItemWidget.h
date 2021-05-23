@@ -19,8 +19,19 @@ class ClipboardItemWidget : public QWidget{
 public:
     explicit ClipboardItemWidget(QWidget *parent= nullptr);
 
+    const ClipboardItem &getItem() const;
+
+signals:
+    void clicked();
+    void doubleClicked();
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+
 public slots:
     void showItem(ClipboardItem item);
+    void setSelected(bool selected);
 
 private:
     QHBoxLayout *layout;

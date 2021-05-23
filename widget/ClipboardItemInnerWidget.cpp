@@ -4,11 +4,14 @@
 #include <QPlainTextEdit>
 
 ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
-    QWidget(parent),
+    QFrame(parent),
     ui(new Ui::ClipboardItemInnerWidget),
-    bgColor(Qt::white)
+    bgColor(Qt::white),
+    topBgColor(Qt::white),
+    borderWidth(0)
 {
     ui->setupUi(this);
+    this->setObjectName("innerWidget");
     this->mLayout = new QHBoxLayout(ui->bodyWidget);
     this->mLayout->setMargin(0);
 
@@ -31,7 +34,7 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     ui->typeLabel->setAttribute(Qt::WA_TranslucentBackground);
     ui->timeLabel->setAttribute(Qt::WA_TranslucentBackground);
 
-    this->setStyleSheet(genStyleSheetStr(this->bgColor, this->bgColor));
+    this->refreshStyleSheet();
 }
 
 ClipboardItemInnerWidget::~ClipboardItemInnerWidget()
@@ -54,13 +57,9 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &icon) {
             ++n;
         }
     }
-    std::cout << r / n << " " << g / n << " " << b / n << " " << a / n << std::endl;
-    QColor c(r/n, g/n, b/n, 0);
-    ui->topWidget->setStyleSheet(this->genStyleSheetStr(this->bgColor, c));
-}
-
-QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topColor) {
-    return QString("QWidget {background-color: %1; color: #000000; } #topWidget { background-color: %2;} #typeLabel, #timeLabel { color: #FFFFFF; } ").arg(bgColor.name(), topColor.name());
+    this->topBgColor = QColor(r/n, g/n, b/n, 0);
+    std::cout << this->topBgColor.name().toStdString() << std::endl;
+    this->refreshStyleSheet();
 }
 
 void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
@@ -81,7 +80,6 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
 
         if (tagSet.contains("img") && tagSet.contains("meta") && tagSet.size() == 2) {
             this->imageLabel->show();
-            std::cout << ui->bodyWidget->height() << std::endl;
             this->imageLabel->setPixmap(item.getImage().scaled(275, 234, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             ui->countLabel->setText(QString("%1 x %2 Pixels").arg(item.getImage().height()).arg(item.getImage().width()));
             ui->typeLabel->setText(tr("Image"));
@@ -100,8 +98,32 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
     } else if (!item.getText().isEmpty()) {
         this->textBrowser->show();
         this->textBrowser->setPlainText(item.getText());
+        ui->countLabel->setText(QString("%1 Characters").arg(item.getText().size()));
     } else if (!item.getImage().isNull()) {
         this->imageLabel->show();
-        this->imageLabel->setPixmap(item.getImage().scaled(this->imageLabel->sizeHint(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+        this->imageLabel->setPixmap(item.getImage().scaled(275, 234, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        ui->countLabel->setText(QString("%1 x %2 Pixels").arg(item.getImage().height()).arg(item.getImage().width()));
+        ui->typeLabel->setText(tr("Image"));
     }
+}
+
+void ClipboardItemInnerWidget::showBorder(bool flag) {
+    if (flag) {
+        this->borderWidth = 3;
+        this->refreshStyleSheet();
+    } else {
+        this->borderWidth = 0;
+        this->refreshStyleSheet();
+    }
+}
+
+void ClipboardItemInnerWidget::refreshStyleSheet() {
+    this->setStyleSheet(this->genStyleSheetStr(this->bgColor, this->topBgColor, this->borderWidth));
+}
+
+QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topColor, int borderWidth) {
+    return QString("QWidget {background-color: %1; color: #000000; } "
+                   "#topWidget { background-color: %2;} "
+                   "#typeLabel, #timeLabel { color: #FFFFFF; } "
+                   "QFrame#innerWidget {border: %3px solid #1684fc;} ").arg(bgColor.name(), topColor.name(), QString::number(borderWidth));
 }

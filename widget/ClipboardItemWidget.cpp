@@ -3,8 +3,8 @@
 //
 
 #include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
 #include "ClipboardItemWidget.h"
-#include "XUtils.h"
 #include "ClipboardMonitor.h"
 
 ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
@@ -15,14 +15,12 @@ ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
     this->innerShadowedWidget = new ClipboardItemInnerWidget(this);
     this->innerShadowedWidget->setObjectName("innerWidget");
     this->layout->addWidget(this->innerShadowedWidget);
-
-//    this->setWindowFlags(Qt::FramelessWindowHint);
     this->setAttribute(Qt::WA_TranslucentBackground);
 
     auto *effect = new QGraphicsDropShadowEffect(this);
     effect->setOffset(0, 0);
     effect->setColor(Qt::black);
-    effect->setBlurRadius(20);
+    effect->setBlurRadius(10);
     this->innerShadowedWidget->setGraphicsEffect(effect);
     this->innerShadowedWidget->setAttribute(Qt::WA_TranslucentBackground, false);
 }
@@ -30,4 +28,28 @@ ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
 void ClipboardItemWidget::showItem(ClipboardItem nItem) {
     this->item = nItem;
     this->innerShadowedWidget->showItem(this->item);
+}
+
+void ClipboardItemWidget::setSelected(bool flag) {
+    this->innerShadowedWidget->showBorder(flag);
+}
+
+void ClipboardItemWidget::mousePressEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        Q_EMIT clicked();
+    }
+
+    QWidget::mousePressEvent(event);
+}
+
+void ClipboardItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        Q_EMIT doubleClicked();
+    }
+
+    QWidget::mouseDoubleClickEvent(event);
+}
+
+const ClipboardItem &ClipboardItemWidget::getItem() const {
+    return item;
 }
