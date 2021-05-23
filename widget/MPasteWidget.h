@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QMimeData>
 #include <QMenu>
+#include <QMediaPlayer>
 
 namespace Ui {
 class MPasteWidget;
@@ -44,6 +45,8 @@ private:
     QMimeData *mimeData;
 
     QMenu *menu;
+
+    QMediaPlayer *player;
 };
 
 #endif // MPASTEWIDGET_H

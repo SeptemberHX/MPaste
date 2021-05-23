@@ -21,7 +21,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DQT_DEBUG")
 set(BIN_NAME MPaste)
 
 # Sources files
-file(GLOB SRCS "*.h" "*.cpp" "widget/*.ui" "widget/*.h" "widget/*.cpp" "qhotkey/*.h" "qhotkey/*.cpp")
+file(GLOB SRCS "*.h" "*.cpp" "widget/*.ui" "widget/*.h" "widget/*.cpp" "qhotkey/*.h" "qhotkey/*.cpp" "resources.qrc")
 
 # Find the library
 find_package(PkgConfig REQUIRED)
@@ -30,36 +30,29 @@ find_package(Qt5Concurrent REQUIRED)
 find_package(Qt5X11Extras REQUIRED)
 find_package(Qt5DBus REQUIRED)
 find_package(Qt5Svg REQUIRED)
-find_package(DtkWidget REQUIRED)
-find_package(DtkCMake REQUIRED)
 find_package(KF5WindowSystem REQUIRED)
+find_package(Qt5Multimedia REQUIRED)
 
 pkg_check_modules(XCB_EWMH REQUIRED xcb-ewmh x11)
-pkg_check_modules(DFrameworkDBus REQUIRED dframeworkdbus)
 pkg_check_modules(QGSettings REQUIRED gsettings-qt)
-pkg_check_modules(DtkGUI REQUIRED dtkgui)
 
 add_executable(${BIN_NAME} ${SRCS} ${INTERFACES})
-target_include_directories(${BIN_NAME} PUBLIC ${DtkWidget_INCLUDE_DIRS}
+target_include_directories(${BIN_NAME} PUBLIC
         ${XCB_EWMH_INCLUDE_DIRS}
-        ${DFrameworkDBus_INCLUDE_DIRS}
         ${Qt5Gui_PRIVATE_INCLUDE_DIRS}
         ${PROJECT_BINARY_DIR}
         ${QGSettings_INCLUDE_DIRS}
-        ${DtkGUI_INCLUDE_DIRS}
         ${KF5WindowSystem_INCLUDE_DIRS}
         )
 
 target_link_libraries(${BIN_NAME} PRIVATE
         ${XCB_EWMH_LIBRARIES}
-        ${DFrameworkDBus_LIBRARIES}
-        ${DtkWidget_LIBRARIES}
         ${Qt5Widgets_LIBRARIES}
         ${Qt5Concurrent_LIBRARIES}
+        ${Qt5Multimedia_LIBRARIES}
         ${Qt5X11Extras_LIBRARIES}
         ${Qt5DBus_LIBRARIES}
         ${QGSettings_LIBRARIES}
-        ${DtkGUI_LIBRARIES}
         ${Qt5Svg_LIBRARIES}
         KF5::WindowSystem
         xdo

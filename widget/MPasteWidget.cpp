@@ -13,6 +13,12 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     mimeData(nullptr)
 {
     ui->setupUi(this);
+
+    std::cout << "Init media player..." << std::endl;
+    this->player = new QMediaPlayer(this, QMediaPlayer::LowLatency);
+    this->player->setMedia(QUrl("qrc:/resources/resources/sound.mp3"));
+    std::cout << "Sound effect loaded finished" << std::endl;
+
     this->layout = new QHBoxLayout(ui->scrollAreaWidgetContents);
     this->layout->setContentsMargins(0, 0, 0, 0);
     this->layout->addStretch(1);
@@ -85,6 +91,7 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
 
     itemWidget->showItem(nItem);
     this->setCurrentItem(itemWidget);
+    this->player->play();
 }
 
 void MPasteWidget::setSelectedItem(ClipboardItemWidget *widget) {
