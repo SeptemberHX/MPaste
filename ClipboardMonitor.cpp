@@ -46,4 +46,5 @@ void ClipboardMonitor::clipboardChanged() {
 
 ClipboardMonitor::ClipboardMonitor() {
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &ClipboardMonitor::clipboardChanged);
+    this->clipboardChanged();
 }

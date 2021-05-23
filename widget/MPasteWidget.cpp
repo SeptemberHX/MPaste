@@ -14,6 +14,9 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     ui->setupUi(this);
     this->layout = new QHBoxLayout(ui->scrollAreaWidgetContents);
     this->layout->setContentsMargins(0, 0, 0, 0);
+    this->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Dialog | Qt::FramelessWindowHint);
+    this->setObjectName("pasteWidget");
+    this->setStyleSheet("QWidget#pasteWidget, #scrollAreaWidgetContents {background-color: #e6e5e4;}");
 
     this->monitor = new ClipboardMonitor();
     connect(this->monitor, &ClipboardMonitor::clipboardUpdated, this, &MPasteWidget::clipboardUpdated);

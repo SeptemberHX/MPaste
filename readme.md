@@ -9,3 +9,7 @@ A clipboard manager for Deepin V20.
 ## Screenshot
 
 ![s1](./images/s1.png)
+
+##
+
+* [QHotKey](https://github.com/Skycoder42/QHotkey.git)

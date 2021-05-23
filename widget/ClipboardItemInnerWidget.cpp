@@ -27,6 +27,7 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
 
     this->imageLabel = new QLabel(ui->bodyWidget);
     this->imageLabel->hide();
+    this->imageLabel->setAlignment(Qt::AlignCenter);
     this->mLayout->addWidget(this->imageLabel);
 
     ui->iconLabel->setAttribute(Qt::WA_TranslucentBackground);
@@ -58,7 +59,6 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &icon) {
         }
     }
     this->topBgColor = QColor(r/n, g/n, b/n, 0);
-    std::cout << this->topBgColor.name().toStdString() << std::endl;
     this->refreshStyleSheet();
 }
 
@@ -66,14 +66,12 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
     this->setIcon(item.getIcon());
 
     if (!item.getHtml().isEmpty()) {
-        std::cout << item.getHtml().toStdString() << std::endl;
         QRegExp regExp("<([A-Za-z]+)");
         regExp.indexIn(item.getHtml());
         QSet<QString> tagSet;
         int pos = 0;
         while ((pos = regExp.indexIn(item.getHtml(), pos)) != -1) {
             QString str = regExp.cap(1);
-//            std::cout << str.toStdString() << std::endl;
             tagSet << str;
             pos += regExp.matchedLength();
         }
@@ -90,7 +88,6 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
             QRegExp bgColorExp("background-color:(#[A-Za-z0-9]{6})");
             if (bgColorExp.indexIn(item.getHtml()) != -1) {
                 QString colorStr = bgColorExp.cap(1);
-                std::cout << colorStr.toStdString() << std::endl;
                 ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr));
             }
             ui->countLabel->setText(QString("%1 Characters").arg(item.getText().size()));
