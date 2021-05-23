@@ -1,4 +1,5 @@
 #include <iostream>
+#include <QScrollBar>
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
 #include "ClipboardItemWidget.h"
@@ -21,7 +22,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
         itemWidget->showItem(nItem);
     });
 
-//    ui->scrollArea->installEventFilter(this);
+    ui->scrollArea->installEventFilter(this);
 }
 
 MPasteWidget::~MPasteWidget()
@@ -31,23 +32,7 @@ MPasteWidget::~MPasteWidget()
 
 bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::Wheel) {
-        std::cout << "Wheel event" << std::endl;
-        QWheelEvent *wheelEvent = dynamic_cast<QWheelEvent*>(event);
-
-        QPoint numPixels = wheelEvent->pixelDelta();
-        QPoint numDegrees = wheelEvent->angleDelta() / 8;
-
-        if (!numPixels.isNull()) {
-            ui->scrollArea->scroll(wheelEvent->pixelDelta().x(), 0);
-            std::cout << numPixels.x() << " " << numPixels.y() << std::endl;
-        } else if (!numDegrees.isNull()) {
-            QPoint numSteps = numDegrees / 15;
-            std::cout << numSteps.x() << " " << numSteps.y() << std::endl;
-            ui->scrollArea->scroll(numSteps.y() * 60, 0);
-        }
-
-
-        event->accept();
+        QCoreApplication::sendEvent(ui->scrollArea->horizontalScrollBar(), event);
     }
 
     return QObject::eventFilter(watched, event);

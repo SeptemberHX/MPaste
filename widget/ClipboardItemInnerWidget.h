@@ -5,7 +5,7 @@
 #include <QHBoxLayout>
 #include <QPlainTextEdit>
 #include <QTextEdit>
-#include <QTextBrowser>
+#include "MTextBrowser.h"
 #include "ClipboardItem.h"
 
 namespace Ui {
@@ -29,9 +29,7 @@ private:
     Ui::ClipboardItemInnerWidget *ui;
     QColor bgColor;
 
-    QPlainTextEdit *plainTextEdit;
-    QTextEdit *textEdit;
-    QTextBrowser *textBrowser;
+    MTextBrowser *textBrowser;
     QHBoxLayout *mLayout;
 };
 

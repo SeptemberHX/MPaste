@@ -9,19 +9,13 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     bgColor(Qt::white)
 {
     ui->setupUi(this);
-
     this->mLayout = new QHBoxLayout(ui->bodyWidget);
-    this->plainTextEdit = new QPlainTextEdit(ui->bodyWidget);
-    this->mLayout->addWidget(this->plainTextEdit);
-    this->plainTextEdit->hide();
+    this->mLayout->setMargin(0);
 
-    this->textEdit = new QTextEdit(ui->bodyWidget);
-    this->textEdit->setWordWrapMode(QTextOption::WrapAnywhere);
-    this->textEdit->setLineWrapMode(QTextEdit::WidgetWidth);
-    this->mLayout->addWidget(this->textEdit);
-    this->textEdit->hide();
-
-    this->textBrowser = new QTextBrowser(ui->bodyWidget);
+    this->textBrowser = new MTextBrowser(ui->bodyWidget);
+    this->textBrowser->setReadOnly(true);
+    this->textBrowser->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+//    this->textBrowser->setEnabled(false);
     this->mLayout->addWidget(this->textBrowser);
     this->textBrowser->hide();
 
@@ -63,12 +57,8 @@ void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
     if (!item.getHtml().isEmpty()) {
         this->textBrowser->show();
         this->textBrowser->setHtml(item.getHtml());
-//        this->textEdit->show();
-//        this->textEdit->setHtml(item.getHtml());
-//        this->textEdit->document()->setHtml(item.getHtml());
-//        this->textEdit->setAcceptRichText(true);
     } else if (!item.getText().isEmpty()) {
-        this->textEdit->show();
-        this->textEdit->setPlainText(item.getText());
+        this->textBrowser->show();
+        this->textBrowser->setPlainText(item.getText());
     }
 }
