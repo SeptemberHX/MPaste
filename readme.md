@@ -26,9 +26,8 @@ A clipboard manager for Deepin V20.
 
 ## Screenshot
 
-[Imgur](https://i.imgur.com/79gyO0n.gifv)
+![Imgur](https://i.imgur.com/79gyO0n.gifv)
 
-<blockquote class="imgur-embed-pub" lang="en" data-id="a/79gyO0n" data-context="false" ><a href="//imgur.com/a/79gyO0n"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script>
 
 ![s1](./images/s1.png)
 
