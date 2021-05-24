@@ -2,6 +2,8 @@
 #include <QScrollBar>
 #include <QClipboard>
 #include <QKeyEvent>
+#include <QDir>
+#include "MPasteSettings.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
 #include "ClipboardItemWidget.h"
@@ -13,6 +15,8 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     mimeData(nullptr)
 {
     ui->setupUi(this);
+
+    this->saver = new LocalSaver();
     this->numKeyList << Qt::Key_1 << Qt::Key_2 << Qt::Key_3 << Qt::Key_4 << Qt::Key_5 << Qt::Key_6 << Qt::Key_7 << Qt::Key_8 << Qt::Key_9 << Qt::Key_0;
 
     std::cout << "Init media player..." << std::endl;
@@ -42,6 +46,8 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     connect(ui->menuButton, &QToolButton::clicked, this, [this]() {
         this->menu->popup(ui->menuButton->mapToGlobal(ui->menuButton->rect().bottomLeft()));
     });
+
+    this->loadFromSaveDir();
 }
 
 MPasteWidget::~MPasteWidget()
@@ -75,27 +81,17 @@ void MPasteWidget::setCurrentItem(ClipboardItemWidget *widget) {
 }
 
 void MPasteWidget::itemDoubleClicked() {
-    ClipboardItemWidget *widget = dynamic_cast<ClipboardItemWidget*>(sender());
+    auto *widget = dynamic_cast<ClipboardItemWidget*>(sender());
+    ClipboardItem item = widget->getItem();
+    item.setTime(QDateTime::currentDateTime());
+    widget->showItem(item);
+    this->saveItem(item);
     this->setCurrentItemAndClipboard(widget);
 }
 
 void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
-    if (nItem.isEmpty()) return;
-
-    for (int i = 0; i < this->layout->count() - 1; ++i) {
-        ClipboardItemWidget *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
-        if (widget->getItem().sameContent(nItem)) {
-            this->setCurrentItem(widget);
-            return;
-        }
-    }
-
-    auto itemWidget = new ClipboardItemWidget(ui->scrollAreaWidgetContents);
-    connect(itemWidget, &ClipboardItemWidget::clicked, this, &MPasteWidget::itemClicked);
-    connect(itemWidget, &ClipboardItemWidget::doubleClicked, this, &MPasteWidget::itemDoubleClicked);
-
-    itemWidget->showItem(nItem);
-    this->setCurrentItem(itemWidget);
+    this->addOneItem(nItem);
+    this->saveItem(nItem);
     this->player->play();
 }
 
@@ -163,4 +159,56 @@ void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
     }
 
     QWidget::keyReleaseEvent(event);
+}
+
+void MPasteWidget::saveItem(const ClipboardItem &item) {
+    this->checkSaveDir();
+
+    QString fileName = QString("%1.mpaste").arg(item.getName());
+    QString filePath = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir() + QDir::separator() + fileName);
+    this->saver->saveToFile(item, filePath);
+}
+
+void MPasteWidget::checkSaveDir() {
+    QDir dir;
+    if (!dir.exists(MPasteSettings::getInst()->getSaveDir())) {
+        dir.mkpath(MPasteSettings::getInst()->getSaveDir());
+    }
+}
+
+void MPasteWidget::loadFromSaveDir() {
+    this->checkSaveDir();
+
+    QDir saveDir(MPasteSettings::getInst()->getSaveDir());
+    QList<ClipboardItem> itemList;
+    foreach (QFileInfo info, saveDir.entryInfoList(QStringList() << "*.mpaste", QDir::Files)) {
+        ClipboardItem item = this->saver->loadFromFile(info.filePath());
+        itemList << item;
+    }
+
+    std::sort(itemList.begin(), itemList.end(), [](const ClipboardItem &item1, const ClipboardItem &item2) {
+        return item1.getTime() < item2.getTime();
+    });
+
+    foreach (const ClipboardItem &item, itemList) {
+        this->addOneItem(item);
+    }
+}
+
+void MPasteWidget::addOneItem(const ClipboardItem &nItem) {
+    if (nItem.isEmpty()) return;
+
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        ClipboardItemWidget *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (widget->getItem().sameContent(nItem)) {
+            this->setCurrentItem(widget);
+            return;
+        }
+    }
+
+    auto itemWidget = new ClipboardItemWidget(ui->scrollAreaWidgetContents);
+    connect(itemWidget, &ClipboardItemWidget::clicked, this, &MPasteWidget::itemClicked);
+    connect(itemWidget, &ClipboardItemWidget::doubleClicked, this, &MPasteWidget::itemDoubleClicked);
+    itemWidget->showItem(nItem);
+    this->setCurrentItem(itemWidget);
 }

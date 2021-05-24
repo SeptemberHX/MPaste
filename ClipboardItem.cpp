@@ -13,6 +13,7 @@ ClipboardItem::ClipboardItem(const QPixmap &icon, const QString &text, const QPi
     , urls(urls)
 {
     this->time = QDateTime::currentDateTime();
+    this->name = QString::number(this->time.toMSecsSinceEpoch());
 }
 
 const QString &ClipboardItem::getText() const {
@@ -48,4 +49,36 @@ const bool ClipboardItem::isEmpty() const {
 
 const QDateTime &ClipboardItem::getTime() const {
     return time;
+}
+
+void ClipboardItem::setIcon(const QPixmap &icon) {
+    ClipboardItem::icon = icon;
+}
+
+void ClipboardItem::setText(const QString &text) {
+    ClipboardItem::text = text;
+}
+
+void ClipboardItem::setImage(const QPixmap &image) {
+    ClipboardItem::image = image;
+}
+
+void ClipboardItem::setHtml(const QString &html) {
+    ClipboardItem::html = html;
+}
+
+void ClipboardItem::setUrls(const QList<QUrl> &urls) {
+    ClipboardItem::urls = urls;
+}
+
+void ClipboardItem::setTime(const QDateTime &time) {
+    ClipboardItem::time = time;
+}
+
+const QString &ClipboardItem::getName() const {
+    return name;
+}
+
+ClipboardItem::ClipboardItem() {
+    this->name = QString::number(QDateTime::currentMSecsSinceEpoch());
 }

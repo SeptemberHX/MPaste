@@ -5,6 +5,7 @@
 #include "ClipboardMonitor.h"
 #include "ClipboardItemWidget.h"
 #include "ClipboardItem.h"
+#include "data/LocalSaver.h"
 #include <QHBoxLayout>
 #include <QMimeData>
 #include <QMenu>
@@ -34,10 +35,15 @@ private slots:
     void clipboardUpdated(ClipboardItem item, int wId);
 
 private:
+    void addOneItem(const ClipboardItem &item);
     void setCurrentItem(ClipboardItemWidget *item);
     void setSelectedItem(ClipboardItemWidget *item);
     void setClipboard(const ClipboardItem &item);
     void setCurrentItemAndClipboard(ClipboardItemWidget *item);
+
+    void checkSaveDir();
+    void loadFromSaveDir();
+    void saveItem(const ClipboardItem &item);
 
     Ui::MPasteWidget *ui;
     QHBoxLayout *layout;
@@ -50,6 +56,8 @@ private:
 
     QMediaPlayer *player;
     QList<int> numKeyList;
+
+    LocalSaver *saver;
 };
 
 #endif // MPASTEWIDGET_H

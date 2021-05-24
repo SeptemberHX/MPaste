@@ -20,7 +20,7 @@ public:
 
     const bool isEmpty() const;
 
-    ClipboardItem() = default;
+    ClipboardItem();
 
     const QString &getText() const;
 
@@ -34,6 +34,20 @@ public:
 
     const QDateTime &getTime() const;
 
+    void setIcon(const QPixmap &icon);
+
+    void setText(const QString &text);
+
+    void setImage(const QPixmap &image);
+
+    void setHtml(const QString &html);
+
+    void setUrls(const QList<QUrl> &urls);
+
+    void setTime(const QDateTime &time);
+
+    const QString &getName() const;
+
 private:
     QPixmap icon;
 
@@ -42,6 +56,8 @@ private:
     QString html;
     QList<QUrl> urls;
     QDateTime time;
+
+    QString name;
 };
 
 
