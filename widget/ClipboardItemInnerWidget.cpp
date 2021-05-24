@@ -124,10 +124,20 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
     this->textBrowser->setHtml(html);
 
     QRegExp bgColorExp("background-color:(#[A-Za-z0-9]{6})");
-    if (bgColorExp.indexIn(html) != -1) {
+    if (bgColorExp.indexIn(html.trimmed()) != -1) {
         QString colorStr = bgColorExp.cap(1);
         ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr));
         ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr));
+    } else {
+        bgColorExp = QRegExp(R"(background.*:[ ]*rgb\((\d*),[ ]*(\d*),[ ]*(\d*)\))");
+        if (bgColorExp.indexIn(html.trimmed()) != -1) {
+            int r = bgColorExp.cap(1).toInt();
+            int g = bgColorExp.cap(2).toInt();
+            int b = bgColorExp.cap(3).toInt();
+            QColor colorStr(r, g, b);
+            ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr.name()));
+            ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr.name()));
+        }
     }
     ui->countLabel->setText(QString("%1 Characters").arg(html.size()));
 }
