@@ -34,7 +34,9 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
 
     this->monitor = new ClipboardMonitor();
     connect(this->monitor, &ClipboardMonitor::clipboardUpdated, this, &MPasteWidget::clipboardUpdated);
+
     ui->scrollArea->installEventFilter(this);
+    ui->searchEdit->installEventFilter(this);
 
     this->menu = new QMenu(this);
     this->menu->addAction(tr("Settings"), [this]() { });
@@ -45,8 +47,12 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
         this->menu->popup(ui->menuButton->mapToGlobal(ui->menuButton->rect().bottomLeft()));
     });
 
+    connect(ui->searchEdit, &QLineEdit::textChanged, this, &MPasteWidget::filterByKeyword);
+    connect(ui->searchButton, &QToolButton::clicked, this, [this] () { this->setFocusOnSearch(true); } );
+
     this->loadFromSaveDir();
     this->monitor->clipboardChanged();
+    this->setFocusOnSearch(false);
 }
 
 MPasteWidget::~MPasteWidget()
@@ -56,15 +62,21 @@ MPasteWidget::~MPasteWidget()
 
 bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::Wheel) {
-
         // it seems to crash with 5.11 on UOS, but work well on Deepin V20
 #if (QT_VERSION >= QT_VERSION_CHECK(5,12,0))
         QCoreApplication::sendEvent(ui->scrollArea->horizontalScrollBar(), event);
         return true;
 #endif
-
+    } else if (event->type() == QEvent::KeyPress) {
+        // make sure Alt+num still works even current focus is on the search area
+        if (watched == ui->searchEdit) {
+            auto keyEvent = dynamic_cast<QKeyEvent*>(event);
+            if (keyEvent->modifiers() & Qt::AltModifier) {
+                QGuiApplication::sendEvent(this, keyEvent);
+                return true;
+            }
+        }
     }
-
     return QObject::eventFilter(watched, event);
 }
 
@@ -105,32 +117,55 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
     }
 
     this->mimeData = new QMimeData();
-    this->mimeData->setText(item.getText());
-    this->mimeData->setHtml(item.getHtml());
-    this->mimeData->setUrls(item.getUrls());
-    this->mimeData->setImageData(item.getImage());
+    if (item.getImage().isNull() && !item.getText().isEmpty()) this->mimeData->setText(item.getText());
+
+    if (!item.getImage().isNull()) this->mimeData->setImageData(item.getImage());
+    else if (!item.getHtml().isEmpty()) this->mimeData->setHtml(item.getHtml());
+    else if (!item.getUrls().isEmpty()) this->mimeData->setUrls(item.getUrls());
     QGuiApplication::clipboard()->setMimeData(this->mimeData);
 }
 
 void MPasteWidget::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Escape) {
-        this->hide();
-    }
-
-    if (event->key() == Qt::Key_Alt) {
-        for (int i = 0; i < this->layout->count() - 1 && i < 10; ++i) {
+        // unfocus the search area and show all items, or hide window
+        if (ui->searchEdit->hasFocus()) {
+            ui->searchEdit->clear();
+            this->setFocusOnSearch(false);
+        } else {
+            this->hide();
+        }
+    } else if (event->key() == Qt::Key_Alt) {
+        // set shortcut information for selecting top-10 items
+        for (int i = 0, c = 0; i < this->layout->count() - 1 && c < 10; ++i) {
             auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
-            widget->setShortcutInfo((i + 1) % 10);
+            if (widget->isVisible()) {
+                widget->setShortcutInfo((c + 1) % 10);
+                ++c;
+            }
         }
     }
 
     if (event->modifiers() & Qt::AltModifier) {
+        // shortcut for selecting top-10 items
         int keyIndex = this->numKeyList.indexOf(event->key());
         if (keyIndex >= 0 && keyIndex < this->layout->count() - 1) {
-            auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(keyIndex)->widget());
-            this->moveItemToFirst(widget);
-            this->hide();
+            for (int i = 0, c = 0; i < this->layout->count() - 1; ++i) {
+                auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+                if (widget->isVisible()) {
+                    if (c == keyIndex) {
+                        this->moveItemToFirst(widget);
+                        this->hide();
+                        break;
+                    } else {
+                        ++c;
+                    }
+                }
+            }
         }
+    } else if (event->key() >= Qt::Key_Space && event->key() <= Qt::Key_AsciiTilde) {
+        // make sure we can get to search area by pressing any characters
+        QGuiApplication::sendEvent(ui->searchEdit, event);
+        this->setFocusOnSearch(true);
     }
 
     QWidget::keyPressEvent(event);
@@ -138,6 +173,7 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
 
 void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Alt) {
+        // remove the shortcut information after releasing Alt key
         for (int i = 0; i < this->layout->count() - 1; ++i) {
             auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
             widget->clearShortcutInfo();
@@ -199,6 +235,17 @@ bool MPasteWidget::addOneItem(const ClipboardItem &nItem) {
 
     this->layout->insertWidget(0, itemWidget);
     this->setSelectedItem(itemWidget);
+
+    for (int i = MPasteSettings::getInst()->getMaxSize(); i < this->layout->count() - 1; ++i) {
+        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        this->saver->removeItem(this->getItemFilePath(widget->getItem()));
+        this->layout->removeWidget(widget);
+        if (this->currItemWidget == widget) {
+            this->currItemWidget = nullptr;
+            this->setFirstVisibleItemSelected();
+        }
+    }
+
     return true;
 }
 
@@ -228,4 +275,47 @@ void MPasteWidget::moveItemToFirst(ClipboardItemWidget *widget) {
     this->setSelectedItem(widget);
     widget->showItem(item);
     this->setClipboard(item);
+}
+
+void MPasteWidget::filterByKeyword(const QString &keyword) {
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        widget->setVisible(widget->getItem().contains(keyword));
+    }
+    this->setFirstVisibleItemSelected();
+}
+
+void MPasteWidget::setAllItemVisible() {
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        widget->setVisible(true);
+    }
+    if (this->layout->count() > 1) {
+        this->setSelectedItem(dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(0)->widget()));
+    }
+}
+
+void MPasteWidget::setFocusOnSearch(bool flag) {
+    if (flag) {
+        ui->searchEdit->show();
+        ui->searchEdit->setFocus();
+    } else {
+        ui->searchEdit->hide();
+        ui->searchEdit->clearFocus();
+        this->setFocus();
+    }
+}
+
+void MPasteWidget::setFirstVisibleItemSelected() {
+    int c = -1;
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (c < 0 && widget->isVisible()) {
+            c = i;
+            break;
+        }
+    }
+    if (c >= 0) {
+        this->setSelectedItem(dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(c)->widget()));
+    }
 }

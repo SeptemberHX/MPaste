@@ -20,6 +20,8 @@ public:
 
     const bool isEmpty() const;
 
+    const bool contains(const QString &keyword) const;
+
     ClipboardItem();
 
     const QString &getText() const;

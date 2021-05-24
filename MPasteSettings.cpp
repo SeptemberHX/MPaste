@@ -22,6 +22,11 @@ const QString &MPasteSettings::getSaveDir() const {
 
 MPasteSettings::MPasteSettings()
     : saveDir(QDir::homePath() + QDir::separator() +  ".MPaste")
+    , maxSize(500)
 {
 
+}
+
+int MPasteSettings::getMaxSize() const {
+    return maxSize;
 }

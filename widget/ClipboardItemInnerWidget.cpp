@@ -67,6 +67,8 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &icon) {
 void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
     this->setIcon(item.getIcon());
 
+    // obviously, I didn't read the QMimeData document before implement this
+    //   later will re-implement it more elegantly
     if (!item.getHtml().isEmpty()) {
         QRegExp regExp("<([A-Za-z]+)");
         regExp.indexIn(item.getHtml());

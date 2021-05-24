@@ -26,10 +26,7 @@ file(GLOB SRCS "*.h" "*.cpp" "widget/*.ui" "widget/*.h" "widget/*.cpp" "qhotkey/
 # Find the library
 find_package(PkgConfig REQUIRED)
 find_package(Qt5Widgets REQUIRED)
-find_package(Qt5Concurrent REQUIRED)
 find_package(Qt5X11Extras REQUIRED)
-find_package(Qt5DBus REQUIRED)
-find_package(Qt5Svg REQUIRED)
 find_package(KF5WindowSystem REQUIRED)
 find_package(Qt5Multimedia REQUIRED)
 
@@ -48,12 +45,9 @@ target_include_directories(${BIN_NAME} PUBLIC
 target_link_libraries(${BIN_NAME} PRIVATE
         ${XCB_EWMH_LIBRARIES}
         ${Qt5Widgets_LIBRARIES}
-        ${Qt5Concurrent_LIBRARIES}
         ${Qt5Multimedia_LIBRARIES}
         ${Qt5X11Extras_LIBRARIES}
-        ${Qt5DBus_LIBRARIES}
         ${QGSettings_LIBRARIES}
-        ${Qt5Svg_LIBRARIES}
         KF5::WindowSystem
         xdo
         X11

@@ -14,10 +14,13 @@ public:
 
     const QString &getSaveDir() const;
 
+    int getMaxSize() const;
+
 private:
     MPasteSettings();
 
     QString saveDir;
+    int maxSize;
 
     static MPasteSettings *inst;
 };

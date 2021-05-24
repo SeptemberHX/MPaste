@@ -33,8 +33,14 @@ private slots:
     void itemClicked();
     void itemDoubleClicked();
     void clipboardUpdated(ClipboardItem item, int wId);
+    void filterByKeyword(const QString &keyword);
 
 private:
+    void setFocusOnSearch(bool flag);
+    void setFirstVisibleItemSelected();
+
+    void setAllItemVisible();
+
     bool addOneItem(const ClipboardItem &item);
     void removeOneItemByWidget(ClipboardItemWidget *widget);
     void moveItemToFirst(ClipboardItemWidget *widget);

@@ -37,10 +37,18 @@ const QPixmap &ClipboardItem::getIcon() const {
 }
 
 const bool ClipboardItem::sameContent(ClipboardItem item) const {
-    if (this->getHtml() != item.getHtml()) return false;
-    if (this->getText() != item.getText()) return false;
-    if (this->getImage().toImage() != item.getImage().toImage()) return false;
-    return true;
+    if (!item.getImage().isNull() && !this->getImage().isNull() && item.getImage().toImage() == this->getImage().toImage()) {
+        return true;
+    } else if (!item.getHtml().isEmpty() && !this->getHtml().isEmpty() && item.getHtml() == this->getHtml()) {
+        return true;
+    } else if (!item.getUrls().isEmpty() && !this->getUrls().isEmpty() && item.getUrls() == this->getUrls()) {
+        return true;
+    }
+
+    if (!item.getText().isEmpty() && !this->getText().isEmpty() && item.getText() == this->getText()) {
+        return true;
+    }
+    return false;
 }
 
 const bool ClipboardItem::isEmpty() const {
@@ -85,4 +93,8 @@ ClipboardItem::ClipboardItem() {
 
 void ClipboardItem::setName(const QString &name) {
     ClipboardItem::name = name;
+}
+
+const bool ClipboardItem::contains(const QString &keyword) const {
+    return this->text.contains(keyword);
 }
