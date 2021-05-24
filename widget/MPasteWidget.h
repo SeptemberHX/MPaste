@@ -35,15 +35,17 @@ private slots:
     void clipboardUpdated(ClipboardItem item, int wId);
 
 private:
-    void addOneItem(const ClipboardItem &item);
-    void setCurrentItem(ClipboardItemWidget *item);
+    bool addOneItem(const ClipboardItem &item);
+    void removeOneItemByWidget(ClipboardItemWidget *widget);
+    void moveItemToFirst(ClipboardItemWidget *widget);
+
     void setSelectedItem(ClipboardItemWidget *item);
     void setClipboard(const ClipboardItem &item);
-    void setCurrentItemAndClipboard(ClipboardItemWidget *item);
 
     void checkSaveDir();
     void loadFromSaveDir();
     void saveItem(const ClipboardItem &item);
+    QString getItemFilePath(const ClipboardItem &item);
 
     Ui::MPasteWidget *ui;
     QHBoxLayout *layout;

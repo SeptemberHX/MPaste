@@ -12,6 +12,7 @@ class LocalSaver {
 
 public:
     bool saveToFile(const ClipboardItem &item, const QString &filePath);
+    bool removeItem(const QString &filePath);
     ClipboardItem loadFromFile(const QString &filePath);
 };
 

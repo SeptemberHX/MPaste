@@ -82,3 +82,7 @@ const QString &ClipboardItem::getName() const {
 ClipboardItem::ClipboardItem() {
     this->name = QString::number(QDateTime::currentMSecsSinceEpoch());
 }
+
+void ClipboardItem::setName(const QString &name) {
+    ClipboardItem::name = name;
+}

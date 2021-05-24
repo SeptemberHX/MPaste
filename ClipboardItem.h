@@ -48,6 +48,8 @@ public:
 
     const QString &getName() const;
 
+    void setName(const QString &name);
+
 private:
     QPixmap icon;
 

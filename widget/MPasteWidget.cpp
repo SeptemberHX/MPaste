@@ -34,8 +34,6 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
 
     this->monitor = new ClipboardMonitor();
     connect(this->monitor, &ClipboardMonitor::clipboardUpdated, this, &MPasteWidget::clipboardUpdated);
-    this->monitor->clipboardChanged();
-
     ui->scrollArea->installEventFilter(this);
 
     this->menu = new QMenu(this);
@@ -48,6 +46,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     });
 
     this->loadFromSaveDir();
+    this->monitor->clipboardChanged();
 }
 
 MPasteWidget::~MPasteWidget()
@@ -74,24 +73,16 @@ void MPasteWidget::itemClicked() {
     this->setSelectedItem(widget);
 }
 
-void MPasteWidget::setCurrentItem(ClipboardItemWidget *widget) {
-    this->setSelectedItem(widget);
-    this->layout->removeWidget(widget);
-    this->layout->insertWidget(0, widget, 0, Qt::AlignLeft);
-}
-
 void MPasteWidget::itemDoubleClicked() {
     auto *widget = dynamic_cast<ClipboardItemWidget*>(sender());
-    ClipboardItem item = widget->getItem();
-    item.setTime(QDateTime::currentDateTime());
-    widget->showItem(item);
-    this->saveItem(item);
-    this->setCurrentItemAndClipboard(widget);
+    this->moveItemToFirst(widget);
+    this->hide();
 }
 
 void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
-    this->addOneItem(nItem);
-    this->saveItem(nItem);
+    if (this->addOneItem(nItem)) {
+        this->saveItem(nItem);
+    }
     this->player->play();
 }
 
@@ -137,17 +128,12 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         int keyIndex = this->numKeyList.indexOf(event->key());
         if (keyIndex >= 0 && keyIndex < this->layout->count() - 1) {
             auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(keyIndex)->widget());
-            this->setCurrentItemAndClipboard(widget);
+            this->moveItemToFirst(widget);
+            this->hide();
         }
     }
 
     QWidget::keyPressEvent(event);
-}
-
-void MPasteWidget::setCurrentItemAndClipboard(ClipboardItemWidget *widget) {
-    this->setCurrentItem(widget);
-    this->setClipboard(widget->getItem());
-    this->hide();
 }
 
 void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
@@ -164,9 +150,7 @@ void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
 void MPasteWidget::saveItem(const ClipboardItem &item) {
     this->checkSaveDir();
 
-    QString fileName = QString("%1.mpaste").arg(item.getName());
-    QString filePath = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir() + QDir::separator() + fileName);
-    this->saver->saveToFile(item, filePath);
+    this->saver->saveToFile(item, this->getItemFilePath(item));
 }
 
 void MPasteWidget::checkSaveDir() {
@@ -195,14 +179,16 @@ void MPasteWidget::loadFromSaveDir() {
     }
 }
 
-void MPasteWidget::addOneItem(const ClipboardItem &nItem) {
-    if (nItem.isEmpty()) return;
+bool MPasteWidget::addOneItem(const ClipboardItem &nItem) {
+    if (nItem.isEmpty()) return false;
 
     for (int i = 0; i < this->layout->count() - 1; ++i) {
         ClipboardItemWidget *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
         if (widget->getItem().sameContent(nItem)) {
-            this->setCurrentItem(widget);
-            return;
+            if (i != 0) {
+                this->moveItemToFirst(widget);
+            }
+            return false;
         }
     }
 
@@ -210,5 +196,36 @@ void MPasteWidget::addOneItem(const ClipboardItem &nItem) {
     connect(itemWidget, &ClipboardItemWidget::clicked, this, &MPasteWidget::itemClicked);
     connect(itemWidget, &ClipboardItemWidget::doubleClicked, this, &MPasteWidget::itemDoubleClicked);
     itemWidget->showItem(nItem);
-    this->setCurrentItem(itemWidget);
+
+    this->layout->insertWidget(0, itemWidget);
+    this->setSelectedItem(itemWidget);
+    return true;
+}
+
+void MPasteWidget::removeOneItemByWidget(ClipboardItemWidget *widget) {
+    if (this->currItemWidget == widget) {
+        this->currItemWidget = nullptr;
+    }
+    this->layout->removeWidget(widget);
+    this->saver->removeItem(this->getItemFilePath(widget->getItem()));
+    widget->deleteLater();
+}
+
+QString MPasteWidget::getItemFilePath(const ClipboardItem &item) {
+return QDir::cleanPath(MPasteSettings::getInst()->getSaveDir() + QDir::separator() + item.getName() + ".mpaste");
+}
+
+void MPasteWidget::moveItemToFirst(ClipboardItemWidget *widget) {
+    ClipboardItem item(widget->getItem().getIcon(),
+                       widget->getItem().getText(),
+                       widget->getItem().getImage(),
+                       widget->getItem().getHtml(),
+                       widget->getItem().getUrls());
+    this->saver->removeItem(this->getItemFilePath(widget->getItem()));
+    this->saveItem(item);
+    this->layout->removeWidget(widget);
+    this->layout->insertWidget(0, widget);
+    this->setSelectedItem(widget);
+    widget->showItem(item);
+    this->setClipboard(item);
 }
