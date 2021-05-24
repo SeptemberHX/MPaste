@@ -26,7 +26,7 @@ A clipboard manager for Deepin V20.
 
 ## Screenshot
 
-![Imgur](https://i.imgur.com/79gyO0n.gifv)
+Gif on [Imgur](https://i.imgur.com/79gyO0n.gifv)
 
 
 ![s1](./images/s1.png)
