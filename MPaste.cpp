@@ -11,7 +11,10 @@
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
 
+    app.setApplicationName("MPaste");
+
     MPasteWidget widget;
+    widget.setWindowTitle("MPaste");
     widget.setFixedWidth(QApplication::desktop()->rect().width());
 
     auto hotkey = new QHotkey(QKeySequence("ctrl+alt+Q"), true, &app);
