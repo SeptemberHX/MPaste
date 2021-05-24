@@ -60,7 +60,15 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &icon) {
             ++n;
         }
     }
-    this->topBgColor = QColor(r/n, g/n, b/n, 0);
+
+    // make it lighter
+    r /= n;
+    r += (255 - r) / 6;
+    g /= n;
+    g += (255 - g) / 6;
+    b /= n;
+    b += (255 - b) / 6;
+    this->topBgColor = QColor(r, g, b, 0);
     this->refreshStyleSheet();
 }
 

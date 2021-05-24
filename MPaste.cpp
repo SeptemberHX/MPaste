@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QDesktopWidget>
 #include <iostream>
+#include <QScreen>
 #include "widget/MPasteWidget.h"
 #include "qhotkey/qhotkey.h"
 
@@ -12,6 +13,7 @@ int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
 
     app.setApplicationName("MPaste");
+    app.setWindowIcon(QIcon(":/resources/resources/paste.svg"));
 
     MPasteWidget widget;
     widget.setWindowTitle("MPaste");
@@ -19,8 +21,10 @@ int main(int argc, char* argv[]) {
 
     auto hotkey = new QHotkey(QKeySequence("ctrl+alt+Q"), true, &app);
     QObject::connect(hotkey, &QHotkey::activated, qApp, [&]() {
-       widget.setVisible(!widget.isVisible());
-       widget.move(0, QApplication::desktop()->height() - widget.height());
+        auto screen = qApp->screenAt(QCursor::pos());
+        widget.setFixedWidth(screen->size().width());
+        widget.setVisible(!widget.isVisible());
+        widget.move(0, screen->size().height() - widget.height());
     });
 
     QObject::connect(qApp, &QGuiApplication::applicationStateChanged, qApp, [&](Qt::ApplicationState state) {

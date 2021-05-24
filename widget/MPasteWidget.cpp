@@ -15,6 +15,10 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     mimeData(nullptr)
 {
     ui->setupUi(this);
+    this->aboutWidget = new AboutWidget(this);
+    this->aboutWidget->setWindowFlag(Qt::Dialog);
+    this->aboutWidget->setWindowTitle("MPaste About");
+    this->aboutWidget->hide();
 
     this->saver = new LocalSaver();
     this->numKeyList << Qt::Key_1 << Qt::Key_2 << Qt::Key_3 << Qt::Key_4 << Qt::Key_5 << Qt::Key_6 << Qt::Key_7 << Qt::Key_8 << Qt::Key_9 << Qt::Key_0;
@@ -40,7 +44,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
 
     this->menu = new QMenu(this);
     this->menu->addAction(tr("Settings"), [this]() { });
-    this->menu->addAction(tr("About"), [this]() { });
+    this->menu->addAction(tr("About"), [this]() { this->aboutWidget->show(); });
     this->menu->addAction(tr("Quit"), [this]() { this->close(); });
 
     connect(ui->menuButton, &QToolButton::clicked, this, [this]() {

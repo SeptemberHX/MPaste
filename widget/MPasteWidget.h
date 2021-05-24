@@ -10,6 +10,7 @@
 #include <QMimeData>
 #include <QMenu>
 #include <QMediaPlayer>
+#include "AboutWidget.h"
 
 namespace Ui {
 class MPasteWidget;
@@ -66,6 +67,7 @@ private:
     QList<int> numKeyList;
 
     LocalSaver *saver;
+    AboutWidget *aboutWidget;
 };
 
 #endif // MPASTEWIDGET_H
