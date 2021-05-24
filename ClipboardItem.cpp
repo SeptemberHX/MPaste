@@ -5,12 +5,13 @@
 #include "ClipboardItem.h"
 
 
-ClipboardItem::ClipboardItem(const QPixmap &icon, const QString &text, const QPixmap &image, const QString &html, const QList<QUrl> &urls)
+ClipboardItem::ClipboardItem(const QPixmap &icon, const QString &text, const QPixmap &image, const QString &html, const QList<QUrl> &urls, const QColor &color)
     : icon(icon)
     , text(text)
     , image(image)
     , html(html)
     , urls(urls)
+    , color(color)
 {
     this->time = QDateTime::currentDateTime();
     this->name = QString::number(this->time.toMSecsSinceEpoch());
@@ -42,6 +43,8 @@ const bool ClipboardItem::sameContent(ClipboardItem item) const {
     } else if (!item.getHtml().isEmpty() && !this->getHtml().isEmpty() && item.getHtml() == this->getHtml()) {
         return true;
     } else if (!item.getUrls().isEmpty() && !this->getUrls().isEmpty() && item.getUrls() == this->getUrls()) {
+        return true;
+    } else if (item.getColor().isValid() && this->getColor().isValid() && item.getColor() == this->getColor()) {
         return true;
     }
 
@@ -97,4 +100,12 @@ void ClipboardItem::setName(const QString &name) {
 
 const bool ClipboardItem::contains(const QString &keyword) const {
     return this->text.contains(keyword);
+}
+
+const QColor &ClipboardItem::getColor() const {
+    return color;
+}
+
+void ClipboardItem::setColor(const QColor &color) {
+    ClipboardItem::color = color;
 }

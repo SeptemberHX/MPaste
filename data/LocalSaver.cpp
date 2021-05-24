@@ -10,7 +10,7 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
     QFile file(filePath);
     file.open(QIODevice::WriteOnly);
     QDataStream out(&file);
-    out << item.getTime() << item.getUrls() << item.getImage() << item.getText() << item.getHtml() << item.getIcon() << item.getName();
+    out << item.getTime() << item.getUrls() << item.getImage() << item.getText() << item.getHtml() << item.getIcon() << item.getName() << item.getColor();
     file.close();
     return true;
 }
@@ -48,6 +48,10 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
     QString name;
     in >> name;
     item.setName(name);
+
+    QColor color;
+    in >> color;
+    item.setColor(color);
 
     return item;
 }

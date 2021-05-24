@@ -14,7 +14,7 @@
 class ClipboardItem {
 
 public:
-    ClipboardItem(const QPixmap &icon, const QString &text, const QPixmap &image, const QString &html, const QList<QUrl> &urls);
+    ClipboardItem(const QPixmap &icon, const QString &text, const QPixmap &image, const QString &html, const QList<QUrl> &urls, const QColor &color);
 
     const bool sameContent(ClipboardItem item) const;
 
@@ -52,6 +52,10 @@ public:
 
     void setName(const QString &name);
 
+    const QColor &getColor() const;
+
+    void setColor(const QColor &color);
+
 private:
     QPixmap icon;
 
@@ -60,6 +64,7 @@ private:
     QString html;
     QList<QUrl> urls;
     QDateTime time;
+    QColor color;
 
     QString name;
 };

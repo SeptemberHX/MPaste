@@ -19,6 +19,7 @@ void ClipboardMonitor::clipboardChanged() {
     QString text, html;
     QPixmap image;
     QList<QUrl> urls;
+    QColor color(-1, -1, -1);
     if (mimeData->hasImage()) {
         image = qvariant_cast<QPixmap>(mimeData->imageData());
     }
@@ -35,7 +36,12 @@ void ClipboardMonitor::clipboardChanged() {
         urls = mimeData->urls();
     }
 
-    Q_EMIT clipboardUpdated(ClipboardItem(XUtils::getWindowIconName(wId), text, image, html, urls), wId);
+    if (mimeData->hasColor()) {
+        color = qvariant_cast<QColor>(mimeData->colorData());
+        std::cout << color.name().toStdString() << std::endl;
+    }
+
+    Q_EMIT clipboardUpdated(ClipboardItem(XUtils::getWindowIconName(wId), text, image, html, urls, color), wId);
 }
 
 ClipboardMonitor::ClipboardMonitor() {

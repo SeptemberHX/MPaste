@@ -126,6 +126,7 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
     if (!item.getImage().isNull()) this->mimeData->setImageData(item.getImage());
     else if (!item.getHtml().isEmpty()) this->mimeData->setHtml(item.getHtml());
     else if (!item.getUrls().isEmpty()) this->mimeData->setUrls(item.getUrls());
+    else if (item.getColor().isValid()) this->mimeData->setColorData(item.getColor());
     QGuiApplication::clipboard()->setMimeData(this->mimeData);
 }
 
@@ -271,7 +272,8 @@ void MPasteWidget::moveItemToFirst(ClipboardItemWidget *widget) {
                        widget->getItem().getText(),
                        widget->getItem().getImage(),
                        widget->getItem().getHtml(),
-                       widget->getItem().getUrls());
+                       widget->getItem().getUrls(),
+                       widget->getItem().getColor());
     this->saver->removeItem(this->getItemFilePath(widget->getItem()));
     this->saveItem(item);
     this->layout->removeWidget(widget);

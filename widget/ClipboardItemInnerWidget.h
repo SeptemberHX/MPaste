@@ -24,7 +24,7 @@ public:
     ~ClipboardItemInnerWidget();
 
     void setIcon(const QPixmap &icon);
-    void showItem(ClipboardItem item);
+    void showItem(const ClipboardItem& item);
 
     void showBorder(bool flag);
     void setShortkeyInfo(int num);
@@ -32,6 +32,11 @@ public:
 
 private:
     void refreshStyleSheet();
+    void showHtml(const QString &html);
+    void showImage(const QPixmap &pixmap);
+    void showText(const QString &text);
+    void showColor(const QColor &color);
+    void showUrls(const QList<QUrl> &urls);
 
     Ui::ClipboardItemInnerWidget *ui;
     QColor bgColor;

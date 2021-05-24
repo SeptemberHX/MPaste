@@ -72,48 +72,19 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &icon) {
     this->refreshStyleSheet();
 }
 
-void ClipboardItemInnerWidget::showItem(ClipboardItem item) {
+void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
     this->setIcon(item.getIcon());
 
-    // obviously, I didn't read the QMimeData document before implement this
-    //   later will re-implement it more elegantly
-    if (!item.getHtml().isEmpty()) {
-        QRegExp regExp("<([A-Za-z]+)");
-        regExp.indexIn(item.getHtml());
-        QSet<QString> tagSet;
-        int pos = 0;
-        while ((pos = regExp.indexIn(item.getHtml(), pos)) != -1) {
-            QString str = regExp.cap(1);
-            tagSet << str;
-            pos += regExp.matchedLength();
-        }
-
-        if (tagSet.contains("img") && tagSet.contains("meta") && tagSet.size() == 2) {
-            this->imageLabel->show();
-            this->imageLabel->setPixmap(item.getImage().scaled(275, 234, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            ui->countLabel->setText(QString("%1 x %2 Pixels").arg(item.getImage().height()).arg(item.getImage().width()));
-            ui->typeLabel->setText(tr("Image"));
-        } else {
-            this->textBrowser->show();
-            this->textBrowser->setHtml(item.getHtml());
-
-            QRegExp bgColorExp("background-color:(#[A-Za-z0-9]{6})");
-            if (bgColorExp.indexIn(item.getHtml()) != -1) {
-                QString colorStr = bgColorExp.cap(1);
-                ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr));
-                ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr));
-            }
-            ui->countLabel->setText(QString("%1 Characters").arg(item.getText().size()));
-        }
-    } else if (!item.getText().isEmpty()) {
-        this->textBrowser->show();
-        this->textBrowser->setPlainText(item.getText());
-        ui->countLabel->setText(QString("%1 Characters").arg(item.getText().size()));
+    if (item.getColor().isValid()) {  // actually I haven't meet this situation yet :p
+        this->showColor(item.getColor());
     } else if (!item.getImage().isNull()) {
-        this->imageLabel->show();
-        this->imageLabel->setPixmap(item.getImage().scaled(275, 234, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        ui->countLabel->setText(QString("%1 x %2 Pixels").arg(item.getImage().height()).arg(item.getImage().width()));
-        ui->typeLabel->setText(tr("Image"));
+        this->showImage(item.getImage());
+    } else if (!item.getHtml().isEmpty() && !QColor::isValidColor(item.getText().trimmed())) {
+        this->showHtml(item.getHtml());
+    } else if (!item.getUrls().isEmpty()) {
+        this->showUrls(item.getUrls());
+    } else if (!item.getText().isEmpty()) {
+        this->showText(item.getText());
     }
 
     ui->timeLabel->setText(item.getTime().toString(Qt::SystemLocaleShortDate));
@@ -146,6 +117,57 @@ void ClipboardItemInnerWidget::setShortkeyInfo(int num) {
 
 void ClipboardItemInnerWidget::clearShortkeyInfo() {
     ui->shortkeyLabel->setText("");
+}
+
+void ClipboardItemInnerWidget::showHtml(const QString &html) {
+    this->textBrowser->show();
+    this->textBrowser->setHtml(html);
+
+    QRegExp bgColorExp("background-color:(#[A-Za-z0-9]{6})");
+    if (bgColorExp.indexIn(html) != -1) {
+        QString colorStr = bgColorExp.cap(1);
+        ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr));
+        ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr));
+    }
+    ui->countLabel->setText(QString("%1 Characters").arg(html.size()));
+}
+
+void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
+    this->imageLabel->show();
+    this->imageLabel->setPixmap(pixmap.scaled(275, 234, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    ui->countLabel->setText(QString("%1 x %2 Pixels").arg(pixmap.height()).arg(pixmap.width()));
+    ui->typeLabel->setText(tr("Image"));
+}
+
+void ClipboardItemInnerWidget::showText(const QString &text) {
+    if (QColor::isValidColor(text.trimmed())) {
+        this->showColor(QColor(text.trimmed()));
+    } else {
+        this->textBrowser->show();
+        this->textBrowser->setPlainText(text);
+        ui->countLabel->setText(QString("%1 Characters").arg(text.size()));
+    }
+}
+
+void ClipboardItemInnerWidget::showColor(const QColor &color) {
+    this->imageLabel->show();
+    QColor fontColor(255 - color.red(), 255 - color.green(), 255 - color.blue());
+
+    this->imageLabel->setStyleSheet(QString("QLabel {background-color: %1; color: %2;}").arg(color.name(), fontColor.name()));
+    ui->infoWidget->setStyleSheet(QString("QWidget {background-color: %1;}").arg(color.name()));
+    ui->countLabel->setText("");
+    this->imageLabel->setText(color.name().toUpper());
+    ui->typeLabel->setText(tr("Color"));
+}
+
+void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls) {
+    this->textBrowser->show();
+    QString str;
+    foreach (const QUrl &url, urls) {
+        str += url.toString() + "\n";
+    }
+    this->textBrowser->setText(str);
+    ui->typeLabel->setText(tr("Links"));
 }
 
 //void ClipboardItemInnerWidget::refreshTimeGap() {
