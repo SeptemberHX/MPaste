@@ -65,7 +65,13 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     connect(ui->searchEdit, &QLineEdit::textChanged, this, [this] (const QString &str) {
         this->currItemsWidget()->filterByKeyword(str);
     });
-    connect(ui->searchButton, &QToolButton::clicked, this, [this] () { this->setFocusOnSearch(true); } );
+    connect(ui->searchButton, &QToolButton::clicked, this, [this] (bool flag) {
+        if (flag) {
+            this->setFocusOnSearch(true);
+        } else {
+            this->setFocusOnSearch(false);
+        }
+    });
 
     this->loadFromSaveDir();
     this->monitor->clipboardChanged();

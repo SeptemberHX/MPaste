@@ -83,12 +83,28 @@
           <height>28</height>
          </size>
         </property>
+        <property name="styleSheet">
+         <string notr="true">QToolButton::hover, QToolButton::selected {
+	background-color: #CCCCCC;
+border-radius: 10px;
+}
+
+QToolButton {
+border-radius: 10px;
+}</string>
+        </property>
         <property name="text">
          <string>S</string>
         </property>
         <property name="icon">
          <iconset resource="../resources.qrc">
           <normaloff>:/resources/resources/search.png</normaloff>:/resources/resources/search.png</iconset>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -106,6 +122,14 @@
           <height>24</height>
          </size>
         </property>
+        <property name="styleSheet">
+         <string notr="true">QLineEdit {
+	border-style: solid;
+border-color: gray;
+border-width: 1px;
+border-radius: 10px;
+}</string>
+        </property>
        </widget>
       </item>
       <item>
@@ -115,6 +139,12 @@
           <width>16777215</width>
           <height>28</height>
          </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QToolButton::checked {
+background-color: #CCCCCC;
+border-radius: 10px;
+}</string>
         </property>
         <property name="text">
          <string>Clipboard</string>
@@ -129,11 +159,27 @@
       </item>
       <item>
        <widget class="QToolButton" name="menuButton">
-        <property name="maximumSize">
+        <property name="minimumSize">
          <size>
-          <width>16777215</width>
+          <width>28</width>
           <height>28</height>
          </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>28</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QToolButton {
+border-radius: 10px;
+}
+
+QToolButton::hover {
+	background-color: #CCCCCC;
+border-radius: 10px;
+}</string>
         </property>
         <property name="text">
          <string>...</string>
