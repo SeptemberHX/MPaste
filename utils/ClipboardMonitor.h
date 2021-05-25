@@ -6,7 +6,7 @@
 #define MPASTE_CLIPBOARDMONITOR_H
 
 #include <QObject>
-#include "ClipboardItem.h"
+#include "data/ClipboardItem.h"
 
 class ClipboardMonitor : public QObject {
     Q_OBJECT

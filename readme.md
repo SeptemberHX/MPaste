@@ -14,17 +14,14 @@ A clipboard manager for Linux. Works on X11 and Wayland.
 
 ## Shortcut
 
-* `ctrl-alt-q`: show/hide window (Only works on X11 now)
 * `Alt+[1-9, 0]`: quick select item. Holding `Alt` can show the shortcut tips
 * Any characters: search mode
-
-> Global shortcut doesn't work on Wayland now
+* Global shortcut to show window: Open your shortcut settings in system settings, and assign a shortcut for command `/path/to/your/MPaste`
 
 > On Gnome wayland with 2x screen factor, `export QT_AUTO_SCREEN_SCALE_FACTOR=1` is needed before running.
 
 ## Default settings
 
-* Global shortcut: `ctrl-alt-q`
 * Max history size: 500
 * History location: `~/.MPaste`
 
@@ -47,7 +44,7 @@ cmake ..
 make
 ```
 
-* [QHotKey](https://github.com/Skycoder42/QHotkey.git)
+* [KDSingleApplication](https://github.com/KDAB/KDSingleApplication)
 * sound effect from https://www.zapsplat.com/
 
 <div>Icons made by <a href="https://www.flaticon.com/authors/pixel-perfect" title="Pixel perfect">Pixel perfect</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a></div>

@@ -7,7 +7,7 @@
 #include <QLabel>
 #include <QTextEdit>
 #include "MTextBrowser.h"
-#include "ClipboardItem.h"
+#include "data/ClipboardItem.h"
 
 namespace Ui {
 class ClipboardItemInnerWidget;

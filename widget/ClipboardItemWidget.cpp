@@ -5,7 +5,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QMouseEvent>
 #include "ClipboardItemWidget.h"
-#include "ClipboardMonitor.h"
+#include "utils/ClipboardMonitor.h"
 
 ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
     : QWidget(parent)

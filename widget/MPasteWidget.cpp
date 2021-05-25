@@ -3,7 +3,7 @@
 #include <QClipboard>
 #include <QKeyEvent>
 #include <QDir>
-#include "MPasteSettings.h"
+#include "utils/MPasteSettings.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
 #include "ClipboardItemWidget.h"

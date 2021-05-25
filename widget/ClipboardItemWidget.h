@@ -9,8 +9,8 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include "ClipboardItemInnerWidget.h"
-#include "ClipboardItem.h"
-#include "ClipboardMonitor.h"
+#include "data/ClipboardItem.h"
+#include "utils/ClipboardMonitor.h"
 
 class ClipboardItemWidget : public QWidget{
 

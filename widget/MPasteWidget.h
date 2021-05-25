@@ -2,9 +2,9 @@
 #define MPASTEWIDGET_H
 
 #include <QWidget>
-#include "ClipboardMonitor.h"
+#include "utils/ClipboardMonitor.h"
 #include "ClipboardItemWidget.h"
-#include "ClipboardItem.h"
+#include "data/ClipboardItem.h"
 #include "data/LocalSaver.h"
 #include <QHBoxLayout>
 #include <QMimeData>

@@ -1,5 +1,5 @@
 #include <QDir>
-#include <MPasteSettings.h>
+#include <utils/MPasteSettings.h>
 #include <iostream>
 #include "ScrollItemsWidget.h"
 #include "ui_ScrollItemsWidget.h"

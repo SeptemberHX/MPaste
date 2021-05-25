@@ -21,7 +21,8 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DQT_DEBUG")
 set(BIN_NAME MPaste)
 
 # Sources files
-file(GLOB SRCS "*.h" "*.cpp" "widget/*.ui" "widget/*.h" "widget/*.cpp" "qhotkey/*.h" "qhotkey/*.cpp" "resources.qrc" "data/*.h" "data/*.cpp")
+file(GLOB SRCS "*.h" "*.cpp" "widget/*.ui" "widget/*.h" "widget/*.cpp"
+        "resources.qrc" "data/*.h" "data/*.cpp" "utils/*.h" "utils/*.cpp" )
 
 # Find the library
 find_package(PkgConfig REQUIRED)
@@ -31,6 +32,7 @@ find_package(KF5WindowSystem REQUIRED)
 find_package(Qt5Multimedia REQUIRED)
 
 pkg_check_modules(QGSettings REQUIRED gsettings-qt)
+add_subdirectory(KDSingleApplication)
 
 add_executable(${BIN_NAME} ${SRCS} ${INTERFACES})
 target_include_directories(${BIN_NAME} PUBLIC
@@ -47,4 +49,5 @@ target_link_libraries(${BIN_NAME} PRIVATE
         ${Qt5X11Extras_LIBRARIES}
         ${QGSettings_LIBRARIES}
         KF5::WindowSystem
+        kdsingleapplication
         )

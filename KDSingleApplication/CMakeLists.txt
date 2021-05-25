@@ -1,0 +1,87 @@
+cmake_minimum_required(VERSION 3.10)
+
+project(KDSingleApplication
+        VERSION 0.1
+        DESCRIPTION "KDSingleApplication is a helper class for single-instance policy applications written by KDAB"
+        HOMEPAGE_URL "https://github.com/KDAB/KDSingleApplication"
+        LANGUAGES CXX)
+
+cmake_policy(SET CMP0020 NEW)
+cmake_policy(SET CMP0042 NEW)
+
+find_package(Qt5Widgets)
+find_package(Qt5Network)
+
+set(CMAKE_AUTOMOC ON)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+option(OPTION_DEVELOPER_MODE "Developer Mode" OFF)
+option(${PROJECT_NAME}_TESTS "Build the tests" OFF)
+option(${PROJECT_NAME}_EXAMPLES "Build the examples" OFF)
+option(${PROJECT_NAME}_STATIC "Build lib as shared" OFF)
+
+add_definitions(-DQT_NO_CAST_TO_ASCII
+        -DQT_NO_CAST_FROM_ASCII
+        -DQT_NO_URL_CAST_FROM_STRING
+        -DQT_NO_CAST_FROM_BYTEARRAY
+        -DQT_NO_SIGNALS_SLOTS_KEYWORDS
+        -DQT_USE_QSTRINGBUILDER
+        -DQT_NO_NARROWING_CONVERSIONS_IN_CONNECT
+        -DQT_STRICT_ITERATORS
+        -DQT_NO_KEYWORDS
+        -DQT_DISABLE_DEPRECATED_BEFORE=0x051200
+        -DQT_NO_FOREACH)
+
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if (NOT WIN32)
+    # Strict iterators can't be used on Windows, they lead to a link error
+    # when application code iterates over a QVector<QPoint> for instance, unless
+    # Qt itself was also built with strict iterators.
+    # See example at https://bugreports.qt.io/browse/AUTOSUITE-946
+    add_definitions(-DQT_STRICT_ITERATORS)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wunused-parameter")
+endif()
+
+if (OPTION_DEVELOPER_MODE)
+    add_definitions(-DQT_FORCE_ASSERTS)
+    if (NOT MSVC)
+        add_compile_options(-Wall -Wextra -Werror)
+    endif()
+endif()
+
+set(KDSINGLEAPPLICATION_SRCS
+	kdsingleapplication.cpp
+	kdsingleapplication_localsocket.cpp)
+
+set(KDSINGLEAPPLICATION_INSTALLABLE_INCLUDES
+       kdsingleapplication.h
+       kdsingleapplication_lib.h
+    )
+
+set(KDSINGLEAPPLICATION_NON_INSTALLABLE_INCLUDES
+       kdsingleapplication_localsocket_p.h
+   )
+
+if (${PROJECT_NAME}_STATIC)
+    add_library(kdsingleapplication STATIC ${KDSINGLEAPPLICATION_INSTALLABLE_INCLUDES} ${KDSINGLEAPPLICATION_SRCS})
+    target_compile_definitions(kdsingleapplication PUBLIC KDSINGLEAPPLICATION_STATIC_BUILD)
+else()
+    add_library(kdsingleapplication SHARED ${KDSINGLEAPPLICATION_INSTALLABLE_INCLUDES} ${KDSINGLEAPPLICATION_SRCS})
+    target_compile_definitions(kdsingleapplication PRIVATE KDSINGLEAPPLICATION_SHARED_BUILD)
+endif()
+
+target_include_directories(kdsingleapplication
+    PUBLIC
+        $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+if (WIN32)
+    target_link_libraries(kdsingleapplication kernel32)
+endif()
+target_link_libraries(kdsingleapplication Qt5::Core Qt5::Network)

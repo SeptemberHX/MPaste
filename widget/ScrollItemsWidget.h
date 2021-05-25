@@ -4,7 +4,7 @@
 #include <QWidget>
 #include <QHBoxLayout>
 #include <data/LocalSaver.h>
-#include "ClipboardItem.h"
+#include "data/ClipboardItem.h"
 #include "ClipboardItemWidget.h"
 
 namespace Ui {
