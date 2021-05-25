@@ -7,7 +7,7 @@
 #include <iostream>
 #include <QScreen>
 #include "widget/MPasteWidget.h"
-`#include "KDSingleApplication/kdsingleapplication.h"
+#include "KDSingleApplication/kdsingleapplication.h"
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
