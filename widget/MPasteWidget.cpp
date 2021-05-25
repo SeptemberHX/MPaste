@@ -14,6 +14,15 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     mimeData(nullptr)
 {
     ui->setupUi(this);
+    this->searchHideAnim = new QPropertyAnimation(ui->searchEdit, "maximumWidth");
+    this->searchHideAnim->setEndValue(0);
+    this->searchHideAnim->setDuration(150);
+    connect(this->searchHideAnim, &QPropertyAnimation::finished, ui->searchEdit, &QLineEdit::hide);
+
+    this->searchShowAnim = new QPropertyAnimation(ui->searchEdit, "maximumWidth");
+    this->searchShowAnim->setEndValue(200);
+    this->searchShowAnim->setDuration(150);
+
     this->aboutWidget = new AboutWidget(this);
     this->aboutWidget->setWindowFlag(Qt::Dialog);
     this->aboutWidget->setWindowTitle("MPaste About");
@@ -35,7 +44,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->layout->setContentsMargins(0, 0, 0, 0);
     this->layout->addWidget(this->clipboardWidget);
 
-    this->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+    this->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint);
     this->setObjectName("pasteWidget");
     this->setStyleSheet("QWidget#pasteWidget, #scrollAreaWidgetContents {background-color: #e6e5e4;}");
 
@@ -160,9 +169,10 @@ void MPasteWidget::loadFromSaveDir() {
 void MPasteWidget::setFocusOnSearch(bool flag) {
     if (flag) {
         ui->searchEdit->show();
+        this->searchShowAnim->start();
         ui->searchEdit->setFocus();
     } else {
-        ui->searchEdit->hide();
+        this->searchHideAnim->start();
         ui->searchEdit->clearFocus();
         this->setFocus();
     }

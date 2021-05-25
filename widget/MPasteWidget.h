@@ -10,6 +10,7 @@
 #include <QMimeData>
 #include <QMenu>
 #include <QMediaPlayer>
+#include <QPropertyAnimation>
 #include "AboutWidget.h"
 #include "ScrollItemsWidget.h"
 
@@ -55,6 +56,9 @@ private:
     AboutWidget *aboutWidget;
 
     ScrollItemsWidget *clipboardWidget;
+
+    QPropertyAnimation *searchShowAnim;
+    QPropertyAnimation *searchHideAnim;
 };
 
 #endif // MPASTEWIDGET_H
