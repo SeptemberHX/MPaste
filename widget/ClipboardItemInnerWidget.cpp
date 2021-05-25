@@ -46,33 +46,36 @@ ClipboardItemInnerWidget::~ClipboardItemInnerWidget()
     delete ui;
 }
 
-void ClipboardItemInnerWidget::setIcon(const QPixmap &icon) {
-    if (!icon.isNull()) {
-        ui->iconLabel->setPixmap(icon.scaled(ui->iconLabel->sizeHint(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-
-        int r = 0, g = 0, b = 0, a = 0, n = 0;
-        QImage image = icon.toImage();
-        for (int row = 1; row < image.height(); ++row) {
-            for (int c = 1; c < image.width(); ++c) {
-                QColor current(image.pixel(row, c));
-                r += current.red();
-                g += current.green();
-                b += current.blue();
-                a += current.alpha();
-                ++n;
-            }
-        }
-
-        // make it lighter
-        r /= n;
-        r += (255 - r) / 6;
-        g /= n;
-        g += (255 - g) / 6;
-        b /= n;
-        b += (255 - b) / 6;
-        this->topBgColor = QColor(r, g, b, 0);
-        this->refreshStyleSheet();
+void ClipboardItemInnerWidget::setIcon(const QPixmap &nIcon) {
+    QPixmap icon = nIcon;
+    if (icon.isNull()) {
+        icon = QPixmap(":/resources/resources/unknown.svg");
     }
+
+    ui->iconLabel->setPixmap(icon.scaled(ui->iconLabel->sizeHint(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    int r = 0, g = 0, b = 0, a = 0, n = 0;
+    QImage image = icon.toImage();
+    for (int row = 1; row < image.height(); ++row) {
+        for (int c = 1; c < image.width(); ++c) {
+            QColor current(image.pixel(row, c));
+            r += current.red();
+            g += current.green();
+            b += current.blue();
+            a += current.alpha();
+            ++n;
+        }
+    }
+
+    // make it lighter
+    r /= n;
+    r += (255 - r) / 6;
+    g /= n;
+    g += (255 - g) / 6;
+    b /= n;
+    b += (255 - b) / 6;
+    this->topBgColor = QColor(r, g, b, 0);
+    this->refreshStyleSheet();
 }
 
 void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
@@ -170,6 +173,7 @@ void ClipboardItemInnerWidget::showColor(const QColor &color) {
     ui->infoWidget->setStyleSheet(QString("QWidget {background-color: %1;}").arg(color.name()));
     ui->countLabel->setText("");
     this->imageLabel->setText(color.name().toUpper());
+    this->imageLabel->setAlignment(Qt::AlignCenter);
     ui->typeLabel->setText(tr("Color"));
 }
 

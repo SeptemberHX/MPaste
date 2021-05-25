@@ -24,6 +24,7 @@ class MPasteWidget : public QWidget
 public:
     explicit MPasteWidget(QWidget *parent = nullptr);
     ~MPasteWidget();
+    void setVisibleWithAnnimation(bool visible);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 protected:

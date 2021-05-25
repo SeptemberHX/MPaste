@@ -35,7 +35,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->layout->setContentsMargins(0, 0, 0, 0);
     this->layout->addWidget(this->clipboardWidget);
 
-    this->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Dialog | Qt::FramelessWindowHint);
+    this->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
     this->setObjectName("pasteWidget");
     this->setStyleSheet("QWidget#pasteWidget, #scrollAreaWidgetContents {background-color: #e6e5e4;}");
 
@@ -133,6 +133,7 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         if (keyOrder >= 0 && keyOrder <= 9) {
             this->currItemsWidget()->selectedByShortcut(keyOrder);
             this->hide();
+            this->currItemsWidget()->cleanShortCutInfo();
         }
     } else if (event->key() >= Qt::Key_Space && event->key() <= Qt::Key_AsciiTilde) {
         // make sure we can get to search area by pressing any characters
@@ -169,4 +170,17 @@ void MPasteWidget::setFocusOnSearch(bool flag) {
 
 ScrollItemsWidget *MPasteWidget::currItemsWidget() {
     return this->clipboardWidget;
+}
+
+void MPasteWidget::setVisibleWithAnnimation(bool visible) {
+    if (visible == this->isVisible()) return;
+
+    if (visible) {
+        this->show();
+        if (!ui->searchEdit->text().isEmpty()) {
+            ui->searchEdit->setFocus();
+        }
+    } else {
+        this->hide();
+    }
 }

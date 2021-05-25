@@ -6,6 +6,7 @@
 #include <QDesktopWidget>
 #include <iostream>
 #include <QScreen>
+#include <KWindowSystem>
 #include "widget/MPasteWidget.h"
 #include "KDSingleApplication/kdsingleapplication.h"
 
@@ -30,10 +31,12 @@ int main(int argc, char* argv[]) {
         QObject::connect(&kds, &KDSingleApplication::messageReceived, qApp, [&] (const QByteArray &message) {
             // whatever received here, just raise the window !
             auto screen = qApp->screenAt(QCursor::pos());
-            widget.setFixedWidth(screen->size().width());
-            widget.setVisible(!widget.isVisible());
-            widget.setFocus();
-            widget.move(0, screen->size().height() - widget.height());
+            widget.setFixedWidth(screen->availableSize().width());
+            widget.setVisibleWithAnnimation(!widget.isVisible());
+            if (widget.isVisible()) {
+                KWindowSystem::forceActiveWindow(widget.winId());
+            }
+            widget.move(screen->availableGeometry().x(), screen->size().height() - widget.height());
         });
 
         return app.exec();

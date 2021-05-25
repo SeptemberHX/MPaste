@@ -20,6 +20,8 @@ A clipboard manager for Linux. Works on X11 and Wayland.
 
 > On Gnome wayland with 2x screen factor, `export QT_AUTO_SCREEN_SCALE_FACTOR=1` is needed before running.
 
+> On Gnome, please install the extension: https://extensions.gnome.org/extension/1005/focus-my-window/  
+> Or the window will not get focused after appearing with shortcut
 ## Default settings
 
 * Max history size: 500
@@ -29,6 +31,7 @@ A clipboard manager for Linux. Works on X11 and Wayland.
 
 Gif on [Imgur](https://i.imgur.com/79gyO0n.gifv)
 
+![s1_ubuntu](./images/s1_ubuntu.png)
 ![s2](./images/s2.png)
 ![s1](./images/s1.png)
 
