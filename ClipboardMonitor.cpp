@@ -10,7 +10,6 @@
 #include <QGuiApplication>
 #include <QMimeData>
 #include <QUrl>
-#include "XUtils.h"
 
 void ClipboardMonitor::clipboardChanged() {
     int wId = KWindowSystem::activeWindow();
@@ -41,7 +40,7 @@ void ClipboardMonitor::clipboardChanged() {
         std::cout << color.name().toStdString() << std::endl;
     }
 
-    Q_EMIT clipboardUpdated(ClipboardItem(XUtils::getWindowIconName(wId), text, image, html, urls, color), wId);
+    Q_EMIT clipboardUpdated(ClipboardItem(KWindowSystem::self()->icon(wId), text, image, html, urls, color), wId);
 }
 
 ClipboardMonitor::ClipboardMonitor() {

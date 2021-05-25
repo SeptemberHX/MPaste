@@ -47,30 +47,32 @@ ClipboardItemInnerWidget::~ClipboardItemInnerWidget()
 }
 
 void ClipboardItemInnerWidget::setIcon(const QPixmap &icon) {
-    ui->iconLabel->setPixmap(icon.scaled(ui->iconLabel->sizeHint(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    if (!icon.isNull()) {
+        ui->iconLabel->setPixmap(icon.scaled(ui->iconLabel->sizeHint(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
-    int r = 0, g = 0, b = 0, a = 0, n = 0;
-    QImage image = icon.toImage();
-    for (int row = 1; row < image.height(); ++row) {
-        for (int c = 1; c < image.width(); ++c) {
-            QColor current(image.pixel(row, c));
-            r += current.red();
-            g += current.green();
-            b += current.blue();
-            a += current.alpha();
-            ++n;
+        int r = 0, g = 0, b = 0, a = 0, n = 0;
+        QImage image = icon.toImage();
+        for (int row = 1; row < image.height(); ++row) {
+            for (int c = 1; c < image.width(); ++c) {
+                QColor current(image.pixel(row, c));
+                r += current.red();
+                g += current.green();
+                b += current.blue();
+                a += current.alpha();
+                ++n;
+            }
         }
-    }
 
-    // make it lighter
-    r /= n;
-    r += (255 - r) / 6;
-    g /= n;
-    g += (255 - g) / 6;
-    b /= n;
-    b += (255 - b) / 6;
-    this->topBgColor = QColor(r, g, b, 0);
-    this->refreshStyleSheet();
+        // make it lighter
+        r /= n;
+        r += (255 - r) / 6;
+        g /= n;
+        g += (255 - g) / 6;
+        b /= n;
+        b += (255 - b) / 6;
+        this->topBgColor = QColor(r, g, b, 0);
+        this->refreshStyleSheet();
+    }
 }
 
 void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {

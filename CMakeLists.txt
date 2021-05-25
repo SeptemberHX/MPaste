@@ -30,12 +30,10 @@ find_package(Qt5X11Extras REQUIRED)
 find_package(KF5WindowSystem REQUIRED)
 find_package(Qt5Multimedia REQUIRED)
 
-pkg_check_modules(XCB_EWMH REQUIRED xcb-ewmh x11)
 pkg_check_modules(QGSettings REQUIRED gsettings-qt)
 
 add_executable(${BIN_NAME} ${SRCS} ${INTERFACES})
 target_include_directories(${BIN_NAME} PUBLIC
-        ${XCB_EWMH_INCLUDE_DIRS}
         ${Qt5Gui_PRIVATE_INCLUDE_DIRS}
         ${PROJECT_BINARY_DIR}
         ${QGSettings_INCLUDE_DIRS}
@@ -49,6 +47,4 @@ target_link_libraries(${BIN_NAME} PRIVATE
         ${Qt5X11Extras_LIBRARIES}
         ${QGSettings_LIBRARIES}
         KF5::WindowSystem
-        xdo
-        X11
         )
