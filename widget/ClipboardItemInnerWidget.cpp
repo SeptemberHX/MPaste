@@ -2,6 +2,7 @@
 #include "ClipboardItemInnerWidget.h"
 #include "ui_ClipboardItemInnerWidget.h"
 #include <QPlainTextEdit>
+#include <QFileInfo>
 
 ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     QFrame(parent),
@@ -31,6 +32,10 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     this->imageLabel->hide();
     this->imageLabel->setAlignment(Qt::AlignCenter);
     this->mLayout->addWidget(this->imageLabel);
+
+    this->thumbWidget = new FileThumbWidget(ui->bodyWidget);
+    this->thumbWidget->hide();
+    this->mLayout->addWidget(this->thumbWidget);
 
     ui->iconLabel->setAttribute(Qt::WA_TranslucentBackground);
     ui->widget_2->setAttribute(Qt::WA_TranslucentBackground);
@@ -178,13 +183,23 @@ void ClipboardItemInnerWidget::showColor(const QColor &color) {
 }
 
 void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls) {
-    this->textBrowser->show();
-    QString str;
-    foreach (const QUrl &url, urls) {
-        str += url.toString() + "\n";
+    if (urls.size() == 1 && urls[0].isLocalFile()) {
+        this->showFile(urls[0]);
+    } else {
+        this->textBrowser->show();
+        QString str;
+                foreach (const QUrl &url, urls) {
+                str += url.toString() + "\n";
+            }
+        this->textBrowser->setText(str);
+        ui->typeLabel->setText(tr("Links"));
     }
-    this->textBrowser->setText(str);
-    ui->typeLabel->setText(tr("Links"));
+}
+
+void ClipboardItemInnerWidget::showFile(const QUrl &url) {
+    ui->typeLabel->setText(tr("File"));
+    this->thumbWidget->show();
+    this->thumbWidget->showUrl(url);
 }
 
 //void ClipboardItemInnerWidget::refreshTimeGap() {

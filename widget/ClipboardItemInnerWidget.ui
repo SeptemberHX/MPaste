@@ -219,7 +219,7 @@
          </font>
         </property>
         <property name="text">
-         <string>50 characters</string>
+         <string/>
         </property>
         <property name="alignment">
          <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>

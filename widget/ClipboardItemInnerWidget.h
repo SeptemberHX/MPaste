@@ -8,6 +8,7 @@
 #include <QTextEdit>
 #include "MTextBrowser.h"
 #include "data/ClipboardItem.h"
+#include "FileThumbWidget.h"
 
 namespace Ui {
 class ClipboardItemInnerWidget;
@@ -37,6 +38,7 @@ private:
     void showText(const QString &text);
     void showColor(const QColor &color);
     void showUrls(const QList<QUrl> &urls);
+    void showFile(const QUrl &url);
 
     Ui::ClipboardItemInnerWidget *ui;
     QColor bgColor;
@@ -46,6 +48,7 @@ private:
     QLabel *imageLabel;
     QHBoxLayout *mLayout;
     int borderWidth;
+    FileThumbWidget *thumbWidget;
 };
 
 #endif // CLIPBOARDITEMINNERWIDGET_H

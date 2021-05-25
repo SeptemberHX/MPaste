@@ -119,11 +119,29 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
     }
 
     this->mimeData = new QMimeData();
-    if (item.getImage().isNull() && !item.getText().isEmpty()) this->mimeData->setText(item.getText());
+    if (item.getImage().isNull() && !item.getText().isEmpty() && item.getUrls().isEmpty()) this->mimeData->setText(item.getText());
 
     if (!item.getImage().isNull()) this->mimeData->setImageData(item.getImage());
     else if (!item.getHtml().isEmpty()) this->mimeData->setHtml(item.getHtml());
-    else if (!item.getUrls().isEmpty()) this->mimeData->setUrls(item.getUrls());
+    else if (!item.getUrls().isEmpty()) {
+        bool files = true;
+        foreach (const QUrl &url, item.getUrls()) {
+            if (!url.isLocalFile() || !QFileInfo::exists(url.toLocalFile())) {
+                files = false;
+                break;
+            }
+        }
+
+        if (files) {
+            QByteArray byteArray("copy\n");
+            foreach (const QUrl &url, item.getUrls()) {
+                byteArray.append(url.toEncoded()).append(' ');
+            }
+            this->mimeData->setData("x-special/gnome-copied-files", byteArray);
+        }
+
+        this->mimeData->setUrls(item.getUrls());
+    }
     else if (item.getColor().isValid()) this->mimeData->setColorData(item.getColor());
     QGuiApplication::clipboard()->setMimeData(this->mimeData);
 }

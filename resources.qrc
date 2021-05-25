@@ -4,5 +4,6 @@
         <file>resources/paste.svg</file>
         <file>resources/unknown.svg</file>
         <file>resources/search.svg</file>
+        <file>resources/broken.svg</file>
     </qresource>
 </RCC>
