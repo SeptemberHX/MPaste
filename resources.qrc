@@ -1,8 +1,8 @@
 <RCC>
     <qresource prefix="/resources">
         <file>resources/sound.mp3</file>
-        <file>resources/search.png</file>
         <file>resources/paste.svg</file>
         <file>resources/unknown.svg</file>
+        <file>resources/search.svg</file>
     </qresource>
 </RCC>

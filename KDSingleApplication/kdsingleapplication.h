@@ -56,7 +56,14 @@ Q_SIGNALS:
 
 private:
     Q_DECLARE_PRIVATE(KDSingleApplication)
+
+    // Have no idea when Qt changes the definition of function qGetPtrHelper in qglobal.h
+    //    below not work in UOS with Qt 5.11.3
+#if (QT_VERSION >= QT_VERSION_CHECK(5,12,0))
     std::unique_ptr<KDSingleApplicationPrivate> d_ptr;
+#else
+    KDSingleApplicationPrivate *d_ptr;
+#endif
 };
 
 #endif // KDSINGLEAPPLICATION_H
