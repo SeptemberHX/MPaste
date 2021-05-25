@@ -11,6 +11,7 @@
 #include <QMenu>
 #include <QMediaPlayer>
 #include "AboutWidget.h"
+#include "ScrollItemsWidget.h"
 
 namespace Ui {
 class MPasteWidget;
@@ -27,38 +28,22 @@ public:
     bool eventFilter(QObject *watched, QEvent *event) override;
 protected:
     void keyPressEvent(QKeyEvent *event) override;
-
     void keyReleaseEvent(QKeyEvent *event) override;
 
 private slots:
-    void itemClicked();
-    void itemDoubleClicked();
     void clipboardUpdated(ClipboardItem item, int wId);
-    void filterByKeyword(const QString &keyword);
 
 private:
     void setFocusOnSearch(bool flag);
-    void setFirstVisibleItemSelected();
+    ScrollItemsWidget* currItemsWidget();
 
-    void setAllItemVisible();
-
-    bool addOneItem(const ClipboardItem &item);
-    void removeOneItemByWidget(ClipboardItemWidget *widget);
-    void moveItemToFirst(ClipboardItemWidget *widget);
-
-    void setSelectedItem(ClipboardItemWidget *item);
     void setClipboard(const ClipboardItem &item);
-
-    void checkSaveDir();
     void loadFromSaveDir();
-    void saveItem(const ClipboardItem &item);
-    QString getItemFilePath(const ClipboardItem &item);
 
     Ui::MPasteWidget *ui;
     QHBoxLayout *layout;
     ClipboardMonitor *monitor;
 
-    ClipboardItemWidget *currItemWidget;
     QMimeData *mimeData;
 
     QMenu *menu;
@@ -66,8 +51,9 @@ private:
     QMediaPlayer *player;
     QList<int> numKeyList;
 
-    LocalSaver *saver;
     AboutWidget *aboutWidget;
+
+    ScrollItemsWidget *clipboardWidget;
 };
 
 #endif // MPASTEWIDGET_H

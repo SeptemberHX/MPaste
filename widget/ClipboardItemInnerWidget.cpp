@@ -12,6 +12,7 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
 {
     ui->setupUi(this);
     this->setObjectName("innerWidget");
+    ui->infoWidget->setObjectName("infoWidget");
     this->mLayout = new QHBoxLayout(ui->bodyWidget);
     this->mLayout->setMargin(0);
 
@@ -35,7 +36,7 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     ui->widget_2->setAttribute(Qt::WA_TranslucentBackground);
     ui->typeLabel->setAttribute(Qt::WA_TranslucentBackground);
     ui->timeLabel->setAttribute(Qt::WA_TranslucentBackground);
-    ui->infoWidget->setStyleSheet("{color: #666666;}");
+    ui->infoWidget->setStyleSheet("QWidget {color: #666666;}");
 
     this->refreshStyleSheet();
 }
