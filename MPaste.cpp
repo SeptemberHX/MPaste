@@ -31,7 +31,8 @@ int main(int argc, char* argv[]) {
             // whatever received here, just raise the window !
             auto screen = qApp->screenAt(QCursor::pos());
             widget.setFixedWidth(screen->size().width());
-            widget.show();
+            widget.setVisible(!widget.isVisible());
+            widget.setFocus();
             widget.move(0, screen->size().height() - widget.height());
         });
 
