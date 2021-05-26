@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QUrl>
+#include <QMimeDatabase>
 
 namespace Ui {
 class FileThumbWidget;
@@ -20,6 +21,7 @@ public:
 
 private:
     Ui::FileThumbWidget *ui;
+    QMimeDatabase db;
 };
 
 #endif // FILETHUMBWIDGET_H
