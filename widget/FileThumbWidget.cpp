@@ -31,10 +31,30 @@ void FileThumbWidget::showUrl(const QUrl &fileUrl) {
         } else {
             QFileIconProvider provider;
             QIcon icon = provider.icon(info);
-            ui->iconLabel->setPixmap(icon.pixmap(ui->iconLabel->width(), ui->iconLabel->width()));
+            ui->iconLabel->setPixmap(icon.pixmap(ui->iconLabel->size()).scaled(ui->iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
         }
     } else {
-        ui->iconLabel->setPixmap(QPixmap(":/resources/resources/broken.svg").scaled(ui->iconLabel->width(), ui->iconLabel->width(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        ui->iconLabel->setPixmap(QPixmap(":/resources/resources/broken.svg").scaled(ui->iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
     }
-    ui->pathLabel->setText(fileUrl.toLocalFile());
+    this->setElidedText(fileUrl.toLocalFile());
+}
+
+void FileThumbWidget::showUrls(const QList<QUrl> &fileUrls) {
+    ui->iconLabel->setPixmap(QPixmap(":/resources/resources/files.svg").scaled(ui->iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    QString str;
+    foreach (const QUrl &url, fileUrls) {
+        str += url.fileName() + ", ";
+    }
+    str = str.remove(str.size() - 1, 1);
+    this->setElidedText(str);
+}
+
+void FileThumbWidget::setElidedText(const QString &str) {
+    QString r = str;
+    QFontMetrics font = QFontMetrics(ui->pathLabel->font());
+    if(font.boundingRect(str).width() > ui->pathLabel->width() * 2){
+        r = font.elidedText(str, Qt::ElideRight, ui->pathLabel->width() * 2);
+    }
+    ui->pathLabel->setText(r);
 }

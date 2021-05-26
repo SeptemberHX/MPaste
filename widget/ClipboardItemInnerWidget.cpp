@@ -185,21 +185,29 @@ void ClipboardItemInnerWidget::showColor(const QColor &color) {
 void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls) {
     if (urls.size() == 1 && urls[0].isLocalFile()) {
         this->showFile(urls[0]);
+    } else if (urls.size() > 1 && urls[0].isLocalFile()) {
+        this->showFiles(urls);
     } else {
         this->textBrowser->show();
         QString str;
-                foreach (const QUrl &url, urls) {
-                str += url.toString() + "\n";
-            }
+        foreach (const QUrl &url, urls) {
+            str += url.toString() + "\n";
+        }
         this->textBrowser->setText(str);
         ui->typeLabel->setText(tr("Links"));
     }
 }
 
 void ClipboardItemInnerWidget::showFile(const QUrl &url) {
-    ui->typeLabel->setText(tr("File"));
+    ui->typeLabel->setText(tr("1 File"));
     this->thumbWidget->show();
     this->thumbWidget->showUrl(url);
+}
+
+void ClipboardItemInnerWidget::showFiles(const QList<QUrl> &fileUrls) {
+    ui->typeLabel->setText(QString::number(fileUrls.size()) + " " + tr("Files"));
+    this->thumbWidget->show();
+    this->thumbWidget->showUrls(fileUrls);
 }
 
 //void ClipboardItemInnerWidget::refreshTimeGap() {

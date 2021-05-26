@@ -18,6 +18,8 @@ public:
     ~FileThumbWidget();
 
     void showUrl(const QUrl &fileUrl);
+    void showUrls(const QList<QUrl> &fileUrls);
+    void setElidedText(const QString &str);
 
 private:
     Ui::FileThumbWidget *ui;

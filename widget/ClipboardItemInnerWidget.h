@@ -39,6 +39,7 @@ private:
     void showColor(const QColor &color);
     void showUrls(const QList<QUrl> &urls);
     void showFile(const QUrl &url);
+    void showFiles(const QList<QUrl> &fileUrls);
 
     Ui::ClipboardItemInnerWidget *ui;
     QColor bgColor;

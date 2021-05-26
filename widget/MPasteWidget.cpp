@@ -213,7 +213,6 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
 
 void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == this->isVisible()) return;
-
     if (visible) {
         this->show();
         if (!ui->searchEdit->text().isEmpty()) {

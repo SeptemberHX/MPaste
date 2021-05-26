@@ -5,5 +5,6 @@
         <file>resources/unknown.svg</file>
         <file>resources/search.svg</file>
         <file>resources/broken.svg</file>
+        <file>resources/files.svg</file>
     </qresource>
 </RCC>
