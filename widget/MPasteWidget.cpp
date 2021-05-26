@@ -133,11 +133,16 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
         }
 
         if (files) {
+            QByteArray nautilus("x-special/nautilus-clipboard\n");
             QByteArray byteArray("copy\n");
             foreach (const QUrl &url, item.getUrls()) {
-                byteArray.append(url.toEncoded()).append(' ');
+                byteArray.append(url.toEncoded()).append('\n');
             }
             this->mimeData->setData("x-special/gnome-copied-files", byteArray);
+            nautilus.append(byteArray);
+            this->mimeData->setData("COMPOUND_TEXT", nautilus);
+            this->mimeData->setText(nautilus);
+            this->mimeData->setData("text/plain;charset=utf-8", nautilus);
         }
 
         this->mimeData->setUrls(item.getUrls());
