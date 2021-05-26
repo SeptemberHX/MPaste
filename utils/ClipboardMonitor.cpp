@@ -4,7 +4,7 @@
 
 #include "ClipboardMonitor.h"
 
-#include <KWindowSystem>
+#include "PlatformRelated.h"
 #include <iostream>
 #include <QClipboard>
 #include <QGuiApplication>
@@ -12,7 +12,7 @@
 #include <QUrl>
 
 void ClipboardMonitor::clipboardChanged() {
-    int wId = KWindowSystem::activeWindow();
+    int wId = PlatformRelated::currActiveWindow();
     const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
 
 //    foreach (const QString &format, mimeData->formats()) {
@@ -44,7 +44,7 @@ void ClipboardMonitor::clipboardChanged() {
         std::cout << color.name().toStdString() << std::endl;
     }
 
-    Q_EMIT clipboardUpdated(ClipboardItem(KWindowSystem::self()->icon(wId), text, image, html, urls, color), wId);
+    Q_EMIT clipboardUpdated(ClipboardItem(PlatformRelated::getWindowIcon(wId), text, image, html, urls, color), wId);
 }
 
 ClipboardMonitor::ClipboardMonitor() {

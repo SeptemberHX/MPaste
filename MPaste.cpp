@@ -6,10 +6,9 @@
 #include <QDesktopWidget>
 #include <iostream>
 #include <QScreen>
-#include <KWindowSystem>
 #include "widget/MPasteWidget.h"
 #include "KDSingleApplication/kdsingleapplication.h"
-#include "XUtils.h"
+#include "utils/PlatformRelated.h"
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
@@ -28,7 +27,7 @@ int main(int argc, char* argv[]) {
                 widget.hide();
             }
         });
-        XUtils::activeWindowX11(widget.winId());
+        PlatformRelated::activateWindow(widget.winId());
 
         QObject::connect(&kds, &KDSingleApplication::messageReceived, qApp, [&] (const QByteArray &message) {
             // whatever received here, just raise the window !
@@ -36,8 +35,7 @@ int main(int argc, char* argv[]) {
             widget.setFixedWidth(screen->availableSize().width());
             widget.setVisibleWithAnnimation(!widget.isVisible());
             if (widget.isVisible()) {
-                // The widget cannot get focus with widget.setFocus(). We have to use x11 directly
-                XUtils::activeWindowX11(widget.winId());
+                PlatformRelated::activateWindow(widget.winId());
             }
             widget.move(screen->availableGeometry().x(), screen->size().height() - widget.height());
         });

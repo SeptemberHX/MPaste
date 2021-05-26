@@ -27,7 +27,7 @@ void FileThumbWidget::showUrl(const QUrl &fileUrl) {
     if (info.exists()) {
         QMimeType mime = db.mimeTypeForFile(info);
         if (mime.name().startsWith("image")) {
-            ui->iconLabel->setPixmap(QPixmap(info.absoluteFilePath()).scaled(ui->iconLabel->width(), ui->iconLabel->width(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            ui->iconLabel->setPixmap(QPixmap(info.absoluteFilePath()).scaled(ui->iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
         } else {
             QFileIconProvider provider;
             QIcon icon = provider.icon(info);

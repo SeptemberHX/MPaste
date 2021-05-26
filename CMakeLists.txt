@@ -27,28 +27,32 @@ file(GLOB SRCS "*.h" "*.cpp" "widget/*.ui" "widget/*.h" "widget/*.cpp"
 # Find the library
 find_package(PkgConfig REQUIRED)
 find_package(Qt5Widgets REQUIRED)
+find_package(Qt5Multimedia REQUIRED)
+
+IF (UNIX)
 find_package(Qt5X11Extras REQUIRED)
 find_package(KF5WindowSystem REQUIRED)
-find_package(Qt5Multimedia REQUIRED)
+ENDIF()
 
 pkg_check_modules(QGSettings REQUIRED gsettings-qt)
 add_subdirectory(KDSingleApplication)
 
-add_executable(${BIN_NAME} ${SRCS} ${INTERFACES})
+add_executable(${BIN_NAME} ${SRCS} ${INTERFACES} utils/PlatformRelated.cpp utils/PlatformRelated.h)
 target_include_directories(${BIN_NAME} PUBLIC
         ${Qt5Gui_PRIVATE_INCLUDE_DIRS}
         ${PROJECT_BINARY_DIR}
         ${QGSettings_INCLUDE_DIRS}
-        ${KF5WindowSystem_INCLUDE_DIRS}
         )
 
+set(CUSTOM_LIBARAIES kdsingleapplication)
+
+IF (UNIX)
+    set(CUSTOM_LIBARAIES KF5::WindowSystem xdo ${CUSTOM_LIBARAIES} ${Qt5X11Extras_LIBRARIES})
+ENDIF()
+
 target_link_libraries(${BIN_NAME} PRIVATE
-        ${XCB_EWMH_LIBRARIES}
         ${Qt5Widgets_LIBRARIES}
         ${Qt5Multimedia_LIBRARIES}
-        ${Qt5X11Extras_LIBRARIES}
         ${QGSettings_LIBRARIES}
-        KF5::WindowSystem
-        kdsingleapplication
-        xdo
+        ${CUSTOM_LIBARAIES}
         )
