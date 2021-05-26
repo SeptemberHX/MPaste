@@ -163,6 +163,13 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
     } else if (event->key() == Qt::Key_Alt) {
         // set shortcut information for selecting top-10 items
         this->currItemsWidget()->setShortcutInfo();
+    } else if (event->key() == Qt::Key_Left) {
+        this->currItemsWidget()->focusMoveLeft();
+    } else if (event->key() == Qt::Key_Right) {
+        this->currItemsWidget()->focusMoveRight();
+    } else if (event->key() == Qt::Key_Return) {
+        this->currItemsWidget()->selectedByEnter();
+        this->hide();
     }
 
     if (event->modifiers() & Qt::AltModifier) {

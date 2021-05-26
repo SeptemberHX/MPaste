@@ -28,6 +28,9 @@ public:
     QScrollBar* horizontalScrollbar();
     void setAllItemVisible();
     void selectedByShortcut(int visibleOrder);
+    void selectedByEnter();
+    void focusMoveLeft();
+    void focusMoveRight();
 
 signals:
     void updateClipboard(const ClipboardItem &item);

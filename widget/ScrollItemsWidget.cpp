@@ -4,6 +4,7 @@
 #include "ScrollItemsWidget.h"
 #include "ui_ScrollItemsWidget.h"
 #include "ClipboardItemWidget.h"
+#include <QScrollBar>
 
 ScrollItemsWidget::ScrollItemsWidget(const QString &category, QWidget *parent) :
     QWidget(parent),
@@ -209,4 +210,43 @@ void ScrollItemsWidget::selectedByShortcut(int keyIndex) {
 
 QString ScrollItemsWidget::saveDir() {
     return QDir::cleanPath(MPasteSettings::getInst()->getSaveDir() + QDir::separator() + this->category);
+}
+
+void ScrollItemsWidget::focusMoveLeft() {
+    if (this->currItemWidget == nullptr) {
+        this->setFirstVisibleItemSelected();
+    } else {
+        int index = this->layout->indexOf(this->currItemWidget);
+        if (index > 0 && index <= this->layout->count() - 2) {
+            auto nextWidget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(index - 1)->widget());
+            this->setSelectedItem(nextWidget);
+            int nextWidgetLeft = nextWidget->pos().x();
+            if (nextWidgetLeft < ui->scrollArea->horizontalScrollBar()->value()) {
+                ui->scrollArea->horizontalScrollBar()->setValue(nextWidgetLeft);
+            }
+        }
+    }
+}
+
+void ScrollItemsWidget::focusMoveRight() {
+    if (this->currItemWidget == nullptr) {
+        this->setFirstVisibleItemSelected();
+    } else {
+        int index = this->layout->indexOf(this->currItemWidget);
+        if (index >= 0 && index < this->layout->count() - 2) {
+            auto nextWidget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(index + 1)->widget());
+            this->setSelectedItem(nextWidget);
+            int currValue = ui->scrollArea->horizontalScrollBar()->value() + ui->scrollArea->width();
+            int nextWidgetRight = nextWidget->pos().x() + nextWidget->width();
+            if (nextWidgetRight > currValue) {
+                ui->scrollArea->horizontalScrollBar()->setValue(nextWidgetRight - ui->scrollArea->width());
+            }
+        }
+    }
+}
+
+void ScrollItemsWidget::selectedByEnter() {
+    if (this->currItemWidget != nullptr) {
+        this->moveItemToFirst(this->currItemWidget);
+    }
 }
