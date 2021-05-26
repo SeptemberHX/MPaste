@@ -220,5 +220,6 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
         }
     } else {
         this->hide();
+        this->currItemsWidget()->cleanShortCutInfo();
     }
 }
