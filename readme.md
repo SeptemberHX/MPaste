@@ -1,6 +1,6 @@
 # MPaste
 
-A clipboard manager alternative to Paste for Linux. Works on X11.
+A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 
 > It has nothing related to `Paste` for mac. I just like its UX design, and decide to implement one in Qt
 
@@ -22,6 +22,7 @@ A clipboard manager alternative to Paste for Linux. Works on X11.
 
 > On Gnome, please install the extension: https://extensions.gnome.org/extension/1005/focus-my-window/  
 > Or the window will not get focused after appearing with shortcut
+
 ## Default settings
 
 * Max history size: 500
