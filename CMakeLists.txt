@@ -50,4 +50,5 @@ target_link_libraries(${BIN_NAME} PRIVATE
         ${QGSettings_LIBRARIES}
         KF5::WindowSystem
         kdsingleapplication
+        xdo
         )

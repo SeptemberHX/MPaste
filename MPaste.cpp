@@ -9,6 +9,7 @@
 #include <KWindowSystem>
 #include "widget/MPasteWidget.h"
 #include "KDSingleApplication/kdsingleapplication.h"
+#include "XUtils.h"
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
@@ -34,7 +35,8 @@ int main(int argc, char* argv[]) {
             widget.setFixedWidth(screen->availableSize().width());
             widget.setVisibleWithAnnimation(!widget.isVisible());
             if (widget.isVisible()) {
-                KWindowSystem::forceActiveWindow(widget.winId());
+                XUtils::activeWindowX11(widget.winId());
+                widget.setFocus();
             }
             widget.move(screen->availableGeometry().x(), screen->size().height() - widget.height());
         });
