@@ -266,6 +266,7 @@ void ClipboardItemInnerWidget::showWebLink(const QUrl &url, const ClipboardItem 
     this->initWebLinkThumbWidget();
     this->webLinkThumbWidget->show();
     this->webLinkThumbWidget->showWebLink(url, item);
+    ui->typeLabel->setText(tr("Link"));
 }
 
 bool ClipboardItemInnerWidget::checkWebLink(const QString &str) {
