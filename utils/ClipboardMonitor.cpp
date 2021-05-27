@@ -16,7 +16,7 @@ void ClipboardMonitor::clipboardChanged() {
     const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
 
 //    foreach (const QString &format, mimeData->formats()) {
-//        std::cout << format.toStdString() << " : " << mimeData->data(format).toStdString() << std::endl;
+//        std::cout << format.toStdString() << " : " << mimeData->data(format).toStdString() << "\n" << std::endl;
 //    }
 
     QString text, html;

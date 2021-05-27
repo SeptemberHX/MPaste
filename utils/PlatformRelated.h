@@ -5,7 +5,8 @@
 #ifndef MPASTE_PLATFORMRELATED_H
 #define MPASTE_PLATFORMRELATED_H
 
-
+// must included, otherwise there is compile error on ubuntu 21.04
+#include <QtCore>
 #include <QPixmap>
 
 class PlatformRelated {
@@ -20,6 +21,7 @@ public:
 
 extern "C" {
 #include <xdo.h>
+#include <X11/X.h>
 }
 
 class XUtils {

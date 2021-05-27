@@ -23,7 +23,9 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     this->textBrowser->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->textBrowser->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->textBrowser->setContentsMargins(0, 0, 0, 0);
-    this->textBrowser->document()->setDocumentMargin(5);
+    this->textBrowser->setWordWrapMode(QTextOption::WordWrap);
+    this->textBrowser->document()->setDocumentMargin(15);
+
     this->textBrowser->setAttribute(Qt::WA_TranslucentBackground);
     this->mLayout->addWidget(this->textBrowser);
     this->textBrowser->hide();
