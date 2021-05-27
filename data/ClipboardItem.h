@@ -56,6 +56,18 @@ public:
 
     void setColor(const QColor &color);
 
+    const QString &getTitle() const;
+
+    void setTitle(const QString &title);
+
+    const QString &getUrl() const;
+
+    void setUrl(const QString &url);
+
+    const QPixmap &getFavicon() const;
+
+    void setFavicon(const QPixmap &favicon);
+
 private:
     QPixmap icon;
 
@@ -67,6 +79,10 @@ private:
     QColor color;
 
     QString name;
+
+    QString title;
+    QString url;
+    QPixmap favicon;
 };
 
 

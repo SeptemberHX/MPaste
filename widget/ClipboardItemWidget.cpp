@@ -14,6 +14,11 @@ ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
 
     this->innerShadowedWidget = new ClipboardItemInnerWidget(this);
     this->innerShadowedWidget->setObjectName("innerWidget");
+    connect(this->innerShadowedWidget, &ClipboardItemInnerWidget::itemNeedToSave, this, [this] (const ClipboardItem &item) {
+        this->item = item;
+        Q_EMIT itemNeedToSave();
+    });
+
     this->layout->addWidget(this->innerShadowedWidget);
     this->setAttribute(Qt::WA_TranslucentBackground);
 

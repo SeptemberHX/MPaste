@@ -41,6 +41,10 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     auto itemWidget = new ClipboardItemWidget(ui->scrollAreaWidgetContents);
     connect(itemWidget, &ClipboardItemWidget::clicked, this, &ScrollItemsWidget::itemClicked);
     connect(itemWidget, &ClipboardItemWidget::doubleClicked, this, &ScrollItemsWidget::itemDoubleClicked);
+    connect(itemWidget, &ClipboardItemWidget::itemNeedToSave, this, [this] () {
+       auto itemWidget = dynamic_cast<ClipboardItemWidget*>(sender());
+       this->saveItem(itemWidget->getItem());
+    });
     itemWidget->showItem(nItem);
 
     this->layout->insertWidget(0, itemWidget);

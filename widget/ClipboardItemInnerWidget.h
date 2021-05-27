@@ -9,6 +9,7 @@
 #include "MTextBrowser.h"
 #include "data/ClipboardItem.h"
 #include "FileThumbWidget.h"
+#include "WebLinkThumbWidget.h"
 
 namespace Ui {
 class ClipboardItemInnerWidget;
@@ -31,15 +32,26 @@ public:
     void setShortkeyInfo(int num);
     void clearShortkeyInfo();
 
+signals:
+    void itemNeedToSave(const ClipboardItem &item);
+
 private:
     void refreshStyleSheet();
     void showHtml(const QString &html);
     void showImage(const QPixmap &pixmap);
-    void showText(const QString &text);
+    void showText(const QString &text, const ClipboardItem &item);
     void showColor(const QColor &color);
-    void showUrls(const QList<QUrl> &urls);
+    void showUrls(const QList<QUrl> &urls, const ClipboardItem &item);
+    void showWebLink(const QUrl &url, const ClipboardItem &item);
     void showFile(const QUrl &url);
     void showFiles(const QList<QUrl> &fileUrls);
+
+    void initTextBrowser();
+    void initImageLabel();
+    void initFileThumbWidget();
+    void initWebLinkThumbWidget();
+
+    bool checkWebLink(const QString &str);
 
     Ui::ClipboardItemInnerWidget *ui;
     QColor bgColor;
@@ -49,7 +61,8 @@ private:
     QLabel *imageLabel;
     QHBoxLayout *mLayout;
     int borderWidth;
-    FileThumbWidget *thumbWidget;
+    FileThumbWidget *fileThumbWidget;
+    WebLinkThumbWidget *webLinkThumbWidget;
 };
 
 #endif // CLIPBOARDITEMINNERWIDGET_H

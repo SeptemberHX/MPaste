@@ -10,7 +10,7 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
     QFile file(filePath);
     file.open(QIODevice::WriteOnly);
     QDataStream out(&file);
-    out << item.getTime() << item.getUrls() << item.getImage() << item.getText() << item.getHtml() << item.getIcon() << item.getName() << item.getColor();
+    out << item.getTime() << item.getUrls() << item.getImage() << item.getText() << item.getHtml() << item.getIcon() << item.getName() << item.getColor() << item.getUrl() << item.getTitle() << item.getFavicon();
     file.close();
     return true;
 }
@@ -52,6 +52,20 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
     QColor color;
     in >> color;
     item.setColor(color);
+
+    if (!in.atEnd()) {
+        QString url;
+        in >> url;
+        item.setUrl(url);
+
+        QString title;
+        in >> title;
+        item.setTitle(title);
+
+        QPixmap favico;
+        in >> favico;
+        item.setFavicon(favico);
+    }
 
     return item;
 }

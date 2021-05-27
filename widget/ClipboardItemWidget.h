@@ -26,6 +26,7 @@ public:
 signals:
     void clicked();
     void doubleClicked();
+    void itemNeedToSave();
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;

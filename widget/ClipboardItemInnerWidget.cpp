@@ -11,33 +11,16 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     topBgColor(Qt::white),
     borderWidth(0)
 {
+    this->textBrowser = nullptr;
+    this->imageLabel = nullptr;
+    this->fileThumbWidget = nullptr;
+    this->webLinkThumbWidget = nullptr;
+
     ui->setupUi(this);
     this->setObjectName("innerWidget");
     ui->infoWidget->setObjectName("infoWidget");
     this->mLayout = new QHBoxLayout(ui->bodyWidget);
     this->mLayout->setMargin(0);
-
-    this->textBrowser = new MTextBrowser(ui->bodyWidget);
-    this->textBrowser->setFrameStyle(QFrame::NoFrame);
-    this->textBrowser->setReadOnly(true);
-    this->textBrowser->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    this->textBrowser->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    this->textBrowser->setContentsMargins(0, 0, 0, 0);
-    this->textBrowser->setWordWrapMode(QTextOption::WordWrap);
-    this->textBrowser->document()->setDocumentMargin(15);
-
-    this->textBrowser->setAttribute(Qt::WA_TranslucentBackground);
-    this->mLayout->addWidget(this->textBrowser);
-    this->textBrowser->hide();
-
-    this->imageLabel = new QLabel(ui->bodyWidget);
-    this->imageLabel->hide();
-    this->imageLabel->setAlignment(Qt::AlignCenter);
-    this->mLayout->addWidget(this->imageLabel);
-
-    this->thumbWidget = new FileThumbWidget(ui->bodyWidget);
-    this->thumbWidget->hide();
-    this->mLayout->addWidget(this->thumbWidget);
 
     ui->iconLabel->setAttribute(Qt::WA_TranslucentBackground);
     ui->widget_2->setAttribute(Qt::WA_TranslucentBackground);
@@ -93,11 +76,15 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
     } else if (!item.getImage().isNull()) {
         this->showImage(item.getImage());
     } else if (!item.getHtml().isEmpty() && !QColor::isValidColor(item.getText().trimmed())) {
-        this->showHtml(item.getHtml());
+        if (this->checkWebLink(item.getText())) {
+            this->showWebLink(item.getText(), item);
+        } else {
+            this->showHtml(item.getHtml());
+        }
     } else if (!item.getUrls().isEmpty()) {
-        this->showUrls(item.getUrls());
+        this->showUrls(item.getUrls(), item);
     } else if (!item.getText().isEmpty()) {
-        this->showText(item.getText());
+        this->showText(item.getText(), item);
     }
 
     ui->timeLabel->setText(item.getTime().toString(Qt::SystemLocaleShortDate));
@@ -133,6 +120,7 @@ void ClipboardItemInnerWidget::clearShortkeyInfo() {
 }
 
 void ClipboardItemInnerWidget::showHtml(const QString &html) {
+    this->initTextBrowser();
     this->textBrowser->show();
     this->textBrowser->setHtml(html);
 
@@ -156,16 +144,22 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
 }
 
 void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
+    this->initImageLabel();
     this->imageLabel->show();
     this->imageLabel->setPixmap(pixmap.scaled(275, 234, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     ui->countLabel->setText(QString("%1 x %2 Pixels").arg(pixmap.height()).arg(pixmap.width()));
     ui->typeLabel->setText(tr("Image"));
 }
 
-void ClipboardItemInnerWidget::showText(const QString &text) {
-    if (QColor::isValidColor(text.trimmed())) {
-        this->showColor(QColor(text.trimmed()));
+void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem &item) {
+    QString trimStr = text.trimmed();
+    QUrl url(trimStr);
+    if (QColor::isValidColor(trimStr)) {
+        this->showColor(QColor(trimStr));
+    } else if (url.isValid() && (trimStr.startsWith("http://") || trimStr.startsWith("https://"))) {
+        this->showWebLink(url, item);
     } else {
+        this->initTextBrowser();
         this->textBrowser->show();
         this->textBrowser->setPlainText(text);
         ui->countLabel->setText(QString("%1 Characters").arg(text.size()));
@@ -184,12 +178,21 @@ void ClipboardItemInnerWidget::showColor(const QColor &color) {
     ui->typeLabel->setText(tr("Color"));
 }
 
-void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls) {
-    if (urls.size() == 1 && urls[0].isLocalFile()) {
-        this->showFile(urls[0]);
+void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const ClipboardItem &item) {
+    if (urls.size() == 1) {
+        if (urls[0].isLocalFile()) {
+            this->showFile(urls[0]);
+        } else {
+            QString urlStr = urls[0].toString();
+            if (urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
+                this->showWebLink(urls[0], item);
+            }
+        }
     } else if (urls.size() > 1 && urls[0].isLocalFile()) {
         this->showFiles(urls);
     } else {
+        this->initTextBrowser();
+
         this->textBrowser->show();
         QString str;
         foreach (const QUrl &url, urls) {
@@ -201,15 +204,74 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls) {
 }
 
 void ClipboardItemInnerWidget::showFile(const QUrl &url) {
+    this->initFileThumbWidget();
     ui->typeLabel->setText(tr("1 File"));
-    this->thumbWidget->show();
-    this->thumbWidget->showUrl(url);
+    this->fileThumbWidget->show();
+    this->fileThumbWidget->showUrl(url);
 }
 
 void ClipboardItemInnerWidget::showFiles(const QList<QUrl> &fileUrls) {
+    this->initFileThumbWidget();
     ui->typeLabel->setText(QString::number(fileUrls.size()) + " " + tr("Files"));
-    this->thumbWidget->show();
-    this->thumbWidget->showUrls(fileUrls);
+    this->fileThumbWidget->show();
+    this->fileThumbWidget->showUrls(fileUrls);
+}
+
+void ClipboardItemInnerWidget::initTextBrowser() {
+    if (this->textBrowser != nullptr) return;
+
+    this->textBrowser = new MTextBrowser(ui->bodyWidget);
+    this->textBrowser->setFrameStyle(QFrame::NoFrame);
+    this->textBrowser->setReadOnly(true);
+    this->textBrowser->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    this->textBrowser->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    this->textBrowser->setContentsMargins(0, 0, 0, 0);
+    this->textBrowser->setWordWrapMode(QTextOption::WordWrap);
+    this->textBrowser->document()->setDocumentMargin(15);
+    this->textBrowser->setAttribute(Qt::WA_TranslucentBackground);
+    this->mLayout->addWidget(this->textBrowser);
+    this->textBrowser->hide();
+}
+
+void ClipboardItemInnerWidget::initImageLabel() {
+    if (this->imageLabel != nullptr) return;
+
+    this->imageLabel = new QLabel(ui->bodyWidget);
+    this->imageLabel->hide();
+    this->imageLabel->setAlignment(Qt::AlignCenter);
+    this->mLayout->addWidget(this->imageLabel);
+}
+
+void ClipboardItemInnerWidget::initFileThumbWidget() {
+    if (this->fileThumbWidget != nullptr) return;
+
+    this->fileThumbWidget = new FileThumbWidget(ui->bodyWidget);
+    this->fileThumbWidget->hide();
+    this->mLayout->addWidget(this->fileThumbWidget);
+}
+
+void ClipboardItemInnerWidget::initWebLinkThumbWidget() {
+    if (this->webLinkThumbWidget != nullptr) return;
+
+    this->webLinkThumbWidget = new WebLinkThumbWidget(ui->bodyWidget);
+    this->webLinkThumbWidget->hide();
+    this->mLayout->addWidget(this->webLinkThumbWidget);
+
+    connect(this->webLinkThumbWidget, &WebLinkThumbWidget::itemNeedToSave, [this] (const ClipboardItem &item) {
+        Q_EMIT itemNeedToSave(item);
+    });
+}
+
+void ClipboardItemInnerWidget::showWebLink(const QUrl &url, const ClipboardItem &item) {
+    this->initWebLinkThumbWidget();
+    this->webLinkThumbWidget->show();
+    this->webLinkThumbWidget->showWebLink(url, item);
+}
+
+bool ClipboardItemInnerWidget::checkWebLink(const QString &str) {
+    QString trimStr = str.trimmed();
+    QUrl url(trimStr, QUrl::StrictMode);
+    return url.isValid() && (trimStr.startsWith("https://") || trimStr.startsWith("http://"));
 }
 
 //void ClipboardItemInnerWidget::refreshTimeGap() {

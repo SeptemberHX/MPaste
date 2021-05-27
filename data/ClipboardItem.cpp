@@ -109,3 +109,27 @@ const QColor &ClipboardItem::getColor() const {
 void ClipboardItem::setColor(const QColor &color) {
     ClipboardItem::color = color;
 }
+
+const QString &ClipboardItem::getTitle() const {
+    return title;
+}
+
+void ClipboardItem::setTitle(const QString &title) {
+    ClipboardItem::title = title;
+}
+
+const QString &ClipboardItem::getUrl() const {
+    return url;
+}
+
+void ClipboardItem::setUrl(const QString &url) {
+    ClipboardItem::url = url;
+}
+
+const QPixmap &ClipboardItem::getFavicon() const {
+    return favicon;
+}
+
+void ClipboardItem::setFavicon(const QPixmap &favicon) {
+    ClipboardItem::favicon = favicon;
+}

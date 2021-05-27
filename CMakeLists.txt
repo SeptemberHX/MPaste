@@ -28,6 +28,7 @@ file(GLOB SRCS "*.h" "*.cpp" "widget/*.ui" "widget/*.h" "widget/*.cpp"
 find_package(PkgConfig REQUIRED)
 find_package(Qt5Widgets REQUIRED)
 find_package(Qt5Multimedia REQUIRED)
+find_package(Qt5Network REQUIRED)
 
 IF (UNIX)
 find_package(Qt5X11Extras REQUIRED)
@@ -53,6 +54,7 @@ ENDIF()
 target_link_libraries(${BIN_NAME} PRIVATE
         ${Qt5Widgets_LIBRARIES}
         ${Qt5Multimedia_LIBRARIES}
+        ${Qt5Network_LIBRARIES}
         ${QGSettings_LIBRARIES}
         ${CUSTOM_LIBARAIES}
         )
