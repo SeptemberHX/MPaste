@@ -22,7 +22,9 @@ void WebLinkThumbWidget::showWebLink(const QUrl &url, const ClipboardItem &item)
     urlStr = fm.elidedText(urlStr, Qt::ElideRight, ui->urlLabel->width());
     ui->urlLabel->setText(urlStr);
 
-    ui->imageLabel->setPixmap(QPixmap(":/resources/resources/unknown_favico.svg").scaled(ui->imageLabel->width(), 160, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    QPixmap unknow(":/resources/resources/unknown_favico.svg");
+    unknow.setDevicePixelRatio(this->devicePixelRatioF());
+    ui->imageLabel->setPixmap(unknow.scaled(ui->imageLabel->width() * this->devicePixelRatio(), 160 * this->devicePixelRatio(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
     if (item.getUrl().isEmpty()) {
         this->ogFetcher = new OpenGraphFetcher(url);
         this->url = url;
@@ -46,7 +48,9 @@ void WebLinkThumbWidget::setPreview(const OpenGraphItem &ogItem) {
 
 void WebLinkThumbWidget::showItem(const ClipboardItem &item) {
     if (!item.getFavicon().isNull()) {
-        ui->imageLabel->setPixmap(item.getFavicon().scaled(ui->imageLabel->width(), 160, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        QPixmap tPixmap = item.getFavicon();
+        tPixmap.setDevicePixelRatio(this->devicePixelRatioF());
+        ui->imageLabel->setPixmap(tPixmap.scaled(ui->imageLabel->width() * this->devicePixelRatio(), 160 * this->devicePixelRatio(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
     }
 
     QFontMetrics fm(ui->urlLabel->font());

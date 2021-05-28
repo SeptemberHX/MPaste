@@ -27,26 +27,34 @@ void FileThumbWidget::showUrl(const QUrl &fileUrl) {
     if (info.exists()) {
         QMimeType mime = db.mimeTypeForFile(info);
         if (mime.name().startsWith("image")) {
-            ui->iconLabel->setPixmap(QPixmap(info.absoluteFilePath()).scaled(ui->iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            QPixmap picFile(info.absoluteFilePath());
+            picFile.setDevicePixelRatio(this->devicePixelRatioF());
+            ui->iconLabel->setPixmap(picFile.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
         } else {
             QFileIconProvider provider;
             QIcon icon = provider.icon(info);
-            ui->iconLabel->setPixmap(icon.pixmap(ui->iconLabel->size()).scaled(ui->iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            QPixmap pixmap = icon.pixmap(ui->iconLabel->size() * this->devicePixelRatioF());
+            pixmap.setDevicePixelRatio(this->devicePixelRatioF());
+            ui->iconLabel->setPixmap(pixmap.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
         }
     } else {
-        ui->iconLabel->setPixmap(QPixmap(":/resources/resources/broken.svg").scaled(ui->iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        QPixmap pixmap(":/resources/resources/broken.svg");
+        pixmap.setDevicePixelRatio(this->devicePixelRatioF());
+        ui->iconLabel->setPixmap(pixmap.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
     }
     this->setElidedText(fileUrl.toLocalFile());
 }
 
 void FileThumbWidget::showUrls(const QList<QUrl> &fileUrls) {
-    ui->iconLabel->setPixmap(QPixmap(":/resources/resources/files.svg").scaled(ui->iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    QPixmap pixmap(":/resources/resources/files.svg");
+    pixmap.setDevicePixelRatio(this->devicePixelRatioF());
+    ui->iconLabel->setPixmap(pixmap.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
     QString str;
     foreach (const QUrl &url, fileUrls) {
         str += url.fileName() + ", ";
     }
-    str = str.remove(str.size() - 1, 1);
+    str = str.remove(str.size() - 2, 2);
     this->setElidedText(str);
 }
 

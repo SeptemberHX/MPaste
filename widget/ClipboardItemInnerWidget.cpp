@@ -41,8 +41,8 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &nIcon) {
     if (icon.isNull()) {
         icon = QPixmap(":/resources/resources/unknown.svg");
     }
-
-    ui->iconLabel->setPixmap(icon.scaled(ui->iconLabel->sizeHint(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    icon.setDevicePixelRatio(this->devicePixelRatioF());
+    ui->iconLabel->setPixmap(icon.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
     int r = 0, g = 0, b = 0, a = 0, n = 0;
     QImage image = icon.toImage();
@@ -141,6 +141,7 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
         }
     }
     ui->countLabel->setText(QString("%1 Characters").arg(html.size()));
+    ui->typeLabel->setText(tr("Rich Text"));
 }
 
 void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
@@ -167,6 +168,8 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
 }
 
 void ClipboardItemInnerWidget::showColor(const QColor &color) {
+    this->initImageLabel();
+
     this->imageLabel->show();
     QColor fontColor(255 - color.red(), 255 - color.green(), 255 - color.blue());
 
