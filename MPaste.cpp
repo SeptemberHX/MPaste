@@ -18,6 +18,16 @@ int main(int argc, char* argv[]) {
         app.setApplicationName("MPaste");
         app.setWindowIcon(QIcon(":/resources/resources/paste.svg"));
 
+        QTranslator chinese;
+        switch (QLocale::system().language()) {
+            case QLocale::Chinese:
+                chinese.load(":/translations/app_zh.qm");
+                qApp->installTranslator(&chinese);
+                break;
+            default:
+                break;
+        }
+
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");
         widget.setFixedWidth(QApplication::desktop()->rect().width());

@@ -140,7 +140,7 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
             ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr.name()));
         }
     }
-    ui->countLabel->setText(QString("%1 Characters").arg(html.size()));
+    ui->countLabel->setText(QString("%1 ").arg(html.size()) + tr("Characters"));
     ui->typeLabel->setText(tr("Rich Text"));
 }
 
@@ -148,7 +148,7 @@ void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
     this->initImageLabel();
     this->imageLabel->show();
     this->imageLabel->setPixmap(pixmap.scaled(275, 234, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    ui->countLabel->setText(QString("%1 x %2 Pixels").arg(pixmap.height()).arg(pixmap.width()));
+    ui->countLabel->setText(QString("%1 x %2 ").arg(pixmap.height()).arg(pixmap.width()) + tr("Pixels"));
     ui->typeLabel->setText(tr("Image"));
 }
 
@@ -163,7 +163,7 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
         this->initTextBrowser();
         this->textBrowser->show();
         this->textBrowser->setPlainText(text);
-        ui->countLabel->setText(QString("%1 Characters").arg(text.size()));
+        ui->countLabel->setText(QString("%1 ").arg(text.size()) + tr("Characters"));
     }
 }
 
@@ -208,7 +208,7 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
 
 void ClipboardItemInnerWidget::showFile(const QUrl &url) {
     this->initFileThumbWidget();
-    ui->typeLabel->setText(tr("1 File"));
+    ui->typeLabel->setText(QString("1 ") + tr("File"));
     this->fileThumbWidget->show();
     this->fileThumbWidget->showUrl(url);
 }

@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string notr="true">Form</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">
@@ -44,7 +44,7 @@
       </size>
      </property>
      <property name="text">
-      <string>og:image</string>
+      <string notr="true">og:image</string>
      </property>
      <property name="scaledContents">
       <bool>false</bool>
@@ -83,7 +83,7 @@
       </font>
      </property>
      <property name="text">
-      <string/>
+      <string notr="true"/>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>
@@ -105,7 +105,7 @@
       </font>
      </property>
      <property name="text">
-      <string>url</string>
+      <string notr="true">url</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>

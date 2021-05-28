@@ -29,6 +29,13 @@ find_package(PkgConfig REQUIRED)
 find_package(Qt5Widgets REQUIRED)
 find_package(Qt5Multimedia REQUIRED)
 find_package(Qt5Network REQUIRED)
+find_package(Qt5LinguistTools REQUIRED)
+
+set(TS_FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/translations/app_zh.ts
+        )
+qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
+#qt5_add_translation(QM_FILES ${TS_FILES})
 
 IF (UNIX)
 find_package(Qt5X11Extras REQUIRED)
@@ -38,7 +45,7 @@ ENDIF()
 pkg_check_modules(QGSettings REQUIRED gsettings-qt)
 add_subdirectory(KDSingleApplication)
 
-add_executable(${BIN_NAME} ${SRCS} ${INTERFACES} utils/PlatformRelated.cpp utils/PlatformRelated.h)
+add_executable(${BIN_NAME} ${SRCS} ${INTERFACES} utils/PlatformRelated.cpp utils/PlatformRelated.h ${QM_FILES})
 target_include_directories(${BIN_NAME} PUBLIC
         ${Qt5Gui_PRIVATE_INCLUDE_DIRS}
         ${PROJECT_BINARY_DIR}

@@ -17,7 +17,7 @@
    </sizepolicy>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string notr="true">Form</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">
@@ -94,7 +94,7 @@ border-radius: 10px;
 }</string>
         </property>
         <property name="text">
-         <string>S</string>
+         <string notr="true">S</string>
         </property>
         <property name="icon">
          <iconset resource="../resources.qrc">
@@ -130,6 +130,9 @@ border-width: 1px;
 border-radius: 10px;
 }</string>
         </property>
+        <property name="text">
+         <string notr="true"/>
+        </property>
        </widget>
       </item>
       <item>
@@ -147,7 +150,7 @@ border-radius: 10px;
 }</string>
         </property>
         <property name="text">
-         <string>Clipboard</string>
+         <string notr="true">Clipboard</string>
         </property>
         <property name="checkable">
          <bool>true</bool>
@@ -182,7 +185,7 @@ border-radius: 10px;
 }</string>
         </property>
         <property name="text">
-         <string>...</string>
+         <string notr="true">...</string>
         </property>
        </widget>
       </item>

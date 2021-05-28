@@ -14,8 +14,8 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
 {
     this->replaceHttpHosts << "www.baidu.com";
 
-    this->ogImageReg = QRegExp("<meta [ ]*property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
-    this->ogTitleReg = QRegExp("<meta [ ]*property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
+    this->ogImageReg = QRegExp("<meta .*property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
+    this->ogTitleReg = QRegExp("<meta .*property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
     this->titleReg = QRegExp("<title.*>(.*)</title>");
     this->faviconReg1 = QRegExp("<link[ ]*href=\"(.*)\".*ref=\"{short }?icon\".*/?>");
     this->faviconReg2 = QRegExp("<link[ ]*ref=\"{short }?icon\".*href=\"(.*)\".*/?>");
