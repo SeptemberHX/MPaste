@@ -24,8 +24,11 @@ private slots:
     void requestFinished(QNetworkReply *reply);
 
 private:
+    QStringList replaceHttpHosts;
+
     QUrl targetUrl;
     QUrl imageUrl;
+    QUrl realCalledUrl;
 
     QRegExp ogImageReg;
     QRegExp ogTitleReg;

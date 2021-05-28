@@ -72,5 +72,5 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
 
 bool LocalSaver::removeItem(const QString &filePath) {
     QFile file(filePath);
-    file.remove();
+    return file.remove();
 }

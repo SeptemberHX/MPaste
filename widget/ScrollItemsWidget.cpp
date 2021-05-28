@@ -184,6 +184,7 @@ bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
     if (this->addOneItem(nItem)) {
         this->saveItem(nItem);
     }
+    return true;
 }
 
 void ScrollItemsWidget::setAllItemVisible() {

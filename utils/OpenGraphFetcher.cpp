@@ -12,6 +12,8 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
     : QObject(parent)
     , targetUrl(url)
 {
+    this->replaceHttpHosts << "www.baidu.com";
+
     this->ogImageReg = QRegExp("<meta [ ]*property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
     this->ogTitleReg = QRegExp("<meta [ ]*property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
     this->titleReg = QRegExp("<title.*>(.*)</title>");
@@ -28,14 +30,22 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
 }
 
 void OpenGraphFetcher::handle() {
-    this->naManager->get(QNetworkRequest(this->targetUrl));
+    QUrl tUrl = this->targetUrl;
+    if (this->replaceHttpHosts.contains(this->targetUrl.host())) {
+        tUrl = QUrl(tUrl.toString().replace("https://", "http://"));
+    }
+
+    QNetworkRequest request(tUrl);
+    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+    this->realCalledUrl = tUrl;
+    this->naManager->get(request);
 }
 
 void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
     if (reply->error() != QNetworkReply::NoError) {
-        std::cout << "Error happened" << std::endl;
+        std::cout << "Error happened: " << reply->error() << std::endl;
         Q_EMIT finished(this->ogItem);
-    } else if (reply->request().url() == this->targetUrl) {
+    } else if (reply->request().url() == this->realCalledUrl) {
         QString body(reply->readAll());
         int pos = this->ogImageReg.indexIn(body);
         QString faviconStr;
