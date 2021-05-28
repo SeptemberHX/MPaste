@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
         QTranslator chinese;
         switch (QLocale::system().language()) {
             case QLocale::Chinese:
-                chinese.load(":/translations/app_zh.qm");
+                chinese.load(":/resources/resources/app_zh.qm");
                 qApp->installTranslator(&chinese);
                 break;
             default:

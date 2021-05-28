@@ -54,7 +54,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     ui->searchEdit->installEventFilter(this);
 
     this->menu = new QMenu(this);
-    this->menu->addAction(tr("Settings"), [this]() { });
+//    this->menu->addAction(tr("Settings"), [this]() { });
     this->menu->addAction(tr("About"), [this]() { this->aboutWidget->show(); });
     this->menu->addAction(tr("Quit"), [this]() { this->close(); });
 

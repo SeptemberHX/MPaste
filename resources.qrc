@@ -7,5 +7,6 @@
         <file>resources/broken.svg</file>
         <file>resources/files.svg</file>
         <file>resources/unknown_favico.svg</file>
+        <file>resources/app_zh.qm</file>
     </qresource>
 </RCC>

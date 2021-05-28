@@ -144,7 +144,7 @@ border-radius: 10px;
          </size>
         </property>
         <property name="styleSheet">
-         <string notr="true">QToolButton::checked {
+         <string notr="true">QToolButton {
 background-color: #CCCCCC;
 border-radius: 10px;
 }</string>

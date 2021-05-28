@@ -34,8 +34,8 @@ find_package(Qt5LinguistTools REQUIRED)
 set(TS_FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/translations/app_zh.ts
         )
-qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
-#qt5_add_translation(QM_FILES ${TS_FILES})
+#qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
+qt5_add_translation(QM_FILES ${TS_FILES})
 
 IF (UNIX)
 find_package(Qt5X11Extras REQUIRED)
