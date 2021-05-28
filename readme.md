@@ -4,8 +4,6 @@ A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 
 > It has nothing related to `Paste` for mac. I just like its UX design, and decide to implement one in Qt
 
-> Still working in progress
-
 ## Feature
 
 * Clipboard history saved to files
@@ -34,6 +32,12 @@ Gif on [Imgur](https://i.imgur.com/79gyO0n.gifv)
 
 ![s2_ubuntu](https://i.imgur.com/DlshO2o.png)
 ![s1](./images/s1.png)
+
+## Dependencies
+
+```shell
+sudo apt install libqt5multimedia5 libkf5windowsystem5 libqt5network5 libxdo3 libqt5x11extras5
+```
 
 ## How to bulid from source
 
