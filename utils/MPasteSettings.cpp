@@ -23,10 +23,25 @@ const QString &MPasteSettings::getSaveDir() const {
 MPasteSettings::MPasteSettings()
     : saveDir(QDir::homePath() + QDir::separator() +  ".MPaste")
     , maxSize(500)
+    , proxyType(QNetworkProxy::NoProxy)
 {
-
+    this->proxyType = QNetworkProxy::HttpProxy;
+    this->proxyHost = "127.0.0.1";
+    this->port = 7890;
 }
 
 int MPasteSettings::getMaxSize() const {
     return maxSize;
+}
+
+QNetworkProxy::ProxyType MPasteSettings::getProxyType() const {
+    return proxyType;
+}
+
+const QString &MPasteSettings::getProxyHost() const {
+    return proxyHost;
+}
+
+int MPasteSettings::getPort() const {
+    return port;
 }

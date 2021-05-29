@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QDesktopWidget>
 #include <iostream>
+#include <QNetworkProxy>
 #include <QScreen>
 #include "widget/MPasteWidget.h"
 #include "KDSingleApplication/kdsingleapplication.h"
@@ -17,6 +18,7 @@ int main(int argc, char* argv[]) {
     if (kds.isPrimaryInstance()) {
         app.setApplicationName("MPaste");
         app.setWindowIcon(QIcon(":/resources/resources/paste.svg"));
+        QNetworkProxyFactory::setUseSystemConfiguration(true);
 
         QTranslator chinese;
         switch (QLocale::system().language()) {

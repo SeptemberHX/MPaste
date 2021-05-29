@@ -30,6 +30,7 @@ find_package(Qt5Widgets REQUIRED)
 find_package(Qt5Multimedia REQUIRED)
 find_package(Qt5Network REQUIRED)
 find_package(Qt5LinguistTools REQUIRED)
+find_package(Qt5Xml REQUIRED)
 
 set(TS_FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/translations/app_zh.ts
@@ -62,6 +63,7 @@ target_link_libraries(${BIN_NAME} PRIVATE
         ${Qt5Widgets_LIBRARIES}
         ${Qt5Multimedia_LIBRARIES}
         ${Qt5Network_LIBRARIES}
+        ${Qt5Xml_LIBRARIES}
         ${QGSettings_LIBRARIES}
         ${CUSTOM_LIBARAIES}
         )

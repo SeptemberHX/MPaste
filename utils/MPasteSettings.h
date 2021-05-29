@@ -6,6 +6,7 @@
 #define MPASTE_MPASTESETTINGS_H
 
 #include <QString>
+#include <QNetworkProxy>
 
 class MPasteSettings {
 
@@ -16,11 +17,21 @@ public:
 
     int getMaxSize() const;
 
+    QNetworkProxy::ProxyType getProxyType() const;
+
+    const QString &getProxyHost() const;
+
+    int getPort() const;
+
 private:
     MPasteSettings();
 
     QString saveDir;
     int maxSize;
+
+    QNetworkProxy::ProxyType proxyType;
+    QString proxyHost;
+    int port;
 
     static MPasteSettings *inst;
 };
