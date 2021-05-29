@@ -15,6 +15,17 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
     , targetUrl(url)
 {
     this->replaceHttpHosts << "www.baidu.com";
+    this->ogImageReg = QRegExp("<meta .*property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
+    this->ogTitleReg = QRegExp("<meta .*property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
+    this->titleReg = QRegExp("<title.*>(.*)</title>");
+    this->faviconReg1 = QRegExp("<link[ ]*href=\"(.*)\".*rel=\"{short }?icon\".*/?>");
+    this->faviconReg2 = QRegExp("<link[ ]*rel=\"{short }?icon\".*href=\"(.*)\".*/?>");
+
+    this->ogImageReg.setMinimal(true);
+    this->ogTitleReg.setMinimal(true);
+    this->titleReg.setMinimal(true);
+    this->faviconReg1.setMinimal(true);
+    this->faviconReg2.setMinimal(true);
     this->naManager = new QNetworkAccessManager(this);
     connect(this->naManager, &QNetworkAccessManager::finished, this, &OpenGraphFetcher::requestFinished);
 }
@@ -38,40 +49,85 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
         Q_EMIT finished(this->ogItem);
     } else if (reply->request().url() == this->realCalledUrl) {
         QDomDocument doc;
-        doc.setContent(reply->readAll());
-        QDomElement docElem = doc.documentElement();
         QString faviconStr;
-
-        QDomNodeList metaNodeList = docElem.elementsByTagName("meta");
-        for (int i = 0; i < metaNodeList.size(); ++i) {
-            if (!metaNodeList.at(i).isNull()) {
-                QDomNode n = metaNodeList.at(i).toElement();
-                if (!n.isNull()) {
-                    if (n.attributes().contains("property") && n.attributes().contains("content")) {
-                        QString ogType = n.attributes().namedItem("property").nodeValue();
-                        if (ogType == "og:title") {
-                            this->ogItem.setTitle(n.attributes().namedItem("content").nodeValue());
-                        } else if (ogType == "og:image" && !n.attributes().namedItem("content").nodeValue().startsWith("$")) {
-                            faviconStr = n.attributes().namedItem("content").nodeValue();
+        QString body(reply->readAll());
+        if (doc.setContent(body)) {
+            QDomElement docElem = doc.documentElement();
+            QDomNodeList metaNodeList = docElem.elementsByTagName("meta");
+            for (int i = 0; i < metaNodeList.size(); ++i) {
+                if (!metaNodeList.at(i).isNull()) {
+                    QDomNode n = metaNodeList.at(i).toElement();
+                    if (!n.isNull()) {
+                        if (n.attributes().contains("property") && n.attributes().contains("content")) {
+                            QString ogType = n.attributes().namedItem("property").nodeValue();
+                            if (ogType == "og:title") {
+                                this->ogItem.setTitle(n.attributes().namedItem("content").nodeValue());
+                            } else if (ogType == "og:image" &&
+                                       !n.attributes().namedItem("content").nodeValue().startsWith("$")) {
+                                faviconStr = n.attributes().namedItem("content").nodeValue();
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (faviconStr.isEmpty()) {
-            QDomNodeList linkNodeList = docElem.elementsByTagName("link");
-            for (int i = 0; i < linkNodeList.size(); ++i) {
-                if (!linkNodeList.at(i).isNull()) {
-                    QDomNode n = linkNodeList.at(i).toElement();
-                    if (!n.isNull()) {
-                        if (n.attributes().contains("rel") && n.attributes().contains("href")) {
-                            if (n.attributes().namedItem("rel").nodeValue().contains("icon")
-                                && !n.attributes().namedItem("href").nodeValue().startsWith("$")) {
-                                faviconStr = n.attributes().namedItem("href").nodeValue();
+            if (faviconStr.isEmpty()) {
+                QDomNodeList linkNodeList = docElem.elementsByTagName("link");
+                for (int i = 0; i < linkNodeList.size(); ++i) {
+                    if (!linkNodeList.at(i).isNull()) {
+                        QDomNode n = linkNodeList.at(i).toElement();
+                        if (!n.isNull()) {
+                            if (n.attributes().contains("rel") && n.attributes().contains("href")) {
+                                if (n.attributes().namedItem("rel").nodeValue().contains("icon")
+                                    && !n.attributes().namedItem("href").nodeValue().startsWith("$")) {
+                                    faviconStr = n.attributes().namedItem("href").nodeValue();
+                                }
                             }
                         }
                     }
+                }
+            }
+            if (this->ogItem.getTitle().isEmpty()) {
+                QDomNodeList nodeList = docElem.elementsByTagName("title");
+                for (int i = 0; i < nodeList.size(); ++i) {
+                    if (!nodeList.at(i).isNull()) {
+                        QDomElement e = nodeList.at(i).toElement();
+                        if (!e.isNull()) {
+                            this->ogItem.setTitle(e.text());
+                        }
+                    }
+                }
+            }
+        } else {
+            int pos = this->ogImageReg.indexIn(body);
+            if (pos >= 0) {
+                faviconStr = this->ogImageReg.cap(1);
+            } else {
+                QString str = this->targetUrl.toString();
+                str = str.mid(0, str.indexOf(':'));
+                pos = this->faviconReg1.indexIn(body);
+                if (pos >= 0) {
+                    faviconStr = this->faviconReg1.cap(1);
+                }  else {
+                    pos = this->faviconReg2.indexIn(body);
+                    if (pos >= 0) {
+                        faviconStr = this->faviconReg2.cap(1);
+                    } else {
+                        QUrl faviconUrl(str + "://" + this->targetUrl.host() + "/favicon.ico");
+                        faviconStr = faviconUrl.toString();
+                    }
+                }
+            }
+
+            pos = this->ogTitleReg.indexIn(body);
+            if (pos >= 0) {
+                QString omgTitleStr = this->ogTitleReg.cap(1);
+                this->ogItem.setTitle(omgTitleStr);
+            } else {
+                pos = this->titleReg.indexIn(body);
+                if (pos >= 0) {
+                    QString titleStr = this->titleReg.cap(1);
+                    this->ogItem.setTitle(titleStr);
                 }
             }
         }
@@ -88,17 +144,7 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
         this->imageUrl = QUrl(faviconStr);
         this->naManager->get(QNetworkRequest(this->imageUrl));
 
-        if (this->ogItem.getTitle().isEmpty()) {
-            QDomNodeList nodeList = docElem.elementsByTagName("title");
-            for (int i = 0; i < nodeList.size(); ++i) {
-                if (!nodeList.at(i).isNull()) {
-                    QDomElement e = nodeList.at(i).toElement();
-                    if (!e.isNull()) {
-                        this->ogItem.setTitle(e.text());
-                    }
-                }
-            }
-        }
+
     } else if (reply->request().url() == this->imageUrl) {
         QPixmap image;
         image.loadFromData(reply->readAll());

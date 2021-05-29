@@ -30,6 +30,13 @@ private:
     QUrl imageUrl;
     QUrl realCalledUrl;
 
+    QRegExp ogImageReg;
+    QRegExp ogTitleReg;
+    QRegExp titleReg;
+
+    QRegExp faviconReg1;
+    QRegExp faviconReg2;
+
     QNetworkAccessManager *naManager;
     OpenGraphItem ogItem;
 };
