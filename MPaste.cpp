@@ -12,6 +12,7 @@
 #include "utils/PlatformRelated.h"
 
 int main(int argc, char* argv[]) {
+    qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
     QApplication app(argc, argv);
     KDSingleApplication kds;
 
@@ -36,7 +37,7 @@ int main(int argc, char* argv[]) {
 
         QObject::connect(qApp, &QGuiApplication::applicationStateChanged, qApp, [&](Qt::ApplicationState state) {
             if (state == Qt::ApplicationInactive) {
-                widget.hide();
+                widget.setVisibleWithAnnimation(false);
             }
         });
         PlatformRelated::activateWindow(widget.winId());

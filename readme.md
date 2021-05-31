@@ -18,8 +18,6 @@ A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 * Any characters: search mode
 * Global shortcut to show window: Open your shortcut settings in system settings, and assign a shortcut for command `/path/to/your/MPaste`
 
-> On Gnome wayland with 2x screen factor, `export QT_AUTO_SCREEN_SCALE_FACTOR=1` is needed before running.
-
 > On Gnome, please install the extension: https://extensions.gnome.org/extension/1005/focus-my-window/  
 > Or the window will not get focused after appearing with shortcut
 
