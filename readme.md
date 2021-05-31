@@ -4,6 +4,8 @@ A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 
 > It has nothing related to `Paste` for mac. I just like its UX design, and decide to implement one in Qt
 
+> For wayland, it cannot get the icons of current window, which is treated as the provider of current clipboard data. I haven't found how to fetch the window icon under wayland with window id. Check PlatformRelated.h for more details.
+
 ## Feature
 
 * Clipboard history saved to files
