@@ -235,7 +235,8 @@ void ScrollItemsWidget::focusMoveLeft() {
             auto nextWidget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(index - 1)->widget());
             this->setSelectedItem(nextWidget);
             int nextWidgetLeft = nextWidget->pos().x();
-            if (nextWidgetLeft < ui->scrollArea->horizontalScrollBar()->value()) {
+            if (nextWidgetLeft < ui->scrollArea->horizontalScrollBar()->value()
+                    || nextWidgetLeft > ui->scrollArea->horizontalScrollBar()->value() + ui->scrollArea->width()) {
                 ui->scrollArea->horizontalScrollBar()->setValue(nextWidgetLeft);
             }
         }
@@ -252,7 +253,7 @@ void ScrollItemsWidget::focusMoveRight() {
             this->setSelectedItem(nextWidget);
             int currValue = ui->scrollArea->horizontalScrollBar()->value() + ui->scrollArea->width();
             int nextWidgetRight = nextWidget->pos().x() + nextWidget->width();
-            if (nextWidgetRight > currValue) {
+            if (nextWidgetRight > currValue || nextWidgetRight < ui->scrollArea->horizontalScrollBar()->value()) {
                 ui->scrollArea->horizontalScrollBar()->setValue(nextWidgetRight - ui->scrollArea->width());
             }
         }
