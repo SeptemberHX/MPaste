@@ -32,6 +32,8 @@ public:
     void focusMoveLeft();
     void focusMoveRight();
 
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 signals:
     void updateClipboard(const ClipboardItem &item);
     void doubleClicked();

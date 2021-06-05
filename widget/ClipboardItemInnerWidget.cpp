@@ -232,6 +232,7 @@ void ClipboardItemInnerWidget::initTextBrowser() {
     this->textBrowser->setWordWrapMode(QTextOption::WordWrap);
     this->textBrowser->document()->setDocumentMargin(15);
     this->textBrowser->setAttribute(Qt::WA_TranslucentBackground);
+    this->textBrowser->setDisabled(true);
     this->mLayout->addWidget(this->textBrowser);
     this->textBrowser->hide();
 }

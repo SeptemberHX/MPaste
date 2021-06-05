@@ -161,16 +161,23 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         } else {
             this->hide();
         }
-    } else if (event->key() == Qt::Key_Alt) {
+    } else if (ui->searchEdit->isVisible() && event->key() == Qt::Key_Alt) {
         // set shortcut information for selecting top-10 items
         this->currItemsWidget()->setShortcutInfo();
-    } else if (event->key() == Qt::Key_Left) {
+    } else if (!ui->searchEdit->isVisible() && event->key() == Qt::Key_Left) {
         this->currItemsWidget()->focusMoveLeft();
-    } else if (event->key() == Qt::Key_Right) {
+    } else if (!ui->searchEdit->isVisible() && event->key() == Qt::Key_Right) {
         this->currItemsWidget()->focusMoveRight();
     } else if (event->key() == Qt::Key_Return) {
         this->currItemsWidget()->selectedByEnter();
         this->hide();
+    }
+
+    if (ui->searchEdit->isVisible()) {
+        if (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) {
+            QGuiApplication::sendEvent(ui->searchEdit, event);
+            this->setFocusOnSearch(true);
+        }
     }
 
     if (event->modifiers() & Qt::AltModifier) {
@@ -186,8 +193,6 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         QGuiApplication::sendEvent(ui->searchEdit, event);
         this->setFocusOnSearch(true);
     }
-
-    QWidget::keyPressEvent(event);
 }
 
 void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {

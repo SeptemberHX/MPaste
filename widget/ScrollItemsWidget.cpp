@@ -18,6 +18,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, QWidget *parent) :
     this->layout->setContentsMargins(0, 0, 0, 0);
     this->layout->addStretch(1);
     this->saver = new LocalSaver();
+    ui->scrollArea->installEventFilter(this);
 }
 
 ScrollItemsWidget::~ScrollItemsWidget()
@@ -45,6 +46,7 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
        auto itemWidget = dynamic_cast<ClipboardItemWidget*>(sender());
        this->saveItem(itemWidget->getItem());
     });
+    itemWidget->installEventFilter(this);
     itemWidget->showItem(nItem);
 
     this->layout->insertWidget(0, itemWidget);
@@ -261,4 +263,12 @@ void ScrollItemsWidget::selectedByEnter() {
     if (this->currItemWidget != nullptr) {
         this->moveItemToFirst(this->currItemWidget);
     }
+}
+
+bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
+    if (event->type() == QEvent::KeyPress) {
+        QGuiApplication::sendEvent(this->parent(), event);
+        return true;
+    }
+    return QWidget::eventFilter(watched, event);
 }
