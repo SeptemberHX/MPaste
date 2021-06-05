@@ -60,6 +60,7 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
         }
     }
 
+    Q_EMIT itemCountChanged(this->layout->count() - 1);
     return true;
 }
 
@@ -131,11 +132,17 @@ void ScrollItemsWidget::itemDoubleClicked() {
 }
 
 void ScrollItemsWidget::filterByKeyword(const QString &keyword) {
+    int visibleCount = 0;
     for (int i = 0; i < this->layout->count() - 1; ++i) {
         auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
         widget->setVisible(widget->getItem().contains(keyword));
+        if (widget->isVisible()) {
+            ++visibleCount;
+        }
     }
     this->setFirstVisibleItemSelected();
+
+    Q_EMIT itemCountChanged(visibleCount);
 }
 
 void ScrollItemsWidget::setShortcutInfo() {

@@ -35,6 +35,7 @@ public:
 signals:
     void updateClipboard(const ClipboardItem &item);
     void doubleClicked();
+    void itemCountChanged(int itemCount);
 
 private slots:
     void itemClicked();

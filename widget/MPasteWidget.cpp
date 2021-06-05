@@ -32,6 +32,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->clipboardWidget->installEventFilter(this);
     connect(this->clipboardWidget, &ScrollItemsWidget::updateClipboard, this, &MPasteWidget::setClipboard);
     connect(this->clipboardWidget, &ScrollItemsWidget::doubleClicked, this, &MPasteWidget::hide);
+    connect(this->clipboardWidget, &ScrollItemsWidget::itemCountChanged, this, &MPasteWidget::updateItemCount);
 
     this->numKeyList << Qt::Key_1 << Qt::Key_2 << Qt::Key_3 << Qt::Key_4 << Qt::Key_5 << Qt::Key_6 << Qt::Key_7 << Qt::Key_8 << Qt::Key_9 << Qt::Key_0;
 
@@ -229,4 +230,8 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
         this->hide();
         this->currItemsWidget()->cleanShortCutInfo();
     }
+}
+
+void MPasteWidget::updateItemCount(int itemCount) {
+    ui->countArea->setText(QString::number(itemCount));
 }

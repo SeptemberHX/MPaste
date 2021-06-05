@@ -161,6 +161,38 @@ border-radius: 10px;
        </widget>
       </item>
       <item>
+       <widget class="QToolButton" name="countArea">
+        <property name="minimumSize">
+         <size>
+          <width>28</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QToolButton {
+background-color: #EE9A00;
+color: white;
+border-radius: 14px;
+}</string>
+        </property>
+        <property name="text">
+         <string>100</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QToolButton" name="menuButton">
         <property name="minimumSize">
          <size>
