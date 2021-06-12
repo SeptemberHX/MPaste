@@ -24,8 +24,8 @@ ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
 
     auto *effect = new QGraphicsDropShadowEffect(this);
     effect->setOffset(0, 0);
-    effect->setColor(Qt::black);
-    effect->setBlurRadius(10);
+    effect->setColor(Qt::darkGray);
+    effect->setBlurRadius(15);
     this->innerShadowedWidget->setGraphicsEffect(effect);
     this->innerShadowedWidget->setAttribute(Qt::WA_TranslucentBackground, false);
 }

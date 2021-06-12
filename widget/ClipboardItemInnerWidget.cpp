@@ -106,9 +106,12 @@ void ClipboardItemInnerWidget::refreshStyleSheet() {
 
 QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topColor, int borderWidth) {
     return QString("QWidget {background-color: %1; color: #000000; } "
+                   "QWidget { border-radius: 8px; }"
                    "#topWidget { background-color: %2;} "
+                   "#topWidget { border-bottom-left-radius: 0px; border-bottom-right-radius: 0px; }  "
+                   "#infoWidget { border-top-left-radius: 0px; border-top-right-radius: 0px; }  "
                    "#typeLabel, #timeLabel { color: #FFFFFF; } "
-                   "QFrame#innerWidget {border: %3px solid #1684fc;} ").arg(bgColor.name(), topColor.name(), QString::number(borderWidth));
+                   "QFrame#innerWidget { border-radius: 12px; border: %3px solid #1684fc;} ").arg(bgColor.name(), topColor.name(), QString::number(borderWidth));
 }
 
 void ClipboardItemInnerWidget::setShortkeyInfo(int num) {
@@ -173,7 +176,7 @@ void ClipboardItemInnerWidget::showColor(const QColor &color) {
     this->imageLabel->show();
     QColor fontColor(255 - color.red(), 255 - color.green(), 255 - color.blue());
 
-    this->imageLabel->setStyleSheet(QString("QLabel {background-color: %1; color: %2;}").arg(color.name(), fontColor.name()));
+    this->imageLabel->setStyleSheet(QString("QLabel { border-radius: 0px; background-color: %1; color: %2;}").arg(color.name(), fontColor.name()));
     ui->infoWidget->setStyleSheet(QString("QWidget {background-color: %1;}").arg(color.name()));
     ui->countLabel->setText("");
     this->imageLabel->setText(color.name().toUpper());
@@ -243,6 +246,7 @@ void ClipboardItemInnerWidget::initImageLabel() {
     this->imageLabel = new QLabel(ui->bodyWidget);
     this->imageLabel->hide();
     this->imageLabel->setAlignment(Qt::AlignCenter);
+    this->imageLabel->setStyleSheet("QWidget { border-radius: 0px; } ");
     this->mLayout->addWidget(this->imageLabel);
 }
 
@@ -250,6 +254,7 @@ void ClipboardItemInnerWidget::initFileThumbWidget() {
     if (this->fileThumbWidget != nullptr) return;
 
     this->fileThumbWidget = new FileThumbWidget(ui->bodyWidget);
+    this->fileThumbWidget->setStyleSheet("QWidget { border-radius: 0px; } ");
     this->fileThumbWidget->hide();
     this->mLayout->addWidget(this->fileThumbWidget);
 }
@@ -258,6 +263,7 @@ void ClipboardItemInnerWidget::initWebLinkThumbWidget() {
     if (this->webLinkThumbWidget != nullptr) return;
 
     this->webLinkThumbWidget = new WebLinkThumbWidget(ui->bodyWidget);
+    this->webLinkThumbWidget->setStyleSheet("QWidget { border-radius: 0px; } ");
     this->webLinkThumbWidget->hide();
     this->mLayout->addWidget(this->webLinkThumbWidget);
 
