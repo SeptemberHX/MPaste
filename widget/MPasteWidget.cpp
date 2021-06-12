@@ -161,7 +161,7 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         } else {
             this->hide();
         }
-    } else if (ui->searchEdit->isVisible() && event->key() == Qt::Key_Alt) {
+    } else if (event->key() == Qt::Key_Alt) {
         // set shortcut information for selecting top-10 items
         this->currItemsWidget()->setShortcutInfo();
     } else if (!ui->searchEdit->isVisible() && event->key() == Qt::Key_Left) {
