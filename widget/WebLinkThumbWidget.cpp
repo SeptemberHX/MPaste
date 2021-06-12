@@ -7,7 +7,6 @@ WebLinkThumbWidget::WebLinkThumbWidget(QWidget *parent) :
     ui(new Ui::WebLinkThumbWidget)
 {
     ui->setupUi(this);
-    ui->imageLabel->setFixedHeight(200);
 }
 
 WebLinkThumbWidget::~WebLinkThumbWidget()

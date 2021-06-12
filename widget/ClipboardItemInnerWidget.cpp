@@ -130,7 +130,7 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
     QRegExp bgColorExp("background-color:(#[A-Za-z0-9]{6})");
     if (bgColorExp.indexIn(html.trimmed()) != -1) {
         QString colorStr = bgColorExp.cap(1);
-        ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr));
+        ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1; border-radius: 0px; }").arg(colorStr));
         ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr));
     } else {
         bgColorExp = QRegExp(R"(background.*:[ ]*rgb\((\d*),[ ]*(\d*),[ ]*(\d*)\))");
@@ -139,7 +139,7 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
             int g = bgColorExp.cap(2).toInt();
             int b = bgColorExp.cap(3).toInt();
             QColor colorStr(r, g, b);
-            ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;}").arg(colorStr.name()));
+            ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;  border-radius: 0px;}").arg(colorStr.name()));
             ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr.name()));
         }
     }
@@ -227,6 +227,7 @@ void ClipboardItemInnerWidget::initTextBrowser() {
     if (this->textBrowser != nullptr) return;
 
     this->textBrowser = new MTextBrowser(ui->bodyWidget);
+    this->textBrowser->setStyleSheet("QWidget { border-radius: 0px; }");
     this->textBrowser->setFrameStyle(QFrame::NoFrame);
     this->textBrowser->setReadOnly(true);
     this->textBrowser->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
