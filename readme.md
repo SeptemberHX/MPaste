@@ -30,11 +30,11 @@ A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 
 Gif on [Imgur](https://i.imgur.com/79gyO0n.gifv)
 
-[Screenshot on Ubuntu 21.04 with Gnome](https://i.imgur.com/q6OCzOT.png)
+![Screenshot on Ubuntu 21.04 with Gnome](https://i.imgur.com/q6OCzOT.png)
 
-[Screenshot on Deepin V20 with DDE](https://i.imgur.com/iRUJK8I.png)
+![Screenshot on Deepin V20 with DDE](https://i.imgur.com/iRUJK8I.png)
 
-[Screenshot on neon with KDE](https://i.imgur.com/h5GXFkF.png)
+![Screenshot on neon with KDE](https://i.imgur.com/h5GXFkF.png)
 
 ## Dependencies
 
