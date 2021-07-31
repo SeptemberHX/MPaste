@@ -64,6 +64,7 @@ add_custom_target(changelog ALL DEPENDS "${CMAKE_BINARY_DIR}/changelog.gz")
 install(FILES ${CMAKE_BINARY_DIR}/MPaste DESTINATION /usr/bin/)
 install(FILES ${CMAKE_SOURCE_DIR}/MPaste.desktop DESTINATION /usr/share/applications)
 install(FILES ${CMAKE_SOURCE_DIR}/resources/mpaste.png DESTINATION /usr/share/icons/hicolor/48x48/apps)
+install(FILES ${CMAKE_SOURCE_DIR}/resources/mpaste.svg DESTINATION /usr/share/icons/hicolor/scalable/apps)
 
 
 # 最后把我们的changelog等东西也加进来，project是你的工程名

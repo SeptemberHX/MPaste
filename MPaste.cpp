@@ -18,7 +18,7 @@ int main(int argc, char* argv[]) {
 
     if (kds.isPrimaryInstance()) {
         app.setApplicationName("MPaste");
-        app.setWindowIcon(QIcon(":/resources/resources/paste.svg"));
+        app.setWindowIcon(QIcon::fromTheme("mpaste"));
         QNetworkProxyFactory::setUseSystemConfiguration(true);
 
         QTranslator chinese;

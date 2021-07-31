@@ -57,7 +57,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->menu = new QMenu(this);
 //    this->menu->addAction(tr("Settings"), [this]() { });
     this->menu->addAction(tr("About"), [this]() { this->aboutWidget->show(); });
-    this->menu->addAction(tr("Quit"), [this]() { this->close(); });
+    this->menu->addAction(tr("Quit"), [this]() { qApp->exit(0); });
 
     connect(ui->menuButton, &QToolButton::clicked, this, [this]() {
         this->menu->popup(ui->menuButton->mapToGlobal(ui->menuButton->rect().bottomLeft()));
@@ -79,9 +79,12 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->setFocusOnSearch(false);
 
     this->trayIcon = new QSystemTrayIcon(this);
-    this->trayIcon->setIcon(QIcon(":/resources/resources/paste.svg"));
+    this->trayIcon->setIcon(qApp->windowIcon());
     this->trayIcon->setContextMenu(this->menu);
     this->trayIcon->show();
+    connect(this->trayIcon, &QSystemTrayIcon::activated, this, [this] {
+        this->setVisibleWithAnnimation(true);
+    });
     this->trayIcon->showMessage("MPaste", tr("MPaste has started."), this->trayIcon->icon(), 1500);
 }
 
@@ -148,7 +151,7 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
             this->mimeData->setData("x-special/gnome-copied-files", byteArray);
             nautilus.append(byteArray);
             this->mimeData->setData("COMPOUND_TEXT", nautilus);
-            this->mimeData->setText(nautilus);
+            this->mimeData->setText(item.getText());
             this->mimeData->setData("text/plain;charset=utf-8", nautilus);
         }
 
@@ -237,6 +240,7 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
         if (!ui->searchEdit->text().isEmpty()) {
             ui->searchEdit->setFocus();
         }
+        this->setFocus();
     } else {
         this->hide();
         this->currItemsWidget()->cleanShortCutInfo();

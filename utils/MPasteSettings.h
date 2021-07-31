@@ -25,6 +25,8 @@ public:
 
 private:
     MPasteSettings();
+    void loadSettings();
+    void saveSettings();
 
     QString saveDir;
     int maxSize;

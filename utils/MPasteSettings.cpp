@@ -6,6 +6,7 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <iostream>
+#include <QSettings>
 
 MPasteSettings *MPasteSettings::inst = nullptr;
 
@@ -28,6 +29,11 @@ MPasteSettings::MPasteSettings()
     this->proxyType = QNetworkProxy::HttpProxy;
     this->proxyHost = "127.0.0.1";
     this->port = 7890;
+
+    this->loadSettings();
+
+    // this helps to create the configuration file
+    this->saveSettings();
 }
 
 int MPasteSettings::getMaxSize() const {
@@ -44,4 +50,18 @@ const QString &MPasteSettings::getProxyHost() const {
 
 int MPasteSettings::getPort() const {
     return port;
+}
+
+void MPasteSettings::loadSettings() {
+    QSettings settings("MPaste", "MPaste");
+
+    this->maxSize = settings.value("main/historySize", this->maxSize).toInt();
+    this->saveDir = settings.value("main/saveDir", this->saveDir).toString();
+}
+
+void MPasteSettings::saveSettings() {
+    QSettings settings("MPaste", "MPaste");
+
+    settings.setValue("main/historySize", this->maxSize);
+    settings.setValue("main/saveDir", this->saveDir);
 }
