@@ -1,0 +1,5 @@
+* 0.1.1
+  - add tray icon
+  - cmake & cpack to build deb package for deepin v20
+* 0.1
+  - first release

@@ -11,6 +11,7 @@
 #include <QMenu>
 #include <QMediaPlayer>
 #include <QPropertyAnimation>
+#include <QSystemTrayIcon>
 #include "AboutWidget.h"
 #include "ScrollItemsWidget.h"
 
@@ -60,6 +61,8 @@ private:
 
     QPropertyAnimation *searchShowAnim;
     QPropertyAnimation *searchHideAnim;
+
+    QSystemTrayIcon *trayIcon;
 };
 
 #endif // MPASTEWIDGET_H

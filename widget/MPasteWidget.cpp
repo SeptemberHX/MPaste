@@ -24,7 +24,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->searchShowAnim->setDuration(150);
 
     this->aboutWidget = new AboutWidget(this);
-    this->aboutWidget->setWindowFlag(Qt::Dialog);
+    this->aboutWidget->setWindowFlag(Qt::Tool);
     this->aboutWidget->setWindowTitle("MPaste About");
     this->aboutWidget->hide();
 
@@ -77,6 +77,12 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->loadFromSaveDir();
     this->monitor->clipboardChanged();
     this->setFocusOnSearch(false);
+
+    this->trayIcon = new QSystemTrayIcon(this);
+    this->trayIcon->setIcon(QIcon(":/resources/resources/paste.svg"));
+    this->trayIcon->setContextMenu(this->menu);
+    this->trayIcon->show();
+    this->trayIcon->showMessage("MPaste", tr("MPaste has started."), this->trayIcon->icon(), 1500);
 }
 
 MPasteWidget::~MPasteWidget()

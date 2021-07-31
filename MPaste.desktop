@@ -1,0 +1,9 @@
+[Desktop Entry]
+Comment=MPaste, an alternative to Paste clipboard manager on Linux
+Exec=/usr/bin/MPaste
+Hidden=false
+Name=MPaste
+NoDisplay=false
+Type=Application
+X-GNOME-Autostart-enabled=true
+Icon=mpaste
