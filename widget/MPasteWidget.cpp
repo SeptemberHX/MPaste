@@ -8,6 +8,11 @@
 #include "ui_MPasteWidget.h"
 #include "ClipboardItemWidget.h"
 
+#include "utils/PlatformRelated.h"
+
+// QEvent::KeyPress conflicts with the KeyPress in X.h
+#undef KeyPress
+
 MPasteWidget::MPasteWidget(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::MPasteWidget),
@@ -31,7 +36,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->clipboardWidget = new ScrollItemsWidget("Clipboard", this);
     this->clipboardWidget->installEventFilter(this);
     connect(this->clipboardWidget, &ScrollItemsWidget::updateClipboard, this, &MPasteWidget::setClipboard);
-    connect(this->clipboardWidget, &ScrollItemsWidget::doubleClicked, this, &MPasteWidget::hide);
+    connect(this->clipboardWidget, &ScrollItemsWidget::doubleClicked, this, &MPasteWidget::hideAndPaste);
     connect(this->clipboardWidget, &ScrollItemsWidget::itemCountChanged, this, &MPasteWidget::updateItemCount);
 
     this->numKeyList << Qt::Key_1 << Qt::Key_2 << Qt::Key_3 << Qt::Key_4 << Qt::Key_5 << Qt::Key_6 << Qt::Key_7 << Qt::Key_8 << Qt::Key_9 << Qt::Key_0;
@@ -179,7 +184,7 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         this->currItemsWidget()->focusMoveRight();
     } else if (event->key() == Qt::Key_Return) {
         this->currItemsWidget()->selectedByEnter();
-        this->hide();
+        this->hideAndPaste();
     }
 
     if (ui->searchEdit->isVisible()) {
@@ -194,7 +199,7 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         int keyOrder = this->numKeyList.indexOf(event->key());
         if (keyOrder >= 0 && keyOrder <= 9) {
             this->currItemsWidget()->selectedByShortcut(keyOrder);
-            this->hide();
+            this->hideAndPaste();
             this->currItemsWidget()->cleanShortCutInfo();
         }
     } else if (event->key() >= Qt::Key_Space && event->key() <= Qt::Key_AsciiTilde) {
@@ -240,7 +245,13 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
         if (!ui->searchEdit->text().isEmpty()) {
             ui->searchEdit->setFocus();
         }
-        this->setFocus();
+
+        for (int i = 0; i < 10; ++i) {
+            if (PlatformRelated::currActiveWindow() == this->winId()) {
+                break;
+            }
+            PlatformRelated::activateWindow(this->winId());
+        }
     } else {
         this->hide();
         this->currItemsWidget()->cleanShortCutInfo();
@@ -249,4 +260,12 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
 
 void MPasteWidget::updateItemCount(int itemCount) {
     ui->countArea->setText(QString::number(itemCount));
+}
+
+void MPasteWidget::hideAndPaste() {
+    this->hide();
+
+    if (MPasteSettings::getInst()->isAutoPaste()) {
+        PlatformRelated::triggerPasteShortcut();
+    }
 }

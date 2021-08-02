@@ -51,23 +51,32 @@
     </message>
 </context>
 <context>
+    <name>MPasteSettings</name>
+    <message>
+        <location filename="../utils/MPasteSettings.cpp" line="36"/>
+        <source>Terminal</source>
+        <translatorcomment>已 top-panel 显示为准</translatorcomment>
+        <translation type="unfinished">终端</translation>
+    </message>
+</context>
+<context>
     <name>MPasteWidget</name>
     <message>
         <source>Settings</source>
         <translation type="vanished">设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="59"/>
+        <location filename="../widget/MPasteWidget.cpp" line="64"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="60"/>
+        <location filename="../widget/MPasteWidget.cpp" line="65"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="86"/>
+        <location filename="../widget/MPasteWidget.cpp" line="93"/>
         <source>MPaste has started.</source>
         <translation>MPaste 已启动。</translation>
     </message>

@@ -36,6 +36,7 @@ protected:
 private slots:
     void clipboardUpdated(ClipboardItem item, int wId);
     void updateItemCount(int itemCount);
+    void hideAndPaste();
 
 private:
     void setFocusOnSearch(bool flag);

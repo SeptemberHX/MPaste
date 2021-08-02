@@ -8,7 +8,8 @@
 #include <QString>
 #include <QNetworkProxy>
 
-class MPasteSettings {
+class MPasteSettings : public QObject {
+    Q_OBJECT
 
 public:
     static MPasteSettings* getInst();
@@ -23,10 +24,26 @@ public:
 
     int getPort() const;
 
+    bool isAutoPaste() const;
+
+    void setAutoPaste(bool autoPaste);
+
+    const QString &getShortcutStr() const;
+
+    void setShortcutStr(const QString &shortcutStr);
+
+    bool isTerminalTitle(const QString &title);
+
+    int getCurrFocusWinId() const;
+
+    void setCurrFocusWinId(int currFocusWinId);
+
 private:
     MPasteSettings();
     void loadSettings();
     void saveSettings();
+
+    QStringList terminalNames;
 
     QString saveDir;
     int maxSize;
@@ -34,6 +51,11 @@ private:
     QNetworkProxy::ProxyType proxyType;
     QString proxyHost;
     int port;
+
+    bool autoPaste;
+    QString shortcutStr;
+
+    int currFocusWinId;
 
     static MPasteSettings *inst;
 };

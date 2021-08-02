@@ -15,6 +15,7 @@ public:
     static void activateWindow(int wId);
     static QPixmap getWindowIcon(int wId);
     static int currActiveWindow();
+    static void triggerPasteShortcut();
 };
 
 #if defined(__linux__)
@@ -28,6 +29,8 @@ class XUtils {
 
 public:
     static void activeWindowX11(int winId);
+    static void triggerPasteShortcut(int winId);
+    static int currentWinId();
 
     static xdo_t *m_xdo;
     static Display *m_display;

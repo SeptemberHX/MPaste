@@ -30,6 +30,11 @@ MPasteSettings::MPasteSettings()
     this->proxyHost = "127.0.0.1";
     this->port = 7890;
 
+    this->autoPaste = true;
+    this->shortcutStr = "Alt+Q";
+
+    this->terminalNames << tr("Terminal");
+
     this->loadSettings();
 
     // this helps to create the configuration file
@@ -57,6 +62,8 @@ void MPasteSettings::loadSettings() {
 
     this->maxSize = settings.value("main/historySize", this->maxSize).toInt();
     this->saveDir = settings.value("main/saveDir", this->saveDir).toString();
+    this->autoPaste = settings.value("main/autoPaste", this->autoPaste).toBool();
+    this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
 }
 
 void MPasteSettings::saveSettings() {
@@ -64,4 +71,34 @@ void MPasteSettings::saveSettings() {
 
     settings.setValue("main/historySize", this->maxSize);
     settings.setValue("main/saveDir", this->saveDir);
+    settings.setValue("main/autoPaste", this->autoPaste);
+    settings.setValue("main/shortcut", this->shortcutStr);
+}
+
+bool MPasteSettings::isAutoPaste() const {
+    return autoPaste;
+}
+
+void MPasteSettings::setAutoPaste(bool autoPaste) {
+    MPasteSettings::autoPaste = autoPaste;
+}
+
+const QString &MPasteSettings::getShortcutStr() const {
+    return shortcutStr;
+}
+
+void MPasteSettings::setShortcutStr(const QString &shortcutStr) {
+    MPasteSettings::shortcutStr = shortcutStr;
+}
+
+bool MPasteSettings::isTerminalTitle(const QString &title) {
+    return this->terminalNames.contains(title);
+}
+
+int MPasteSettings::getCurrFocusWinId() const {
+    return currFocusWinId;
+}
+
+void MPasteSettings::setCurrFocusWinId(int currFocusWinId) {
+    MPasteSettings::currFocusWinId = currFocusWinId;
 }

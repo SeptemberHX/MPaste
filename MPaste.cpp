@@ -7,6 +7,7 @@
 #include <iostream>
 #include <QNetworkProxy>
 #include <QScreen>
+#include <utils/MPasteSettings.h>
 #include "widget/MPasteWidget.h"
 #include "KDSingleApplication/kdsingleapplication.h"
 #include "utils/PlatformRelated.h"
@@ -21,15 +22,10 @@ int main(int argc, char* argv[]) {
         app.setWindowIcon(QIcon::fromTheme("mpaste"));
         QNetworkProxyFactory::setUseSystemConfiguration(true);
 
-        QTranslator chinese;
-        switch (QLocale::system().language()) {
-            case QLocale::Chinese:
-                chinese.load(":/resources/resources/app_zh.qm");
-                qApp->installTranslator(&chinese);
-                break;
-            default:
-                break;
-        }
+        QString locale = QLocale::system().name();
+        QTranslator translator;
+        translator.load("/usr/share/MPaste/translations/MPaste_"+ locale +".qm");
+        app.installTranslator(&translator);
 
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");
@@ -43,13 +39,11 @@ int main(int argc, char* argv[]) {
         PlatformRelated::activateWindow(widget.winId());
 
         QObject::connect(&kds, &KDSingleApplication::messageReceived, qApp, [&] (const QByteArray &message) {
+            MPasteSettings::getInst()->setCurrFocusWinId(PlatformRelated::currActiveWindow());
             // whatever received here, just raise the window !
             auto screen = qApp->screenAt(QCursor::pos());
             widget.setFixedWidth(screen->availableSize().width());
             widget.setVisibleWithAnnimation(!widget.isVisible());
-            if (widget.isVisible()) {
-                PlatformRelated::activateWindow(widget.winId());
-            }
             widget.move(screen->availableGeometry().x(), screen->size().height() - widget.height());
         });
 

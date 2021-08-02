@@ -65,6 +65,7 @@ install(FILES ${CMAKE_BINARY_DIR}/MPaste DESTINATION /usr/bin/)
 install(FILES ${CMAKE_SOURCE_DIR}/MPaste.desktop DESTINATION /usr/share/applications)
 install(FILES ${CMAKE_SOURCE_DIR}/resources/mpaste.png DESTINATION /usr/share/icons/hicolor/48x48/apps)
 install(FILES ${CMAKE_SOURCE_DIR}/resources/mpaste.svg DESTINATION /usr/share/icons/hicolor/scalable/apps)
+install(DIRECTORY ${CMAKE_BINARY_DIR}/translations DESTINATION /usr/share/MPaste)
 
 
 # 最后把我们的changelog等东西也加进来，project是你的工程名
