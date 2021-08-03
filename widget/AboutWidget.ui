@@ -56,7 +56,7 @@
          <string notr="true"/>
         </property>
         <property name="pixmap">
-         <pixmap resource="../resources.qrc">:/resources/resources/paste.svg</pixmap>
+         <pixmap>:/resources/resources/paste.svg</pixmap>
         </property>
         <property name="scaledContents">
          <bool>true</bool>
@@ -81,7 +81,7 @@
       </font>
      </property>
      <property name="text">
-      <string notr="true">MPaste V0.1</string>
+      <string notr="true">MPaste V0.2.0</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>

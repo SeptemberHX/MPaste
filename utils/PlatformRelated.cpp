@@ -27,13 +27,17 @@ void XUtils::activeWindowX11(int winId) {
 
 void XUtils::triggerPasteShortcut(int winId) {
     openXdo();
-    xdo_send_keysequence_window_up(m_xdo, winId, "Alt", 0);
     KWindowInfo info(winId, NET::WMVisibleName);
     if (info.valid() && MPasteSettings::getInst()->isTerminalTitle(info.visibleName())) {
-        xdo_send_keysequence_window(m_xdo, winId, "Control+Shift+v", 0);
+        xdo_send_keysequence_window_up(m_xdo, winId, "Alt", 100);
+        xdo_send_keysequence_window(m_xdo, winId, "Control+Shift+v", 100);
     } else {
-        // cannot work with jetbrains if using winId ???
-        xdo_send_keysequence_window(m_xdo, XUtils::currentWinId(), "Control+v", 0);
+        // let the xdotool handle the current window id
+        //   it won't work if we try to use XUtils::currActiveWindow
+        //   and the magic number 12000 also comes from the source code of xdotool
+        //   without 12000, some applications like Edge will get twice paste items.
+        xdo_send_keysequence_window_up(m_xdo, 0, "Alt", 0);
+        xdo_send_keysequence_window(m_xdo, 0, "Control+v", 12000);
     }
 }
 

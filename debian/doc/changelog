@@ -1,6 +1,9 @@
-* 0.1.1
+* 0.2.0
   - add tray icon
   - cmake & cpack to build deb package for deepin v20
   - auto paste when selected
+  - add configuration file at ~/.config/MPaste/MPaste.conf
+    - allow change the max history size
+    - allow to disable/enable the auto paste
 * 0.1
   - first release

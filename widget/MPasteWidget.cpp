@@ -264,7 +264,7 @@ void MPasteWidget::updateItemCount(int itemCount) {
 
 void MPasteWidget::hideAndPaste() {
     this->hide();
-
+    usleep(100);
     if (MPasteSettings::getInst()->isAutoPaste()) {
         PlatformRelated::triggerPasteShortcut();
     }

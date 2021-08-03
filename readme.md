@@ -11,6 +11,7 @@ A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 * Clipboard history saved to files
 * More elegant UI design
 * History search
+* auto paste (only X11)
 
 ## Shortcut
 
@@ -23,8 +24,11 @@ A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 
 ## Default settings
 
+> configure file path: `~/.config/MPaste/MPaste.conf`. Data path configure doesn't work yet.
+
 * Max history size: 500
 * History location: `~/.MPaste`
+* Auto Paste when item selected
 
 ## Screenshot
 
@@ -36,11 +40,11 @@ Gif on [Imgur](https://i.imgur.com/79gyO0n.gifv)
 
 ![Screenshot on neon with KDE](https://i.imgur.com/h5GXFkF.png)
 
-## Dependencies
+## For Deepin V20
 
-```shell
-sudo apt install libqt5multimedia5 libkf5windowsystem5 libqt5network5 libxdo3 libqt5x11extras5
-```
+Download the deb package from the release page and install it.
+
+**do not forget to set a shortcut for it in system settings**
 
 ## How to bulid from source
 
@@ -51,7 +55,7 @@ cd MPaste
 mkdir build
 cd build
 cmake ..
-make
+make -j8
 ```
 
 * [KDSingleApplication](https://github.com/KDAB/KDSingleApplication)
