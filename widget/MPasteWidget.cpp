@@ -42,8 +42,8 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->numKeyList << Qt::Key_1 << Qt::Key_2 << Qt::Key_3 << Qt::Key_4 << Qt::Key_5 << Qt::Key_6 << Qt::Key_7 << Qt::Key_8 << Qt::Key_9 << Qt::Key_0;
 
     std::cout << "Init media player..." << std::endl;
-    this->player = new QMediaPlayer(this, QMediaPlayer::LowLatency);
-    this->player->setMedia(QUrl("qrc:/resources/resources/sound.mp3"));
+    this->player = new QMediaPlayer(this);
+    this->player->setSource(QUrl("qrc:/resources/resources/sound.mp3"));
     std::cout << "Sound effect loaded finished" << std::endl;
 
     this->layout = new QHBoxLayout(ui->itemsWidget);
@@ -264,7 +264,6 @@ void MPasteWidget::updateItemCount(int itemCount) {
 
 void MPasteWidget::hideAndPaste() {
     this->hide();
-    usleep(100);
     if (MPasteSettings::getInst()->isAutoPaste()) {
         PlatformRelated::triggerPasteShortcut();
     }

@@ -15,17 +15,17 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
     , targetUrl(url)
 {
     this->replaceHttpHosts << "www.baidu.com";
-    this->ogImageReg = QRegExp("<meta .*property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
-    this->ogTitleReg = QRegExp("<meta .*property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
-    this->titleReg = QRegExp("<title.*>(.*)</title>");
-    this->faviconReg1 = QRegExp("<link[ ]*href=\"(.*)\".*rel=\"{short }?icon\".*/?>");
-    this->faviconReg2 = QRegExp("<link[ ]*rel=\"{short }?icon\".*href=\"(.*)\".*/?>");
+    this->ogImageReg = QRegularExpression("<meta .*property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
+    this->ogTitleReg = QRegularExpression("<meta .*property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
+    this->titleReg = QRegularExpression("<title.*>(.*)</title>");
+    this->faviconReg1 = QRegularExpression("<link[ ]*href=\"(.*)\".*rel=\"{short }?icon\".*/?>");
+    this->faviconReg2 = QRegularExpression("<link[ ]*rel=\"{short }?icon\".*href=\"(.*)\".*/?>");
 
-    this->ogImageReg.setMinimal(true);
-    this->ogTitleReg.setMinimal(true);
-    this->titleReg.setMinimal(true);
-    this->faviconReg1.setMinimal(true);
-    this->faviconReg2.setMinimal(true);
+//    this->ogImageReg.setMinimal(true);
+//    this->ogTitleReg.setMinimal(true);
+//    this->titleReg.setMinimal(true);
+//    this->faviconReg1.setMinimal(true);
+//    this->faviconReg2.setMinimal(true);
     this->naManager = new QNetworkAccessManager(this);
     connect(this->naManager, &QNetworkAccessManager::finished, this, &OpenGraphFetcher::requestFinished);
 }
@@ -38,7 +38,7 @@ void OpenGraphFetcher::handle() {
 
     QNetworkRequest request(tUrl);
     request.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0");
-    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+//    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
     this->realCalledUrl = tUrl;
     this->naManager->get(request);
 }
@@ -99,19 +99,19 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                 }
             }
         } else {
-            int pos = this->ogImageReg.indexIn(body);
-            if (pos >= 0) {
-                faviconStr = this->ogImageReg.cap(1);
+            QRegularExpressionMatch match = this->ogImageReg.match(body);
+            if (match.hasMatch()) {
+                faviconStr = match.captured(1);
             } else {
                 QString str = this->targetUrl.toString();
                 str = str.mid(0, str.indexOf(':'));
-                pos = this->faviconReg1.indexIn(body);
-                if (pos >= 0) {
-                    faviconStr = this->faviconReg1.cap(1);
+                match = this->faviconReg1.match(str);
+                if (match.hasMatch()) {
+                    faviconStr = match.captured(1);
                 }  else {
-                    pos = this->faviconReg2.indexIn(body);
-                    if (pos >= 0) {
-                        faviconStr = this->faviconReg2.cap(1);
+                    match = this->faviconReg2.match(str);
+                    if (match.hasMatch()) {
+                        faviconStr = match.captured(1);
                     } else {
                         QUrl faviconUrl(str + "://" + this->targetUrl.host() + "/favicon.ico");
                         faviconStr = faviconUrl.toString();
@@ -119,14 +119,14 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                 }
             }
 
-            pos = this->ogTitleReg.indexIn(body);
-            if (pos >= 0) {
-                QString omgTitleStr = this->ogTitleReg.cap(1);
+            match = this->ogTitleReg.match(body);
+            if (match.hasMatch()) {
+                QString omgTitleStr = match.captured(1);
                 this->ogItem.setTitle(omgTitleStr);
             } else {
-                pos = this->titleReg.indexIn(body);
-                if (pos >= 0) {
-                    QString titleStr = this->titleReg.cap(1);
+                match = this->titleReg.match(body);
+                if (match.hasMatch()) {
+                    QString titleStr = match.captured(1);
                     this->ogItem.setTitle(titleStr);
                 }
             }

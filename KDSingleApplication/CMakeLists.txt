@@ -9,8 +9,7 @@ project(KDSingleApplication
 cmake_policy(SET CMP0020 NEW)
 cmake_policy(SET CMP0042 NEW)
 
-find_package(Qt5Widgets)
-find_package(Qt5Network)
+find_package(Qt6 COMPONENTS Widgets Network REQUIRED)
 
 set(CMAKE_AUTOMOC ON)
 
@@ -79,4 +78,4 @@ target_include_directories(kdsingleapplication
 if (WIN32)
     target_link_libraries(kdsingleapplication kernel32)
 endif()
-target_link_libraries(kdsingleapplication Qt5::Core Qt5::Network)
+target_link_libraries(kdsingleapplication Qt6::Core Qt6::Network)

@@ -3,7 +3,6 @@
 //
 
 #include <QApplication>
-#include <QDesktopWidget>
 #include <iostream>
 #include <QNetworkProxy>
 #include <QScreen>
@@ -29,7 +28,7 @@ int main(int argc, char* argv[]) {
 
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");
-        widget.setFixedWidth(QApplication::desktop()->rect().width());
+        widget.setFixedWidth(widget.screen()->size().width());
 
         QObject::connect(qApp, &QGuiApplication::applicationStateChanged, qApp, [&](Qt::ApplicationState state) {
             if (state == Qt::ApplicationInactive) {

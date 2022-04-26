@@ -70,3 +70,23 @@ void PlatformRelated::triggerPasteShortcut() {
 }
 
 #endif
+
+#if defined(__APPLE__)
+
+void PlatformRelated::activateWindow(int wId) {
+}
+
+
+QPixmap PlatformRelated::getWindowIcon(int wId) {
+    return QPixmap();
+}
+
+int PlatformRelated::currActiveWindow() {
+    return 0;
+}
+
+void PlatformRelated::triggerPasteShortcut() {
+
+}
+
+#endif

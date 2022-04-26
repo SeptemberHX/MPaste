@@ -7,6 +7,7 @@
 
 
 #include <QNetworkAccessManager>
+#include <QRegularExpression>
 #include "data/OpenGraphItem.h"
 
 class OpenGraphFetcher : public QObject {
@@ -30,12 +31,12 @@ private:
     QUrl imageUrl;
     QUrl realCalledUrl;
 
-    QRegExp ogImageReg;
-    QRegExp ogTitleReg;
-    QRegExp titleReg;
+    QRegularExpression ogImageReg;
+    QRegularExpression ogTitleReg;
+    QRegularExpression titleReg;
 
-    QRegExp faviconReg1;
-    QRegExp faviconReg2;
+    QRegularExpression faviconReg1;
+    QRegularExpression faviconReg2;
 
     QNetworkAccessManager *naManager;
     OpenGraphItem ogItem;
