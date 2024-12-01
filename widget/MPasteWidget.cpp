@@ -106,11 +106,15 @@ void MPasteWidget::initializeWidget() {
 
     // 初始化系统托盘
     this->trayIcon = new QSystemTrayIcon(this);
-    this->trayIcon->setIcon(qApp->windowIcon());
+    // this->trayIcon->setIcon(qApp->windowIcon());
+    this->trayIcon->setIcon(QIcon(":/resources/resources/mpaste.svg"));
+
     this->trayIcon->setContextMenu(this->menu);
     this->trayIcon->show();
-    connect(this->trayIcon, &QSystemTrayIcon::activated, this, [this] {
-        this->setVisibleWithAnnimation(true);
+    connect(this->trayIcon, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
+        if (reason == QSystemTrayIcon::Trigger) {  // Trigger 表示左键单击
+            this->setVisibleWithAnnimation(true);
+        }
     });
     this->trayIcon->showMessage("MPaste", tr("MPaste has started."), this->trayIcon->icon(), 1500);
 
@@ -335,21 +339,52 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
 
 void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == this->isVisible()) return;
-    if (visible) {
-        this->show();
-        if (!ui->searchEdit->text().isEmpty()) {
-            ui->searchEdit->setFocus();
-        }
 
-        for (int i = 0; i < 10; ++i) {
-            if (PlatformRelated::currActiveWindow() == this->winId()) {
-                break;
+    if (visible) {
+        // 保持在原位置显示，但先设置透明度为0
+        this->setWindowOpacity(0);
+        this->show();
+
+        // 创建动画
+        QPropertyAnimation* animation = new QPropertyAnimation(this, "windowOpacity", this);
+        animation->setDuration(200);  // 200毫秒的动画时长
+        animation->setStartValue(0.0);
+        animation->setEndValue(1.0);
+        animation->setEasingCurve(QEasingCurve::OutCubic);
+
+        // 动画结束后设置焦点
+        connect(animation, &QPropertyAnimation::finished, this, [this, animation]() {
+            animation->deleteLater();
+            if (!ui->searchEdit->text().isEmpty()) {
+                ui->searchEdit->setFocus();
             }
-            PlatformRelated::activateWindow(this->winId());
-        }
+
+            // 尝试激活窗口
+            for (int i = 0; i < 10; ++i) {
+                if (PlatformRelated::currActiveWindow() == this->winId()) {
+                    break;
+                }
+                PlatformRelated::activateWindow(this->winId());
+            }
+        });
+
+        animation->start(QAbstractAnimation::DeleteWhenStopped);
+
     } else {
-        this->hide();
-        this->currItemsWidget()->cleanShortCutInfo();
+        QPropertyAnimation* animation = new QPropertyAnimation(this, "windowOpacity", this);
+        animation->setDuration(HIDE_ANIMATION_TIME);  // 稍短的消失动画
+        animation->setStartValue(1.0);
+        animation->setEndValue(0.0);
+        animation->setEasingCurve(QEasingCurve::InCubic);
+
+        // 动画结束后隐藏窗口
+        connect(animation, &QPropertyAnimation::finished, this, [this, animation]() {
+            animation->deleteLater();
+            this->hide();
+            this->currItemsWidget()->cleanShortCutInfo();
+        });
+
+        animation->start(QAbstractAnimation::DeleteWhenStopped);
     }
 }
 
@@ -358,20 +393,23 @@ void MPasteWidget::updateItemCount(int itemCount) {
 }
 
 void MPasteWidget::hideAndPaste() {
-    this->hide();
+    this->setVisibleWithAnnimation(false);
 
+    // 使用单发定时器，延迟比动画时长稍长一点的时间后执行粘贴
+    QTimer::singleShot(HIDE_ANIMATION_TIME + 50, this, [this]() {
 #ifdef Q_OS_WIN
-    // 等待 Alt 键释放
-    while (GetAsyncKeyState(VK_MENU) & 0x8000) {
-        QThread::msleep(10);
-    }
-    // 再多等待一小段时间确保键盘状态完全恢复
-    QThread::msleep(50);
+        // 等待 Alt 键释放
+        while (GetAsyncKeyState(VK_MENU) & 0x8000) {
+            QThread::msleep(10);
+        }
+        // 再多等待一小段时间确保键盘状态完全恢复
+        QThread::msleep(50);
 #else
-    QThread::usleep(100);
+        QThread::usleep(100);
 #endif
 
-    if (MPasteSettings::getInst()->isAutoPaste()) {
-        PlatformRelated::triggerPasteShortcut();
-    }
+        if (MPasteSettings::getInst()->isAutoPaste()) {
+            PlatformRelated::triggerPasteShortcut();
+        }
+    });
 }

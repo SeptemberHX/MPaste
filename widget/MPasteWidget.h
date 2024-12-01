@@ -24,6 +24,9 @@ class MPasteWidget : public QWidget
     Q_OBJECT
 
 public:
+    int HIDE_ANIMATION_TIME = 50;
+
+public:
     explicit MPasteWidget(QWidget *parent = nullptr);
     ~MPasteWidget();
     void setVisibleWithAnnimation(bool visible);

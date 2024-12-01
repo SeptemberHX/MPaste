@@ -76,7 +76,7 @@
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="115"/>
+        <location filename="../widget/MPasteWidget.cpp" line="119"/>
         <source>MPaste has started.</source>
         <translation>MPaste 已启动。</translation>
     </message>
