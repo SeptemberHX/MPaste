@@ -1,14 +1,44 @@
 #include <QApplication>
 #include <iostream>
 #include <QScreen>
+#include <qsurfaceformat.h>
+
 #include "utils/MPasteSettings.h"
 #include "widget/MPasteWidget.h"
 #include "utils/SingleApplication.h"
 #include "utils/PlatformRelated.h"
 #include "utils/HotkeyManager.h"
 
+// 添加一个辅助函数来获取窗口所在的屏幕
+QScreen* getScreenForWindow(WId windowId) {
+    if (windowId) {
+#ifdef Q_OS_WIN
+        HWND hwnd = (HWND)windowId;
+        RECT rect;
+        if (GetWindowRect(hwnd, &rect)) {
+            // 使用窗口中心点来确定屏幕
+            QPoint windowCenter((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2);
+            return QGuiApplication::screenAt(windowCenter);
+        }
+#endif
+    }
+    return QGuiApplication::primaryScreen();
+}
+
+
 int main(int argc, char* argv[]) {
+    // 设置 OpenGL 相关属性，必须在创建 QApplication 之前设置
+    QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);  // 使用 OpenGL ES
+    QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);  // 如果硬件加速有问题可以尝试软件渲染
+
+    // 设置 OpenGL 格式
+    QSurfaceFormat format;
+    format.setSwapInterval(1);  // 启用垂直同步
+    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);  // 双缓冲
+    QSurfaceFormat::setDefaultFormat(format);
+
     qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
+
     QApplication app(argc, argv);
 
     SingleApplication singleApp("com.mpaste.app");
@@ -36,16 +66,33 @@ int main(int argc, char* argv[]) {
             qWarning() << "Failed to register global hotkey Alt+V";
         }
 
-        // Handle hotkey press
-        QObject::connect(&hotkeyManager, &HotkeyManager::hotkeyPressed, [&widget]() {
-            MPasteSettings::getInst()->setCurrFocusWinId(PlatformRelated::currActiveWindow());
+        // 显示窗口的 lambda 函数
+        auto showWidget = [&widget]() {
+            WId focusWinId = PlatformRelated::currActiveWindow();
+            MPasteSettings::getInst()->setCurrFocusWinId(focusWinId);
 
-            auto screen = qApp->screenAt(QCursor::pos());
-            widget.setFixedWidth(screen->availableSize().width());
+            // 获取当前活动窗口所在的屏幕
+            QScreen* currentScreen = getScreenForWindow(focusWinId);
+            if (!currentScreen) {
+                currentScreen = QGuiApplication::screenAt(QCursor::pos());
+            }
+            if (!currentScreen) {
+                currentScreen = QGuiApplication::primaryScreen();
+            }
+
+            // 设置窗口宽度和位置
+            widget.setFixedWidth(currentScreen->availableSize().width());
             widget.setVisibleWithAnnimation(!widget.isVisible());
-            widget.move(screen->availableGeometry().x(),
-                      screen->size().height() - widget.height());
-        });
+            widget.move(currentScreen->geometry().x(),
+                       currentScreen->geometry().y() +
+                       currentScreen->geometry().height() -
+                       widget.height());
+        };
+
+        // 在主函数中使用这个 lambda
+        QObject::connect(&hotkeyManager, &HotkeyManager::hotkeyPressed, showWidget);
+        QObject::connect(&singleApp, &SingleApplication::messageReceived,
+            [showWidget](const QString &) { showWidget(); });
 
         // Handle application state changes
         QObject::connect(qApp, &QGuiApplication::applicationStateChanged, 

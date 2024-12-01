@@ -42,30 +42,49 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &nIcon) {
     if (icon.isNull()) {
         icon = QPixmap(":/resources/resources/unknown.svg");
     }
-    icon.setDevicePixelRatio(this->devicePixelRatioF());
-    ui->iconLabel->setPixmap(icon.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
-    int r = 0, g = 0, b = 0, a = 0, n = 0;
+    // 确保图标大小合适
+    const int iconSize = 32;  // 或者其他合适的大小
+    icon = icon.scaled(iconSize * devicePixelRatioF(), iconSize * devicePixelRatioF(),
+                      Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    icon.setDevicePixelRatio(devicePixelRatioF());
+
+    // 如果图标完全透明，尝试转换为 ARGB32 格式
+    if (icon.toImage().isNull() || icon.toImage().format() == QImage::Format_Invalid) {
+        QImage img = icon.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        icon = QPixmap::fromImage(img);
+    }
+
+    ui->iconLabel->setPixmap(icon);
+
+    // 计算平均颜色，跳过完全透明的像素
     QImage image = icon.toImage();
-    for (int row = 1; row < image.height(); ++row) {
-        for (int c = 1; c < image.width(); ++c) {
-            QColor current(image.pixel(row, c));
-            r += current.red();
-            g += current.green();
-            b += current.blue();
-            a += current.alpha();
-            ++n;
+    qint64 r = 0, g = 0, b = 0;  // 使用 qint64 避免溢出
+    int n = 0;
+
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            QColor color(image.pixel(x, y));
+            if (color.alpha() > 0) {  // 只计算非透明像素
+                r += color.red();
+                g += color.green();
+                b += color.blue();
+                ++n;
+            }
         }
     }
 
-    // make it lighter
-    r /= n;
-    r += (255 - r) / 6;
-    g /= n;
-    g += (255 - g) / 6;
-    b /= n;
-    b += (255 - b) / 6;
-    this->topBgColor = QColor(r, g, b, 0);
+    if (n > 0) {
+        // 计算平均值并使颜色更亮
+        r = qMin(255, (int)(r / n + (255 - r / n) / 6));
+        g = qMin(255, (int)(g / n + (255 - g / n) / 6));
+        b = qMin(255, (int)(b / n + (255 - b / n) / 6));
+        this->topBgColor = QColor(r, g, b, 0);
+    } else {
+        // 如果没有有效像素，使用默认颜色
+        this->topBgColor = QColor(240, 240, 240, 0);
+    }
+
     this->refreshStyleSheet();
 }
 

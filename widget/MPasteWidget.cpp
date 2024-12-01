@@ -210,19 +210,24 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
 
 void MPasteWidget::setClipboard(const ClipboardItem &item) {
     if (this->mimeData != nullptr) {
-        // todo: we should delete it here. however, sometimes it causes crash. I suspect the system deletes it before here.
-//        try {
-//            delete this->mimeData;
-//        } catch (...) {
-//            std::cout << " ++++++ " << std::endl;
-//        }
+        // 可能需要删除旧的 mimeData，但要小心处理
     }
 
     this->mimeData = new QMimeData();
-    if (item.getImage().isNull() && !item.getText().isEmpty() && item.getUrls().isEmpty()) this->mimeData->setText(item.getText());
 
-    if (!item.getImage().isNull()) this->mimeData->setImageData(item.getImage());
-    else if (!item.getHtml().isEmpty()) this->mimeData->setHtml(item.getHtml());
+    // 处理富文本应该是优先级最高的
+    if (!item.getHtml().isEmpty()) {
+        this->mimeData->setHtml(item.getHtml());
+        // 同时设置纯文本作为后备
+        if (!item.getText().isEmpty()) {
+            this->mimeData->setText(item.getText());
+        }
+    }
+    // 然后是图片
+    else if (!item.getImage().isNull()) {
+        this->mimeData->setImageData(item.getImage());
+    }
+    // 然后是文件URL
     else if (!item.getUrls().isEmpty()) {
         bool files = true;
         foreach (const QUrl &url, item.getUrls()) {
@@ -244,10 +249,18 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
             this->mimeData->setText(item.getText());
             this->mimeData->setData("text/plain;charset=utf-8", nautilus);
         }
-
         this->mimeData->setUrls(item.getUrls());
     }
-    else if (item.getColor().isValid()) this->mimeData->setColorData(item.getColor());
+    // 普通文本
+    else if (!item.getText().isEmpty()) {
+        this->mimeData->setText(item.getText());
+    }
+    // 颜色数据
+    else if (item.getColor().isValid()) {
+        this->mimeData->setColorData(item.getColor());
+    }
+
+    // 设置到系统剪贴板
     QGuiApplication::clipboard()->setMimeData(this->mimeData);
 }
 

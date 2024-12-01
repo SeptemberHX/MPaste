@@ -3,6 +3,7 @@
 //
 
 #include "PlatformRelated.h"
+#include <iostream>
 
 #if defined(__linux__)
 
@@ -158,51 +159,81 @@ HWND WinUtils::currentWinId() {
 }
 
 QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
-    HICON hIcon = (HICON)SendMessage(hwnd, WM_GETICON, ICON_BIG, 0);
-    if (!hIcon) {
-        hIcon = (HICON)SendMessage(hwnd, WM_GETICON, ICON_SMALL, 0);
+    if (!hwnd) {
+        return QPixmap(":/resources/resources/unknown.svg");
     }
+
+    // 获取窗口的大图标
+    HICON hIcon = nullptr;
+    SendMessageTimeout(hwnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&hIcon);
+
+    // 如果获取大图标失败，尝试获取小图标
+    if (!hIcon) {
+        SendMessageTimeout(hwnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&hIcon);
+    }
+
+    // 如果通过消息获取失败，直接从窗口类获取
     if (!hIcon) {
         hIcon = (HICON)GetClassLongPtr(hwnd, GCLP_HICON);
     }
+
     if (!hIcon) {
-        hIcon = LoadIcon(NULL, IDI_APPLICATION);
+        hIcon = (HICON)GetClassLongPtr(hwnd, GCLP_HICONSM);
     }
 
+    // 如果所有方法都失败了，返回空图标
+    if (!hIcon) {
+        return QPixmap();
+    }
+
+    // 获取图标信息
+    ICONINFO iconInfo;
+    if (!GetIconInfo(hIcon, &iconInfo)) {
+        return QPixmap();
+    }
+
+    // 获取图标尺寸
+    BITMAP bm;
+    GetObject(iconInfo.hbmColor, sizeof(BITMAP), &bm);
+
+    // 创建设备上下文
+    HDC screenDC = GetDC(0);
+    HDC memDC = CreateCompatibleDC(screenDC);
+
+    // 创建兼容位图
+    HBITMAP hBitmap = CreateCompatibleBitmap(screenDC, bm.bmWidth, bm.bmHeight);
+    HGDIOBJ oldBitmap = SelectObject(memDC, hBitmap);
+
+    // 绘制图标
+    DrawIcon(memDC, 0, 0, hIcon);
+
+    // 转换为 QImage，再转换为 QPixmap
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(BITMAPINFO));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = bm.bmWidth;
+    bmi.bmiHeader.biHeight = -bm.bmHeight; // 自上而下
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    QImage image(bm.bmWidth, bm.bmHeight, QImage::Format_ARGB32_Premultiplied);
+    GetDIBits(memDC, hBitmap, 0, bm.bmHeight, image.bits(), &bmi, DIB_RGB_COLORS);
+
+    // 清理资源
+    SelectObject(memDC, oldBitmap);
+    DeleteObject(hBitmap);
+    DeleteDC(memDC);
+    ReleaseDC(0, screenDC);
+    DeleteObject(iconInfo.hbmColor);
+    DeleteObject(iconInfo.hbmMask);
+
+    // 不要销毁通过 GetClassLongPtr 获取的图标
     if (hIcon) {
-        ICONINFO iconInfo;
-        if (GetIconInfo(hIcon, &iconInfo)) {
-            HDC dc = GetDC(NULL);
-            BITMAP bm;
-            GetObject(iconInfo.hbmColor, sizeof(BITMAP), &bm);
-
-            int width = bm.bmWidth;
-            int height = bm.bmHeight;
-
-            QPixmap pixmap(width, height);
-            pixmap.fill(Qt::transparent);
-
-            HDC memDC = CreateCompatibleDC(dc);
-            HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, iconInfo.hbmColor);
-
-            BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-
-            // Copy icon to pixmap
-            BitBlt(memDC, 0, 0, width, height, dc, 0, 0, SRCCOPY);
-
-            SelectObject(memDC, oldBitmap);
-            DeleteDC(memDC);
-            ReleaseDC(NULL, dc);
-
-            DeleteObject(iconInfo.hbmColor);
-            DeleteObject(iconInfo.hbmMask);
-
-            return pixmap;
-        }
+        DestroyIcon(hIcon);
     }
 
-    // Return a default icon if we couldn't get the window icon
-    return QPixmap(":/resources/resources/unknown.svg");
+    return QPixmap::fromImage(image);
 }
 
 // Implementation of PlatformRelated for Windows
