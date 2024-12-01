@@ -2,13 +2,19 @@
 #include <QScrollBar>
 #include <QClipboard>
 #include <QKeyEvent>
+#include <QAudioOutput>
 #include <QDir>
+#include <QDebug>
+#include <QTimer>
 #include "utils/MPasteSettings.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
 #include "ClipboardItemWidget.h"
-
 #include "utils/PlatformRelated.h"
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 // QEvent::KeyPress conflicts with the KeyPress in X.h
 #undef KeyPress
@@ -19,6 +25,18 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     mimeData(nullptr)
 {
     ui->setupUi(this);
+    initializeWidget();
+}
+
+void MPasteWidget::initializeWidget() {
+    // 设置窗口属性
+#ifdef Q_OS_WIN
+    setAttribute(Qt::WA_InputMethodEnabled, false);
+    setAttribute(Qt::WA_KeyCompression, false);
+#endif
+    setFocusPolicy(Qt::StrongFocus);
+
+    // 初始化动画
     this->searchHideAnim = new QPropertyAnimation(ui->searchEdit, "maximumWidth");
     this->searchHideAnim->setEndValue(0);
     this->searchHideAnim->setDuration(150);
@@ -28,39 +46,49 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
     this->searchShowAnim->setEndValue(200);
     this->searchShowAnim->setDuration(150);
 
+    // 初始化关于窗口
     this->aboutWidget = new AboutWidget(this);
     this->aboutWidget->setWindowFlag(Qt::Tool);
     this->aboutWidget->setWindowTitle("MPaste About");
     this->aboutWidget->hide();
 
+    // 初始化剪贴板窗口
     this->clipboardWidget = new ScrollItemsWidget("Clipboard", this);
     this->clipboardWidget->installEventFilter(this);
     connect(this->clipboardWidget, &ScrollItemsWidget::updateClipboard, this, &MPasteWidget::setClipboard);
     connect(this->clipboardWidget, &ScrollItemsWidget::doubleClicked, this, &MPasteWidget::hideAndPaste);
     connect(this->clipboardWidget, &ScrollItemsWidget::itemCountChanged, this, &MPasteWidget::updateItemCount);
 
-    this->numKeyList << Qt::Key_1 << Qt::Key_2 << Qt::Key_3 << Qt::Key_4 << Qt::Key_5 << Qt::Key_6 << Qt::Key_7 << Qt::Key_8 << Qt::Key_9 << Qt::Key_0;
+    // 初始化数字键列表
+    this->numKeyList << Qt::Key_1 << Qt::Key_2 << Qt::Key_3 << Qt::Key_4 << Qt::Key_5
+                     << Qt::Key_6 << Qt::Key_7 << Qt::Key_8 << Qt::Key_9 << Qt::Key_0;
 
+    // 初始化媒体播放器
     std::cout << "Init media player..." << std::endl;
-    this->player = new QMediaPlayer(this, QMediaPlayer::LowLatency);
-    this->player->setMedia(QUrl("qrc:/resources/resources/sound.mp3"));
+    this->player = new QMediaPlayer(this);
+    QAudioOutput *audioOutput = new QAudioOutput(this);
+    this->player->setAudioOutput(audioOutput);
+    this->player->setSource(QUrl("qrc:/resources/resources/sound.mp3"));
     std::cout << "Sound effect loaded finished" << std::endl;
 
+    // 设置布局
     this->layout = new QHBoxLayout(ui->itemsWidget);
     this->layout->setContentsMargins(0, 0, 0, 0);
     this->layout->addWidget(this->clipboardWidget);
 
+    // 设置窗口属性
     this->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint);
     this->setObjectName("pasteWidget");
     this->setStyleSheet("QWidget#pasteWidget, #scrollAreaWidgetContents {background-color: #e6e5e4;}");
 
+    // 初始化剪贴板监视器
     this->monitor = new ClipboardMonitor();
     connect(this->monitor, &ClipboardMonitor::clipboardUpdated, this, &MPasteWidget::clipboardUpdated);
 
     ui->searchEdit->installEventFilter(this);
 
+    // 初始化菜单
     this->menu = new QMenu(this);
-//    this->menu->addAction(tr("Settings"), [this]() { });
     this->menu->addAction(tr("About"), [this]() { this->aboutWidget->show(); });
     this->menu->addAction(tr("Quit"), [this]() { qApp->exit(0); });
 
@@ -68,21 +96,15 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
         this->menu->popup(ui->menuButton->mapToGlobal(ui->menuButton->rect().bottomLeft()));
     });
 
+    // 设置搜索功能
     connect(ui->searchEdit, &QLineEdit::textChanged, this, [this] (const QString &str) {
         this->currItemsWidget()->filterByKeyword(str);
     });
     connect(ui->searchButton, &QToolButton::clicked, this, [this] (bool flag) {
-        if (flag) {
-            this->setFocusOnSearch(true);
-        } else {
-            this->setFocusOnSearch(false);
-        }
+        this->setFocusOnSearch(flag);
     });
 
-    this->loadFromSaveDir();
-    this->monitor->clipboardChanged();
-    this->setFocusOnSearch(false);
-
+    // 初始化系统托盘
     this->trayIcon = new QSystemTrayIcon(this);
     this->trayIcon->setIcon(qApp->windowIcon());
     this->trayIcon->setContextMenu(this->menu);
@@ -91,6 +113,69 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
         this->setVisibleWithAnnimation(true);
     });
     this->trayIcon->showMessage("MPaste", tr("MPaste has started."), this->trayIcon->icon(), 1500);
+
+    // 加载保存的数据
+    this->loadFromSaveDir();
+    this->monitor->clipboardChanged();
+    this->setFocusOnSearch(false);
+
+#ifdef _DEBUG
+    // 添加调试计时器
+    debugTimer = new QTimer(this);
+    connect(debugTimer, &QTimer::timeout, this, &MPasteWidget::debugKeyState);
+    debugTimer->start(1000);  // 每秒检查一次键盘状态
+#endif
+}
+
+
+bool MPasteWidget::handleAltNumShortcut(QKeyEvent *event) {
+    qDebug() << "Key Press:" << event->key()
+             << "Modifiers:" << event->modifiers()
+             << "Native Modifiers:" << event->nativeModifiers()
+             << "Native Virtual Key:" << event->nativeVirtualKey();
+
+#ifdef Q_OS_WIN
+    // 检查Alt键状态
+    bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    if (altPressed) {
+        // 检查数字键
+        int keyOrder = -1;
+        if (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9) {
+            keyOrder = (event->key() == Qt::Key_0) ? 9 : event->key() - Qt::Key_1;
+        }
+
+        if (keyOrder >= 0 && keyOrder <= 9) {
+            qDebug() << "Alt+" << keyOrder << " detected";
+            this->currItemsWidget()->selectedByShortcut(keyOrder);
+            this->hideAndPaste();
+            this->currItemsWidget()->cleanShortCutInfo();
+            return true;
+        }
+    }
+#else
+    // Linux平台的原始实现
+    if (event->modifiers() & Qt::AltModifier) {
+        int keyOrder = this->numKeyList.indexOf(event->key());
+        if (keyOrder >= 0 && keyOrder <= 9) {
+            this->currItemsWidget()->selectedByShortcut(keyOrder);
+            this->hideAndPaste();
+            this->currItemsWidget()->cleanShortCutInfo();
+            return true;
+        }
+    }
+#endif
+
+    return false;
+}
+
+void MPasteWidget::debugKeyState() {
+#ifdef Q_OS_WIN
+    qDebug() << "Alt Key State:" << (GetAsyncKeyState(VK_MENU) & 0x8000)
+             << "Window Focus:" << hasFocus()
+             << "Window ID:" << winId()
+             << "Is Visible:" << isVisible()
+             << "Active Window:" << QApplication::activeWindow();
+#endif
 }
 
 MPasteWidget::~MPasteWidget()
@@ -166,9 +251,20 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
     QGuiApplication::clipboard()->setMimeData(this->mimeData);
 }
 
+void MPasteWidget::showEvent(QShowEvent *event) {
+    QWidget::showEvent(event);
+    activateWindow();
+    raise();
+    setFocus();
+}
+
 void MPasteWidget::keyPressEvent(QKeyEvent *event) {
+    if (handleAltNumShortcut(event)) {
+        event->accept();
+        return;
+    }
+
     if (event->key() == Qt::Key_Escape) {
-        // unfocus the search area and show all items, or hide window
         if (ui->searchEdit->hasFocus()) {
             ui->searchEdit->clear();
             this->setFocusOnSearch(false);
@@ -176,7 +272,6 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
             this->hide();
         }
     } else if (event->key() == Qt::Key_Alt) {
-        // set shortcut information for selecting top-10 items
         this->currItemsWidget()->setShortcutInfo();
     } else if (!ui->searchEdit->isVisible() && event->key() == Qt::Key_Left) {
         this->currItemsWidget()->focusMoveLeft();
@@ -185,25 +280,12 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
     } else if (event->key() == Qt::Key_Return) {
         this->currItemsWidget()->selectedByEnter();
         this->hideAndPaste();
-    }
-
-    if (ui->searchEdit->isVisible()) {
-        if (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) {
-            QGuiApplication::sendEvent(ui->searchEdit, event);
-            this->setFocusOnSearch(true);
-        }
-    }
-
-    if (event->modifiers() & Qt::AltModifier) {
-        // shortcut for selecting top-10 items
-        int keyOrder = this->numKeyList.indexOf(event->key());
-        if (keyOrder >= 0 && keyOrder <= 9) {
-            this->currItemsWidget()->selectedByShortcut(keyOrder);
-            this->hideAndPaste();
-            this->currItemsWidget()->cleanShortCutInfo();
-        }
     } else if (event->key() >= Qt::Key_Space && event->key() <= Qt::Key_AsciiTilde) {
-        // make sure we can get to search area by pressing any characters
+        QGuiApplication::sendEvent(ui->searchEdit, event);
+        this->setFocusOnSearch(true);
+    }
+
+    if (ui->searchEdit->isVisible() && (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right)) {
         QGuiApplication::sendEvent(ui->searchEdit, event);
         this->setFocusOnSearch(true);
     }
@@ -264,7 +346,18 @@ void MPasteWidget::updateItemCount(int itemCount) {
 
 void MPasteWidget::hideAndPaste() {
     this->hide();
-    usleep(100);
+
+#ifdef Q_OS_WIN
+    // 等待 Alt 键释放
+    while (GetAsyncKeyState(VK_MENU) & 0x8000) {
+        QThread::msleep(10);
+    }
+    // 再多等待一小段时间确保键盘状态完全恢复
+    QThread::msleep(50);
+#else
+    QThread::usleep(100);
+#endif
+
     if (MPasteSettings::getInst()->isAutoPaste()) {
         PlatformRelated::triggerPasteShortcut();
     }

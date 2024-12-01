@@ -1,7 +1,3 @@
-//
-// Created by ragdoll on 2021/5/27.
-//
-
 #include "OpenGraphFetcher.h"
 #include <QNetworkReply>
 #include <iostream>
@@ -15,17 +11,16 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
     , targetUrl(url)
 {
     this->replaceHttpHosts << "www.baidu.com";
-    this->ogImageReg = QRegExp("<meta .*property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
-    this->ogTitleReg = QRegExp("<meta .*property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*)\"[ ]*/?>");
-    this->titleReg = QRegExp("<title.*>(.*)</title>");
-    this->faviconReg1 = QRegExp("<link[ ]*href=\"(.*)\".*rel=\"{short }?icon\".*/?>");
-    this->faviconReg2 = QRegExp("<link[ ]*rel=\"{short }?icon\".*href=\"(.*)\".*/?>");
+    
+    // 更新正则表达式以适应Qt6的QRegularExpression语法
+    this->ogImageReg.setPattern("<meta .*?property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*?)\"[ ]*/?>");
+    this->ogTitleReg.setPattern("<meta .*?property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*?)\"[ ]*/?>");
+    this->titleReg.setPattern("<title.*?>(.*?)</title>");
+    this->faviconReg1.setPattern("<link[ ]*href=\"(.*?)\".*?rel=\"(?:short )?icon\".*?/?>");
+    this->faviconReg2.setPattern("<link[ ]*rel=\"(?:short )?icon\".*?href=\"(.*?)\".*?/?>");
 
-    this->ogImageReg.setMinimal(true);
-    this->ogTitleReg.setMinimal(true);
-    this->titleReg.setMinimal(true);
-    this->faviconReg1.setMinimal(true);
-    this->faviconReg2.setMinimal(true);
+    // QRegularExpression默认就是最小匹配（非贪婪模式），使用 *? 代替 *
+    
     this->naManager = new QNetworkAccessManager(this);
     connect(this->naManager, &QNetworkAccessManager::finished, this, &OpenGraphFetcher::requestFinished);
 }
@@ -38,7 +33,7 @@ void OpenGraphFetcher::handle() {
 
     QNetworkRequest request(tUrl);
     request.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0");
-    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     this->realCalledUrl = tUrl;
     this->naManager->get(request);
 }
@@ -63,7 +58,7 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                             if (ogType == "og:title") {
                                 this->ogItem.setTitle(n.attributes().namedItem("content").nodeValue());
                             } else if (ogType == "og:image" &&
-                                       !n.attributes().namedItem("content").nodeValue().startsWith("$")) {
+                                     !n.attributes().namedItem("content").nodeValue().startsWith("$")) {
                                 faviconStr = n.attributes().namedItem("content").nodeValue();
                             }
                         }
@@ -99,19 +94,19 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                 }
             }
         } else {
-            int pos = this->ogImageReg.indexIn(body);
-            if (pos >= 0) {
-                faviconStr = this->ogImageReg.cap(1);
+            QRegularExpressionMatch match = this->ogImageReg.match(body);
+            if (match.hasMatch()) {
+                faviconStr = match.captured(1);
             } else {
                 QString str = this->targetUrl.toString();
                 str = str.mid(0, str.indexOf(':'));
-                pos = this->faviconReg1.indexIn(body);
-                if (pos >= 0) {
-                    faviconStr = this->faviconReg1.cap(1);
-                }  else {
-                    pos = this->faviconReg2.indexIn(body);
-                    if (pos >= 0) {
-                        faviconStr = this->faviconReg2.cap(1);
+                match = this->faviconReg1.match(body);
+                if (match.hasMatch()) {
+                    faviconStr = match.captured(1);
+                } else {
+                    match = this->faviconReg2.match(body);
+                    if (match.hasMatch()) {
+                        faviconStr = match.captured(1);
                     } else {
                         QUrl faviconUrl(str + "://" + this->targetUrl.host() + "/favicon.ico");
                         faviconStr = faviconUrl.toString();
@@ -119,14 +114,14 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                 }
             }
 
-            pos = this->ogTitleReg.indexIn(body);
-            if (pos >= 0) {
-                QString omgTitleStr = this->ogTitleReg.cap(1);
+            match = this->ogTitleReg.match(body);
+            if (match.hasMatch()) {
+                QString omgTitleStr = match.captured(1);
                 this->ogItem.setTitle(omgTitleStr);
             } else {
-                pos = this->titleReg.indexIn(body);
-                if (pos >= 0) {
-                    QString titleStr = this->titleReg.cap(1);
+                match = this->titleReg.match(body);
+                if (match.hasMatch()) {
+                    QString titleStr = match.captured(1);
                     this->ogItem.setTitle(titleStr);
                 }
             }
@@ -143,7 +138,6 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
         }
         this->imageUrl = QUrl(faviconStr);
         this->naManager->get(QNetworkRequest(this->imageUrl));
-
 
     } else if (reply->request().url() == this->imageUrl) {
         QPixmap image;

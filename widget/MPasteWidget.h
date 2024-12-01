@@ -28,15 +28,17 @@ public:
     ~MPasteWidget();
     void setVisibleWithAnnimation(bool visible);
 
-    bool eventFilter(QObject *watched, QEvent *event) override;
 protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     void clipboardUpdated(ClipboardItem item, int wId);
     void updateItemCount(int itemCount);
     void hideAndPaste();
+    void debugKeyState();
 
 private:
     void setFocusOnSearch(bool flag);
@@ -44,6 +46,9 @@ private:
 
     void setClipboard(const ClipboardItem &item);
     void loadFromSaveDir();
+
+    void initializeWidget();
+    bool handleAltNumShortcut(QKeyEvent *event);
 
     Ui::MPasteWidget *ui;
     QHBoxLayout *layout;

@@ -1,55 +1,78 @@
-//
-// Created by ragdoll on 2021/5/22.
-//
-
 #include <QApplication>
-#include <QDesktopWidget>
 #include <iostream>
-#include <QNetworkProxy>
 #include <QScreen>
-#include <utils/MPasteSettings.h>
+#include "utils/MPasteSettings.h"
 #include "widget/MPasteWidget.h"
-#include "KDSingleApplication/kdsingleapplication.h"
+#include "utils/SingleApplication.h"
 #include "utils/PlatformRelated.h"
+#include "utils/HotkeyManager.h"
 
 int main(int argc, char* argv[]) {
     qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
     QApplication app(argc, argv);
-    KDSingleApplication kds;
 
-    if (kds.isPrimaryInstance()) {
+    SingleApplication singleApp("com.mpaste.app");
+
+    if (singleApp.isPrimaryInstance()) {
         app.setApplicationName("MPaste");
         app.setWindowIcon(QIcon::fromTheme("mpaste"));
         QNetworkProxyFactory::setUseSystemConfiguration(true);
 
+        // Load translations
         QString locale = QLocale::system().name();
         QTranslator translator;
         translator.load("/usr/share/MPaste/translations/MPaste_"+ locale +".qm");
         app.installTranslator(&translator);
 
+        // Create and setup main widget
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");
-        widget.setFixedWidth(QApplication::desktop()->rect().width());
+        widget.setFixedWidth(QApplication::primaryScreen()->geometry().width());
 
-        QObject::connect(qApp, &QGuiApplication::applicationStateChanged, qApp, [&](Qt::ApplicationState state) {
-            if (state == Qt::ApplicationInactive) {
-                widget.setVisibleWithAnnimation(false);
-            }
-        });
-        PlatformRelated::activateWindow(widget.winId());
+        // Create hotkey manager
+        HotkeyManager hotkeyManager;
+        // Register Alt+V hotkey
+        if (!hotkeyManager.registerHotkey(QKeySequence("Alt+V"))) {
+            qWarning() << "Failed to register global hotkey Alt+V";
+        }
 
-        QObject::connect(&kds, &KDSingleApplication::messageReceived, qApp, [&] (const QByteArray &message) {
+        // Handle hotkey press
+        QObject::connect(&hotkeyManager, &HotkeyManager::hotkeyPressed, [&widget]() {
             MPasteSettings::getInst()->setCurrFocusWinId(PlatformRelated::currActiveWindow());
-            // whatever received here, just raise the window !
+
             auto screen = qApp->screenAt(QCursor::pos());
             widget.setFixedWidth(screen->availableSize().width());
             widget.setVisibleWithAnnimation(!widget.isVisible());
-            widget.move(screen->availableGeometry().x(), screen->size().height() - widget.height());
+            widget.move(screen->availableGeometry().x(),
+                      screen->size().height() - widget.height());
         });
+
+        // Handle application state changes
+        QObject::connect(qApp, &QGuiApplication::applicationStateChanged, 
+            [&widget](Qt::ApplicationState state) {
+                if (state == Qt::ApplicationInactive) {
+                    widget.setVisibleWithAnnimation(false);
+                }
+            });
+
+        PlatformRelated::activateWindow(widget.winId());
+
+        // Handle messages from other instances
+        QObject::connect(&singleApp, &SingleApplication::messageReceived,
+            [&widget](const QString &) {
+                MPasteSettings::getInst()->setCurrFocusWinId(PlatformRelated::currActiveWindow());
+                
+                auto screen = qApp->screenAt(QCursor::pos());
+                widget.setFixedWidth(screen->availableSize().width());
+                widget.setVisibleWithAnnimation(!widget.isVisible());
+                widget.move(screen->availableGeometry().x(), 
+                          screen->size().height() - widget.height());
+            });
 
         return app.exec();
     } else {
-        kds.sendMessage("MPaste");
+        // If this is not the primary instance, send a message and exit
+        singleApp.sendMessage("show");
         return 0;
     }
 }

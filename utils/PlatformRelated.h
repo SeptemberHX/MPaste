@@ -12,9 +12,9 @@
 class PlatformRelated {
 
 public:
-    static void activateWindow(int wId);
-    static QPixmap getWindowIcon(int wId);
-    static int currActiveWindow();
+    static void activateWindow(WId wId);  // 使用 WId 而不是 int
+    static QPixmap getWindowIcon(WId wId);
+    static WId currActiveWindow();  // 返回 WId
     static void triggerPasteShortcut();
 };
 
@@ -40,6 +40,18 @@ private:
 };
 
 #elif defined(__WIN32__)
+#include <windows.h>
+
+class WinUtils {
+public:
+    static void activeWindowWin32(HWND hwnd);
+    static void triggerPasteShortcut(HWND hwnd);
+    static HWND currentWinId();
+    static QPixmap getWindowIconWin32(HWND hwnd);
+
+private:
+    static void simulateKeyPress(WORD key, bool ctrl = false, bool shift = false, bool alt = false);
+};
 
 #endif
 

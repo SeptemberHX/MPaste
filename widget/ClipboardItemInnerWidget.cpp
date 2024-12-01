@@ -20,7 +20,8 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
     this->setObjectName("innerWidget");
     ui->infoWidget->setObjectName("infoWidget");
     this->mLayout = new QHBoxLayout(ui->bodyWidget);
-    this->mLayout->setMargin(0);
+    // 新代码 (Qt6)
+    this->mLayout->setContentsMargins(0, 0, 0, 0);  // 左、上、右、下都设为0
 
     ui->iconLabel->setAttribute(Qt::WA_TranslucentBackground);
     ui->widget_2->setAttribute(Qt::WA_TranslucentBackground);
@@ -87,7 +88,7 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
         this->showText(item.getText(), item);
     }
 
-    ui->timeLabel->setText(item.getTime().toString(Qt::SystemLocaleShortDate));
+    ui->timeLabel->setText(QLocale::system().toString(item.getTime(), QLocale::ShortFormat));
 }
 
 void ClipboardItemInnerWidget::showBorder(bool flag) {
@@ -127,17 +128,20 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
     this->textBrowser->show();
     this->textBrowser->setHtml(html);
 
-    QRegExp bgColorExp("background-color:(#[A-Za-z0-9]{6})");
-    if (bgColorExp.indexIn(html.trimmed()) != -1) {
-        QString colorStr = bgColorExp.cap(1);
+    QRegularExpression bgColorExp("background-color:(#[A-Za-z0-9]{6})");
+    QRegularExpressionMatch match = bgColorExp.match(html.trimmed());
+
+    if (match.hasMatch()) {
+        QString colorStr = match.captured(1);
         ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1; border-radius: 0px; }").arg(colorStr));
         ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr));
     } else {
-        bgColorExp = QRegExp(R"(background.*:[ ]*rgb\((\d*),[ ]*(\d*),[ ]*(\d*)\))");
-        if (bgColorExp.indexIn(html.trimmed()) != -1) {
-            int r = bgColorExp.cap(1).toInt();
-            int g = bgColorExp.cap(2).toInt();
-            int b = bgColorExp.cap(3).toInt();
+        bgColorExp = QRegularExpression(R"(background.*:[ ]*rgb\((\d*),[ ]*(\d*),[ ]*(\d*)\))");
+        match = bgColorExp.match(html.trimmed());
+        if (match.hasMatch()) {
+            int r = match.captured(1).toInt();
+            int g = match.captured(2).toInt();
+            int b = match.captured(3).toInt();
             QColor colorStr(r, g, b);
             ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;  border-radius: 0px;}").arg(colorStr.name()));
             ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr.name()));

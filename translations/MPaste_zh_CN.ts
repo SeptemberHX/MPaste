@@ -4,48 +4,48 @@
 <context>
     <name>ClipboardItemInnerWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="146"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="169"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="150"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="173"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="147"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="151"/>
         <source>Rich Text</source>
         <translation>富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="154"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="158"/>
         <source>Pixels</source>
         <translation>像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="155"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="159"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="184"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="188"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="208"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="212"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="214"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="218"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="221"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="225"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="280"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="284"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
@@ -66,23 +66,22 @@
         <translation type="vanished">设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="64"/>
+        <location filename="../widget/MPasteWidget.cpp" line="92"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="65"/>
+        <location filename="../widget/MPasteWidget.cpp" line="93"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="93"/>
+        <location filename="../widget/MPasteWidget.cpp" line="115"/>
         <source>MPaste has started.</source>
         <translation>MPaste 已启动。</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="191"/>
-        <location filename="../build/MPaste_autogen/include/ui_MPasteWidget.h" line="167"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="167"/>
         <source>100</source>
         <translation type="unfinished"></translation>
