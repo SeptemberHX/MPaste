@@ -8,5 +8,7 @@
         <file>resources/files.svg</file>
         <file>resources/unknown_favico.svg</file>
         <file>resources/app_zh.qm</file>
+        <file>resources/star_outline.svg</file>
+        <file>resources/delete.svg</file>
     </qresource>
 </RCC>

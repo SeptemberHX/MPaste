@@ -51,6 +51,25 @@
     </message>
 </context>
 <context>
+    <name>ClipboardItemWidget</name>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="74"/>
+        <source>Delete</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="128"/>
+        <source>Remove from favorites</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="68"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="128"/>
+        <source>Add to favorites</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>MPasteSettings</name>
     <message>
         <location filename="../utils/MPasteSettings.cpp" line="36"/>

@@ -24,6 +24,7 @@ void WebLinkThumbWidget::showWebLink(const QUrl &url, const ClipboardItem &item)
     QPixmap unknow(":/resources/resources/unknown_favico.svg");
     unknow.setDevicePixelRatio(this->devicePixelRatioF());
     ui->imageLabel->setPixmap(unknow.scaled(ui->imageLabel->width() * this->devicePixelRatio(), 160 * this->devicePixelRatio(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
     if (item.getUrl().isEmpty()) {
         this->ogFetcher = new OpenGraphFetcher(url);
         this->url = url;
@@ -49,7 +50,37 @@ void WebLinkThumbWidget::showItem(const ClipboardItem &item) {
     if (!item.getFavicon().isNull()) {
         QPixmap tPixmap = item.getFavicon();
         tPixmap.setDevicePixelRatio(this->devicePixelRatioF());
-        ui->imageLabel->setPixmap(tPixmap.scaled(ui->imageLabel->width() * this->devicePixelRatio(), 160 * this->devicePixelRatio(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+        // 预览图尽可能保持原始分辨率
+        const int previewWidth = ui->imageLabel->width();
+        const int previewHeight = 160;
+
+        QSize imageSize = tPixmap.size();
+        QSize targetSize(previewWidth * this->devicePixelRatio(),
+                        previewHeight * this->devicePixelRatio());
+
+        // 如果图片太大则等比缩小，但尽量保持高分辨率
+        if (imageSize.width() > targetSize.width() ||
+            imageSize.height() > targetSize.height()) {
+            ui->imageLabel->setPixmap(tPixmap.scaled(
+                targetSize,
+                Qt::KeepAspectRatio,
+                Qt::SmoothTransformation
+            ));
+            } else {
+                // 如果图片较小，则适当放大但不超过目标尺寸
+                if (imageSize.width() < previewWidth/2 ||
+                    imageSize.height() < previewHeight/2) {
+                    ui->imageLabel->setPixmap(tPixmap.scaled(
+                        targetSize,
+                        Qt::KeepAspectRatio,
+                        Qt::SmoothTransformation
+                    ));
+                    } else {
+                        // 原始尺寸合适则直接使用
+                        ui->imageLabel->setPixmap(tPixmap);
+                    }
+            }
     }
 
     QFontMetrics fm(ui->urlLabel->font());
