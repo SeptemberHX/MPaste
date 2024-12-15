@@ -96,17 +96,17 @@
         <translation type="vanished">设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="92"/>
+        <location filename="../widget/MPasteWidget.cpp" line="93"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="93"/>
+        <location filename="../widget/MPasteWidget.cpp" line="108"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="119"/>
+        <location filename="../widget/MPasteWidget.cpp" line="134"/>
         <source>MPaste has started.</source>
         <translation>MPaste 已启动。</translation>
     </message>

@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QTimer>
+#include <QWindow>
 #include "utils/MPasteSettings.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
@@ -89,7 +90,21 @@ void MPasteWidget::initializeWidget() {
 
     // 初始化菜单
     this->menu = new QMenu(this);
-    this->menu->addAction(tr("About"), [this]() { this->aboutWidget->show(); });
+    this->menu->addAction(tr("About"), [this]() {
+        // 获取当前屏幕
+        QScreen *screen = QGuiApplication::primaryScreen();
+        if (const QWindow *window = windowHandle())
+            screen = window->screen();
+        if (!screen)
+            return;
+
+        // 将窗口移动到屏幕中央
+        QRect screenGeometry = screen->geometry();
+        int x = (screenGeometry.width() - this->aboutWidget->width()) / 2;
+        int y = (screenGeometry.height() - this->aboutWidget->height()) / 2;
+        this->aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
+
+        this->aboutWidget->show();    });
     this->menu->addAction(tr("Quit"), [this]() { qApp->exit(0); });
 
     connect(ui->menuButton, &QToolButton::clicked, this, [this]() {
