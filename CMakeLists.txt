@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.7)
-set(VERSION 4.0)
+set(VERSION 0.4.0)
 project(MPaste)
 
 # Set Qt installation path
@@ -82,12 +82,22 @@ ENDIF()
 #endif()
 
 # Main executable
-add_executable(${BIN_NAME}
-        ${SRCS}
-        ${INTERFACES}
-        ${PLATFORM_SPECIFIC_SOURCES}
-        ${QM_FILES}
-)
+# Main executable
+IF(WIN32)
+    add_executable(${BIN_NAME} WIN32    # 为 Windows 添加 WIN32 标志
+            ${SRCS}
+            ${INTERFACES}
+            ${PLATFORM_SPECIFIC_SOURCES}
+            ${QM_FILES}
+    )
+ELSE()
+    add_executable(${BIN_NAME}     # Linux 保持原样
+            ${SRCS}
+            ${INTERFACES}
+            ${PLATFORM_SPECIFIC_SOURCES}
+            ${QM_FILES}
+    )
+ENDIF()
 
 target_include_directories(${BIN_NAME} PUBLIC
         ${Qt6Gui_PRIVATE_INCLUDE_DIRS}
@@ -111,6 +121,9 @@ IF(UNIX)
 ENDIF()
 
 if(WIN32)
+    # 设置为 Windows GUI 应用程序
+    set(CMAKE_WIN32_EXECUTABLE TRUE)
+
     # 找到 windeployqt.exe
     get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
@@ -120,7 +133,7 @@ if(WIN32)
     set(MINGW_DIR "C:/Users/tianj/AppData/Local/Programs/CLion/bin/mingw/bin")
 
     # 创建部署目录
-    set(DEPLOY_DIR "${CMAKE_BINARY_DIR}/deploy")
+    set(DEPLOY_DIR "${CMAKE_BINARY_DIR}/${PROJECT_NAME}")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             # 创建部署目录
             COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}"
