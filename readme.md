@@ -1,6 +1,6 @@
 # MPaste
 
-A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
+A clipboard manager alternative to Paste for Linux & Windows.
 
 > It has nothing related to `Paste` for mac. I just like its UX design, and decide to implement one in Qt
 
@@ -11,7 +11,7 @@ A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 * Clipboard history saved to files
 * More elegant UI design
 * History search
-* auto paste (only X11)
+* auto paste
 
 ## Shortcut
 
@@ -33,6 +33,12 @@ A clipboard manager alternative to Paste for Linux. Works on X11 and wayland.
 ## Screenshot
 
 Gif on [Imgur](https://i.imgur.com/79gyO0n.gifv)
+
+### Windows 11
+
+![Screenshot on Windows 11](./screenshot/mpaste_on_windows_11.png)
+
+### Linux
 
 ![Screenshot on Ubuntu 21.04 with Gnome](https://i.imgur.com/q6OCzOT.png)
 
