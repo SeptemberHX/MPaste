@@ -12,6 +12,17 @@ ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
 {
     this->layout = new QHBoxLayout(this);
 
+    // Enable hardware acceleration
+    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_NoSystemBackground);
+
+    // Enable widget caching
+    setAttribute(Qt::WA_AlwaysShowToolTips);
+    setAttribute(Qt::WA_Hover);
+
+    // Optimize painting
+    setAutoFillBackground(false);
+
     this->innerShadowedWidget = new ClipboardItemInnerWidget(this);
     this->innerShadowedWidget->setObjectName("innerWidget");
     connect(this->innerShadowedWidget, &ClipboardItemInnerWidget::itemNeedToSave, this, [this] (const ClipboardItem &item) {

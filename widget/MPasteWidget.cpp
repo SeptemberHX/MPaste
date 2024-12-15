@@ -393,23 +393,21 @@ void MPasteWidget::updateItemCount(int itemCount) {
 }
 
 void MPasteWidget::hideAndPaste() {
-    this->setVisibleWithAnnimation(false);
+    this->hide();
 
-    // 使用单发定时器，延迟比动画时长稍长一点的时间后执行粘贴
-    QTimer::singleShot(HIDE_ANIMATION_TIME + 50, this, [this]() {
 #ifdef Q_OS_WIN
-        // 等待 Alt 键释放
-        while (GetAsyncKeyState(VK_MENU) & 0x8000) {
-            QThread::msleep(10);
-        }
-        // 再多等待一小段时间确保键盘状态完全恢复
-        QThread::msleep(50);
+    // 等待 Alt 键释放
+    while (GetAsyncKeyState(VK_MENU) & 0x8000) {
+        QThread::msleep(10);
+    }
+    // 再多等待一小段时间确保键盘状态完全恢复
+    QThread::msleep(50);
 #else
-        QThread::usleep(100);
+    QThread::usleep(100);
 #endif
 
-        if (MPasteSettings::getInst()->isAutoPaste()) {
-            PlatformRelated::triggerPasteShortcut();
-        }
-    });
+    if (MPasteSettings::getInst()->isAutoPaste()) {
+        PlatformRelated::triggerPasteShortcut();
+    }
+
 }

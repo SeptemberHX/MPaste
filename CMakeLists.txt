@@ -116,14 +116,41 @@ if(WIN32)
     get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
     find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${_qt_bin_dir}")
 
-    # 添加部署命令
+    # 使用 CLion 的 MinGW 目录
+    set(MINGW_DIR "C:/Users/tianj/AppData/Local/Programs/CLion/bin/mingw/bin")
+
+    # 创建部署目录
+    set(DEPLOY_DIR "${CMAKE_BINARY_DIR}/deploy")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            # 创建部署目录
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}"
+            # 复制主程序
+            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${PROJECT_NAME}>" "${DEPLOY_DIR}"
+            # 复制翻译文件
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}/translations"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/translations" "${DEPLOY_DIR}/translations"
+            # 复制 MinGW 运行时
+            COMMAND ${CMAKE_COMMAND} -E copy
+            "${MINGW_DIR}/libgcc_s_seh-1.dll"
+            "${MINGW_DIR}/libstdc++-6.dll"
+            "${MINGW_DIR}/libwinpthread-1.dll"
+            "${DEPLOY_DIR}/"
+            # 运行 windeployqt
             COMMAND "${WINDEPLOYQT_EXECUTABLE}"
             --no-translations
             --no-system-d3d-compiler
             --no-compiler-runtime
             --no-opengl-sw
-            \"$<TARGET_FILE:${PROJECT_NAME}>\"
+            --dir "${DEPLOY_DIR}"
+            "${DEPLOY_DIR}/${PROJECT_NAME}.exe"
             COMMENT "Deploying Qt dependencies..."
+    )
+
+    # 添加打包命令
+    add_custom_target(package
+            COMMAND ${CMAKE_COMMAND} -E tar "cfv" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-${VERSION}-win64.zip" --format=zip "${DEPLOY_DIR}"
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Creating zip package..."
+            DEPENDS ${PROJECT_NAME}
     )
 endif()

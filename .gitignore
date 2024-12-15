@@ -40,3 +40,5 @@ build
 /cmake-build-debug/
 /bin
 *.user*
+
+cmake-build-package

@@ -5,6 +5,7 @@
 #include "ui_ScrollItemsWidget.h"
 #include "ClipboardItemWidget.h"
 #include <QScrollBar>
+#include <QScroller>
 
 ScrollItemsWidget::ScrollItemsWidget(const QString &category, QWidget *parent) :
     QWidget(parent),
@@ -13,6 +14,24 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, QWidget *parent) :
     currItemWidget(nullptr)
 {
     ui->setupUi(this);
+
+    // Enable OpenGL hardware acceleration
+    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_NoSystemBackground);
+
+    // Enable hardware acceleration for the scroll area
+    ui->scrollArea->viewport()->setAttribute(Qt::WA_TranslucentBackground);
+    ui->scrollArea->viewport()->setAttribute(Qt::WA_NoSystemBackground);
+
+    // Enable smooth scrolling using QScroller
+    QScroller::grabGesture(ui->scrollArea->viewport(), QScroller::TouchGesture);
+    QScrollerProperties sp;
+    sp.setScrollMetric(QScrollerProperties::FrameRate, QVariant(120));
+    sp.setScrollMetric(QScrollerProperties::DragStartDistance, QVariant(100));
+    QScroller::scroller(ui->scrollArea->viewport())->setScrollerProperties(sp);
+
+    // Enable pixel scrolling
+    ui->scrollArea->horizontalScrollBar()->setSingleStep(50);
 
     this->layout = new QHBoxLayout(ui->scrollAreaWidgetContents);
     this->layout->setContentsMargins(0, 0, 0, 0);
