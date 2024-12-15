@@ -6,8 +6,8 @@
 #define MPASTE_CLIPBOARDITEMWIDGET_H
 
 #include <QWidget>
-#include <QHBoxLayout>
 #include <QToolButton>
+#include <QMenu>
 #include "ClipboardItemInnerWidget.h"
 #include "data/ClipboardItem.h"
 #include "utils/ClipboardMonitor.h"
@@ -31,6 +31,7 @@ signals:
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
     void enterEvent(QEnterEvent *event) override;
     void leaveEvent(QEvent *event) override;
@@ -58,13 +59,19 @@ private:
     QToolButton* createActionButton(const QString& iconPath,
                                   const QString& tooltip);
 
+    QMenu* contextMenu;
+    void setupContextMenu();
+    void showContextMenu(const QPoint& pos);
+
 signals:
     void favoriteChanged(bool isFavorite);
     void deleteRequested();  // 新增信号
+    void saveRequested(const ClipboardItem& item);
 
 private slots:
     void onFavoriteClicked();
     void onDeleteClicked();
+    void onSaveTriggered();
 };
 
 

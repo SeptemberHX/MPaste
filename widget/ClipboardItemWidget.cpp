@@ -48,6 +48,8 @@ ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
     // ... 现有初始化代码 ...
     isFavorite = false;
     setupActionButtons();
+
+    setupContextMenu();
 }
 
 void ClipboardItemWidget::showItem(ClipboardItem nItem) {
@@ -120,17 +122,48 @@ QToolButton * ClipboardItemWidget::createActionButton(const QString &iconPath, c
     return button;
 }
 
+void ClipboardItemWidget::setupContextMenu() {
+    contextMenu = new QMenu(this);
+
+    // 添加菜单项
+    QAction* saveAction = new QAction(QIcon(":/resources/resources/save_black.svg"), tr("Save"), this);
+    QAction* addToAction = new QAction(QIcon(":/resources/resources/add_black.svg"), tr("Add to"), this);
+    QAction* deleteAction = new QAction(QIcon(":/resources/resources/delete.svg"), tr("Delete"), this);
+
+    contextMenu->addAction(saveAction);
+    contextMenu->addAction(addToAction);
+    contextMenu->addSeparator();
+    contextMenu->addAction(deleteAction);
+
+    // 连接信号槽
+    connect(saveAction, &QAction::triggered, this, &ClipboardItemWidget::onSaveTriggered);
+    connect(addToAction, &QAction::triggered, this, &ClipboardItemWidget::onFavoriteClicked);
+    connect(deleteAction, &QAction::triggered, this, &ClipboardItemWidget::onDeleteClicked);
+}
+
+void ClipboardItemWidget::showContextMenu(const QPoint &pos) {
+    // 在点击位置显示菜单
+    contextMenu->exec(mapToGlobal(pos));
+}
+
 void ClipboardItemWidget::onFavoriteClicked() {
     isFavorite = !isFavorite;
+
+    // 更新按钮图标
     favoriteButton->setIcon(QIcon(isFavorite ?
         ":/resources/resources/star_filled.svg" :
         ":/resources/resources/star_outline.svg"));
     favoriteButton->setToolTip(isFavorite ? tr("Remove from favorites") : tr("Add to favorites"));
+
     emit favoriteChanged(isFavorite);
 }
 
 void ClipboardItemWidget::onDeleteClicked() {
     emit deleteRequested();
+}
+
+void ClipboardItemWidget::onSaveTriggered() {
+    emit saveRequested(this->item);
 }
 
 void ClipboardItemWidget::mousePressEvent(QMouseEvent *event) {
@@ -147,6 +180,10 @@ void ClipboardItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
     }
 
     QWidget::mouseDoubleClickEvent(event);
+}
+
+void ClipboardItemWidget::contextMenuEvent(QContextMenuEvent *event) {
+    showContextMenu(event->pos());
 }
 
 void ClipboardItemWidget::enterEvent(QEnterEvent *event) {

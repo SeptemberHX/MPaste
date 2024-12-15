@@ -53,18 +53,29 @@
 <context>
     <name>ClipboardItemWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="74"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="76"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="131"/>
         <source>Delete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="128"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="129"/>
+        <source>Save</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="130"/>
+        <source>Add to</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="156"/>
         <source>Remove from favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="68"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="128"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="70"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="156"/>
         <source>Add to favorites</source>
         <translation type="unfinished"></translation>
     </message>
