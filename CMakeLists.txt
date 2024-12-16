@@ -84,7 +84,8 @@ ENDIF()
 # Main executable
 # Main executable
 IF(WIN32)
-    add_executable(${BIN_NAME} WIN32    # 为 Windows 添加 WIN32 标志
+    add_executable(${BIN_NAME}
+            WIN32    # 为 Windows 添加 WIN32 标志
             ${SRCS}
             ${INTERFACES}
             ${PLATFORM_SPECIFIC_SOURCES}

@@ -53,7 +53,7 @@ void WebLinkThumbWidget::showItem(const ClipboardItem &item) {
 
         // 预览图尽可能保持原始分辨率
         const int previewWidth = ui->imageLabel->width();
-        const int previewHeight = 160;
+        const int previewHeight = ui->imageLabel->height();
 
         QSize imageSize = tPixmap.size();
         QSize targetSize(previewWidth * this->devicePixelRatio(),
@@ -69,8 +69,8 @@ void WebLinkThumbWidget::showItem(const ClipboardItem &item) {
             ));
             } else {
                 // 如果图片较小，则适当放大但不超过目标尺寸
-                if (imageSize.width() < previewWidth/2 ||
-                    imageSize.height() < previewHeight/2) {
+                if (imageSize.width() < previewWidth / 2 ||
+                    imageSize.height() < previewHeight / 2) {
                     ui->imageLabel->setPixmap(tPixmap.scaled(
                         targetSize,
                         Qt::KeepAspectRatio,
@@ -83,9 +83,9 @@ void WebLinkThumbWidget::showItem(const ClipboardItem &item) {
             }
     }
 
-    QFontMetrics fm(ui->urlLabel->font());
+    QFontMetrics fm(ui->titleLabel->font());
     QString elidedStr = item.getTitle();
-    if (fm.boundingRect(item.getTitle()).width() > ui->urlLabel->width()) {
+    if (fm.boundingRect(item.getTitle()).width() > ui->titleLabel->width()) {
         ui->titleLabel->setAlignment(Qt::AlignLeft);
         elidedStr = fm.elidedText(item.getTitle(), Qt::ElideRight, ui->titleLabel->width());
     }
