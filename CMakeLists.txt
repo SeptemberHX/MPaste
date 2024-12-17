@@ -84,20 +84,22 @@ ENDIF()
 # Main executable
 # Main executable
 IF(WIN32)
-    add_executable(${BIN_NAME}
-            WIN32    # 为 Windows 添加 WIN32 标志
-            ${SRCS}
-            ${INTERFACES}
-            ${PLATFORM_SPECIFIC_SOURCES}
-            ${QM_FILES}
-    )
-ELSE()
-    add_executable(${BIN_NAME}     # Linux 保持原样
-            ${SRCS}
-            ${INTERFACES}
-            ${PLATFORM_SPECIFIC_SOURCES}
-            ${QM_FILES}
-    )
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_executable(${BIN_NAME}
+                ${SRCS}
+                ${INTERFACES}
+                ${PLATFORM_SPECIFIC_SOURCES}
+                ${QM_FILES}
+        )
+    else()
+        add_executable(${BIN_NAME}
+                WIN32    # Only add WIN32 flag for Release builds
+                ${SRCS}
+                ${INTERFACES}
+                ${PLATFORM_SPECIFIC_SOURCES}
+                ${QM_FILES}
+        )
+    endif()
 ENDIF()
 
 target_include_directories(${BIN_NAME} PUBLIC
@@ -123,7 +125,9 @@ ENDIF()
 
 if(WIN32)
     # 设置为 Windows GUI 应用程序
-    set(CMAKE_WIN32_EXECUTABLE TRUE)
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(CMAKE_WIN32_EXECUTABLE TRUE)
+    endif()
 
     # 找到 windeployqt.exe
     get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)

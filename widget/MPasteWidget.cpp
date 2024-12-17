@@ -148,10 +148,10 @@ void MPasteWidget::initializeWidget() {
 
 
 bool MPasteWidget::handleAltNumShortcut(QKeyEvent *event) {
-    qDebug() << "Key Press:" << event->key()
-             << "Modifiers:" << event->modifiers()
-             << "Native Modifiers:" << event->nativeModifiers()
-             << "Native Virtual Key:" << event->nativeVirtualKey();
+    // qDebug() << "Key Press:" << event->key()
+    //          << "Modifiers:" << event->modifiers()
+    //          << "Native Modifiers:" << event->nativeModifiers()
+    //          << "Native Virtual Key:" << event->nativeVirtualKey();
 
 #ifdef Q_OS_WIN
     // 检查Alt键状态
@@ -313,8 +313,25 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         this->currItemsWidget()->selectedByEnter();
         this->hideAndPaste();
     } else if (event->key() >= Qt::Key_Space && event->key() <= Qt::Key_AsciiTilde) {
-        QGuiApplication::sendEvent(ui->searchEdit, event);
-        this->setFocusOnSearch(true);
+        // 检查是否存在修饰键
+        Qt::KeyboardModifiers modifiers = event->modifiers();
+        if (modifiers & (Qt::AltModifier | Qt::ControlModifier)) {
+            event->ignore();
+            return;
+        }
+
+        // 直接设置文本而不是发送事件
+        if (!ui->searchEdit->hasFocus()) {
+            ui->searchEdit->setFocus();
+            this->setFocusOnSearch(true);
+        }
+
+        // 获取当前文本并追加新字符
+        QString currentText = ui->searchEdit->text();
+        currentText += event->text();
+        ui->searchEdit->setText(currentText);
+
+        event->accept();
     }
 
     if (ui->searchEdit->isVisible() && (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right)) {
