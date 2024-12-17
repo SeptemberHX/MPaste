@@ -93,11 +93,13 @@
           <widget class="QLabel" name="typeLabel">
            <property name="font">
             <font>
+             <family>Microsoft YaHei</family>
              <pointsize>12</pointsize>
+             <bold>false</bold>
             </font>
            </property>
            <property name="text">
-            <string notr="true">Text</string>
+            <string notr="true">纯文本</string>
            </property>
            <property name="alignment">
             <set>Qt::AlignmentFlag::AlignBottom|Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft</set>

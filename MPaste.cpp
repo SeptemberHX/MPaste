@@ -51,8 +51,30 @@ int main(int argc, char* argv[]) {
         // Load translations
         QString locale = QLocale::system().name();
         QTranslator translator;
-        translator.load("/usr/share/MPaste/translations/MPaste_"+ locale +".qm");
-        app.installTranslator(&translator);
+
+        // 获取应用程序可执行文件所在目录
+        QString appDir = QCoreApplication::applicationDirPath();
+
+        // 尝试多个可能的翻译文件位置
+        QStringList searchPaths = {
+            appDir + "/translations/MPaste_" + locale + ".qm",              // 直接在 translations 子目录下
+            appDir + "/../translations/MPaste_" + locale + ".qm",          // 上一级目录的 translations 下
+            QStringLiteral(":/translations/MPaste_") + locale + ".qm"      // 资源文件中的翻译
+        };
+
+        bool loaded = false;
+        for (const QString &path : searchPaths) {
+            if (translator.load(path)) {
+                loaded = true;
+                break;
+            }
+        }
+
+        if (loaded) {
+            app.installTranslator(&translator);
+        } else {
+            qWarning() << "Failed to load translation for" << locale;
+        }
 
         // Create and setup main widget
         MPasteWidget widget;

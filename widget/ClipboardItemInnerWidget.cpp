@@ -198,6 +198,7 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
         this->textBrowser->setPlainText(text);
         ui->countLabel->setText(QString("%1 ").arg(text.size()) + tr("Characters"));
     }
+    ui->typeLabel->setText(tr("Plain Text"));
 }
 
 void ClipboardItemInnerWidget::showColor(const QColor &color) {

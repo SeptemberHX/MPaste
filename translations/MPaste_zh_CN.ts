@@ -25,27 +25,32 @@
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="214"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="201"/>
+        <source>Plain Text</source>
+        <translation>纯文本</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="215"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="238"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="239"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="244"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="245"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="251"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="252"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="310"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="311"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
@@ -113,7 +118,7 @@
     <message>
         <location filename="../widget/MPasteWidget.ui" line="233"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="211"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="167"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="211"/>
         <source>100</source>
         <translation type="unfinished"></translation>
     </message>

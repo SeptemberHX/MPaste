@@ -191,7 +191,7 @@ void ClipboardItemWidget::enterEvent(QEnterEvent *event) {
 
     // 计算按钮位置 (顶部居中)
     int x = (width() - buttonContainer->width()) / 2;
-    buttonContainer->move(x, 8);  // 让按钮垂直方向上半隐藏
+    buttonContainer->move(x, 0);  // 让按钮垂直方向上半隐藏
     buttonContainer->show();
 
     // 使用渐变动画显示按钮
