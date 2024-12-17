@@ -44,6 +44,7 @@ private slots:
     void debugKeyState();
 
 private:
+    void initStyle();
     void setFocusOnSearch(bool flag);
     ScrollItemsWidget* currItemsWidget();
 

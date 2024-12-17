@@ -108,14 +108,26 @@ target_include_directories(${BIN_NAME} PUBLIC
         ${PLATFORM_SPECIFIC_INCLUDES}
 )
 
-target_link_libraries(${BIN_NAME} PRIVATE
-        Qt6::Widgets
-        Qt6::Multimedia
-        Qt6::Network
-        Qt6::Xml
-        ${PLATFORM_SPECIFIC_LIBS}
-        ${CUSTOM_LIBRARIES}
-)
+IF(WIN32)
+    target_link_libraries(${BIN_NAME} PRIVATE
+            Qt6::Widgets
+            Qt6::Multimedia
+            Qt6::Network
+            Qt6::Xml
+            ${PLATFORM_SPECIFIC_LIBS}
+            ${CUSTOM_LIBRARIES}
+            dwmapi
+    )
+ELSE ()
+    target_link_libraries(${BIN_NAME} PRIVATE
+            Qt6::Widgets
+            Qt6::Multimedia
+            Qt6::Network
+            Qt6::Xml
+            ${PLATFORM_SPECIFIC_LIBS}
+            ${CUSTOM_LIBRARIES}
+    )
+ENDIF ()
 
 # Only include packaging on Unix systems
 IF(UNIX)
