@@ -166,7 +166,14 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
             ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr.name()));
         }
     }
-    ui->countLabel->setText(QString("%1 ").arg(html.size()) + tr("Characters"));
+
+    // 使用 QTextDocument 来提取纯文本内容
+    QTextDocument doc;
+    doc.setHtml(html);
+    QString plainText = doc.toPlainText();
+    int charCount = plainText.length();
+
+    ui->countLabel->setText(QString("%1 ").arg(charCount) + tr("Characters"));
     ui->typeLabel->setText(tr("Rich Text"));
 }
 

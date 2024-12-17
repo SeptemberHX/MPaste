@@ -12,5 +12,7 @@
         <file>resources/delete.svg</file>
         <file>resources/save_black.svg</file>
         <file>resources/add_black.svg</file>
+        <file>resources/first.svg</file>
+        <file>resources/last.svg</file>
     </qresource>
 </RCC>

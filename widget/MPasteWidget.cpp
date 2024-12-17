@@ -119,6 +119,14 @@ void MPasteWidget::initializeWidget() {
         this->setFocusOnSearch(flag);
     });
 
+    // 初始化 Home & End 按钮
+    connect(ui->firstButton, &QPushButton::clicked, this, [this]() {
+        this->currItemsWidget()->moveToFirst();
+    });
+    connect(ui->lastButton, &QPushButton::clicked, this, [this]() {
+        this->currItemsWidget()->moveToLast();
+    });
+
     // 初始化系统托盘
     this->trayIcon = new QSystemTrayIcon(this);
     // this->trayIcon->setIcon(qApp->windowIcon());
@@ -309,6 +317,10 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         this->currItemsWidget()->focusMoveLeft();
     } else if (!ui->searchEdit->isVisible() && event->key() == Qt::Key_Right) {
         this->currItemsWidget()->focusMoveRight();
+    } else if (!ui->searchEdit->isVisible() && event->key() == Qt::Key_Home) {
+        this->currItemsWidget()->moveToFirst();
+    } else if (!ui->searchEdit->isVisible() && event->key() == Qt::Key_End) {
+        this->currItemsWidget()->moveToLast();
     } else if (event->key() == Qt::Key_Return) {
         this->currItemsWidget()->selectedByEnter();
         this->hideAndPaste();

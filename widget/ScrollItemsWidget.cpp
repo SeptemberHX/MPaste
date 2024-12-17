@@ -279,6 +279,35 @@ void ScrollItemsWidget::focusMoveRight() {
     }
 }
 
+void ScrollItemsWidget::moveToFirst() {
+    if (this->layout->count() <= 1) return;  // 没有条目时直接返回
+
+    // 找到第一个可见的条目
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (widget && widget->isVisible()) {
+            this->setSelectedItem(widget);
+            ui->scrollArea->horizontalScrollBar()->setValue(0);
+            break;
+        }
+    }
+}
+
+void ScrollItemsWidget::moveToLast() {
+    if (this->layout->count() <= 1) return;  // 没有条目时直接返回
+
+    // 找到最后一个可见的条目
+    for (int i = this->layout->count() - 2; i >= 0; --i) {
+        auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (widget && widget->isVisible()) {
+            this->setSelectedItem(widget);
+            int maxScroll = ui->scrollArea->horizontalScrollBar()->maximum();
+            ui->scrollArea->horizontalScrollBar()->setValue(maxScroll);
+            break;
+        }
+    }
+}
+
 void ScrollItemsWidget::selectedByEnter() {
     if (this->currItemWidget != nullptr) {
         this->moveItemToFirst(this->currItemWidget);

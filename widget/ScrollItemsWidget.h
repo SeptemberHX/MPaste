@@ -32,6 +32,9 @@ public:
     void focusMoveLeft();
     void focusMoveRight();
 
+    void moveToFirst();
+    void moveToLast();
+
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
