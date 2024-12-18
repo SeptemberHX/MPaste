@@ -281,7 +281,10 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
     }
 
     QGuiApplication::clipboard()->setMimeData(clipboard_.mimeData);
-    clipboard_.monitor->connectMonitor();
+    // 使用延时重新连接监视器，避免触发重复提示音
+    QTimer::singleShot(200, this, [this]() {
+        clipboard_.monitor->connectMonitor();
+    });
 }
 
 void MPasteWidget::handleUrlsClipboard(const ClipboardItem &item) {
