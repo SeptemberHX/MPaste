@@ -14,6 +14,9 @@ class ClipboardMonitor : public QObject {
 public:
     ClipboardMonitor();
 
+    void disconnectMonitor();
+    void connectMonitor();
+
 signals:
     void clipboardUpdated(ClipboardItem item, int wId);
 

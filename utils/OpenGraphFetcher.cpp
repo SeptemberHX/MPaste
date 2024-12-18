@@ -39,113 +39,121 @@ void OpenGraphFetcher::handle() {
 }
 
 void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
-    if (reply->error() != QNetworkReply::NoError) {
-        std::cout << "Error happened: " << reply->error() << std::endl;
+if (reply->error() != QNetworkReply::NoError) {
+        if (!pendingImageUrls.isEmpty()) {
+            tryNextImage();
+            return;
+        }
         Q_EMIT finished(this->ogItem);
-    } else if (reply->request().url() == this->realCalledUrl) {
+        return;
+    }
+
+    if (reply->request().url() == this->realCalledUrl) {
+        // HTML 内容处理
         QDomDocument doc;
-        QString faviconStr;
         QString body(reply->readAll());
+
+        // 收集所有可能的图片URL
+        pendingImageUrls.clear();
+
         if (doc.setContent(body)) {
-            QDomElement docElem = doc.documentElement();
-            QDomNodeList metaNodeList = docElem.elementsByTagName("meta");
-            for (int i = 0; i < metaNodeList.size(); ++i) {
-                if (!metaNodeList.at(i).isNull()) {
-                    QDomNode n = metaNodeList.at(i).toElement();
-                    if (!n.isNull()) {
-                        if (n.attributes().contains("property") && n.attributes().contains("content")) {
-                            QString ogType = n.attributes().namedItem("property").nodeValue();
-                            if (ogType == "og:title") {
-                                this->ogItem.setTitle(n.attributes().namedItem("content").nodeValue());
-                            } else if (ogType == "og:image" &&
-                                     !n.attributes().namedItem("content").nodeValue().startsWith("$")) {
-                                faviconStr = n.attributes().namedItem("content").nodeValue();
-                            }
-                        }
+            // 1. 尝试 og:image
+            QDomNodeList metaNodes = doc.elementsByTagName("meta");
+            for (int i = 0; i < metaNodes.size(); ++i) {
+                QDomElement meta = metaNodes.at(i).toElement();
+                if (meta.attribute("property") == "og:image" ||
+                    meta.attribute("property") == "twitter:image") {
+                    pendingImageUrls << meta.attribute("content");
+                }
+            }
+
+            // 2. 尝试 link 标签中的图标
+            QDomNodeList linkNodes = doc.elementsByTagName("link");
+            for (int i = 0; i < linkNodes.size(); ++i) {
+                QDomElement link = linkNodes.at(i).toElement();
+                if (link.attribute("rel").contains("icon")) {
+                    QString href = link.attribute("href");
+                    if (!href.isEmpty() && !href.startsWith("$")) {
+                        pendingImageUrls << href;
                     }
                 }
             }
 
-            if (faviconStr.isEmpty()) {
-                QDomNodeList linkNodeList = docElem.elementsByTagName("link");
-                for (int i = 0; i < linkNodeList.size(); ++i) {
-                    if (!linkNodeList.at(i).isNull()) {
-                        QDomNode n = linkNodeList.at(i).toElement();
-                        if (!n.isNull()) {
-                            if (n.attributes().contains("rel") && n.attributes().contains("href")) {
-                                if (n.attributes().namedItem("rel").nodeValue().contains("icon")
-                                    && !n.attributes().namedItem("href").nodeValue().startsWith("$")) {
-                                    faviconStr = n.attributes().namedItem("href").nodeValue();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if (this->ogItem.getTitle().isEmpty()) {
-                QDomNodeList nodeList = docElem.elementsByTagName("title");
-                for (int i = 0; i < nodeList.size(); ++i) {
-                    if (!nodeList.at(i).isNull()) {
-                        QDomElement e = nodeList.at(i).toElement();
-                        if (!e.isNull()) {
-                            this->ogItem.setTitle(e.text());
-                        }
-                    }
-                }
+            // 处理标题...
+            QDomNodeList titleNodes = doc.elementsByTagName("title");
+            if (!titleNodes.isEmpty()) {
+                this->ogItem.setTitle(titleNodes.at(0).toElement().text());
             }
         } else {
+            // 使用正则表达式提取信息
             QRegularExpressionMatch match = this->ogImageReg.match(body);
             if (match.hasMatch()) {
-                faviconStr = match.captured(1);
-            } else {
-                QString str = this->targetUrl.toString();
-                str = str.mid(0, str.indexOf(':'));
-                match = this->faviconReg1.match(body);
-                if (match.hasMatch()) {
-                    faviconStr = match.captured(1);
-                } else {
-                    match = this->faviconReg2.match(body);
-                    if (match.hasMatch()) {
-                        faviconStr = match.captured(1);
-                    } else {
-                        QUrl faviconUrl(str + "://" + this->targetUrl.host() + "/favicon.ico");
-                        faviconStr = faviconUrl.toString();
-                    }
-                }
+                pendingImageUrls << match.captured(1);
             }
 
-            match = this->ogTitleReg.match(body);
+            match = this->faviconReg1.match(body);
             if (match.hasMatch()) {
-                QString omgTitleStr = match.captured(1);
-                this->ogItem.setTitle(omgTitleStr);
-            } else {
-                match = this->titleReg.match(body);
-                if (match.hasMatch()) {
-                    QString titleStr = match.captured(1);
-                    this->ogItem.setTitle(titleStr);
-                }
+                pendingImageUrls << match.captured(1);
+            }
+
+            match = this->faviconReg2.match(body);
+            if (match.hasMatch()) {
+                pendingImageUrls << match.captured(1);
+            }
+
+            // 处理标题...
+            match = this->titleReg.match(body);
+            if (match.hasMatch()) {
+                this->ogItem.setTitle(match.captured(1));
             }
         }
 
-        QString str = this->targetUrl.toString();
-        if (!faviconStr.startsWith("http")) {
-            if (faviconStr.startsWith("//")) {
-                faviconStr = "https:" + faviconStr;
-            } else {
-                QUrl url(str + "://" + this->targetUrl.host());
-                faviconStr = url.resolved(faviconStr).toString();
-            }
+        // 3. 添加常见的高质量图标路径
+        for (const QString &path : getHighQualityIconPaths()) {
+            pendingImageUrls << (targetUrl.toString() + path);
         }
-        this->imageUrl = QUrl(faviconStr);
-        this->naManager->get(QNetworkRequest(this->imageUrl));
 
-    } else if (reply->request().url() == this->imageUrl) {
-        QPixmap image;
-        image.loadFromData(reply->readAll());
-        this->ogItem.setImage(image);
-        Q_EMIT finished(this->ogItem);
+        // 开始尝试获取图片
+        tryNextImage();
+
     } else {
-        std::cout << "Error happened" << std::endl;
-        Q_EMIT finished(this->ogItem);
+        // 处理图片请求的响应
+        QPixmap image;
+        if (image.loadFromData(reply->readAll())) {
+            // 检查图片质量
+            if (image.width() >= 32 && image.height() >= 32) {
+                this->ogItem.setImage(image);
+                Q_EMIT finished(this->ogItem);
+                return;
+            }
+        }
+
+        // 如果这个图片不合适，尝试下一个
+        if (!pendingImageUrls.isEmpty()) {
+            tryNextImage();
+        } else {
+            Q_EMIT finished(this->ogItem);
+        }
     }
+}
+
+void OpenGraphFetcher::tryNextImage() {
+    if (pendingImageUrls.isEmpty()) {
+        Q_EMIT finished(this->ogItem);
+        return;
+    }
+
+    QString imageUrl = pendingImageUrls.takeFirst();
+    if (!imageUrl.startsWith("http")) {
+        if (imageUrl.startsWith("//")) {
+            imageUrl = "https:" + imageUrl;
+        } else {
+            imageUrl = targetUrl.resolved(QUrl(imageUrl)).toString();
+        }
+    }
+
+    QNetworkRequest request{QUrl(imageUrl)};
+    request.setRawHeader("User-Agent",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0");
+    this->naManager->get(request);
 }

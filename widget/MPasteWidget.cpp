@@ -25,7 +25,8 @@
 MPasteWidget::MPasteWidget(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::MPasteWidget),
-    mimeData(nullptr)
+    mimeData(nullptr),
+    isPasting(false)
 {
     ui->setupUi(this);
     initializeWidget();
@@ -290,16 +291,20 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
 }
 
 void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
-    this->clipboardWidget->addAndSaveItem(nItem);
-    this->player->play();
+    if (!isPasting) {  // 只有在非粘贴状态下才处理剪贴板更新
+        this->clipboardWidget->addAndSaveItem(nItem);
+        this->player->play();
+    }
 }
 
 void MPasteWidget::setClipboard(const ClipboardItem &item) {
     if (this->mimeData != nullptr) {
         // 可能需要删除旧的 mimeData，但要小心处理
+
     }
 
     this->mimeData = new QMimeData();
+    this->monitor->disconnectMonitor();
 
     // 处理富文本应该是优先级最高的
     if (!item.getHtml().isEmpty()) {
@@ -347,7 +352,12 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
     }
 
     // 设置到系统剪贴板
-    QGuiApplication::clipboard()->setMimeData(this->mimeData);
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    clipboard->setMimeData(this->mimeData);
+
+    // 重新连接信号
+    connect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
+            this->monitor, &ClipboardMonitor::clipboardChanged);
 }
 
 void MPasteWidget::showEvent(QShowEvent *event) {
@@ -510,7 +520,11 @@ void MPasteWidget::hideAndPaste() {
 #endif
 
     if (MPasteSettings::getInst()->isAutoPaste()) {
+        isPasting = true;  // 设置标志位
         PlatformRelated::triggerPasteShortcut();
+        // 使用 QTimer 延迟重置标志位，确保粘贴操作完成
+        QTimer::singleShot(200, this, [this]() {
+            isPasting = false;
+        });
     }
-
 }

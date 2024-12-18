@@ -101,17 +101,17 @@
         <translation type="vanished">设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="98"/>
+        <location filename="../widget/MPasteWidget.cpp" line="99"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="113"/>
+        <location filename="../widget/MPasteWidget.cpp" line="114"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="147"/>
+        <location filename="../widget/MPasteWidget.cpp" line="148"/>
         <source>MPaste has started.</source>
         <translation>MPaste 已启动。</translation>
     </message>

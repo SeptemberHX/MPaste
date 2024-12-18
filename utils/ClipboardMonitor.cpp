@@ -19,7 +19,17 @@ void ClipboardMonitor::clipboardChanged() {
     QColor color(-1, -1, -1);
 
 #ifdef Q_OS_WIN
-    if (!OpenClipboard(NULL)) {
+    // 多次尝试打开剪贴板
+    int retries = 3;
+    while (retries > 0) {
+        if (OpenClipboard(NULL)) {
+            break;
+        }
+        QThread::msleep(10);
+        retries--;
+    }
+
+    if (retries == 0) {
         return;
     }
 
@@ -115,5 +125,16 @@ void ClipboardMonitor::clipboardChanged() {
 }
 
 ClipboardMonitor::ClipboardMonitor() {
-    connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &ClipboardMonitor::clipboardChanged);
+    this->connectMonitor();
+}
+
+void ClipboardMonitor::disconnectMonitor() {
+    // 设置数据前先断开剪贴板的 dataChanged 信号
+    disconnect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
+              this, &ClipboardMonitor::clipboardChanged);
+}
+
+void ClipboardMonitor::connectMonitor() {
+    connect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
+        this, &ClipboardMonitor::clipboardChanged);
 }

@@ -73,6 +73,7 @@ private:
     QPropertyAnimation *searchHideAnim;
 
     QSystemTrayIcon *trayIcon;
+    bool isPasting;
 };
 
 #endif // MPASTEWIDGET_H
