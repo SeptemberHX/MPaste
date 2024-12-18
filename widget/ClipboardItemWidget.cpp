@@ -39,9 +39,9 @@ ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
     this->setAttribute(Qt::WA_TranslucentBackground);
 
     auto *effect = new QGraphicsDropShadowEffect(this);
-    effect->setOffset(0, 0);
-    effect->setColor(Qt::darkGray);
-    effect->setBlurRadius(15);
+    effect->setOffset(0, 2);  // 添加轻微的向下偏移
+    effect->setColor(QColor(0, 0, 0, 80));  // 使用半透明黑色 (alpha=80)
+    effect->setBlurRadius(10);  // 稍微减小模糊半径
     this->innerShadowedWidget->setGraphicsEffect(effect);
     this->innerShadowedWidget->setAttribute(Qt::WA_TranslucentBackground, false);
 
