@@ -14,5 +14,6 @@
         <file>resources/add_black.svg</file>
         <file>resources/first.svg</file>
         <file>resources/last.svg</file>
+        <file>resources/preview.svg</file>
     </qresource>
 </RCC>

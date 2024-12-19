@@ -58,29 +58,34 @@
 <context>
     <name>ClipboardItemWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="76"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="131"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="60"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="88"/>
         <source>Delete</source>
-        <translation type="unfinished"></translation>
+        <translation>删除</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="129"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="82"/>
         <source>Save</source>
-        <translation type="unfinished"></translation>
+        <translation>保存</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="130"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="83"/>
         <source>Add to</source>
-        <translation type="unfinished"></translation>
+        <translation>添加至</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="156"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="84"/>
+        <source>Preview</source>
+        <translation>预览</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="143"/>
         <source>Remove from favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="70"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="156"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="56"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="144"/>
         <source>Add to favorites</source>
         <translation type="unfinished"></translation>
     </message>
@@ -101,12 +106,12 @@
         <translation type="vanished">设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="184"/>
+        <location filename="../widget/MPasteWidget.cpp" line="185"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="200"/>
+        <location filename="../widget/MPasteWidget.cpp" line="201"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>

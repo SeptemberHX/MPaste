@@ -1,107 +1,103 @@
-//
-// Created by ragdoll on 2021/5/22.
-//
-
-#include <QGraphicsDropShadowEffect>
-#include <QMouseEvent>
 #include "ClipboardItemWidget.h"
 
-#include <qabstractanimation.h>
+#include <QGraphicsDropShadowEffect>
 #include <QPropertyAnimation>
 #include <QToolButton>
-
-#include "utils/ClipboardMonitor.h"
+#include <QMenu>
+#include <QHBoxLayout>
+#include <QMouseEvent>
 
 ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
     : QWidget(parent)
 {
-    this->layout = new QHBoxLayout(this);
+    setupUI();
+    setupActionButtons();
+    setupContextMenu();
+    initializeEffects();
+}
 
-    // Enable hardware acceleration
+void ClipboardItemWidget::setupUI() {
+    // Widget attributes
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground);
-
-    // Enable widget caching
     setAttribute(Qt::WA_AlwaysShowToolTips);
     setAttribute(Qt::WA_Hover);
-
-    // Optimize painting
     setAutoFillBackground(false);
 
-    this->innerShadowedWidget = new ClipboardItemInnerWidget(this);
-    this->innerShadowedWidget->setObjectName("innerWidget");
-    connect(this->innerShadowedWidget, &ClipboardItemInnerWidget::itemNeedToSave, this, [this] (const ClipboardItem &item) {
-        this->item = item;
+    // Main layout
+    ui.mainLayout = new QHBoxLayout(this);
+    ui.mainLayout->setContentsMargins(0, 0, 0, 0);
+
+    // Inner widget
+    ui.innerWidget = new ClipboardItemInnerWidget(this);
+    ui.innerWidget->setObjectName("innerWidget");
+    connect(ui.innerWidget, &ClipboardItemInnerWidget::itemNeedToSave, 
+            this, [this](const ClipboardItem &item) {
+        currentItem = item;
         Q_EMIT itemNeedToSave();
     });
 
-    this->layout->addWidget(this->innerShadowedWidget);
-    this->setAttribute(Qt::WA_TranslucentBackground);
-
-    auto *effect = new QGraphicsDropShadowEffect(this);
-    effect->setOffset(0, 2);  // 添加轻微的向下偏移
-    effect->setColor(QColor(0, 0, 0, 80));  // 使用半透明黑色 (alpha=80)
-    effect->setBlurRadius(10);  // 稍微减小模糊半径
-    this->innerShadowedWidget->setGraphicsEffect(effect);
-    this->innerShadowedWidget->setAttribute(Qt::WA_TranslucentBackground, false);
-
-    // ... 现有初始化代码 ...
-    isFavorite = false;
-    setupActionButtons();
-
-    setupContextMenu();
-}
-
-void ClipboardItemWidget::showItem(ClipboardItem nItem) {
-    this->item = nItem;
-    this->innerShadowedWidget->showItem(this->item);
-}
-
-void ClipboardItemWidget::setSelected(bool flag) {
-    this->innerShadowedWidget->showBorder(flag);
+    ui.mainLayout->addWidget(ui.innerWidget);
 }
 
 void ClipboardItemWidget::setupActionButtons() {
-    setupButtonContainer();
+    // Container setup
+    ui.actions.container = new QWidget(this);
+    ui.actions.container->setFixedSize(50, 24);
+    ui.actions.container->hide();
 
-    // 创建收藏按钮
-    favoriteButton = createActionButton(
+    ui.actions.layout = new QHBoxLayout(ui.actions.container);
+    ui.actions.layout->setContentsMargins(0, 0, 0, 0);
+    ui.actions.layout->setSpacing(0);
+
+    // Create buttons
+    ui.actions.favoriteBtn = createActionButton(
         ":/resources/resources/star_outline.svg",
         tr("Add to favorites")
     );
-
-    // 创建删除按钮
-    deleteButton = createActionButton(
+    ui.actions.deleteBtn = createActionButton(
         ":/resources/resources/delete.svg",
         tr("Delete")
     );
 
-    // 将按钮添加到容器中
-    QHBoxLayout* layout = qobject_cast<QHBoxLayout*>(buttonContainer->layout());
-    layout->addWidget(favoriteButton);
-    layout->addWidget(deleteButton);
+    // Add buttons to layout
+    ui.actions.layout->addWidget(ui.actions.favoriteBtn);
+    ui.actions.layout->addWidget(ui.actions.deleteBtn);
 
-    // 连接信号
-    connect(favoriteButton, &QToolButton::clicked, this, &ClipboardItemWidget::onFavoriteClicked);
-    connect(deleteButton, &QToolButton::clicked, this, &ClipboardItemWidget::onDeleteClicked);
+    // Connect signals
+    connect(ui.actions.favoriteBtn, &QToolButton::clicked, this, &ClipboardItemWidget::handleFavoriteAction);
+    connect(ui.actions.deleteBtn, &QToolButton::clicked, this, &ClipboardItemWidget::handleDeleteAction);
 }
 
-void ClipboardItemWidget::setupButtonContainer() {
-    buttonContainer = new QWidget(this);
-    buttonContainer->setFixedHeight(24);
-    buttonContainer->setFixedWidth(50);
+void ClipboardItemWidget::setupContextMenu() {
+    ui.contextMenu = new QMenu(this);
 
-    // 使用水平布局来排列按钮
-    buttonLayout = new QHBoxLayout(buttonContainer);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(0);  // 按钮之间的间距
+    auto addAction = [this](const QString& iconPath, const QString& text, auto slot) {
+        QAction* action = new QAction(QIcon(iconPath), text, this);
+        connect(action, &QAction::triggered, this, slot);
+        ui.contextMenu->addAction(action);
+        return action;
+    };
 
-    // 默认隐藏按钮容器
-    buttonContainer->hide();
+    addAction(":/resources/resources/save_black.svg", tr("Save"), &ClipboardItemWidget::handleSaveAction);
+    addAction(":/resources/resources/add_black.svg", tr("Add to"), &ClipboardItemWidget::handleFavoriteAction);
+    addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
+    
+    ui.contextMenu->addSeparator();
+    
+    addAction(":/resources/resources/delete.svg", tr("Delete"), &ClipboardItemWidget::handleDeleteAction);
 }
 
-QToolButton * ClipboardItemWidget::createActionButton(const QString &iconPath, const QString &tooltip) {
-    QToolButton* button = new QToolButton;
+void ClipboardItemWidget::initializeEffects() {
+    auto* shadowEffect = new QGraphicsDropShadowEffect(this);
+    shadowEffect->setOffset(0, 2);
+    shadowEffect->setColor(QColor(0, 0, 0, 80));
+    shadowEffect->setBlurRadius(10);
+    ui.innerWidget->setGraphicsEffect(shadowEffect);
+}
+
+QToolButton* ClipboardItemWidget::createActionButton(const QString& iconPath, const QString& tooltip) const {
+    auto* button = new QToolButton;
     button->setIcon(QIcon(iconPath));
     button->setIconSize(QSize(16, 16));
     button->setFixedSize(16, 16);
@@ -118,110 +114,101 @@ QToolButton * ClipboardItemWidget::createActionButton(const QString &iconPath, c
     )");
     button->setCursor(Qt::PointingHandCursor);
     button->setToolTip(tooltip);
-
     return button;
 }
 
-void ClipboardItemWidget::setupContextMenu() {
-    contextMenu = new QMenu(this);
-
-    // 添加菜单项
-    QAction* saveAction = new QAction(QIcon(":/resources/resources/save_black.svg"), tr("Save"), this);
-    QAction* addToAction = new QAction(QIcon(":/resources/resources/add_black.svg"), tr("Add to"), this);
-    QAction* deleteAction = new QAction(QIcon(":/resources/resources/delete.svg"), tr("Delete"), this);
-
-    contextMenu->addAction(saveAction);
-    contextMenu->addAction(addToAction);
-    contextMenu->addSeparator();
-    contextMenu->addAction(deleteAction);
-
-    // 连接信号槽
-    connect(saveAction, &QAction::triggered, this, &ClipboardItemWidget::onSaveTriggered);
-    connect(addToAction, &QAction::triggered, this, &ClipboardItemWidget::onFavoriteClicked);
-    connect(deleteAction, &QAction::triggered, this, &ClipboardItemWidget::onDeleteClicked);
+void ClipboardItemWidget::showContextMenu(const QPoint& pos) {
+    ui.contextMenu->exec(mapToGlobal(pos));
 }
 
-void ClipboardItemWidget::showContextMenu(const QPoint &pos) {
-    // 在点击位置显示菜单
-    contextMenu->exec(mapToGlobal(pos));
-}
-
-void ClipboardItemWidget::onFavoriteClicked() {
+void ClipboardItemWidget::handleFavoriteAction() {
     isFavorite = !isFavorite;
-
-    // 更新按钮图标
-    favoriteButton->setIcon(QIcon(isFavorite ?
-        ":/resources/resources/star_filled.svg" :
-        ":/resources/resources/star_outline.svg"));
-    favoriteButton->setToolTip(isFavorite ? tr("Remove from favorites") : tr("Add to favorites"));
-
+    updateFavoriteButton();
     emit favoriteChanged(isFavorite);
 }
 
-void ClipboardItemWidget::onDeleteClicked() {
+void ClipboardItemWidget::handleDeleteAction() {
     emit deleteRequested();
 }
 
-void ClipboardItemWidget::onSaveTriggered() {
-    emit saveRequested(this->item);
+void ClipboardItemWidget::handleSaveAction() {
+    emit saveRequested(currentItem);
 }
 
-void ClipboardItemWidget::mousePressEvent(QMouseEvent *event) {
-    if (event->button() == Qt::LeftButton) {
-        Q_EMIT clicked();
-    }
+void ClipboardItemWidget::updateFavoriteButton() {
+    ui.actions.favoriteBtn->setIcon(QIcon(isFavorite ?
+        ":/resources/resources/star_filled.svg" :
+        ":/resources/resources/star_outline.svg"));
+    ui.actions.favoriteBtn->setToolTip(isFavorite ? 
+        tr("Remove from favorites") : 
+        tr("Add to favorites"));
+}
 
+void ClipboardItemWidget::showItem(const ClipboardItem& item) {
+    currentItem = item;
+    ui.innerWidget->showItem(currentItem);
+}
+
+void ClipboardItemWidget::setSelected(bool selected) {
+    ui.innerWidget->showBorder(selected);
+}
+
+const ClipboardItem& ClipboardItemWidget::getItem() const {
+    return currentItem;
+}
+
+void ClipboardItemWidget::setShortcutInfo(int num) {
+    ui.innerWidget->setShortkeyInfo(num);
+}
+
+void ClipboardItemWidget::clearShortcutInfo() {
+    ui.innerWidget->clearShortkeyInfo();
+}
+
+// Event handlers
+void ClipboardItemWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        emit clicked();
+    }
     QWidget::mousePressEvent(event);
 }
 
-void ClipboardItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
+void ClipboardItemWidget::mouseDoubleClickEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        Q_EMIT doubleClicked();
+        emit doubleClicked();
     }
-
     QWidget::mouseDoubleClickEvent(event);
 }
 
-void ClipboardItemWidget::contextMenuEvent(QContextMenuEvent *event) {
+void ClipboardItemWidget::contextMenuEvent(QContextMenuEvent* event) {
     showContextMenu(event->pos());
 }
 
-void ClipboardItemWidget::enterEvent(QEnterEvent *event) {
+void ClipboardItemWidget::enterEvent(QEnterEvent* event) {
     QWidget::enterEvent(event);
 
-    // 计算按钮位置 (顶部居中)
-    int x = (width() - buttonContainer->width()) / 2;
-    buttonContainer->move(x, 0);  // 让按钮垂直方向上半隐藏
-    buttonContainer->show();
+    // Position buttons at the top center
+    const int x = (width() - ui.actions.container->width()) / 2;
+    ui.actions.container->move(x, 0);
+    ui.actions.container->show();
 
-    // 使用渐变动画显示按钮
-    QPropertyAnimation *animation = new QPropertyAnimation(buttonContainer, "opacity");
+    // Fade in animation
+    auto* animation = new QPropertyAnimation(ui.actions.container, "opacity", this);
     animation->setDuration(50);
     animation->setStartValue(0.0);
     animation->setEndValue(1.0);
     animation->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
-void ClipboardItemWidget::leaveEvent(QEvent *event) {
+void ClipboardItemWidget::leaveEvent(QEvent* event) {
     QWidget::leaveEvent(event);
 
-    // 使用渐变动画隐藏按钮
-    QPropertyAnimation *animation = new QPropertyAnimation(buttonContainer, "opacity");
+    // Fade out animation
+    auto* animation = new QPropertyAnimation(ui.actions.container, "opacity", this);
     animation->setDuration(50);
     animation->setStartValue(1.0);
     animation->setEndValue(0.0);
-    connect(animation, &QPropertyAnimation::finished, buttonContainer, &QToolButton::hide);
+    connect(animation, &QPropertyAnimation::finished, 
+            ui.actions.container, &QWidget::hide);
     animation->start(QAbstractAnimation::DeleteWhenStopped);
-}
-
-const ClipboardItem &ClipboardItemWidget::getItem() const {
-    return item;
-}
-
-void ClipboardItemWidget::setShortcutInfo(int num) {
-    this->innerShadowedWidget->setShortkeyInfo(num);
-}
-
-void ClipboardItemWidget::clearShortcutInfo() {
-    this->innerShadowedWidget->clearShortkeyInfo();
 }

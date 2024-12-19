@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
             [showWidget](const QString &) { showWidget(); });
 
         // Handle application state changes
-        QObject::connect(qApp, &QGuiApplication::applicationStateChanged, 
+        QObject::connect(qApp, &QGuiApplication::applicationStateChanged,
             [&widget](Qt::ApplicationState state) {
                 if (state == Qt::ApplicationInactive) {
                     widget.setVisibleWithAnnimation(false);

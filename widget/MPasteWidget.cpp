@@ -56,8 +56,18 @@ void MPasteWidget::initializeWidget() {
 }
 
 void MPasteWidget::initStyle() {
+    // 窗口属性设置
+    setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint);
+    setFocusPolicy(Qt::StrongFocus);
+
+#ifdef Q_OS_WIN
+    setAttribute(Qt::WA_InputMethodEnabled, false);
+    setAttribute(Qt::WA_KeyCompression, false);
+#endif
+
     // 设置窗口透明
     setAttribute(Qt::WA_TranslucentBackground);
+    // setAttribute(Qt::WA_NoSystemBackground, false);
     ui_.ui->itemsWidget->setAttribute(Qt::WA_TranslucentBackground);
 
 #ifdef Q_OS_WIN
@@ -107,15 +117,6 @@ void MPasteWidget::initStyle() {
 }
 
 void MPasteWidget::initUI() {
-    // 窗口属性设置
-    setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint);
-    setFocusPolicy(Qt::StrongFocus);
-
-#ifdef Q_OS_WIN
-    setAttribute(Qt::WA_InputMethodEnabled, false);
-    setAttribute(Qt::WA_KeyCompression, false);
-#endif
-
     // 初始化搜索动画
     initSearchAnimations();
 
