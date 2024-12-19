@@ -27,7 +27,7 @@ public:
     void loadFromSaveDir();
     QScrollBar* horizontalScrollbar();
     void setAllItemVisible();
-    void selectedByShortcut(int visibleOrder);
+    const ClipboardItem& selectedByShortcut(int visibleOrder);
     void selectedByEnter();
     void focusMoveLeft();
     void focusMoveRight();
@@ -38,7 +38,7 @@ public:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
-    void doubleClicked();
+    void doubleClicked(const ClipboardItem &item);
     void itemCountChanged(int itemCount);
 
 private slots:

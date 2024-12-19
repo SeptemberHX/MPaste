@@ -150,7 +150,7 @@ if(WIN32)
     set(MINGW_DIR "C:/Users/tianj/AppData/Local/Programs/CLion/bin/mingw/bin")
 
     # 创建部署目录
-    set(DEPLOY_DIR "${CMAKE_BINARY_DIR}/${PROJECT_NAME}")
+    set(DEPLOY_DIR "${CMAKE_BINARY_DIR}/")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             # 创建部署目录
             COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}"

@@ -205,7 +205,10 @@ void MPasteWidget::setupConnections() {
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardUpdated,
             this, &MPasteWidget::clipboardUpdated);
     connect(ui_.clipboardWidget, &ScrollItemsWidget::doubleClicked,
-            this, &MPasteWidget::hideAndPaste);
+            this, [this](const ClipboardItem &item) {
+                this->setClipboard(item);
+                this->hideAndPaste();
+            });
     connect(ui_.clipboardWidget, &ScrollItemsWidget::itemCountChanged,
             this, &MPasteWidget::updateItemCount);
 
@@ -282,6 +285,7 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
     // 使用延时重新连接监视器，避免触发重复提示音
     QTimer::singleShot(200, this, [this]() {
         clipboard_.monitor->connectMonitor();
+        delete clipboard_.mimeData;
     });
 }
 
@@ -404,7 +408,8 @@ bool MPasteWidget::handleAltNumShortcut(QKeyEvent *event) {
 
         if (keyOrder >= 0 && keyOrder <= 9) {
             qDebug() << "Alt+" << keyOrder << " detected";
-            currItemsWidget()->selectedByShortcut(keyOrder);
+            const ClipboardItem& selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
+            this->setClipboard(selectedItem);
             hideAndPaste();
             currItemsWidget()->cleanShortCutInfo();
             return true;

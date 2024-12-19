@@ -150,7 +150,7 @@ void ScrollItemsWidget::itemClicked() {
 void ScrollItemsWidget::itemDoubleClicked() {
     auto *widget = dynamic_cast<ClipboardItemWidget*>(sender());
     this->moveItemToFirst(widget);
-    Q_EMIT doubleClicked();
+    Q_EMIT doubleClicked(widget->getItem());
 }
 
 void ScrollItemsWidget::filterByKeyword(const QString &keyword) {
@@ -226,20 +226,21 @@ void ScrollItemsWidget::setAllItemVisible() {
     }
 }
 
-void ScrollItemsWidget::selectedByShortcut(int keyIndex) {
+const ClipboardItem& ScrollItemsWidget::selectedByShortcut(int keyIndex) {
     if (keyIndex >= 0 && keyIndex < this->layout->count() - 1) {
         for (int i = 0, c = 0; i < this->layout->count() - 1; ++i) {
             auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
             if (widget->isVisible()) {
                 if (c == keyIndex) {
                     this->moveItemToFirst(widget);
-                    break;
+                    return widget->getItem();
                 } else {
                     ++c;
                 }
             }
         }
     }
+    return this->currItemWidget->getItem();
 }
 
 QString ScrollItemsWidget::saveDir() {

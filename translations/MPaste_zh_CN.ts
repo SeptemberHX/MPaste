@@ -117,6 +117,7 @@
     <message>
         <location filename="../widget/MPasteWidget.ui" line="233"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="211"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="211"/>
         <source>100</source>
         <translation type="unfinished"></translation>
     </message>
