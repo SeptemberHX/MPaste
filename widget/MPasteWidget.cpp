@@ -204,8 +204,6 @@ void MPasteWidget::setupConnections() {
     // 剪贴板连接
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardUpdated,
             this, &MPasteWidget::clipboardUpdated);
-    connect(ui_.clipboardWidget, &ScrollItemsWidget::updateClipboard,
-            this, &MPasteWidget::setClipboard);
     connect(ui_.clipboardWidget, &ScrollItemsWidget::doubleClicked,
             this, &MPasteWidget::hideAndPaste);
     connect(ui_.clipboardWidget, &ScrollItemsWidget::itemCountChanged,

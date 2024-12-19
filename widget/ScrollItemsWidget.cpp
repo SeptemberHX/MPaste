@@ -127,8 +127,6 @@ void ScrollItemsWidget::moveItemToFirst(ClipboardItemWidget *widget) {
     this->layout->insertWidget(0, widget);
     this->setSelectedItem(widget);
     widget->showItem(item);
-
-    Q_EMIT updateClipboard(item);
 }
 
 void ScrollItemsWidget::saveItem(const ClipboardItem &item) {
