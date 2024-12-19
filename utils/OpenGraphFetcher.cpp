@@ -11,13 +11,18 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
     , targetUrl(url)
 {
     this->replaceHttpHosts << "www.baidu.com";
-    
+
+    // 更新 favicon 正则表达式，使其更通用
+    this->faviconReg1.setPattern(R"(<link[^>]*(?:rel=["'](?:[^"']*\s)?(?:icon|shortcut)(?:\s[^"']*)?["'][^>]*href=["']([^"']+)["']|href=["']([^"']+)["'][^>]*rel=["'](?:[^"']*\s)?(?:icon|shortcut)(?:\s[^"']*)?["'])[^>]*>)");
+
+    // 可以再添加一个专门匹配 type="image/x-icon" 的正则
+    this->faviconReg2.setPattern(R"(<link[^>]*type=["']image/(?:x-icon|vnd\.microsoft\.icon)["'][^>]*href=["']([^"']+)["'][^>]*>)");
+
     // 更新正则表达式以适应Qt6的QRegularExpression语法
     this->ogImageReg.setPattern("<meta .*?property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*?)\"[ ]*/?>");
     this->ogTitleReg.setPattern("<meta .*?property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*?)\"[ ]*/?>");
     this->titleReg.setPattern("<title.*?>(.*?)</title>");
-    this->faviconReg1.setPattern("<link[ ]*href=\"(.*?)\".*?rel=\"(?:short )?icon\".*?/?>");
-    this->faviconReg2.setPattern("<link[ ]*rel=\"(?:short )?icon\".*?href=\"(.*?)\".*?/?>");
+
 
     // QRegularExpression默认就是最小匹配（非贪婪模式），使用 *? 代替 *
     
@@ -71,12 +76,17 @@ if (reply->error() != QNetworkReply::NoError) {
             QDomNodeList linkNodes = doc.elementsByTagName("link");
             for (int i = 0; i < linkNodes.size(); ++i) {
                 QDomElement link = linkNodes.at(i).toElement();
-                if (link.attribute("rel").contains("icon")) {
-                    QString href = link.attribute("href");
-                    if (!href.isEmpty() && !href.startsWith("$")) {
-                        pendingImageUrls << href;
+                QString rel = link.attribute("rel").toLower();
+                QString type = link.attribute("type").toLower();
+                QString href = link.attribute("href");
+
+                // 检查所有可能的 favicon 相关属性
+                if ((rel.contains("icon") ||
+                     type == "image/x-icon" ||
+                     type == "image/vnd.microsoft.icon") &&
+                    !href.isEmpty() && !href.startsWith("$")) {
+                    pendingImageUrls << href;
                     }
-                }
             }
 
             // 处理标题...
@@ -86,19 +96,26 @@ if (reply->error() != QNetworkReply::NoError) {
             }
         } else {
             // 使用正则表达式提取信息
-            QRegularExpressionMatch match = this->ogImageReg.match(body);
-            if (match.hasMatch()) {
-                pendingImageUrls << match.captured(1);
-            }
+            auto processFaviconMatch = [this](const QRegularExpressionMatch& match) {
+                QString url = match.captured(1);
+                if (!url.isEmpty()) {
+                    pendingImageUrls << url;
+                }
+                // 检查第二个捕获组（针对 faviconReg1 的第二种模式）
+                url = match.captured(2);
+                if (!url.isEmpty()) {
+                    pendingImageUrls << url;
+                }
+            };
 
-            match = this->faviconReg1.match(body);
+            QRegularExpressionMatch match = this->faviconReg1.match(body);
             if (match.hasMatch()) {
-                pendingImageUrls << match.captured(1);
+                processFaviconMatch(match);
             }
 
             match = this->faviconReg2.match(body);
             if (match.hasMatch()) {
-                pendingImageUrls << match.captured(1);
+                processFaviconMatch(match);
             }
 
             // 处理标题...
