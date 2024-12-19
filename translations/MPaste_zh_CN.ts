@@ -5,7 +5,7 @@
     <name>ClipboardItemInnerWidget</name>
     <message>
         <location filename="../widget/ClipboardItemInnerWidget.cpp" line="176"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="199"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="216"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
@@ -15,42 +15,42 @@
         <translation>富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="184"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="201"/>
         <source>Pixels</source>
         <translation>像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="185"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="202"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="201"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="218"/>
         <source>Plain Text</source>
         <translation>纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="215"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="232"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="239"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="256"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="245"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="262"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="252"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="269"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="311"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="328"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>

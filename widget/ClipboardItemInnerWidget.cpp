@@ -180,7 +180,24 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
 void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
     this->initImageLabel();
     this->imageLabel->show();
-    this->imageLabel->setPixmap(pixmap.scaled(275, 234, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    // 获取设备像素比
+    qreal devicePixelRatio = this->imageLabel->devicePixelRatio();
+    // 根据 DPI 调整目标尺寸
+    int targetWidth = 275 * devicePixelRatio;
+    int targetHeight = 234 * devicePixelRatio;
+
+    // 缩放时考虑设备像素比
+    QPixmap scaled = pixmap.scaled(
+        targetWidth,
+        targetHeight,
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation
+    );
+    // 设置缩放后图片的设备像素比
+    scaled.setDevicePixelRatio(devicePixelRatio);
+
+    this->imageLabel->setPixmap(scaled);
     ui->countLabel->setText(QString("%1 x %2 ").arg(pixmap.height()).arg(pixmap.width()) + tr("Pixels"));
     ui->typeLabel->setText(tr("Image"));
 }
