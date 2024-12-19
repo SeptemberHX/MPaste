@@ -23,25 +23,33 @@ FileThumbWidget::~FileThumbWidget()
 }
 
 void FileThumbWidget::showUrl(const QUrl &fileUrl) {
+    // 获取一次 DPI 比例和目标尺寸
+    const qreal dpr = ui->iconLabel->devicePixelRatioF();
+    const QSize targetSize = ui->iconLabel->size() * dpr;
+
+    QPixmap pixmap;
+
     QFileInfo info(fileUrl.toLocalFile());
     if (info.exists()) {
         QMimeType mime = db.mimeTypeForFile(info);
         if (mime.name().startsWith("image")) {
-            QPixmap picFile(info.absoluteFilePath());
-            picFile.setDevicePixelRatio(this->devicePixelRatioF());
-            ui->iconLabel->setPixmap(picFile.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            pixmap = QPixmap(info.absoluteFilePath());
         } else {
             QFileIconProvider provider;
             QIcon icon = provider.icon(info);
-            QPixmap pixmap = icon.pixmap(ui->iconLabel->size() * this->devicePixelRatioF());
-            pixmap.setDevicePixelRatio(this->devicePixelRatioF());
-            ui->iconLabel->setPixmap(pixmap.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            pixmap = icon.pixmap(targetSize);
         }
     } else {
-        QPixmap pixmap(":/resources/resources/broken.svg");
-        pixmap.setDevicePixelRatio(this->devicePixelRatioF());
-        ui->iconLabel->setPixmap(pixmap.scaled(ui->iconLabel->size() * this->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        pixmap = QPixmap(":/resources/resources/broken.svg");
     }
+
+    // 统一处理 DPI 缩放
+    QPixmap scaledPixmap = pixmap.scaled(targetSize,
+                                        Qt::KeepAspectRatio,
+                                        Qt::SmoothTransformation);
+    scaledPixmap.setDevicePixelRatio(dpr);
+    ui->iconLabel->setPixmap(scaledPixmap);
+
     this->setElidedText(fileUrl.toLocalFile());
 }
 
