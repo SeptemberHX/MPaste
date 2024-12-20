@@ -56,7 +56,6 @@ void MPasteWidget::initializeWidget() {
 }
 
 void MPasteWidget::initStyle() {
-    // 窗口属性设置
     setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint);
     setFocusPolicy(Qt::StrongFocus);
 
@@ -65,52 +64,32 @@ void MPasteWidget::initStyle() {
     setAttribute(Qt::WA_KeyCompression, false);
 #endif
 
-    // 设置窗口透明
     setAttribute(Qt::WA_TranslucentBackground);
-    // setAttribute(Qt::WA_NoSystemBackground, false);
+    setAttribute(Qt::WA_NoSystemBackground, false);
     ui_.ui->itemsWidget->setAttribute(Qt::WA_TranslucentBackground);
-
-#ifdef Q_OS_WIN
-    // Windows 平台使用模糊效果
-    HWND hwnd = (HWND)this->winId();
-
-    // 尝试使用 Windows 11 的新 API
-    const DWORD DWMWA_SYSTEMBACKDROP_TYPE = 38;
-    const DWORD DWMSBT_MAINWINDOW = 2;
-
-    HMODULE hDwmApi = LoadLibraryA("dwmapi.dll");
-    if (hDwmApi) {
-        typedef HRESULT (WINAPI *DwmSetWindowAttribute_t)(HWND, DWORD, LPCVOID, DWORD);
-        DwmSetWindowAttribute_t dwmSetWindowAttribute =
-            (DwmSetWindowAttribute_t)GetProcAddress(hDwmApi, "DwmSetWindowAttribute");
-
-        if (dwmSetWindowAttribute) {
-            DWORD value = DWMSBT_MAINWINDOW;
-            HRESULT hr = dwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &value, sizeof(value));
-
-            if (FAILED(hr)) {
-                const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-                BOOL value = TRUE;
-                dwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
-
-                DWM_BLURBEHIND bb = {0};
-                bb.dwFlags = DWM_BB_ENABLE;
-                bb.fEnable = TRUE;
-                bb.hRgnBlur = NULL;
-                DwmEnableBlurBehindWindow(hwnd, &bb);
-            }
-        }
-
-        FreeLibrary(hDwmApi);
-    }
-#endif
+    ui_.ui->itemsWidget->setAttribute(Qt::WA_NoSystemBackground, false);
 
     setObjectName("pasteWidget");
     setStyleSheet(R"(
         QWidget#pasteWidget {
-            background-color: rgba(230, 229, 228, 180);
+            background: qlineargradient(
+                x1: 0, y1: 0,
+                x2: 1, y2: 1,
+                stop: 0 rgba(235, 246, 249, 255),    /* 浅蓝白色 */
+                stop: 0.5 rgba(242, 245, 236, 255),  /* 浅绿白色 */
+                stop: 1 rgba(235, 246, 249, 255)     /* 浅蓝白色 */
+            );
+            border: 1px solid black;
+            border-radius: 8px;  /* 添加圆角 */
         }
         #scrollAreaWidgetContents {
+            background-color: transparent;
+        }
+        #itemsWidget {
+            background-color: transparent;
+            border: none;
+        }
+        QScrollArea {
             background-color: transparent;
         }
     )");

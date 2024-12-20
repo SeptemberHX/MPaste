@@ -40,7 +40,7 @@ private:
     void showHtml(const QString &html);
     void showImage(const QPixmap &pixmap);
     void showText(const QString &text, const ClipboardItem &item);
-    void showColor(const QColor &color);
+    void showColor(const QColor &color, const QString &rawStr);
     void showUrls(const QList<QUrl> &urls, const ClipboardItem &item);
     void showWebLink(const QUrl &url, const ClipboardItem &item);
     void showFile(const QUrl &url);

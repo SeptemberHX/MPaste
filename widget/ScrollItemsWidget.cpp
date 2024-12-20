@@ -15,17 +15,6 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, QWidget *parent) :
 {
     ui->setupUi(this);
 
-    // Enable OpenGL hardware acceleration
-    setAttribute(Qt::WA_TranslucentBackground);
-    setAttribute(Qt::WA_NoSystemBackground);
-
-    // Enable hardware acceleration for the scroll area
-    ui->scrollArea->viewport()->setAttribute(Qt::WA_TranslucentBackground);
-    ui->scrollArea->viewport()->setAttribute(Qt::WA_NoSystemBackground);
-
-    ui->scrollAreaWidgetContents->setAttribute(Qt::WA_TranslucentBackground);
-    ui->scrollAreaWidgetContents->setAttribute(Qt::WA_NoSystemBackground);
-
     // Enable smooth scrolling using QScroller
     QScroller::grabGesture(ui->scrollArea->viewport(), QScroller::TouchGesture);
     QScrollerProperties sp;

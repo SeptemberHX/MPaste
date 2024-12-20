@@ -6,6 +6,8 @@
     <message>
         <location filename="../widget/ClipboardItemInnerWidget.cpp" line="176"/>
         <location filename="../widget/ClipboardItemInnerWidget.cpp" line="216"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="244"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="258"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
@@ -35,22 +37,22 @@
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="256"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="257"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="262"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="264"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="269"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="271"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="328"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="330"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
@@ -106,12 +108,12 @@
         <translation type="vanished">设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="185"/>
+        <location filename="../widget/MPasteWidget.cpp" line="164"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="201"/>
+        <location filename="../widget/MPasteWidget.cpp" line="180"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>

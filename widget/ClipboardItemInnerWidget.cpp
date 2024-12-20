@@ -92,7 +92,7 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
     this->setIcon(item.getIcon());
 
     if (item.getColor().isValid()) {  // actually I haven't meet this situation yet :p
-        this->showColor(item.getColor());
+        this->showColor(item.getColor(), item.getText());
     } else if (!item.getImage().isNull()) {
         this->showImage(item.getImage());
     } else if (!item.getHtml().isEmpty() && !QColor::isValidColor(item.getText().trimmed())) {
@@ -206,7 +206,7 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
     QString trimStr = text.trimmed();
     QUrl url(trimStr);
     if (QColor::isValidColor(trimStr)) {
-        this->showColor(QColor(trimStr));
+        this->showColor(QColor(trimStr), trimStr);
     } else if (url.isValid() && (trimStr.startsWith("http://") || trimStr.startsWith("https://"))) {
         this->showWebLink(url, item);
     } else {
@@ -218,7 +218,7 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
     ui->typeLabel->setText(tr("Plain Text"));
 }
 
-void ClipboardItemInnerWidget::showColor(const QColor &color) {
+void ClipboardItemInnerWidget::showColor(const QColor &color, const QString &rawStr) {
     this->initImageLabel();
 
     this->imageLabel->show();
@@ -227,7 +227,7 @@ void ClipboardItemInnerWidget::showColor(const QColor &color) {
     this->imageLabel->setStyleSheet(QString("QLabel { border-radius: 0px; background-color: %1; color: %2;}").arg(color.name(), fontColor.name()));
     ui->infoWidget->setStyleSheet(QString("QWidget {background-color: %1;}").arg(color.name()));
     ui->countLabel->setText("");
-    this->imageLabel->setText(color.name().toUpper());
+    this->imageLabel->setText(rawStr);
     this->imageLabel->setAlignment(Qt::AlignCenter);
     ui->typeLabel->setText(tr("Color"));
 }
@@ -241,6 +241,7 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
             if (urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
                 this->showWebLink(urls[0], item);
             }
+            ui->countLabel->setText(QString("%1 ").arg(urlStr.size()) + tr("Characters"));
         }
     } else if (urls.size() > 1 && urls[0].isLocalFile()) {
         this->showFiles(urls);
@@ -254,6 +255,7 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
         }
         this->textBrowser->setText(str);
         ui->typeLabel->setText(tr("Links"));
+        ui->countLabel->setText(QString("%1 ").arg(str.size()) + tr("Characters"));
     }
 }
 
@@ -275,14 +277,14 @@ void ClipboardItemInnerWidget::initTextBrowser() {
     if (this->textBrowser != nullptr) return;
 
     this->textBrowser = new MTextBrowser(ui->bodyWidget);
-    this->textBrowser->setStyleSheet("QWidget { border-radius: 0px; }");
+    this->textBrowser->setStyleSheet("QTextBrowser { border-radius: 0px; padding: 10px; }");
     this->textBrowser->setFrameStyle(QFrame::NoFrame);
     this->textBrowser->setReadOnly(true);
     this->textBrowser->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->textBrowser->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->textBrowser->setContentsMargins(0, 0, 0, 0);
+    this->textBrowser->document()->setDocumentMargin(0);
     this->textBrowser->setWordWrapMode(QTextOption::WordWrap);
-    this->textBrowser->document()->setDocumentMargin(15);
     this->textBrowser->setAttribute(Qt::WA_TranslucentBackground);
     this->textBrowser->setDisabled(true);
     this->mLayout->addWidget(this->textBrowser);
