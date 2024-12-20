@@ -6,8 +6,6 @@ QWidget#pasteWidget {
         stop: 0.5 rgba(242, 245, 236, 255),  /* 浅绿白色 */
         stop: 1 rgba(235, 246, 249, 255)     /* 浅蓝白色 */
     );
-    border: 1px solid black;
-    border-radius: 8px;  /* 添加圆角 */
 }
 #scrollAreaWidgetContents {
     background-color: transparent;
@@ -20,6 +18,9 @@ QScrollArea {
     background-color: transparent;
 }
 
+#topLine {
+    border: 2px solid rgba(0, 0, 0, 20);
+}
 
 #firstButton, #lastButton, #searchButton, #menuButton {
     border-radius: 10px;

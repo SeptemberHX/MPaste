@@ -122,15 +122,15 @@
         <translation type="vanished">MPaste 已启动。</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.ui" line="172"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="166"/>
+        <location filename="../widget/MPasteWidget.ui" line="179"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="175"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="166"/>
         <source>Clipboard</source>
         <translation>剪贴板</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.ui" line="197"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="167"/>
+        <location filename="../widget/MPasteWidget.ui" line="204"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="176"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="167"/>
         <source>100</source>
         <translation type="unfinished"></translation>
