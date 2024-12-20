@@ -149,23 +149,41 @@ if(WIN32)
     # 使用 CLion 的 MinGW 目录
     set(MINGW_DIR "C:/Users/tianj/AppData/Local/Programs/CLion/bin/mingw/bin")
 
-    # 创建部署目录
-    set(DEPLOY_DIR "${CMAKE_BINARY_DIR}/")
+
+    # 两个部署目录
+    set(DEPLOY_DIR "${CMAKE_BINARY_DIR}")
+    set(PACKAGE_DIR "${CMAKE_BINARY_DIR}/package/${PROJECT_NAME}")
+
+    # 同时部署到两个目录
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            # 创建部署目录
+            # 创建目录
             COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}"
-            # 复制主程序
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_DIR}"
+
+            # 复制主程序到两个目录
             COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${PROJECT_NAME}>" "${DEPLOY_DIR}"
-            # 复制翻译文件
+            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${PROJECT_NAME}>" "${PACKAGE_DIR}"
+
+            # 创建并复制翻译文件到两个目录
             COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}/translations"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_DIR}/translations"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/translations" "${DEPLOY_DIR}/translations"
-            # 复制 MinGW 运行时
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/translations" "${PACKAGE_DIR}/translations"
+
+            # 复制 MinGW 运行时到两个目录
             COMMAND ${CMAKE_COMMAND} -E copy
             "${MINGW_DIR}/libgcc_s_seh-1.dll"
             "${MINGW_DIR}/libstdc++-6.dll"
             "${MINGW_DIR}/libwinpthread-1.dll"
             "${DEPLOY_DIR}/"
-            # 运行 windeployqt
+
+            COMMAND ${CMAKE_COMMAND} -E copy
+            "${MINGW_DIR}/libgcc_s_seh-1.dll"
+            "${MINGW_DIR}/libstdc++-6.dll"
+            "${MINGW_DIR}/libwinpthread-1.dll"
+            "${PACKAGE_DIR}/"
+
+            # 运行 windeployqt 部署 Qt 依赖到两个目录
             COMMAND "${WINDEPLOYQT_EXECUTABLE}"
             --no-translations
             --no-system-d3d-compiler
@@ -173,13 +191,22 @@ if(WIN32)
             --no-opengl-sw
             --dir "${DEPLOY_DIR}"
             "${DEPLOY_DIR}/${PROJECT_NAME}.exe"
-            COMMENT "Deploying Qt dependencies..."
+
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+            --no-translations
+            --no-system-d3d-compiler
+            --no-compiler-runtime
+            --no-opengl-sw
+            --dir "${PACKAGE_DIR}"
+            "${PACKAGE_DIR}/${PROJECT_NAME}.exe"
+
+            COMMENT "Deploying to both directories..."
     )
 
-    # 添加打包命令
+    # 打包命令（直接打包 package 目录）
     add_custom_target(package
-            COMMAND ${CMAKE_COMMAND} -E tar "cfv" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-${VERSION}-win64.zip" --format=zip "${DEPLOY_DIR}"
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMAND ${CMAKE_COMMAND} -E tar "cfv" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-${VERSION}-win64.zip" --format=zip "${PROJECT_NAME}"
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/package
             COMMENT "Creating zip package..."
             DEPENDS ${PROJECT_NAME}
     )
