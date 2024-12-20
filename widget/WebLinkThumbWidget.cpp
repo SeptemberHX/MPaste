@@ -110,4 +110,5 @@ void WebLinkThumbWidget::setElidedText(QLabel *label, const QString &text) {
 void WebLinkThumbWidget::setDefaultStyle() {
     ui->titleLabel->setStyleSheet(DEFAULT_STYLE);
     ui->urlLabel->setStyleSheet(DEFAULT_STYLE);
+    ui->imageLabel->setMargin(10);
 }

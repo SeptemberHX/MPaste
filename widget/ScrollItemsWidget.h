@@ -32,8 +32,8 @@ public:
     void focusMoveLeft();
     void focusMoveRight();
 
-    void moveToFirst();
-    void moveToLast();
+    void scrollToFirst();
+    void scrollToLast();
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 

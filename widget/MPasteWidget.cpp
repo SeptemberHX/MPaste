@@ -27,6 +27,7 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
 {
     ui_.ui = new Ui::MPasteWidget;
     ui_.ui->setupUi(this);
+    clipboard_.copiedWhenHide = false;
     initializeWidget();
 }
 
@@ -68,31 +69,16 @@ void MPasteWidget::initStyle() {
     setAttribute(Qt::WA_NoSystemBackground, false);
     ui_.ui->itemsWidget->setAttribute(Qt::WA_TranslucentBackground);
     ui_.ui->itemsWidget->setAttribute(Qt::WA_NoSystemBackground, false);
-
     setObjectName("pasteWidget");
-    setStyleSheet(R"(
-        QWidget#pasteWidget {
-            background: qlineargradient(
-                x1: 0, y1: 0,
-                x2: 1, y2: 1,
-                stop: 0 rgba(235, 246, 249, 255),    /* 浅蓝白色 */
-                stop: 0.5 rgba(242, 245, 236, 255),  /* 浅绿白色 */
-                stop: 1 rgba(235, 246, 249, 255)     /* 浅蓝白色 */
-            );
-            border: 1px solid black;
-            border-radius: 8px;  /* 添加圆角 */
-        }
-        #scrollAreaWidgetContents {
-            background-color: transparent;
-        }
-        #itemsWidget {
-            background-color: transparent;
-            border: none;
-        }
-        QScrollArea {
-            background-color: transparent;
-        }
-    )");
+
+    QFile styleFile(":/resources/resources/style/defaultStyle.qss");
+    if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
+        QString style = QLatin1String(styleFile.readAll());
+        setStyleSheet(style);
+        styleFile.close();
+    } else {
+        qWarning() << "Failed to load style sheet:" << styleFile.errorString();
+    }
 }
 
 void MPasteWidget::initUI() {
@@ -207,10 +193,10 @@ void MPasteWidget::setupConnections() {
 
     // Home & End 按钮连接
     connect(ui_.ui->firstButton, &QPushButton::clicked, this, [this]() {
-        this->currItemsWidget()->moveToFirst();
+        this->currItemsWidget()->scrollToFirst();
     });
     connect(ui_.ui->lastButton, &QPushButton::clicked, this, [this]() {
-        this->currItemsWidget()->moveToLast();
+        this->currItemsWidget()->scrollToLast();
     });
 
     // 系统托盘连接
@@ -226,6 +212,7 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
     if (!clipboard_.isPasting) {
         ui_.clipboardWidget->addAndSaveItem(nItem);
         misc_.player->play();
+        clipboard_.copiedWhenHide = true;
     }
 }
 
@@ -348,9 +335,9 @@ void MPasteWidget::handleNavigationKeys(QKeyEvent *event) {
 void MPasteWidget::handleHomeEndKeys(QKeyEvent *event) {
     if (!ui_.ui->searchEdit->isVisible()) {
         if (event->key() == Qt::Key_Home) {
-            currItemsWidget()->moveToFirst();
+            currItemsWidget()->scrollToFirst();
         } else {
-            currItemsWidget()->moveToLast();
+            currItemsWidget()->scrollToLast();
         }
     }
 }
@@ -504,6 +491,10 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible) {
         setWindowOpacity(0);
         show();
+        if (clipboard_.copiedWhenHide) {
+            ui_.clipboardWidget->scrollToFirst();
+            clipboard_.copiedWhenHide = false;
+        }
 
         QPropertyAnimation* animation = new QPropertyAnimation(this, "windowOpacity", this);
         animation->setDuration(200);

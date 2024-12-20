@@ -91,6 +91,7 @@ private:
         ClipboardMonitor *monitor;
         QMimeData *mimeData;
         bool isPasting;
+        bool copiedWhenHide;
     } clipboard_;
 
     // 其他组件

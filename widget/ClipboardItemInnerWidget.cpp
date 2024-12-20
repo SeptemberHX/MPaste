@@ -180,6 +180,7 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
 void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
     this->initImageLabel();
     this->imageLabel->show();
+    this->imageLabel->setMargin(10);
 
     // 获取设备像素比
     qreal devicePixelRatio = this->imageLabel->devicePixelRatio();

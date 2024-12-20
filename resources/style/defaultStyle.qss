@@ -1,0 +1,99 @@
+QWidget#pasteWidget {
+    background: qlineargradient(
+        x1: 0, y1: 0,
+        x2: 1, y2: 1,
+        stop: 0 rgba(235, 246, 249, 255),    /* 浅蓝白色 */
+        stop: 0.5 rgba(242, 245, 236, 255),  /* 浅绿白色 */
+        stop: 1 rgba(235, 246, 249, 255)     /* 浅蓝白色 */
+    );
+    border: 1px solid black;
+    border-radius: 8px;  /* 添加圆角 */
+}
+#scrollAreaWidgetContents {
+    background-color: transparent;
+}
+#itemsWidget {
+    background-color: transparent;
+    border: none;
+}
+QScrollArea {
+    background-color: transparent;
+}
+
+
+#firstButton, #lastButton, #searchButton, #menuButton {
+    border-radius: 10px;
+    border: none;  /* 边框颜色 */
+}
+
+#firstButton:hover, #lastButton:hover,
+#firstButton:selected, #lastButton:hover,
+#searchButton:selected, #searchButton:hover,
+#menuButton:selected, #menuButton:hover {
+    background-color: #CCCCCC;
+}
+
+
+/* 输入框样式 */
+QLineEdit {
+    border-style: solid;
+    border-color: #FFA07A;  /* 浅橙色 */
+    border-width: 2px;
+    border-radius: 10px;
+    padding: 4px 12px;
+    background-color: rgba(255, 255, 255, 0.95);
+    color: #2C3E50;
+}
+
+QLineEdit:focus {
+    border-color: #FF8C69;  /* 聚焦时边框颜色加深 */
+}
+
+/* Clipboard 标签样式 */
+QToolButton#toolButton {
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 4px 12px;
+    color: #2C3E50;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: none;
+    border: 2px solid #4A90E2;
+    border-radius: 14px;
+}
+
+/* 圆形计数器样式 */
+QToolButton#countArea {
+    background-color: #1abc9c;
+    color: white;
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    border-radius: 14px;
+    padding: 0px;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* 其他样式保持不变 */
+QToolButton#toolButton:hover,
+QToolButton#toolButton:pressed,
+QToolButton#toolButton:checked,
+QToolButton#toolButton:focus {
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 2px solid #4A90E2;
+}
+
+QToolButton#countArea:hover {
+    background-color: #357ABD;
+}
+
+QToolButton#countArea {
+    qproperty-toolButtonStyle: Qt::ToolButtonTextOnly;
+}
+
+QToolButton#toolButton:focus,
+QToolButton#countArea:focus {
+    outline: none;
+}

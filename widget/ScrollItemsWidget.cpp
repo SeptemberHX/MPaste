@@ -270,7 +270,7 @@ void ScrollItemsWidget::focusMoveRight() {
     }
 }
 
-void ScrollItemsWidget::moveToFirst() {
+void ScrollItemsWidget::scrollToFirst() {
     if (this->layout->count() <= 1) return;  // 没有条目时直接返回
 
     // 找到第一个可见的条目
@@ -284,7 +284,7 @@ void ScrollItemsWidget::moveToFirst() {
     }
 }
 
-void ScrollItemsWidget::moveToLast() {
+void ScrollItemsWidget::scrollToLast() {
     if (this->layout->count() <= 1) return;  // 没有条目时直接返回
 
     // 找到最后一个可见的条目

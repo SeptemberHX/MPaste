@@ -108,7 +108,7 @@
       <enum>QFrame::Shape::NoFrame</enum>
      </property>
      <property name="text">
-      <string notr="true">title</string>
+      <string notr="true"/>
      </property>
      <property name="scaledContents">
       <bool>true</bool>

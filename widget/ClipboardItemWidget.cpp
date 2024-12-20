@@ -102,12 +102,12 @@ QToolButton* ClipboardItemWidget::createActionButton(const QString& iconPath, co
     button->setIconSize(QSize(16, 16));
     button->setFixedSize(16, 16);
     button->setStyleSheet(R"(
-        QToolButton {
+        ClipboardItemWidget QToolButton {
             background: transparent;
             border: none;
             padding: 0px;
         }
-        QToolButton:hover {
+        ClipboardItemWidget QToolButton:hover {
             background: rgba(0, 0, 0, 0.1);
             border-radius: 3px;
         }
@@ -189,7 +189,7 @@ void ClipboardItemWidget::enterEvent(QEnterEvent* event) {
 
     // Position buttons at the top center
     const int x = (width() - ui.actions.container->width()) / 2;
-    ui.actions.container->move(x, 0);
+    ui.actions.container->move(x, 4);
     ui.actions.container->show();
 
     // Fade in animation
