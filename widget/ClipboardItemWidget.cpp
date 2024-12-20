@@ -26,7 +26,7 @@ void ClipboardItemWidget::setupUI() {
 
     // Main layout
     ui.mainLayout = new QHBoxLayout(this);
-    ui.mainLayout->setContentsMargins(0, 0, 0, 0);
+    ui.mainLayout->setContentsMargins(0, 0, 3, 0);
 
     // Inner widget
     ui.innerWidget = new ClipboardItemInnerWidget(this);
@@ -90,9 +90,9 @@ void ClipboardItemWidget::setupContextMenu() {
 
 void ClipboardItemWidget::initializeEffects() {
     auto* shadowEffect = new QGraphicsDropShadowEffect(this);
-    shadowEffect->setOffset(0, 2);
-    shadowEffect->setColor(QColor(0, 0, 0, 80));
-    shadowEffect->setBlurRadius(10);
+    shadowEffect->setOffset(3, 4);
+    shadowEffect->setColor(QColor(0, 0, 0, 40));
+    shadowEffect->setBlurRadius(4);
     ui.innerWidget->setGraphicsEffect(shadowEffect);
 }
 
