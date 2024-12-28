@@ -365,34 +365,30 @@ void MPasteWidget::handleSearchInput(QKeyEvent *event) {
 }
 
 bool MPasteWidget::handleAltNumShortcut(QKeyEvent *event) {
-#ifdef Q_OS_WIN
-    bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-    if (altPressed) {
+    // 使用Qt的事件系统来判断Alt状态
+    if (event->modifiers() & Qt::AltModifier) {
         int keyOrder = -1;
         if (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9) {
             keyOrder = (event->key() == Qt::Key_0) ? 9 : event->key() - Qt::Key_1;
-        }
 
-        if (keyOrder >= 0 && keyOrder <= 9) {
-            qDebug() << "Alt+" << keyOrder << " detected";
-            const ClipboardItem& selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
-            this->setClipboard(selectedItem);
-            hideAndPaste();
-            currItemsWidget()->cleanShortCutInfo();
-            return true;
+            // 添加额外的状态验证
+            if (keyOrder >= 0 && keyOrder <= 9) {
+                qDebug() << "Alt+" << keyOrder << " detected";
+
+                const ClipboardItem& selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
+                this->setClipboard(selectedItem);
+
+                // 确保在处理完成后再隐藏窗口
+                QTimer::singleShot(0, this, [this]() {
+                    hideAndPaste();
+                    currItemsWidget()->cleanShortCutInfo();
+                });
+
+                return true;
+            }
         }
     }
-#else
-    if (event->modifiers() & Qt::AltModifier) {
-        int keyOrder = misc_.numKeyList.indexOf(event->key());
-        if (keyOrder >= 0 && keyOrder <= 9) {
-            currItemsWidget()->selectedByShortcut(keyOrder);
-            hideAndPaste();
-            currItemsWidget()->cleanShortCutInfo();
-            return true;
-        }
-    }
-#endif
+
     return false;
 }
 
