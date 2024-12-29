@@ -90,55 +90,76 @@ void WinUtils::simulateKeyPress(WORD key, bool ctrl, bool shift, bool alt) {
     INPUT inputs[8] = {};
     int inputCount = 0;
 
+    // 获取扫描码
+    WORD scanCode = MapVirtualKey(key, MAPVK_VK_TO_VSC);
+    WORD ctrlScan = MapVirtualKey(VK_CONTROL, MAPVK_VK_TO_VSC);
+    WORD shiftScan = MapVirtualKey(VK_SHIFT, MAPVK_VK_TO_VSC);
+    WORD altScan = MapVirtualKey(VK_MENU, MAPVK_VK_TO_VSC);
+
     // Press modifier keys
     if (ctrl) {
         inputs[inputCount].type = INPUT_KEYBOARD;
         inputs[inputCount].ki.wVk = VK_CONTROL;
+        inputs[inputCount].ki.wScan = ctrlScan;
+        inputs[inputCount].ki.dwFlags = KEYEVENTF_SCANCODE;
         inputCount++;
     }
     if (shift) {
         inputs[inputCount].type = INPUT_KEYBOARD;
         inputs[inputCount].ki.wVk = VK_SHIFT;
+        inputs[inputCount].ki.wScan = shiftScan;
+        inputs[inputCount].ki.dwFlags = KEYEVENTF_SCANCODE;
         inputCount++;
     }
     if (alt) {
         inputs[inputCount].type = INPUT_KEYBOARD;
         inputs[inputCount].ki.wVk = VK_MENU;
+        inputs[inputCount].ki.wScan = altScan;
+        inputs[inputCount].ki.dwFlags = KEYEVENTF_SCANCODE;
         inputCount++;
     }
 
     // Press the key
     inputs[inputCount].type = INPUT_KEYBOARD;
     inputs[inputCount].ki.wVk = key;
+    inputs[inputCount].ki.wScan = scanCode;
+    inputs[inputCount].ki.dwFlags = KEYEVENTF_SCANCODE;
     inputCount++;
 
     // Release the key
     inputs[inputCount].type = INPUT_KEYBOARD;
     inputs[inputCount].ki.wVk = key;
-    inputs[inputCount].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[inputCount].ki.wScan = scanCode;
+    inputs[inputCount].ki.dwFlags = KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE;
     inputCount++;
 
-    // Release modifier keys
+    // Release modifier keys in reverse order
     if (alt) {
         inputs[inputCount].type = INPUT_KEYBOARD;
         inputs[inputCount].ki.wVk = VK_MENU;
-        inputs[inputCount].ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[inputCount].ki.wScan = altScan;
+        inputs[inputCount].ki.dwFlags = KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE;
         inputCount++;
     }
     if (shift) {
         inputs[inputCount].type = INPUT_KEYBOARD;
         inputs[inputCount].ki.wVk = VK_SHIFT;
-        inputs[inputCount].ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[inputCount].ki.wScan = shiftScan;
+        inputs[inputCount].ki.dwFlags = KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE;
         inputCount++;
     }
     if (ctrl) {
         inputs[inputCount].type = INPUT_KEYBOARD;
         inputs[inputCount].ki.wVk = VK_CONTROL;
-        inputs[inputCount].ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[inputCount].ki.wScan = ctrlScan;
+        inputs[inputCount].ki.dwFlags = KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE;
         inputCount++;
     }
 
+    // 添加小延时确保窗口有足够时间处理事件
+    Sleep(10);
     SendInput(inputCount, inputs, sizeof(INPUT));
+    Sleep(10);
 }
 
 void WinUtils::triggerPasteShortcut(HWND hwnd) {

@@ -469,7 +469,7 @@ void MPasteWidget::hideAndPaste() {
     // 再多等待一小段时间确保键盘状态完全恢复
     QThread::msleep(50);
 #else
-    QThread::usleep(100);
+    QThread::msleep(100);
 #endif
 
     if (MPasteSettings::getInst()->isAutoPaste()) {
