@@ -7,7 +7,7 @@
 #include "widget/MPasteWidget.h"
 #include "utils/SingleApplication.h"
 #include "utils/PlatformRelated.h"
-#include "utils/HotkeyManager.h"
+#include "utils/HotKeyManager.h"
 
 // 添加一个辅助函数来获取窗口所在的屏幕
 QScreen* getScreenForWindow(WId windowId) {

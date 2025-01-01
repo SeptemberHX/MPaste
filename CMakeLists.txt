@@ -50,25 +50,19 @@ qt6_add_translation(QM_FILES ${TS_FILES})
 
 # Platform specific configuration
 IF (UNIX)
-    # Linux specific packages
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(X11 REQUIRED x11)
-    pkg_check_modules(QGSettings REQUIRED gsettings-qt)
+    pkg_check_modules(XCB REQUIRED xcb xcb-keysyms)
 
+    # 添加到 PLATFORM_SPECIFIC_LIBS
     set(PLATFORM_SPECIFIC_LIBS
-            xdo
-            ${X11_LIBRARIES}
-            ${QGSettings_LIBRARIES}
+            ${PLATFORM_SPECIFIC_LIBS}
+            ${XCB_LIBRARIES}
     )
 
+    # 添加到 PLATFORM_SPECIFIC_INCLUDES
     set(PLATFORM_SPECIFIC_INCLUDES
-            ${X11_INCLUDE_DIRS}
-            ${QGSettings_INCLUDE_DIRS}
-    )
-
-    set(PLATFORM_SPECIFIC_SOURCES
-            utils/PlatformRelated.cpp
-            utils/PlatformRelated.h
+            ${PLATFORM_SPECIFIC_INCLUDES}
+            ${XCB_INCLUDE_DIRS}
     )
 ELSE()
     # Windows specific setup
