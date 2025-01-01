@@ -6,10 +6,8 @@
 #include <iostream>
 
 #if defined(__linux__)
-
-#include <KWindowSystem>
-#include <xdo.h>
-#include <iostream>
+#include <QImage>
+#include <QPainter>
 #include "MPasteSettings.h"
 
 xdo_t *XUtils::m_xdo = nullptr;
@@ -17,57 +15,143 @@ Display *XUtils::m_display = nullptr;
 
 void XUtils::openXdo() {
     if (m_xdo == nullptr) {
-        m_xdo = xdo_new(NULL);
+        m_xdo = xdo_new(nullptr);
     }
 }
 
-void XUtils::activeWindowX11(int winId) {
+void XUtils::openDisplay() {
+    if (m_display == nullptr) {
+        m_display = XOpenDisplay(nullptr);
+    }
+}
+
+void XUtils::activeWindowX11(Window winId) {
     openXdo();
     xdo_activate_window(m_xdo, winId);
 }
 
-void XUtils::triggerPasteShortcut(int winId) {
+void XUtils::triggerPasteShortcut(Window winId) {
     openXdo();
-    KWindowInfo info(winId, NET::WMVisibleName);
-    if (info.valid() && MPasteSettings::getInst()->isTerminalTitle(info.visibleName())) {
+
+    // Get window class to identify terminals
+    XClassHint hint;
+    Status status = XGetClassHint(m_display, winId, &hint);
+    bool isTerminal = false;
+
+    if (status) {
+        // Check common terminal class names
+        if (strcmp(hint.res_class, "XTerm") == 0 ||
+            strcmp(hint.res_class, "konsole") == 0 ||
+            strcmp(hint.res_class, "gnome-terminal") == 0 ||
+            strcmp(hint.res_class, "terminator") == 0) {
+            isTerminal = true;
+        }
+        XFree(hint.res_name);
+        XFree(hint.res_class);
+    }
+
+    if (isTerminal) {
         xdo_send_keysequence_window_up(m_xdo, winId, "Alt", 100);
         xdo_send_keysequence_window(m_xdo, winId, "Control+Shift+v", 100);
     } else {
-        // let the xdotool handle the current window id
-        //   it won't work if we try to use XUtils::currActiveWindow
-        //   and the magic number 12000 also comes from the source code of xdotool
-        //   without 12000, some applications like Edge will get twice paste items.
         xdo_send_keysequence_window_up(m_xdo, 0, "Alt", 0);
         xdo_send_keysequence_window(m_xdo, 0, "Control+v", 12000);
     }
 }
 
-int XUtils::currentWinId() {
+Window XUtils::currentWinId() {
     openXdo();
     Window window = 0;
     int ret = xdo_get_active_window(m_xdo, &window);
 
-    if (ret == XDO_SUCCESS) {
-        return window;
-    } else {
-        return KWindowSystem::activeWindow();
+    if (ret != XDO_SUCCESS) {
+        openDisplay();
+        Window root, parent, *children;
+        unsigned int nchildren;
+        Window focused;
+        int revert_to;
+
+        XGetInputFocus(m_display, &focused, &revert_to);
+        if (focused != None) {
+            return focused;
+        }
+
+        // Fallback: try to find the topmost window
+        root = DefaultRootWindow(m_display);
+        XQueryTree(m_display, root, &root, &parent, &children, &nchildren);
+        if (children) {
+            window = children[nchildren - 1];
+            XFree(children);
+        }
     }
+
+    return window;
 }
 
-void PlatformRelated::activateWindow(int wId) {
-    XUtils::activeWindowX11(wId);
+Atom XUtils::getAtom(const char* atomName) {
+    openDisplay();
+    return XInternAtom(m_display, atomName, False);
 }
 
-QPixmap PlatformRelated::getWindowIcon(int wId) {
-    return KWindowSystem::self()->icon(wId);
+QPixmap XUtils::getWindowIconX11(Window winId) {
+    openDisplay();
+
+    Atom net_wm_icon = getAtom("_NET_WM_ICON");
+    Atom actual_type;
+    int actual_format;
+    unsigned long nitems, bytes_after;
+    unsigned char *data = nullptr;
+
+    int status = XGetWindowProperty(m_display, winId, net_wm_icon,
+                                  0, 1048576, False, XA_CARDINAL,
+                                  &actual_type, &actual_format,
+                                  &nitems, &bytes_after, &data);
+
+    if (status == Success && data) {
+        long *long_data = (long*) data;
+        int width = long_data[0];
+        int height = long_data[1];
+
+        // Skip width and height values
+        long_data += 2;
+
+        QPixmap icon = convertFromNative(long_data, width, height);
+        XFree(data);
+        return icon;
+    }
+
+    // Fallback to default icon
+    return QPixmap(":/resources/resources/unknown.svg");
 }
 
-int PlatformRelated::currActiveWindow() {
-    return XUtils::currentWinId();
+QPixmap XUtils::convertFromNative(const void* data, int width, int height) {
+    QImage image(width, height, QImage::Format_ARGB32);
+    const long* long_data = static_cast<const long*>(data);
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            long pixel = long_data[y * width + x];
+            image.setPixel(x, y, pixel);
+        }
+    }
+
+    return QPixmap::fromImage(image);
+}
+
+void PlatformRelated::activateWindow(WId wId) {
+    XUtils::activeWindowX11((Window)wId);
+}
+
+QPixmap PlatformRelated::getWindowIcon(WId wId) {
+    return XUtils::getWindowIconX11((Window)wId);
+}
+
+WId PlatformRelated::currActiveWindow() {
+    return (WId)XUtils::currentWinId();
 }
 
 void PlatformRelated::triggerPasteShortcut() {
-    XUtils::triggerPasteShortcut(MPasteSettings::getInst()->getCurrFocusWinId());
+    XUtils::triggerPasteShortcut(XUtils::currentWinId());
 }
 
 #elif defined(_WIN32)

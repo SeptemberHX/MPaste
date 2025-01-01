@@ -23,20 +23,26 @@ public:
 extern "C" {
 #include <xdo.h>
 #include <X11/X.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/Xatom.h>
 }
 
 class XUtils {
-
 public:
-    static void activeWindowX11(int winId);
-    static void triggerPasteShortcut(int winId);
-    static int currentWinId();
+    static void activeWindowX11(Window winId);
+    static void triggerPasteShortcut(Window winId);
+    static Window currentWinId();
+    static QPixmap getWindowIconX11(Window winId);
 
     static xdo_t *m_xdo;
     static Display *m_display;
+
 private:
     static void openXdo();
     static void openDisplay();
+    static Atom getAtom(const char* atomName);
+    static QPixmap convertFromNative(const void* data, int width, int height);
 };
 
 #elif defined(__WIN32__)

@@ -52,18 +52,20 @@ qt6_add_translation(QM_FILES ${TS_FILES})
 IF (UNIX)
     # Linux specific packages
     find_package(PkgConfig REQUIRED)
-    find_package(Qt6X11Extras REQUIRED)
-    find_package(KF5WindowSystem REQUIRED)
+    pkg_check_modules(X11 REQUIRED x11)
     pkg_check_modules(QGSettings REQUIRED gsettings-qt)
+
     set(PLATFORM_SPECIFIC_LIBS
-            KF5::WindowSystem
             xdo
-            ${Qt6X11Extras_LIBRARIES}
+            ${X11_LIBRARIES}
             ${QGSettings_LIBRARIES}
     )
+
     set(PLATFORM_SPECIFIC_INCLUDES
+            ${X11_INCLUDE_DIRS}
             ${QGSettings_INCLUDE_DIRS}
     )
+
     set(PLATFORM_SPECIFIC_SOURCES
             utils/PlatformRelated.cpp
             utils/PlatformRelated.h
@@ -75,32 +77,23 @@ ELSE()
     set(PLATFORM_SPECIFIC_SOURCES "")
 ENDIF()
 
-# Add KDSingleApplication subdirectory if it exists
-#if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/KDSingleApplication")
-#    add_subdirectory(KDSingleApplication)
-#    set(CUSTOM_LIBRARIES kdsingleapplication)
-#endif()
-
-# Main executable
-# Main executable
-IF(WIN32)
-    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        add_executable(${BIN_NAME}
-                ${SRCS}
-                ${INTERFACES}
-                ${PLATFORM_SPECIFIC_SOURCES}
-                ${QM_FILES}
-        )
-    else()
-        add_executable(${BIN_NAME}
-                WIN32    # Only add WIN32 flag for Release builds
-                ${SRCS}
-                ${INTERFACES}
-                ${PLATFORM_SPECIFIC_SOURCES}
-                ${QM_FILES}
-        )
-    endif()
-ENDIF()
+# Main executable - moved outside of IF(WIN32)
+if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_executable(${BIN_NAME}
+            WIN32    # Only add WIN32 flag for Release builds on Windows
+            ${SRCS}
+            ${INTERFACES}
+            ${PLATFORM_SPECIFIC_SOURCES}
+            ${QM_FILES}
+    )
+else()
+    add_executable(${BIN_NAME}
+            ${SRCS}
+            ${INTERFACES}
+            ${PLATFORM_SPECIFIC_SOURCES}
+            ${QM_FILES}
+    )
+endif()
 
 target_include_directories(${BIN_NAME} PUBLIC
         ${Qt6Gui_PRIVATE_INCLUDE_DIRS}
