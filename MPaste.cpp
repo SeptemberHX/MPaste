@@ -2,6 +2,8 @@
 #include <iostream>
 #include <QScreen>
 #include <qsurfaceformat.h>
+#include <QTimer>
+#include <QShowEvent>
 
 #include "utils/MPasteSettings.h"
 #include "widget/MPasteWidget.h"
@@ -9,14 +11,13 @@
 #include "utils/PlatformRelated.h"
 #include "utils/HotKeyManager.h"
 
-// 添加一个辅助函数来获取窗口所在的屏幕
+// 辅助函数保持不变
 QScreen* getScreenForWindow(WId windowId) {
     if (windowId) {
 #ifdef Q_OS_WIN
         HWND hwnd = (HWND)windowId;
         RECT rect;
         if (GetWindowRect(hwnd, &rect)) {
-            // 使用窗口中心点来确定屏幕
             QPoint windowCenter((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2);
             return QGuiApplication::screenAt(windowCenter);
         }
@@ -25,22 +26,19 @@ QScreen* getScreenForWindow(WId windowId) {
     return QGuiApplication::primaryScreen();
 }
 
-
 int main(int argc, char* argv[]) {
     // 设置 OpenGL 相关属性，必须在创建 QApplication 之前设置
-    QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);  // 使用 OpenGL ES
-    QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);  // 如果硬件加速有问题可以尝试软件渲染
+    QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+    QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
 
-    // 设置 OpenGL 格式
     QSurfaceFormat format;
-    format.setSwapInterval(1);  // 启用垂直同步
-    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);  // 双缓冲
+    format.setSwapInterval(1);
+    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
     QSurfaceFormat::setDefaultFormat(format);
 
     qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
 
     QApplication app(argc, argv);
-
     SingleApplication singleApp("com.mpaste.app");
 
     if (singleApp.isPrimaryInstance()) {
@@ -51,15 +49,11 @@ int main(int argc, char* argv[]) {
         // Load translations
         QString locale = QLocale::system().name();
         QTranslator translator;
-
-        // 获取应用程序可执行文件所在目录
         QString appDir = QCoreApplication::applicationDirPath();
-
-        // 尝试多个可能的翻译文件位置
         QStringList searchPaths = {
-            appDir + "/translations/MPaste_" + locale + ".qm",              // 直接在 translations 子目录下
-            appDir + "/../translations/MPaste_" + locale + ".qm",          // 上一级目录的 translations 下
-            QStringLiteral(":/translations/MPaste_") + locale + ".qm"      // 资源文件中的翻译
+            appDir + "/translations/MPaste_" + locale + ".qm",
+            appDir + "/../translations/MPaste_" + locale + ".qm",
+            QStringLiteral(":/translations/MPaste_") + locale + ".qm"
         };
 
         bool loaded = false;
@@ -76,24 +70,21 @@ int main(int argc, char* argv[]) {
             qWarning() << "Failed to load translation for" << locale;
         }
 
-        // Create and setup main widget
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");
         widget.setFixedWidth(QApplication::primaryScreen()->geometry().width());
 
-        // Create hotkey manager
         HotkeyManager hotkeyManager;
-        // Register Alt+V hotkey
         if (!hotkeyManager.registerHotkey(QKeySequence("Alt+V"))) {
             qWarning() << "Failed to register global hotkey Alt+V";
         }
 
-        // 显示窗口的 lambda 函数
-        auto showWidget = [&widget]() {
+        bool isShowingWidget = false;
+
+        auto showWidget = [&widget, &isShowingWidget]() {
             WId focusWinId = PlatformRelated::currActiveWindow();
             MPasteSettings::getInst()->setCurrFocusWinId(focusWinId);
 
-            // 获取当前活动窗口所在的屏幕
             QScreen* currentScreen = getScreenForWindow(focusWinId);
             if (!currentScreen) {
                 currentScreen = QGuiApplication::screenAt(QCursor::pos());
@@ -102,45 +93,44 @@ int main(int argc, char* argv[]) {
                 currentScreen = QGuiApplication::primaryScreen();
             }
 
-            // 设置窗口宽度和位置
             widget.setFixedWidth(currentScreen->availableSize().width());
-            widget.setVisibleWithAnnimation(!widget.isVisible());
-            widget.move(currentScreen->geometry().x(),
-                       currentScreen->geometry().y() +
-                       currentScreen->geometry().height() -
-                       widget.height());
+
+            isShowingWidget = true;
+
+            QTimer::singleShot(50, [&widget, currentScreen]() {
+                widget.setVisibleWithAnnimation(true);
+                widget.raise();
+                widget.activateWindow();
+                widget.move(currentScreen->geometry().x(),
+                          currentScreen->geometry().y() +
+                          currentScreen->geometry().height() -
+                          widget.height());
+
+                // 确保窗口获得焦点
+                PlatformRelated::activateWindow(widget.winId());
+            });
         };
 
-        // 在主函数中使用这个 lambda
+        // 修改应用程序状态变化的处理
+        QObject::connect(qApp, &QGuiApplication::applicationStateChanged,
+            [&widget, &isShowingWidget](Qt::ApplicationState state) {
+                if (state == Qt::ApplicationInactive) {
+                    QTimer::singleShot(100, [&widget, &isShowingWidget]() {
+                        if (isShowingWidget) {
+                            widget.setVisibleWithAnnimation(false);
+                            isShowingWidget = false;
+                        }
+                    });
+                }
+            });
+
+        // 连接热键和消息处理
         QObject::connect(&hotkeyManager, &HotkeyManager::hotkeyPressed, showWidget);
         QObject::connect(&singleApp, &SingleApplication::messageReceived,
             [showWidget](const QString &) { showWidget(); });
 
-        // Handle application state changes
-        QObject::connect(qApp, &QGuiApplication::applicationStateChanged,
-            [&widget](Qt::ApplicationState state) {
-                if (state == Qt::ApplicationInactive) {
-                    widget.setVisibleWithAnnimation(false);
-                }
-            });
-
-        PlatformRelated::activateWindow(widget.winId());
-
-        // Handle messages from other instances
-        QObject::connect(&singleApp, &SingleApplication::messageReceived,
-            [&widget](const QString &) {
-                MPasteSettings::getInst()->setCurrFocusWinId(PlatformRelated::currActiveWindow());
-                
-                auto screen = qApp->screenAt(QCursor::pos());
-                widget.setFixedWidth(screen->availableSize().width());
-                widget.setVisibleWithAnnimation(!widget.isVisible());
-                widget.move(screen->availableGeometry().x(), 
-                          screen->size().height() - widget.height());
-            });
-
         return app.exec();
     } else {
-        // If this is not the primary instance, send a message and exit
         singleApp.sendMessage("show");
         return 0;
     }
