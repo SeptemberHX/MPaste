@@ -44,7 +44,40 @@ private:
 
 class HotkeyManager::Private {
 public:
-    HotkeyEventFilter *eventFilter;
+    class EventFilter : public QAbstractNativeEventFilter {
+    public:
+        explicit EventFilter(HotkeyManager *manager) : manager(manager) {}
+
+        bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override {
+#ifdef Q_OS_WIN
+            if (eventType == "windows_generic_MSG" || eventType == "windows_dispatcher_MSG") {
+                MSG *msg = static_cast<MSG *>(message);
+                if (msg->message == WM_HOTKEY) {
+                    emit manager->hotkeyPressed();
+                    return true;
+                }
+            }
+#elif defined(Q_OS_LINUX)
+            if (eventType == "xcb_generic_event_t") {
+                xcb_generic_event_t *event = static_cast<xcb_generic_event_t *>(message);
+                if ((event->response_type & ~0x80) == XCB_KEY_PRESS) {
+                    xcb_key_press_event_t *kp = (xcb_key_press_event_t *)event;
+                    if (kp->detail == manager->d->keycode &&
+                        (kp->state & manager->d->modifiers) == manager->d->modifiers) {
+                        emit manager->hotkeyPressed();
+                        return true;
+                        }
+                }
+            }
+#endif
+            return false;
+        }
+
+    private:
+        HotkeyManager *manager;
+    };
+
+    EventFilter *eventFilter;
 #ifdef Q_OS_WIN
     int hotkeyId;
 #elif defined(Q_OS_LINUX)
@@ -60,7 +93,7 @@ HotkeyManager::HotkeyManager(QObject *parent)
     : QObject(parent)
     , d(new Private)
 {
-    d->eventFilter = new HotkeyEventFilter(this);
+    d->eventFilter = new Private::EventFilter(this);
     qApp->installNativeEventFilter(d->eventFilter);
 
 #ifdef Q_OS_WIN

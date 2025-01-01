@@ -14,11 +14,8 @@ public:
     bool registerHotkey(const QKeySequence &keySequence);
     void unregisterHotkey();
 
-    signals:
-        void hotkeyPressed();
-
-protected:
-    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result);
+signals:
+    void hotkeyPressed();
 
 private:
     class Private;
