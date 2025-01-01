@@ -1,3 +1,4 @@
+// HotKeyManager.h
 #ifndef MPASTE_HOTKEYMANAGER_H
 #define MPASTE_HOTKEYMANAGER_H
 
@@ -9,17 +10,18 @@ class HotkeyManager : public QObject {
 
 public:
     explicit HotkeyManager(QObject *parent = nullptr);
-    ~HotkeyManager();
+    ~HotkeyManager() override;
 
     bool registerHotkey(const QKeySequence &keySequence);
     void unregisterHotkey();
 
-signals:
-    void hotkeyPressed();
+    signals:
+        void hotkeyPressed();
 
 private:
     class Private;
+    friend class Private;
     Private *d;
 };
 
-#endif // MPASTE_HOTKEYMANAGER_H
+#endif //MPASTE_HOTKEYMANAGER_H
