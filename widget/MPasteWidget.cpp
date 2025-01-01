@@ -57,7 +57,16 @@ void MPasteWidget::initializeWidget() {
 }
 
 void MPasteWidget::initStyle() {
-    setWindowFlags(Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint);
+    // 保持原有的基础窗口标志
+    Qt::WindowFlags flags = Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint;
+
+#ifdef Q_OS_LINUX
+    // Linux 特定的窗口标志和属性
+    flags |= Qt::X11BypassWindowManagerHint;  // 绕过窗口管理器的一些处理
+    flags |= Qt::Window;  // 确保窗口可以覆盖其他窗口
+#endif
+    setWindowFlags(flags);
+
     setFocusPolicy(Qt::StrongFocus);
 
 #ifdef Q_OS_WIN
@@ -67,10 +76,11 @@ void MPasteWidget::initStyle() {
 
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground, false);
+    setAttribute(Qt::WA_AlwaysStackOnTop);
     ui_.ui->itemsWidget->setAttribute(Qt::WA_TranslucentBackground);
     ui_.ui->itemsWidget->setAttribute(Qt::WA_NoSystemBackground, false);
-    setObjectName("pasteWidget");
 
+    setObjectName("pasteWidget");
     QFile styleFile(":/resources/resources/style/defaultStyle.qss");
     if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
         QString style = QLatin1String(styleFile.readAll());

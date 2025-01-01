@@ -1,7 +1,3 @@
-set(_VERSION_MAJOR 0)
-set(_VERSION_MINOR 2)
-set(_VERSION_PATCH 0)
-
 set(CPACK_GENERATOR "DEB")
 
 ############下面是设置debian/control文件中的内容

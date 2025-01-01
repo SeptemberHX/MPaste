@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.7)
-set(VERSION 0.4.0)
+set(_VERSION_MAJOR 0)
+set(_VERSION_MINOR 4)
+set(_VERSION_PATCH 0)
+set(VERSION "${_VERSION_MAJOR}.${_VERSION_MINOR}.${_VERSION_PATCH}")
 project(MPaste)
 
 # Set Qt installation path
