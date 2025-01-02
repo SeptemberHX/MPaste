@@ -221,7 +221,13 @@ void MPasteWidget::setupConnections() {
 void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
     if (!clipboard_.isPasting) {
         ui_.clipboardWidget->addAndSaveItem(nItem);
-        misc_.player->play();
+
+        misc_.player->stop();
+        misc_.player->setPosition(0);
+        if (misc_.player->playbackState() != QMediaPlayer::PlayingState) {
+            misc_.player->play();
+        }
+
         clipboard_.copiedWhenHide = true;
     }
 }
