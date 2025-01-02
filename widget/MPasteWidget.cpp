@@ -101,6 +101,8 @@ void MPasteWidget::initUI() {
     ui_.aboutWidget->setWindowTitle("MPaste About");
     ui_.aboutWidget->hide();
 
+    ui_.settingsWidget = new MPasteSettingsWidget(this);
+
     // 初始化剪贴板窗口
     ui_.clipboardWidget = new ScrollItemsWidget("Clipboard", this);
     ui_.clipboardWidget->installEventFilter(this);
@@ -172,6 +174,21 @@ void MPasteWidget::initMenu() {
         ui_.aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
 
         ui_.aboutWidget->show();
+    });
+    ui_.menu->addAction(tr("Settings"), [this]() {
+        // 获取当前屏幕
+        QScreen *screen = QGuiApplication::primaryScreen();
+        if (const QWindow *window = windowHandle())
+            screen = window->screen();
+        if (!screen)
+            return;
+
+        // 将窗口移动到屏幕中央
+        QRect screenGeometry = screen->geometry();
+        int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
+        int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
+        ui_.settingsWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
+        ui_.settingsWidget->show();
     });
     ui_.menu->addAction(tr("Quit"), [this]() { qApp->exit(0); });
 }

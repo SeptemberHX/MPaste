@@ -14,6 +14,7 @@
 #include "data/ClipboardItem.h"
 #include "data/LocalSaver.h"
 #include "AboutWidget.h"
+#include "MPasteSettingsWidget.h"
 #include "ScrollItemsWidget.h"
 
 namespace Ui {
@@ -79,6 +80,7 @@ private:
         Ui::MPasteWidget *ui;
         QHBoxLayout *layout;
         AboutWidget *aboutWidget;
+        MPasteSettingsWidget *settingsWidget;
         ScrollItemsWidget *clipboardWidget;
         QPropertyAnimation *searchShowAnim;
         QPropertyAnimation *searchHideAnim;
