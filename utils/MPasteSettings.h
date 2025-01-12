@@ -15,7 +15,9 @@ public:
     static MPasteSettings* getInst();
 
     static const QString CLIPBOARD_CATEGORY_NAME;
+    static const QString CLIPBOARD_CATEGORY_COLOR;
     static const QString STAR_CATEGORY_NAME;
+    static const QString STAR_CATEGORY_COLOR;
 
     const QString &getSaveDir() const;
 

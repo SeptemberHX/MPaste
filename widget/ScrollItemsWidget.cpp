@@ -7,10 +7,11 @@
 #include <QScrollBar>
 #include <QScroller>
 
-ScrollItemsWidget::ScrollItemsWidget(const QString &category, QWidget *parent) :
+ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &borderColor, QWidget *parent) :
     QWidget(parent),
     ui(new Ui::ScrollItemsWidget),
     category(category),
+    borderColor(borderColor),
     currItemWidget(nullptr)
 {
     ui->setupUi(this);
@@ -51,7 +52,7 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
         }
     }
 
-    auto itemWidget = new ClipboardItemWidget(this->category, ui->scrollAreaWidgetContents);
+    auto itemWidget = new ClipboardItemWidget(this->category, QColor::fromString(this->borderColor), ui->scrollAreaWidgetContents);
     connect(itemWidget, &ClipboardItemWidget::clicked, this, &ScrollItemsWidget::itemClicked);
     connect(itemWidget, &ClipboardItemWidget::doubleClicked, this, &ScrollItemsWidget::itemDoubleClicked);
     connect(itemWidget, &ClipboardItemWidget::itemNeedToSave, this, [this] () {

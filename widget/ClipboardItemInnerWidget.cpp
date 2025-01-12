@@ -4,8 +4,9 @@
 #include <QPlainTextEdit>
 #include <QFileInfo>
 
-ClipboardItemInnerWidget::ClipboardItemInnerWidget(QWidget *parent) :
+ClipboardItemInnerWidget::ClipboardItemInnerWidget(QColor borderColor, QWidget *parent) :
     QFrame(parent),
+    borderColor(borderColor),
     ui(new Ui::ClipboardItemInnerWidget),
     bgColor(Qt::white),
     topBgColor(Qt::white),
@@ -121,17 +122,17 @@ void ClipboardItemInnerWidget::showBorder(bool flag) {
 }
 
 void ClipboardItemInnerWidget::refreshStyleSheet() {
-    this->setStyleSheet(this->genStyleSheetStr(this->bgColor, this->topBgColor, this->borderWidth));
+    this->setStyleSheet(this->genStyleSheetStr(this->bgColor, this->topBgColor, this->borderColor, this->borderWidth));
 }
 
-QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topColor, int borderWidth) {
+QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topColor, QColor borderColor, int borderWidth) {
     return QString("QWidget {background-color: %1; color: #000000; } "
                    "QWidget { border-radius: 8px; }"
                    "#topWidget { background-color: %2;} "
                    "#topWidget { border-bottom-left-radius: 0px; border-bottom-right-radius: 0px; }  "
                    "#infoWidget { border-top-left-radius: 0px; border-top-right-radius: 0px; }  "
                    "#typeLabel, #timeLabel { color: #FFFFFF; } "
-                   "QFrame#innerWidget { border-radius: 12px; border: %3px solid #1684fc;} ").arg(bgColor.name(), topColor.name(), QString::number(borderWidth));
+                   "QFrame#innerWidget { border-radius: 12px; border: %3px solid %4;} ").arg(bgColor.name(), topColor.name(), QString::number(borderWidth), borderColor.name());
 }
 
 void ClipboardItemInnerWidget::setShortkeyInfo(int num) {

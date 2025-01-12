@@ -9,8 +9,8 @@
 
 #include "utils/MPasteSettings.h"
 
-ClipboardItemWidget::ClipboardItemWidget(QString category, QWidget *parent)
-    : category(category), QWidget(parent)
+ClipboardItemWidget::ClipboardItemWidget(QString category, QColor borderColor, QWidget *parent)
+    : category(category), borderColor(borderColor), QWidget(parent)
 {
     setupUI();
     setupActionButtons();
@@ -31,7 +31,7 @@ void ClipboardItemWidget::setupUI() {
     ui.mainLayout->setContentsMargins(0, 0, 3, 0);
 
     // Inner widget
-    ui.innerWidget = new ClipboardItemInnerWidget(this);
+    ui.innerWidget = new ClipboardItemInnerWidget(this->borderColor, this);
     ui.innerWidget->setObjectName("innerWidget");
     connect(ui.innerWidget, &ClipboardItemInnerWidget::itemNeedToSave, 
             this, [this](const ClipboardItem &item) {

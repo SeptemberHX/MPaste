@@ -14,7 +14,7 @@ class ClipboardItemWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit ClipboardItemWidget(QString category, QWidget *parent = nullptr);
+    explicit ClipboardItemWidget(QString category, QColor borderColor, QWidget *parent = nullptr);
     ~ClipboardItemWidget() override = default;
 
     // Public API
@@ -82,6 +82,7 @@ private:
     bool isFavorite{false};
 
     QString category;
+    QColor borderColor;
 };
 
 #endif //MPASTE_CLIPBOARDITEMWIDGET_H

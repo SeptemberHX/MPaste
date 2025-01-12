@@ -4,55 +4,55 @@
 <context>
     <name>ClipboardItemInnerWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="176"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="217"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="247"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="261"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="177"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="218"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="248"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="262"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="177"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="178"/>
         <source>Rich Text</source>
         <translation>富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="202"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="203"/>
         <source>Pixels</source>
         <translation>像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="203"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="204"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="219"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="220"/>
         <source>Plain Text</source>
         <translation>纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="233"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="234"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="260"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="261"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="267"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="268"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="274"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="275"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="333"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="334"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
@@ -108,7 +108,7 @@
 <context>
     <name>MPasteSettings</name>
     <message>
-        <location filename="../utils/MPasteSettings.cpp" line="39"/>
+        <location filename="../utils/MPasteSettings.cpp" line="42"/>
         <source>Terminal</source>
         <translatorcomment>已 top-panel 显示为准</translatorcomment>
         <translation type="unfinished">终端</translation>
@@ -148,17 +148,17 @@
 <context>
     <name>MPasteWidget</name>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="198"/>
+        <location filename="../widget/MPasteWidget.cpp" line="200"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="182"/>
+        <location filename="../widget/MPasteWidget.cpp" line="184"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="213"/>
+        <location filename="../widget/MPasteWidget.cpp" line="215"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>

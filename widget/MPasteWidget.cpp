@@ -104,12 +104,14 @@ void MPasteWidget::initUI() {
     ui_.settingsWidget = new MPasteSettingsWidget(this);
 
     // 初始化剪贴板窗口
-    ui_.clipboardWidget = new ScrollItemsWidget(MPasteSettings::CLIPBOARD_CATEGORY_NAME, this);
+    ui_.clipboardWidget = new ScrollItemsWidget(
+        MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
     ui_.ui->clipboardButton->setProperty("category", ui_.clipboardWidget->getCategory());
     ui_.clipboardWidget->installEventFilter(this);
     ui_.boardWidgetMap.insert(ui_.clipboardWidget->getCategory(), ui_.clipboardWidget);
 
-    ui_.staredWidget = new ScrollItemsWidget(MPasteSettings::STAR_CATEGORY_NAME, this);
+    ui_.staredWidget = new ScrollItemsWidget(
+        MPasteSettings::STAR_CATEGORY_NAME, MPasteSettings::STAR_CATEGORY_COLOR, this);
     ui_.ui->staredButton->setProperty("category", ui_.staredWidget->getCategory());
     ui_.staredWidget->installEventFilter(this);
     ui_.boardWidgetMap.insert(ui_.staredWidget->getCategory(), ui_.staredWidget);

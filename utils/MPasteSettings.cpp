@@ -11,7 +11,10 @@
 MPasteSettings *MPasteSettings::inst = nullptr;
 
 const QString MPasteSettings::CLIPBOARD_CATEGORY_NAME = "Clipboard";
+const QString MPasteSettings::CLIPBOARD_CATEGORY_COLOR = "#4A90E2";
+
 const QString MPasteSettings::STAR_CATEGORY_NAME = "Stared";
+const QString MPasteSettings::STAR_CATEGORY_COLOR = "#fc9867";
 
 MPasteSettings *MPasteSettings::getInst() {
     if (inst == nullptr) {

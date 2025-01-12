@@ -16,7 +16,7 @@ class ScrollItemsWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit ScrollItemsWidget(const QString &category, QWidget *parent = nullptr);
+    explicit ScrollItemsWidget(const QString &category, const QString &borderColor, QWidget *parent = nullptr);
     ~ScrollItemsWidget();
 
     bool addOneItem(const ClipboardItem &item);
@@ -60,6 +60,7 @@ private:
     Ui::ScrollItemsWidget *ui;
     QHBoxLayout *layout;
     QString category;
+    QString borderColor;
 
     ClipboardItemWidget *currItemWidget;
     LocalSaver *saver;

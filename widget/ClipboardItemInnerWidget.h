@@ -20,9 +20,9 @@ class ClipboardItemInnerWidget : public QFrame
     Q_OBJECT
 
 public:
-    static QString genStyleSheetStr(QColor bgColor, QColor topColor, int bw);
+    static QString genStyleSheetStr(QColor bgColor, QColor topColor, QColor borderColor, int bw);
 
-    explicit ClipboardItemInnerWidget(QWidget *parent = nullptr);
+    explicit ClipboardItemInnerWidget(QColor borderColor, QWidget *parent = nullptr);
     ~ClipboardItemInnerWidget();
 
     void setIcon(const QPixmap &icon);
@@ -63,6 +63,8 @@ private:
     int borderWidth;
     FileThumbWidget *fileThumbWidget;
     WebLinkThumbWidget *webLinkThumbWidget;
+
+    QColor borderColor;
 };
 
 #endif // CLIPBOARDITEMINNERWIDGET_H
