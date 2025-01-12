@@ -241,6 +241,8 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
             QString urlStr = urls[0].toString();
             if (urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
                 this->showWebLink(urls[0], item);
+            } else {
+                this->showText(item.getText(), item);
             }
             ui->countLabel->setText(QString("%1 ").arg(urlStr.size()) + tr("Characters"));
         }

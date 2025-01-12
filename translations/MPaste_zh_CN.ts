@@ -6,8 +6,8 @@
     <message>
         <location filename="../widget/ClipboardItemInnerWidget.cpp" line="176"/>
         <location filename="../widget/ClipboardItemInnerWidget.cpp" line="217"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="245"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="259"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="247"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="261"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
@@ -37,22 +37,22 @@
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="258"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="260"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="265"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="267"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="272"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="274"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="331"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="333"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
