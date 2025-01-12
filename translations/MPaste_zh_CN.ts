@@ -86,7 +86,7 @@
     <message>
         <location filename="../widget/ClipboardItemWidget.cpp" line="90"/>
         <source>Save to Star</source>
-        <translation>另存到收藏</translation>
+        <translation>另存到收藏夹</translation>
     </message>
     <message>
         <location filename="../widget/ClipboardItemWidget.cpp" line="92"/>
@@ -167,23 +167,23 @@
         <translation type="vanished">MPaste 已启动。</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.ui" line="194"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="195"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="195"/>
+        <location filename="../widget/MPasteWidget.ui" line="200"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
         <source>Clipboard</source>
         <translation>剪贴板</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.ui" line="218"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="196"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="196"/>
+        <location filename="../widget/MPasteWidget.ui" line="224"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="198"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="198"/>
         <source>Stared</source>
-        <translation>收藏</translation>
+        <translation>收藏夹</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.ui" line="246"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
+        <location filename="../widget/MPasteWidget.ui" line="252"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="199"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="199"/>
         <source>100</source>
         <translation type="unfinished"></translation>
     </message>

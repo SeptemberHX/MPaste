@@ -80,7 +80,7 @@
       </font>
      </property>
      <property name="text">
-      <string notr="true">MPaste V0.3.0</string>
+      <string notr="true">MPaste V0.5.0</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignmentFlag::AlignCenter</set>
