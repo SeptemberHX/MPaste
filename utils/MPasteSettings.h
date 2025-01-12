@@ -14,6 +14,9 @@ class MPasteSettings : public QObject {
 public:
     static MPasteSettings* getInst();
 
+    static const QString CLIPBOARD_CATEGORY_NAME;
+    static const QString STAR_CATEGORY_NAME;
+
     const QString &getSaveDir() const;
 
     int getMaxSize() const;

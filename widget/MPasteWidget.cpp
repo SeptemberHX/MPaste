@@ -5,7 +5,7 @@
 #include <QAudioOutput>
 #include <QDir>
 #include <QDebug>
-#include <QTimer>
+#include <QButtonGroup>
 #include <QWindow>
 #include "utils/MPasteSettings.h"
 #include "MPasteWidget.h"
@@ -104,13 +104,33 @@ void MPasteWidget::initUI() {
     ui_.settingsWidget = new MPasteSettingsWidget(this);
 
     // 初始化剪贴板窗口
-    ui_.clipboardWidget = new ScrollItemsWidget("Clipboard", this);
+    ui_.clipboardWidget = new ScrollItemsWidget(MPasteSettings::CLIPBOARD_CATEGORY_NAME, this);
+    ui_.ui->clipboardButton->setProperty("category", ui_.clipboardWidget->getCategory());
     ui_.clipboardWidget->installEventFilter(this);
+    ui_.boardWidgetMap.insert(ui_.clipboardWidget->getCategory(), ui_.clipboardWidget);
+
+    ui_.staredWidget = new ScrollItemsWidget(MPasteSettings::STAR_CATEGORY_NAME, this);
+    ui_.ui->staredButton->setProperty("category", ui_.staredWidget->getCategory());
+    ui_.staredWidget->installEventFilter(this);
+    ui_.boardWidgetMap.insert(ui_.staredWidget->getCategory(), ui_.staredWidget);
 
     // 设置布局
     ui_.layout = new QHBoxLayout(ui_.ui->itemsWidget);
     ui_.layout->setContentsMargins(0, 0, 0, 0);
+    ui_.layout->setSpacing(0);
     ui_.layout->addWidget(ui_.clipboardWidget);
+    ui_.layout->addWidget(ui_.staredWidget);
+
+    ui_.staredWidget->hide();
+
+    // 初始化 buttonGroup
+    ui_.buttonGroup = new QButtonGroup(this);
+    ui_.buttonGroup->setExclusive(true);
+    ui_.buttonGroup->addButton(ui_.ui->clipboardButton);
+    ui_.buttonGroup->addButton(ui_.ui->staredButton);
+
+    // 默认显示
+    ui_.ui->clipboardButton->setChecked(true);
 
     // 初始化菜单
     initMenu();
@@ -197,13 +217,24 @@ void MPasteWidget::setupConnections() {
     // 剪贴板连接
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardUpdated,
             this, &MPasteWidget::clipboardUpdated);
-    connect(ui_.clipboardWidget, &ScrollItemsWidget::doubleClicked,
-            this, [this](const ClipboardItem &item) {
-                this->setClipboard(item);
-                this->hideAndPaste();
-            });
-    connect(ui_.clipboardWidget, &ScrollItemsWidget::itemCountChanged,
-            this, &MPasteWidget::updateItemCount);
+    for (auto *boardWidget : ui_.boardWidgetMap.values()) {
+        connect(boardWidget, &ScrollItemsWidget::doubleClicked,
+        this, [this](const ClipboardItem &item) {
+            this->setClipboard(item);
+            this->hideAndPaste();
+        });
+
+        connect(boardWidget, &ScrollItemsWidget::itemCountChanged, this, [this, boardWidget](int itemCount) {
+            if (ui_.buttonGroup->checkedButton()->property("category").toString() == boardWidget->getCategory()) {
+                this->updateItemCount(itemCount);
+            }
+        });
+
+        connect(boardWidget, &ScrollItemsWidget::itemStared, this, [this](const ClipboardItem &item) {
+            ClipboardItem updatedItem(item.getIcon(), item.getText(), item.getImage(), item.getHtml(), item.getUrls(), item.getColor());
+            ui_.staredWidget->addAndSaveItem(updatedItem);
+        });
+    }
 
     // 菜单按钮连接
     connect(ui_.ui->menuButton, &QToolButton::clicked, this, [this]() {
@@ -233,6 +264,19 @@ void MPasteWidget::setupConnections() {
             this->setVisibleWithAnnimation(true);
         }
     });
+
+    // 处理切换事件
+    connect(ui_.buttonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
+        [this](QAbstractButton *button) {
+            // 处理切换逻辑
+            for (auto *toolButton : ui_.buttonGroup->buttons()) {
+                auto *boardWidget = ui_.boardWidgetMap[toolButton->property("category").toString()];
+                boardWidget->setVisible(toolButton == button);
+                if (toolButton == button) {
+                    this->updateItemCount(boardWidget->getItemCount());
+                }
+            }
+        });
 }
 
 void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
@@ -469,9 +513,10 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     setFocus();
 }
 
-// 辅助功能实现
 void MPasteWidget::loadFromSaveDir() {
-    ui_.clipboardWidget->loadFromSaveDir();
+    for (auto *boardWidget : ui_.boardWidgetMap.values()) {
+        boardWidget->loadFromSaveDir();
+    }
 }
 
 void MPasteWidget::setFocusOnSearch(bool flag) {
@@ -487,6 +532,12 @@ void MPasteWidget::setFocusOnSearch(bool flag) {
 }
 
 ScrollItemsWidget *MPasteWidget::currItemsWidget() {
+    QAbstractButton* currentBtn = ui_.buttonGroup->checkedButton();
+    if (currentBtn) {
+        QString category = currentBtn->property("category").toString();
+        return ui_.boardWidgetMap[category];
+    }
+
     return ui_.clipboardWidget;
 }
 

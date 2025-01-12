@@ -7,8 +7,10 @@
 #include <QHBoxLayout>
 #include <QMouseEvent>
 
-ClipboardItemWidget::ClipboardItemWidget(QWidget *parent)
-    : QWidget(parent)
+#include "utils/MPasteSettings.h"
+
+ClipboardItemWidget::ClipboardItemWidget(QString category, QWidget *parent)
+    : category(category), QWidget(parent)
 {
     setupUI();
     setupActionButtons();
@@ -80,10 +82,14 @@ void ClipboardItemWidget::setupContextMenu() {
     };
 
     addAction(":/resources/resources/save_black.svg", tr("Save"), &ClipboardItemWidget::handleSaveAction);
-    addAction(":/resources/resources/add_black.svg", tr("Add to"), &ClipboardItemWidget::handleFavoriteAction);
     addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
     
     ui.contextMenu->addSeparator();
+
+    if (this->category != MPasteSettings::STAR_CATEGORY_NAME) {
+        addAction(":/resources/resources/star.svg", tr("Save to Star"), &ClipboardItemWidget::handleStarAction);
+    }
+    addAction(":/resources/resources/add_black.svg", tr("Save to"), &ClipboardItemWidget::handleFavoriteAction);
     
     addAction(":/resources/resources/delete.svg", tr("Delete"), &ClipboardItemWidget::handleDeleteAction);
 }
@@ -91,8 +97,8 @@ void ClipboardItemWidget::setupContextMenu() {
 void ClipboardItemWidget::initializeEffects() {
     auto* shadowEffect = new QGraphicsDropShadowEffect(this);
     shadowEffect->setOffset(3, 4);
-    shadowEffect->setColor(QColor(0, 0, 0, 40));
-    shadowEffect->setBlurRadius(4);
+    shadowEffect->setColor(QColor(0, 0, 0, 30));
+    shadowEffect->setBlurRadius(8);
     ui.innerWidget->setGraphicsEffect(shadowEffect);
 }
 
@@ -133,6 +139,10 @@ void ClipboardItemWidget::handleDeleteAction() {
 
 void ClipboardItemWidget::handleSaveAction() {
     emit saveRequested(currentItem);
+}
+
+void ClipboardItemWidget::handleStarAction() {
+    emit itemStared(currentItem);
 }
 
 void ClipboardItemWidget::updateFavoriteButton() {

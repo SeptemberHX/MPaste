@@ -15,6 +15,8 @@
         <file>resources/first.svg</file>
         <file>resources/last.svg</file>
         <file>resources/preview.svg</file>
+        <file>resources/star.svg</file>
+
         <file>resources/style/defaultStyle.qss</file>
     </qresource>
 </RCC>

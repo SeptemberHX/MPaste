@@ -10,6 +10,9 @@
 
 MPasteSettings *MPasteSettings::inst = nullptr;
 
+const QString MPasteSettings::CLIPBOARD_CATEGORY_NAME = "Clipboard";
+const QString MPasteSettings::STAR_CATEGORY_NAME = "Stared";
+
 MPasteSettings *MPasteSettings::getInst() {
     if (inst == nullptr) {
         MPasteSettings::inst = new MPasteSettings();

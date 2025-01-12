@@ -14,7 +14,7 @@ class ClipboardItemWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit ClipboardItemWidget(QWidget *parent = nullptr);
+    explicit ClipboardItemWidget(QString category, QWidget *parent = nullptr);
     ~ClipboardItemWidget() override = default;
 
     // Public API
@@ -30,6 +30,7 @@ signals:
     void clicked();
     void doubleClicked();
     void itemNeedToSave();
+    void itemStared(const ClipboardItem& item);
     void favoriteChanged(bool isFavorite);
     void deleteRequested();
     void saveRequested(const ClipboardItem& item);
@@ -59,6 +60,7 @@ private:
     void handleFavoriteAction();
     void handleDeleteAction();
     void handleSaveAction();
+    void handleStarAction();
 
     // UI Components
     struct {
@@ -78,6 +80,8 @@ private:
     // Data
     ClipboardItem currentItem;
     bool isFavorite{false};
+
+    QString category;
 };
 
 #endif //MPASTE_CLIPBOARDITEMWIDGET_H

@@ -31,15 +31,18 @@ public:
     void selectedByEnter();
     void focusMoveLeft();
     void focusMoveRight();
+    int getItemCount();
 
     void scrollToFirst();
     void scrollToLast();
+    QString getCategory() const;
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
     void doubleClicked(const ClipboardItem &item);
     void itemCountChanged(int itemCount);
+    void itemStared(const ClipboardItem &item);
 
 private slots:
     void itemClicked();

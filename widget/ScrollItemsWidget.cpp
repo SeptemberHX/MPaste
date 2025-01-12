@@ -24,6 +24,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, QWidget *parent) :
 
     // Enable pixel scrolling
     ui->scrollArea->horizontalScrollBar()->setSingleStep(50);
+    ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
 
     this->layout = new QHBoxLayout(ui->scrollAreaWidgetContents);
     this->layout->setContentsMargins(0, 0, 0, 0);
@@ -50,13 +51,15 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
         }
     }
 
-    auto itemWidget = new ClipboardItemWidget(ui->scrollAreaWidgetContents);
+    auto itemWidget = new ClipboardItemWidget(this->category, ui->scrollAreaWidgetContents);
     connect(itemWidget, &ClipboardItemWidget::clicked, this, &ScrollItemsWidget::itemClicked);
     connect(itemWidget, &ClipboardItemWidget::doubleClicked, this, &ScrollItemsWidget::itemDoubleClicked);
     connect(itemWidget, &ClipboardItemWidget::itemNeedToSave, this, [this] () {
        auto itemWidget = dynamic_cast<ClipboardItemWidget*>(sender());
        this->saveItem(itemWidget->getItem());
     });
+    connect(itemWidget, &ClipboardItemWidget::itemStared, this, &ScrollItemsWidget::itemStared);
+
     itemWidget->installEventFilter(this);
     itemWidget->showItem(nItem);
 
@@ -270,6 +273,10 @@ void ScrollItemsWidget::focusMoveRight() {
     }
 }
 
+int ScrollItemsWidget::getItemCount() {
+    return this->layout->count() - 1;
+}
+
 void ScrollItemsWidget::scrollToFirst() {
     if (this->layout->count() <= 1) return;  // 没有条目时直接返回
 
@@ -297,6 +304,10 @@ void ScrollItemsWidget::scrollToLast() {
             break;
         }
     }
+}
+
+QString ScrollItemsWidget::getCategory() const {
+    return this->category;
 }
 
 void ScrollItemsWidget::selectedByEnter() {

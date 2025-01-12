@@ -50,18 +50,6 @@ QLineEdit:focus {
     border-color: #FF8C69;  /* 聚焦时边框颜色加深 */
 }
 
-/* Clipboard 标签样式 */
-QToolButton#toolButton {
-    background-color: rgba(255, 255, 255, 0.95);
-    padding: 4px 12px;
-    color: #2C3E50;
-    font-weight: 600;
-    font-size: 13px;
-    text-transform: none;
-    border: 2px solid #4A90E2;
-    border-radius: 14px;
-}
-
 /* 圆形计数器样式 */
 QToolButton#countArea {
     background-color: #1abc9c;
@@ -77,13 +65,23 @@ QToolButton#countArea {
     text-align: center;
 }
 
-/* 其他样式保持不变 */
-QToolButton#toolButton:hover,
-QToolButton#toolButton:pressed,
-QToolButton#toolButton:checked,
-QToolButton#toolButton:focus {
+
+/* Clipboard 标签样式 */
+QWidget#clipboardBtnWidget QToolButton  {
+    padding: 4px 12px;
+    color: #2C3E50;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: none;
+    border-radius: 14px;
+}
+QWidget#clipboardBtnWidget QToolButton:hover,
+QWidget#clipboardBtnWidget QToolButton:pressed,
+QWidget#clipboardBtnWidget QToolButton:checked,
+QWidget#clipboardBtnWidget QToolButton:focus {
     background-color: rgba(255, 255, 255, 0.95);
     border: 2px solid #4A90E2;
+    outline: none;
 }
 
 QToolButton#countArea:hover {
@@ -94,7 +92,6 @@ QToolButton#countArea {
     qproperty-toolButtonStyle: Qt::ToolButtonTextOnly;
 }
 
-QToolButton#toolButton:focus,
 QToolButton#countArea:focus {
     outline: none;
 }

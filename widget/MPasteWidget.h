@@ -1,6 +1,7 @@
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
 
+#include <QAbstractButton>
 #include <QWidget>
 #include <QHBoxLayout>
 #include <QMimeData>
@@ -81,7 +82,19 @@ private:
         QHBoxLayout *layout;
         AboutWidget *aboutWidget;
         MPasteSettingsWidget *settingsWidget;
+
+        // 存储所有的 boardWidget
+        QMap<QString, ScrollItemsWidget*> boardWidgetMap;
+
+        // 存储切换的 button
+        QButtonGroup *buttonGroup;
+
+        // 剪贴板，必须要存在
         ScrollItemsWidget *clipboardWidget;
+
+        // 收藏夹，必须要存在
+        ScrollItemsWidget *staredWidget;
+
         QPropertyAnimation *searchShowAnim;
         QPropertyAnimation *searchHideAnim;
         QSystemTrayIcon *trayIcon;
