@@ -58,6 +58,16 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
        auto itemWidget = dynamic_cast<ClipboardItemWidget*>(sender());
        this->saveItem(itemWidget->getItem());
     });
+    connect(itemWidget, &ClipboardItemWidget::deleteRequested, this, [this] () {
+        auto itemWidget = dynamic_cast<ClipboardItemWidget*>(sender());
+        qDebug() << itemWidget->getItem().getTime();
+        this->saver->removeItem(this->getItemFilePath(itemWidget->getItem()));
+        this->layout->removeWidget(itemWidget);
+        itemWidget->deleteLater();
+        this->layout->update();
+
+        emit itemCountChanged(this->layout->count() - 1);
+    });
     connect(itemWidget, &ClipboardItemWidget::itemStared, this, &ScrollItemsWidget::itemStared);
 
     itemWidget->installEventFilter(this);
