@@ -23,22 +23,33 @@ void ClipboardMonitor::clipboardChanged() {
         return;
     }
 
-    if (mimeData->hasImage()) {
+    // Debug: 输出所有可用的格式
+    qDebug() << "Available formats:" << mimeData->formats();
+    // 1. 首先检查富文本格式（包括Office原始格式）
+    if (mimeData->hasHtml()) {
+        html = mimeData->html();
+        // PowerPoint可能在text中包含额外的格式信息
+        if (mimeData->hasText()) {
+            text = mimeData->text();
+        }
+    }
+    // 2. 检查URL（文件链接等）
+    else if (mimeData->hasUrls()) {
+        urls = mimeData->urls();
+        if (mimeData->hasText()) {
+            text = mimeData->text();
+        }
+    }
+    // 3. 检查纯文本
+    else if (mimeData->hasText()) {
+        text = mimeData->text();
+    }
+    // 4. 最后才检查图片格式
+    else if (mimeData->hasImage()) {
         image = qvariant_cast<QPixmap>(mimeData->imageData());
     }
 
-    if (mimeData->hasHtml()) {
-        html = mimeData->html();
-    }
-
-    if (mimeData->hasText()) {
-        text = mimeData->text();
-    }
-
-    if (mimeData->hasUrls()) {
-        urls = mimeData->urls();
-    }
-
+    // 颜色数据的处理保持不变
     if (mimeData->hasColor()) {
         color = qvariant_cast<QColor>(mimeData->colorData());
     }

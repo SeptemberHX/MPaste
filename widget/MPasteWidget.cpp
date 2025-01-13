@@ -47,6 +47,7 @@ void MPasteWidget::initializeWidget() {
     loadFromSaveDir();
     clipboard_.monitor->clipboardChanged();
     setFocusOnSearch(false);
+    misc_.pendingNumKey = 0;  // 初始化待处理的数字键
 
 #ifdef _DEBUG
     // 添加调试计时器
@@ -446,34 +447,6 @@ void MPasteWidget::handleSearchInput(QKeyEvent *event) {
     event->accept();
 }
 
-bool MPasteWidget::handleAltNumShortcut(QKeyEvent *event) {
-    // 使用Qt的事件系统来判断Alt状态
-    if (event->modifiers() & Qt::AltModifier) {
-        int keyOrder = -1;
-        if (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9) {
-            keyOrder = (event->key() == Qt::Key_0) ? 9 : event->key() - Qt::Key_1;
-
-            // 添加额外的状态验证
-            if (keyOrder >= 0 && keyOrder <= 9) {
-                qDebug() << "Alt+" << keyOrder << " detected";
-
-                const ClipboardItem& selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
-                this->setClipboard(selectedItem);
-
-                // 确保在处理完成后再隐藏窗口
-                QTimer::singleShot(0, this, [this]() {
-                    hideAndPaste();
-                    currItemsWidget()->cleanShortCutInfo();
-                });
-
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 // 事件处理相关
 bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::Wheel) {
@@ -494,9 +467,13 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
 }
 
 void MPasteWidget::keyPressEvent(QKeyEvent *event) {
-    if (handleAltNumShortcut(event)) {
-        event->accept();
-        return;
+    if (event->modifiers() & Qt::AltModifier) {
+        // 记录按下的数字键
+        if (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9) {
+            misc_.pendingNumKey = event->key();
+            event->accept();
+            return;
+        }
     }
     handleKeyboardEvent(event);
 }
@@ -504,7 +481,41 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
 void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Alt) {
         currItemsWidget()->cleanShortCutInfo();
+        misc_.pendingNumKey = 0;  // 清除待处理的数字键
     }
+    // 处理数字键释放
+    else if (event->key() == misc_.pendingNumKey) {
+        int keyOrder = -1;
+        if (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9) {
+#ifdef Q_OS_WIN
+            // 检查 Alt 键是否仍然按下
+            bool altStillPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+#else
+            bool altStillPressed = QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier;
+#endif
+            // 只有当 Alt 键仍然按下时才执行操作
+            if (altStillPressed) {
+                keyOrder = (event->key() == Qt::Key_0) ? 9 : event->key() - Qt::Key_1;
+
+                if (keyOrder >= 0 && keyOrder <= 9) {
+                    qDebug() << "Alt+" << keyOrder << " detected on key release";
+
+                    const ClipboardItem& selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
+                    this->setClipboard(selectedItem);
+
+                    // 等待数字键完全释放
+                    QTimer::singleShot(50, this, [this]() {
+                        hideAndPaste();
+                        currItemsWidget()->cleanShortCutInfo();
+                    });
+                }
+            }
+        }
+        misc_.pendingNumKey = 0;  // 清除待处理的数字键
+        event->accept();
+        return;
+    }
+
     QWidget::keyReleaseEvent(event);
 }
 

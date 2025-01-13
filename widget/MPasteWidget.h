@@ -70,7 +70,6 @@ private:
     void handleEnterKey();
     void handleNavigationKeys(QKeyEvent *event);
     void handleHomeEndKeys(QKeyEvent *event);
-    bool handleAltNumShortcut(QKeyEvent *event);
 
     // 辅助方法
     ScrollItemsWidget* currItemsWidget();
@@ -113,6 +112,7 @@ private:
     struct {
         QMediaPlayer *player;
         QList<int> numKeyList;
+        int pendingNumKey;  // 添加这个变量来跟踪按下的数字键
     } misc_;
 
     static constexpr int HIDE_ANIMATION_TIME = 50;

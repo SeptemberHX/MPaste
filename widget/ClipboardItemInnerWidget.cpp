@@ -94,15 +94,15 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
 
     if (item.getColor().isValid()) {  // actually I haven't meet this situation yet :p
         this->showColor(item.getColor(), item.getText());
-    } else if (!item.getImage().isNull()) {
-        this->showImage(item.getImage());
     } else if (!item.getHtml().isEmpty() && !QColor::isValidColor(item.getText().trimmed())) {
         if (this->checkWebLink(item.getText())) {
             this->showWebLink(item.getText(), item);
         } else {
             this->showHtml(item.getHtml());
         }
-    } else if (!item.getUrls().isEmpty()) {
+    } else if (!item.getImage().isNull()) {
+        this->showImage(item.getImage());
+    }  else if (!item.getUrls().isEmpty()) {
         this->showUrls(item.getUrls(), item);
     } else if (!item.getText().isEmpty()) {
         this->showText(item.getText(), item);
