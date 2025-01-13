@@ -102,10 +102,6 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
         // 颜色数据
         this->showColor(item.getColor(), item.getText());
     }
-    else if (mimeData->hasImage()) {
-        // 图片数据优先于其他格式
-        this->showImage(item.getImage());
-    }
     else if (mimeData->hasUrls() && !mimeData->hasHtml()) {
         // 确保是纯URL，而不是富文本或代码中包含的URL
         QList<QUrl> urls = mimeData->urls();
@@ -135,6 +131,10 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
                 // IDE代码或其他富文本内容
                 this->showHtml(mimeData->html());
             }
+    }
+    else if (mimeData->hasImage()) {
+        // 图片数据优先于其他格式
+        this->showImage(item.getImage());
     }
     else if (mimeData->hasText()) {
         // 纯文本内容

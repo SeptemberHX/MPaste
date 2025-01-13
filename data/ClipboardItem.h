@@ -29,10 +29,6 @@ public:
     ClipboardItem(const QPixmap &icon, const QMimeData *mimeData) : icon_(icon) {
         if (mimeData) {
             mimeData_.reset(new QMimeData);
-            for (const QString &format : mimeData->formats()) {
-                // qDebug() << format;
-                mimeData_->setData(format, mimeData->data(format));
-            }
 
             // 检查图像数据，直接获取；例如 snipaste 不会写到 data() 里
             if (mimeData->hasImage()) {
@@ -45,6 +41,11 @@ public:
 
                 mimeData_->setData("application/x-qt-image", imageData); // 直接设置PNG图像数据
                 mimeData_->setData("application/x-qt-windows-mime;value=\"PNG\"", imageData); // 直接设置PNG图像数据
+            }
+
+            for (const QString &format : mimeData->formats()) {
+                // qDebug() << format;
+                mimeData_->setData(format, mimeData->data(format));
             }
 
             time_ = QDateTime::currentDateTime();
@@ -140,35 +141,49 @@ public:
     }
 
     bool operator==(const ClipboardItem &other) const {
-        // 比较图标
-        // if (icon_ != other.icon_) {
-        //     return false;
-        // }
-
-        // 比较 MimeData
+        // 如果两者都为空，认为相等
         if (!mimeData_ && !other.mimeData_) {
             return true;
         }
+        // 如果其中一个为空，另一个不为空，认为不相等
         if (!mimeData_ || !other.mimeData_) {
             return false;
         }
 
-        // 比较 formats 和数据
-        QStringList formats = mimeData_->formats();
-        QStringList otherFormats = other.mimeData_->formats();
-
-        if (formats.size() != otherFormats.size()) {
-            return false;
-        }
-
-        formats.sort();
-        otherFormats.sort();
-
-        for (int i = 0; i < formats.size(); ++i) {
-            if (formats[i] != otherFormats[i]) {
+        // 比较文本内容
+        if (mimeData_->hasText() || other.mimeData_->hasText()) {
+            if (mimeData_->text() != other.mimeData_->text()) {
                 return false;
             }
-            if (mimeData_->data(formats[i]) != other.mimeData_->data(formats[i])) {
+        }
+
+        // 比较HTML内容
+        if (mimeData_->hasHtml() || other.mimeData_->hasHtml()) {
+            if (mimeData_->html() != other.mimeData_->html()) {
+                return false;
+            }
+        }
+
+        // 比较URLs
+        if (mimeData_->hasUrls() || other.mimeData_->hasUrls()) {
+            if (mimeData_->urls() != other.mimeData_->urls()) {
+                return false;
+            }
+        }
+
+        // 比较图片内容
+        if (mimeData_->hasImage() || other.mimeData_->hasImage()) {
+            QPixmap img1 = getImage();
+            QPixmap img2 = other.getImage();
+            if (img1.isNull() != img2.isNull() ||
+                (!img1.isNull() && img1.toImage() != img2.toImage())) {
+                return false;
+                }
+        }
+
+        // 比较颜色数据
+        if (mimeData_->hasColor() || other.mimeData_->hasColor()) {
+            if (getColor() != other.getColor()) {
                 return false;
             }
         }
@@ -209,20 +224,48 @@ public:
     const QMimeData* getMimeData() const { return mimeData_.data(); }
     // 常用访问器保持不变
     QString getText() const { return mimeData_ ? mimeData_->text() : QString(); }
+
     QPixmap getImage() const {
         if (!mimeData_ || !mimeData_->hasImage()) {
             return QPixmap();
         }
 
-        // 尝试多种方式获取图片数据
-        QVariant imageData = mimeData_->imageData();
+        // Windows 特定格式
+        const QStringList formats = mimeData_->formats();
+        for (const QString &format : formats) {
+            if (format.startsWith("application/x-qt-windows-mime;value=\"")) {
+                QPixmap pixmap;
+                QByteArray data = mimeData_->data(format);
+                if (!data.isEmpty() && pixmap.loadFromData(data)) {
+                    return pixmap;
+                }
+            }
+        }
 
-        // 直接尝试转换为 QPixmap
+        // 常见图片格式
+        static const QStringList commonFormats = {
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/bmp",
+            "application/x-qt-image"
+        };
+
+        for (const QString &format : commonFormats) {
+            if (mimeData_->hasFormat(format)) {
+                QPixmap pixmap;
+                QByteArray data = mimeData_->data(format);
+                if (!data.isEmpty() && pixmap.loadFromData(data)) {
+                    return pixmap;
+                }
+            }
+        }
+
+        // 首先尝试直接获取图片数据
+        QVariant imageData = mimeData_->imageData();
         if (imageData.canConvert<QPixmap>()) {
             return qvariant_cast<QPixmap>(imageData);
         }
-
-        // 尝试通过 QImage 转换
         if (imageData.canConvert<QImage>()) {
             QImage img = qvariant_cast<QImage>(imageData);
             if (!img.isNull()) {
@@ -230,26 +273,9 @@ public:
             }
         }
 
-        // 如果有 PNG 数据，尝试从原始数据创建
-        if (mimeData_->hasFormat("application/x-qt-windows-mime;value=\"PNG\"")) {
-            QPixmap pixmap;
-            pixmap.loadFromData(mimeData_->data("application/x-qt-windows-mime;value=\"PNG\""), "PNG");
-            if (!pixmap.isNull()) {
-                return pixmap;
-            }
-        }
-
-        // 尝试其他图片格式
-        if (mimeData_->hasFormat("application/x-qt-image")) {
-            QPixmap pixmap;
-            pixmap.loadFromData(mimeData_->data("application/x-qt-image"));
-            if (!pixmap.isNull()) {
-                return pixmap;
-            }
-        }
-
         return QPixmap();
     }
+
     QString getHtml() const { return mimeData_ ? mimeData_->html() : QString(); }
     QList<QUrl> getUrls() const { return mimeData_ ? mimeData_->urls() : QList<QUrl>(); }
     QColor getColor() const {
