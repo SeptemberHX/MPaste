@@ -40,11 +40,9 @@ ScrollItemsWidget::~ScrollItemsWidget()
 }
 
 bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
-    if (nItem.isEmpty()) return false;
-
     for (int i = 0; i < this->layout->count() - 1; ++i) {
         ClipboardItemWidget *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
-        if (widget->getItem().sameContent(nItem)) {
+        if (widget->getItem() == nItem) {
             if (i != 0) {
                 this->moveItemToFirst(widget);
             }
@@ -118,12 +116,7 @@ void ScrollItemsWidget::setFirstVisibleItemSelected() {
 }
 
 void ScrollItemsWidget::moveItemToFirst(ClipboardItemWidget *widget) {
-    ClipboardItem item(widget->getItem().getIcon(),
-                       widget->getItem().getText(),
-                       widget->getItem().getImage(),
-                       widget->getItem().getHtml(),
-                       widget->getItem().getUrls(),
-                       widget->getItem().getColor());
+    ClipboardItem item(widget->getItem());
     this->saver->removeItem(this->getItemFilePath(widget->getItem()));
     this->saveItem(item);
     this->layout->removeWidget(widget);

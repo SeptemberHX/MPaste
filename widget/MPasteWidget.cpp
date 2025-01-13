@@ -234,7 +234,7 @@ void MPasteWidget::setupConnections() {
         });
 
         connect(boardWidget, &ScrollItemsWidget::itemStared, this, [this](const ClipboardItem &item) {
-            ClipboardItem updatedItem(item.getIcon(), item.getText(), item.getImage(), item.getHtml(), item.getUrls(), item.getColor());
+            ClipboardItem updatedItem(item);
             ui_.staredWidget->addAndSaveItem(updatedItem);
         });
     }
@@ -298,35 +298,10 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
 
 void MPasteWidget::setClipboard(const ClipboardItem &item) {
     clipboard_.monitor->disconnectMonitor();
+    clipboard_.mimeData = item.createMimeData();
 
-    if (clipboard_.mimeData) {
-
-    }
-    clipboard_.mimeData = new QMimeData();
-
-    // 处理富文本
-    if (!item.getHtml().isEmpty()) {
-        clipboard_.mimeData->setHtml(item.getHtml());
-        if (!item.getText().isEmpty()) {
-            clipboard_.mimeData->setText(item.getText());
-        }
-    }
-    // 处理图片
-    else if (!item.getImage().isNull()) {
-        clipboard_.mimeData->setImageData(item.getImage());
-    }
-    // 处理文件URL
-    else if (!item.getUrls().isEmpty()) {
-        handleUrlsClipboard(item);
-    }
-    // 处理普通文本
-    else if (!item.getText().isEmpty()) {
-        clipboard_.mimeData->setText(item.getText());
-    }
-    // 处理颜色数据
-    else if (item.getColor().isValid()) {
-        clipboard_.mimeData->setColorData(item.getColor());
-    }
+    // Debug information
+    qDebug() << "Setting clipboard with formats:" << clipboard_.mimeData->formats();
 
     QGuiApplication::clipboard()->setMimeData(clipboard_.mimeData);
     // 使用延时重新连接监视器，避免触发重复提示音

@@ -4,55 +4,55 @@
 <context>
     <name>ClipboardItemInnerWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="177"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="218"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="248"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="262"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="210"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="251"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="281"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="295"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="178"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="211"/>
         <source>Rich Text</source>
         <translation>富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="203"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="236"/>
         <source>Pixels</source>
         <translation>像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="204"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="237"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="220"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="253"/>
         <source>Plain Text</source>
         <translation>纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="234"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="267"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="261"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="294"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="268"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="301"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="275"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="308"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="334"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="367"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>

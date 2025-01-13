@@ -8,65 +8,66 @@
 
 bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) {
     QFile file(filePath);
-    file.open(QIODevice::WriteOnly);
+    if (!file.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+
     QDataStream out(&file);
-    out << item.getTime() << item.getUrls() << item.getImage() << item.getText() << item.getHtml() << item.getIcon() << item.getName() << item.getColor() << item.getUrl() << item.getTitle() << item.getFavicon();
+
+    // 保存基本属性
+    out << item.getTime() << item.getIcon();
+    out << item.getFavicon() << item.getTitle() << item.getUrl();
+
+    const QMimeData* mimeData = item.getMimeData();
+    if (mimeData) {
+        QStringList formats = mimeData->formats();
+
+        // 直接遍历 formats 列表并写入格式和数据
+        for (const QString &format : formats) {
+            QByteArray data = mimeData->data(format);
+            out << format << data; // 写入格式名称和数据
+        }
+    }
+
     file.close();
     return true;
 }
 
 ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
-    ClipboardItem item;
     QFile file(filePath);
-    file.open(QIODevice::ReadOnly);
-    QDataStream in(&file);
-
-    QDateTime time;
-    in >> time;
-    item.setTime(time);
-
-    QList<QUrl> urls;
-    in >> urls;
-    item.setUrls(urls);
-
-    QPixmap image;
-    in >> image;
-    item.setImage(image);
-
-    QString text;
-    in >> text;
-    item.setText(text);
-
-    QString html;
-    in >> html;
-    item.setHtml(html);
-
-    QPixmap icon;
-    in >> icon;
-    item.setIcon(icon);
-
-    QString name;
-    in >> name;
-    item.setName(name);
-
-    QColor color;
-    in >> color;
-    item.setColor(color);
-
-    if (!in.atEnd()) {
-        QString url;
-        in >> url;
-        item.setUrl(url);
-
-        QString title;
-        in >> title;
-        item.setTitle(title);
-
-        QPixmap favico;
-        in >> favico;
-        item.setFavicon(favico);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return ClipboardItem();
     }
 
+    QDataStream in(&file);
+
+    // 读取基本属性
+    QDateTime time;
+    QPixmap icon;
+    QPixmap favicon;
+    QString title;
+    QString url;
+    in >> time >> icon >> favicon >> title >> url;
+
+    // 创建普通指针，让 ClipboardItem 的构造函数接管其所有权
+    QMimeData* mimeData = new QMimeData;
+    // 循环读取格式和数据，直到文件结束
+    while (!in.atEnd()) {
+        QString format;
+        QByteArray data;
+
+        in >> format >> data;  // 读取格式和数据
+        mimeData->setData(format, data);  // 将数据设置到 QMimeData 中
+    }
+
+    // ClipboardItem 构造函数会接管 mimeData 的所有权
+    ClipboardItem item(icon, mimeData);
+    item.setFavicon(favicon);
+    item.setTime(time);
+    item.setTitle(title);
+    item.setUrl(url);
+
+    file.close();
     return item;
 }
 

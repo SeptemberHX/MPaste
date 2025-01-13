@@ -92,20 +92,53 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &nIcon) {
 void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
     this->setIcon(item.getIcon());
 
-    if (item.getColor().isValid()) {  // actually I haven't meet this situation yet :p
+    const QMimeData* mimeData = item.getMimeData();
+    if (!mimeData) {
+        return;
+    }
+
+    // 从高优先级到低优先级判断
+    if (mimeData->hasColor()) {
+        // 颜色数据
         this->showColor(item.getColor(), item.getText());
-    } else if (!item.getHtml().isEmpty() && !QColor::isValidColor(item.getText().trimmed())) {
-        if (this->checkWebLink(item.getText())) {
-            this->showWebLink(item.getText(), item);
-        } else {
-            this->showHtml(item.getHtml());
-        }
-    } else if (!item.getImage().isNull()) {
+    }
+    else if (mimeData->hasImage()) {
+        // 图片数据优先于其他格式
         this->showImage(item.getImage());
-    }  else if (!item.getUrls().isEmpty()) {
-        this->showUrls(item.getUrls(), item);
-    } else if (!item.getText().isEmpty()) {
-        this->showText(item.getText(), item);
+    }
+    else if (mimeData->hasUrls() && !mimeData->hasHtml()) {
+        // 确保是纯URL，而不是富文本或代码中包含的URL
+        QList<QUrl> urls = mimeData->urls();
+        bool allValidUrls = std::all_of(urls.begin(), urls.end(),
+            [](const QUrl& url) { return url.isValid() && !url.isRelative(); });
+
+        if (allValidUrls) {
+            this->showUrls(urls, item);
+        } else if (mimeData->hasHtml()) {
+            this->showHtml(mimeData->html());
+        } else {
+            this->showText(mimeData->text(), item);
+        }
+    }
+    else if (mimeData->hasHtml()) {
+        QString text = mimeData->text().trimmed();
+        // 检查是否是真正的网页链接
+        if (!mimeData->formats().contains("Rich Text Format") &&
+            !text.contains("\n") &&
+            (text.startsWith("http://") || text.startsWith("https://"))) {
+            if (this->checkWebLink(text)) {
+                this->showWebLink(text, item);
+            } else {
+                this->showHtml(mimeData->html());
+            }
+            } else {
+                // IDE代码或其他富文本内容
+                this->showHtml(mimeData->html());
+            }
+    }
+    else if (mimeData->hasText()) {
+        // 纯文本内容
+        this->showText(mimeData->text(), item);
     }
 
     ui->timeLabel->setText(QLocale::system().toString(item.getTime(), QLocale::ShortFormat));
