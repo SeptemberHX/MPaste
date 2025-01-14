@@ -20,7 +20,7 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
 
     // 更新正则表达式以适应Qt6的QRegularExpression语法
     this->ogImageReg.setPattern("<meta .*?property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*?)\"[ ]*/?>");
-    this->ogTitleReg.setPattern("<meta .*?property[ ]*=[ ]*\"og:title\"[ ]*content[ ]*=[ ]*\"(.*?)\"[ ]*/?>");
+    this->ogTitleReg.setPattern(R"(<meta\s+(?=(?:[^>]*\s)?property=["']og:title["'])(?=[^>]*\scontent=["']([^"']*?)["'])[^>]*>)");
     this->titleReg.setPattern("<title.*?>(.*?)</title>");
 
 
@@ -44,7 +44,7 @@ void OpenGraphFetcher::handle() {
 }
 
 void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
-if (reply->error() != QNetworkReply::NoError) {
+    if (reply->error() != QNetworkReply::NoError) {
         if (!pendingImageUrls.isEmpty()) {
             tryNextImage();
             return;
@@ -54,98 +54,161 @@ if (reply->error() != QNetworkReply::NoError) {
     }
 
     if (reply->request().url() == this->realCalledUrl) {
-        // HTML 内容处理
         QDomDocument doc;
         QString body(reply->readAll());
 
-        // 收集所有可能的图片URL
         pendingImageUrls.clear();
 
-        if (doc.setContent(body)) {
-            // 1. 尝试 og:image
+        if (doc.setContent(body, true)) {
+            qDebug() << "OpenGraphFetcher::requestFinished";
+
+            // 1. 先处理 meta 标签，提取 og:title 和 og:image
             QDomNodeList metaNodes = doc.elementsByTagName("meta");
+            bool foundTitle = false;
             for (int i = 0; i < metaNodes.size(); ++i) {
                 QDomElement meta = metaNodes.at(i).toElement();
+
+                // 处理标题
+                if (!foundTitle && (meta.attribute("property") == "og:title" ||
+                    meta.attribute("property") == "twitter:title")) {
+                    QString content = meta.attribute("content");
+                    if (!content.isEmpty()) {
+                        this->ogItem.setTitle(content);
+                        foundTitle = true;
+                    }
+                }
+
+                // 处理图片
                 if (meta.attribute("property") == "og:image" ||
                     meta.attribute("property") == "twitter:image") {
-                    pendingImageUrls << meta.attribute("content");
-                }
-            }
-
-            // 2. 尝试 link 标签中的图标
-            QDomNodeList linkNodes = doc.elementsByTagName("link");
-            for (int i = 0; i < linkNodes.size(); ++i) {
-                QDomElement link = linkNodes.at(i).toElement();
-                QString rel = link.attribute("rel").toLower();
-                QString type = link.attribute("type").toLower();
-                QString href = link.attribute("href");
-
-                // 检查所有可能的 favicon 相关属性
-                if ((rel.contains("icon") ||
-                     type == "image/x-icon" ||
-                     type == "image/vnd.microsoft.icon") &&
-                    !href.isEmpty() && !href.startsWith("$")) {
-                    pendingImageUrls << href;
+                    QString content = meta.attribute("content");
+                    if (!content.isEmpty()) {
+                        pendingImageUrls << content;
+                    }
                     }
             }
 
-            // 处理标题...
-            QDomNodeList titleNodes = doc.elementsByTagName("title");
-            if (!titleNodes.isEmpty()) {
-                this->ogItem.setTitle(titleNodes.at(0).toElement().text());
+            // 如果没找到 og:title，使用普通标题
+            if (!foundTitle) {
+                QDomNodeList titleNodes = doc.elementsByTagName("title");
+                if (!titleNodes.isEmpty()) {
+                    QString titleText = titleNodes.at(0).toElement().text().trimmed();
+                    if (!titleText.isEmpty()) {
+                        this->ogItem.setTitle(titleText);
+                    }
+                }
             }
+
+            // 2. 其次选择正文第一张合适的图片
+            if (pendingImageUrls.isEmpty()) {
+                QDomNodeList imgNodes = doc.elementsByTagName("img");
+                for (int i = 0; i < imgNodes.size(); ++i) {
+                    QDomElement img = imgNodes.at(i).toElement();
+                    QString src = img.attribute("src");
+
+                    // 跳过明显的小图标、广告等
+                    if (!src.isEmpty() &&
+                        !src.contains("avatar", Qt::CaseInsensitive) &&
+                        !src.contains("logo", Qt::CaseInsensitive) &&
+                        !src.contains("icon", Qt::CaseInsensitive) &&
+                        !src.contains("ad", Qt::CaseInsensitive)) {
+                        pendingImageUrls << src;
+                        break;  // 只取第一张合适的图片
+                    }
+                }
+            }
+
+            // 3. 最后选择 favicon
+            if (pendingImageUrls.isEmpty()) {
+                QDomNodeList linkNodes = doc.elementsByTagName("link");
+                for (int i = 0; i < linkNodes.size(); ++i) {
+                    QDomElement link = linkNodes.at(i).toElement();
+                    QString rel = link.attribute("rel").toLower();
+                    QString type = link.attribute("type").toLower();
+                    QString href = link.attribute("href");
+
+                    if ((rel.contains("icon") ||
+                         type == "image/x-icon" ||
+                         type == "image/vnd.microsoft.icon") &&
+                        !href.isEmpty() && !href.startsWith("$")) {
+                        pendingImageUrls << href;
+                    }
+                }
+            }
+
         } else {
-            // 使用正则表达式提取信息
-            auto processFaviconMatch = [this](const QRegularExpressionMatch& match) {
+            // 使用正则表达式处理
+            // 先尝试 og:title
+            QRegularExpressionMatch match = this->ogTitleReg.match(body);
+            if (match.hasMatch()) {
+                QString content = match.captured(1);
+                if (content.isEmpty()) {
+                    content = match.captured(2);
+                }
+                if (!content.isEmpty()) {
+                    this->ogItem.setTitle(content);
+                }
+            } else {
+                // 如果没有 og:title，尝试普通标题
+                match = this->titleReg.match(body);
+                if (match.hasMatch()) {
+                    this->ogItem.setTitle(match.captured(1));
+                }
+            }
+
+            // 正则表达式提取 og:image
+            match = this->ogImageReg.match(body);
+            if (match.hasMatch()) {
                 QString url = match.captured(1);
                 if (!url.isEmpty()) {
                     pendingImageUrls << url;
                 }
-                // 检查第二个捕获组（针对 faviconReg1 的第二种模式）
-                url = match.captured(2);
-                if (!url.isEmpty()) {
-                    pendingImageUrls << url;
+            }
+
+            // 如果没有 og:image，尝试 favicon
+            if (pendingImageUrls.isEmpty()) {
+                auto processFaviconMatch = [this](const QRegularExpressionMatch& match) {
+                    QString url = match.captured(1);
+                    if (!url.isEmpty()) {
+                        pendingImageUrls << url;
+                    }
+                    url = match.captured(2);
+                    if (!url.isEmpty()) {
+                        pendingImageUrls << url;
+                    }
+                };
+
+                match = this->faviconReg1.match(body);
+                if (match.hasMatch()) {
+                    processFaviconMatch(match);
                 }
-            };
 
-            QRegularExpressionMatch match = this->faviconReg1.match(body);
-            if (match.hasMatch()) {
-                processFaviconMatch(match);
-            }
-
-            match = this->faviconReg2.match(body);
-            if (match.hasMatch()) {
-                processFaviconMatch(match);
-            }
-
-            // 处理标题...
-            match = this->titleReg.match(body);
-            if (match.hasMatch()) {
-                this->ogItem.setTitle(match.captured(1));
+                match = this->faviconReg2.match(body);
+                if (match.hasMatch()) {
+                    processFaviconMatch(match);
+                }
             }
         }
 
-        // 3. 添加常见的高质量图标路径
-        for (const QString &path : getHighQualityIconPaths()) {
-            pendingImageUrls << (targetUrl.toString() + path);
+        // 4. 最后添加默认的 favicon 路径
+        if (pendingImageUrls.isEmpty()) {
+            for (const QString &path : getHighQualityIconPaths()) {
+                pendingImageUrls << (targetUrl.toString() + path);
+            }
         }
 
         // 开始尝试获取图片
         tryNextImage();
-
     } else {
         // 处理图片请求的响应
         QPixmap image;
         if (image.loadFromData(reply->readAll())) {
-            // 检查图片质量
-            if (image.width() >= 32 && image.height() >= 32) {
-                this->ogItem.setImage(image);
-                Q_EMIT finished(this->ogItem);
-                return;
-            }
+            this->ogItem.setImage(image);
+            Q_EMIT finished(this->ogItem);
+            return;
         }
 
-        // 如果这个图片不合适，尝试下一个
+        // 如果这个图片加载失败，尝试下一个
         if (!pendingImageUrls.isEmpty()) {
             tryNextImage();
         } else {
