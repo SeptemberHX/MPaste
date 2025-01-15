@@ -35,6 +35,7 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    bool focusNextPrevChild(bool next) override;
 
 private slots:
     void clipboardUpdated(ClipboardItem item, int wId);
@@ -70,6 +71,7 @@ private:
     void handleEnterKey();
     void handleNavigationKeys(QKeyEvent *event);
     void handleHomeEndKeys(QKeyEvent *event);
+    void handleTabKey();
 
     // 辅助方法
     ScrollItemsWidget* currItemsWidget();
@@ -117,5 +119,6 @@ private:
 
     static constexpr int HIDE_ANIMATION_TIME = 50;
 };
+
 
 #endif // MPASTEWIDGET_H

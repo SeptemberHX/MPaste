@@ -278,6 +278,9 @@ void MPasteWidget::setupConnections() {
                 if (toolButton == button) {
                     this->updateItemCount(boardWidget->getItemCount());
                 }
+                if (!ui_.ui->searchEdit->text().isEmpty()) {
+                    boardWidget->filterByKeyword(ui_.ui->searchEdit->text());
+                }
             }
         });
 }
@@ -357,10 +360,22 @@ void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
         case Qt::Key_End:
             handleHomeEndKeys(event);
             break;
+        case Qt::Key_Tab:
+            handleTabKey();
+            break;
         default:
             handleSearchInput(event);
             break;
     }
+}
+
+void MPasteWidget::handleTabKey() {
+    // 切换到下一个 tab 按钮
+    QAbstractButton* currentButton = ui_.buttonGroup->checkedButton();
+    QList<QAbstractButton*> buttons = ui_.buttonGroup->buttons();
+    int currentIndex = buttons.indexOf(currentButton);
+    int nextIndex = (currentIndex + 1) % buttons.size();
+    buttons[nextIndex]->click();
 }
 
 void MPasteWidget::handleEscapeKey() {
@@ -451,6 +466,11 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
         }
     }
     handleKeyboardEvent(event);
+}
+
+
+bool MPasteWidget::focusNextPrevChild(bool next) {
+    return false;
 }
 
 void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
