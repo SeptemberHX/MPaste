@@ -379,7 +379,7 @@ void MPasteWidget::handleTabKey() {
 }
 
 void MPasteWidget::handleEscapeKey() {
-    if (ui_.ui->searchEdit->hasFocus()) {
+    if (ui_.ui->searchEdit->hasFocus() || !ui_.ui->searchEdit->text().isEmpty()) {
         ui_.ui->searchEdit->clear();
         setFocusOnSearch(false);
     } else {
