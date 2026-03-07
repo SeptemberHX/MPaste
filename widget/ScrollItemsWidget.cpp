@@ -76,9 +76,15 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
         emit itemCountChanged(this->layout->count() - 1);
     });
     connect(itemWidget, &ClipboardItemWidget::itemStared, this, &ScrollItemsWidget::itemStared);
+    connect(itemWidget, &ClipboardItemWidget::itemUnstared, this, &ScrollItemsWidget::itemUnstared);
 
     itemWidget->installEventFilter(this);
     itemWidget->showItem(nItem);
+
+    // Items in the star category should show as favorited
+    if (this->category == MPasteSettings::STAR_CATEGORY_NAME) {
+        itemWidget->setFavorite(true);
+    }
 
     this->layout->insertWidget(0, itemWidget);
     this->setSelectedItem(itemWidget);
@@ -164,10 +170,26 @@ void ScrollItemsWidget::itemDoubleClicked() {
 }
 
 void ScrollItemsWidget::filterByKeyword(const QString &keyword) {
+    currentKeyword_ = keyword;
+    applyFilters();
+}
+
+void ScrollItemsWidget::filterByType(ClipboardItem::ContentType type) {
+    currentTypeFilter_ = type;
+    applyFilters();
+}
+
+void ScrollItemsWidget::applyFilters() {
     int visibleCount = 0;
     for (int i = 0; i < this->layout->count() - 1; ++i) {
         auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
-        widget->setVisible(widget->getItem().contains(keyword));
+        const ClipboardItem &item = widget->getItem();
+
+        bool matchKeyword = currentKeyword_.isEmpty() || item.contains(currentKeyword_);
+        bool matchType = (currentTypeFilter_ == ClipboardItem::All) ||
+                         (item.getContentType() == currentTypeFilter_);
+
+        widget->setVisible(matchKeyword && matchType);
         if (widget->isVisible()) {
             ++visibleCount;
         }
@@ -257,6 +279,36 @@ const ClipboardItem* ScrollItemsWidget::selectedByShortcut(int keyIndex) {
         return &this->currItemWidget->getItem();
     }
     return nullptr;
+}
+
+void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (widget && widget->getItem() == item) {
+            this->saver->removeItem(this->getItemFilePath(widget->getItem()));
+            this->layout->removeWidget(widget);
+            if (this->currItemWidget == widget) {
+                this->currItemWidget = nullptr;
+            }
+            widget->deleteLater();
+            this->layout->update();
+            if (!this->currItemWidget) {
+                this->setFirstVisibleItemSelected();
+            }
+            emit itemCountChanged(this->layout->count() - 1);
+            return;
+        }
+    }
+}
+
+void ScrollItemsWidget::setItemFavorite(const ClipboardItem &item, bool favorite) {
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (widget && widget->getItem() == item) {
+            widget->setFavorite(favorite);
+            return;
+        }
+    }
 }
 
 QString ScrollItemsWidget::saveDir() {

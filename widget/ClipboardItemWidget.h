@@ -21,6 +21,7 @@ public:
     [[nodiscard]] const ClipboardItem& getItem() const;
     void setShortcutInfo(int num);
     void clearShortcutInfo();
+    void setFavorite(bool favorite);
 
 public slots:
     void showItem(const ClipboardItem& item);
@@ -31,6 +32,7 @@ signals:
     void doubleClicked();
     void itemNeedToSave();
     void itemStared(const ClipboardItem& item);
+    void itemUnstared(const ClipboardItem& item);
     void favoriteChanged(bool isFavorite);
     void deleteRequested();
     void saveRequested(const ClipboardItem& item);

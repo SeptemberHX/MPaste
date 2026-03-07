@@ -53,6 +53,16 @@ void ClipboardMonitor::captureClipboard() {
         return;
     }
 
+    // Skip clipboard data with no meaningful content (e.g. delayed render failed)
+    bool hasContent = mimeData->hasText() && !mimeData->text().isEmpty();
+    hasContent = hasContent || mimeData->hasHtml();
+    hasContent = hasContent || mimeData->hasImage();
+    hasContent = hasContent || mimeData->hasUrls();
+    hasContent = hasContent || mimeData->hasColor();
+    if (!hasContent) {
+        return;
+    }
+
     Q_EMIT clipboardUpdated(ClipboardItem(PlatformRelated::getWindowIcon(pendingWId_), mimeData), pendingWId_);
 }
 

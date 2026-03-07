@@ -45,12 +45,17 @@ void ClipboardItemWidget::setupUI() {
 void ClipboardItemWidget::setupActionButtons() {
     // Container setup
     ui.actions.container = new QWidget(this);
-    ui.actions.container->setFixedSize(50, 24);
+    ui.actions.container->setFixedHeight(28);
+    ui.actions.container->setStyleSheet(R"(
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 8px;
+    )");
     ui.actions.container->hide();
 
     ui.actions.layout = new QHBoxLayout(ui.actions.container);
-    ui.actions.layout->setContentsMargins(0, 0, 0, 0);
-    ui.actions.layout->setSpacing(0);
+    ui.actions.layout->setContentsMargins(6, 0, 6, 0);
+    ui.actions.layout->setSpacing(4);
 
     // Create buttons
     ui.actions.favoriteBtn = createActionButton(
@@ -105,17 +110,17 @@ void ClipboardItemWidget::initializeEffects() {
 QToolButton* ClipboardItemWidget::createActionButton(const QString& iconPath, const QString& tooltip) const {
     auto* button = new QToolButton;
     button->setIcon(QIcon(iconPath));
-    button->setIconSize(QSize(16, 16));
-    button->setFixedSize(16, 16);
+    button->setIconSize(QSize(14, 14));
+    button->setFixedSize(22, 22);
     button->setStyleSheet(R"(
-        ClipboardItemWidget QToolButton {
+        QToolButton {
             background: transparent;
             border: none;
-            padding: 0px;
+            border-radius: 6px;
+            padding: 3px;
         }
-        ClipboardItemWidget QToolButton:hover {
-            background: rgba(0, 0, 0, 0.1);
-            border-radius: 3px;
+        QToolButton:hover {
+            background: rgba(0, 0, 0, 0.08);
         }
     )");
     button->setCursor(Qt::PointingHandCursor);
@@ -133,7 +138,14 @@ void ClipboardItemWidget::handleFavoriteAction() {
     emit favoriteChanged(isFavorite);
     if (isFavorite) {
         emit itemStared(currentItem);
+    } else {
+        emit itemUnstared(currentItem);
     }
+}
+
+void ClipboardItemWidget::setFavorite(bool favorite) {
+    isFavorite = favorite;
+    updateFavoriteButton();
 }
 
 void ClipboardItemWidget::handleDeleteAction() {
@@ -201,9 +213,11 @@ void ClipboardItemWidget::enterEvent(QEnterEvent* event) {
     QWidget::enterEvent(event);
 
     // Position buttons at the top center
+    ui.actions.container->adjustSize();
     const int x = (width() - ui.actions.container->width()) / 2;
     ui.actions.container->move(x, 4);
     ui.actions.container->show();
+    ui.actions.container->raise();
 
     // Fade in animation
     auto* animation = new QPropertyAnimation(ui.actions.container, "opacity", this);

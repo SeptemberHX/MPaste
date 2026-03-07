@@ -2,6 +2,7 @@
 #include <QScrollBar>
 #include <QClipboard>
 #include <QKeyEvent>
+#include <QResizeEvent>
 #include <QAudioOutput>
 #include <QDir>
 #include <QDebug>
@@ -59,6 +60,10 @@ static void enableBlurBehind(HWND hwnd) {
     // Extend DWM frame — needed for glass composition
     MARGINS margins = {-1, -1, -1, -1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+    // Native rounded corners (Windows 11) — DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    DWORD preference = 2; // DWMWCP_ROUND
+    DwmSetWindowAttribute(hwnd, 33, &preference, sizeof(preference));
 
     // Acrylic blur via SetWindowCompositionAttribute (instant, no flicker)
     auto user32 = GetModuleHandleW(L"user32.dll");
@@ -200,6 +205,26 @@ void MPasteWidget::initUI() {
     ui_.buttonGroup->addButton(ui_.ui->clipboardButton);
     ui_.buttonGroup->addButton(ui_.ui->staredButton);
 
+    // 初始化类型过滤 buttonGroup
+    ui_.typeButtonGroup = new QButtonGroup(this);
+    ui_.typeButtonGroup->setExclusive(true);
+
+    ui_.ui->allTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::All));
+    ui_.ui->textTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Text));
+    ui_.ui->linkTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Link));
+    ui_.ui->imageTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Image));
+    ui_.ui->richTextTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::RichText));
+    ui_.ui->fileTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::File));
+
+    ui_.typeButtonGroup->addButton(ui_.ui->allTypeBtn);
+    ui_.typeButtonGroup->addButton(ui_.ui->textTypeBtn);
+    ui_.typeButtonGroup->addButton(ui_.ui->linkTypeBtn);
+    ui_.typeButtonGroup->addButton(ui_.ui->imageTypeBtn);
+    ui_.typeButtonGroup->addButton(ui_.ui->richTextTypeBtn);
+    ui_.typeButtonGroup->addButton(ui_.ui->fileTypeBtn);
+
+    ui_.ui->allTypeBtn->setChecked(true);
+
     // 默认显示
     ui_.ui->clipboardButton->setChecked(true);
 
@@ -207,6 +232,8 @@ void MPasteWidget::initUI() {
     initMenu();
 
     ui_.ui->searchEdit->installEventFilter(this);
+    ui_.ui->clipboardBtnWidget->installEventFilter(this);
+    ui_.ui->typeBtnWidget->installEventFilter(this);
 }
 
 void MPasteWidget::initSearchAnimations() {
@@ -305,6 +332,13 @@ void MPasteWidget::setupConnections() {
             ClipboardItem updatedItem(item);
             ui_.staredWidget->addAndSaveItem(updatedItem);
         });
+        connect(boardWidget, &ScrollItemsWidget::itemUnstared, this, [this, boardWidget](const ClipboardItem &item) {
+            ui_.staredWidget->removeItemByContent(item);
+            // Sync: un-star in other boards too
+            if (boardWidget == ui_.staredWidget) {
+                ui_.clipboardWidget->setItemFavorite(item, false);
+            }
+        });
     }
 
     // 菜单按钮连接
@@ -336,17 +370,28 @@ void MPasteWidget::setupConnections() {
         }
     });
 
+    // 类型过滤按钮连接
+    connect(ui_.typeButtonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
+        [this](QAbstractButton *button) {
+            auto type = static_cast<ClipboardItem::ContentType>(button->property("contentType").toInt());
+            this->currItemsWidget()->filterByType(type);
+        });
+
     // 处理切换事件
     connect(ui_.buttonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
         [this](QAbstractButton *button) {
+            // 获取当前类型过滤
+            auto typeBtn = ui_.typeButtonGroup->checkedButton();
+            auto type = typeBtn ? static_cast<ClipboardItem::ContentType>(typeBtn->property("contentType").toInt())
+                                : ClipboardItem::All;
+
             // 处理切换逻辑
             for (auto *toolButton : ui_.buttonGroup->buttons()) {
                 auto *boardWidget = ui_.boardWidgetMap[toolButton->property("category").toString()];
                 boardWidget->setVisible(toolButton == button);
                 if (toolButton == button) {
-                    this->updateItemCount(boardWidget->getItemCount());
-                }
-                if (!ui_.ui->searchEdit->text().isEmpty()) {
+                    // 设置过滤器并统一应用（filterByKeyword 内部会调用 applyFilters）
+                    boardWidget->filterByType(type);
                     boardWidget->filterByKeyword(ui_.ui->searchEdit->text());
                 }
             }
@@ -507,6 +552,30 @@ void MPasteWidget::handleSearchInput(QKeyEvent *event) {
 
 // 事件处理相关
 bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
+    // 为药丸容器绘制炫彩渐变边框
+    if (event->type() == QEvent::Paint &&
+        (watched == ui_.ui->clipboardBtnWidget || watched == ui_.ui->typeBtnWidget)) {
+        QWidget *w = qobject_cast<QWidget*>(watched);
+        QPainter p(w);
+        p.setRenderHint(QPainter::Antialiasing);
+
+        const qreal bw = 2.0;
+        const qreal radius = 13.0;
+        QRectF r = QRectF(w->rect()).adjusted(bw / 2, bw / 2, -bw / 2, -bw / 2);
+
+        QConicalGradient grad(r.center(), 135);
+        grad.setColorAt(0.00, QColor("#4A90E2"));
+        grad.setColorAt(0.25, QColor("#1abc9c"));
+        grad.setColorAt(0.50, QColor("#fc9867"));
+        grad.setColorAt(0.75, QColor("#9B59B6"));
+        grad.setColorAt(1.00, QColor("#4A90E2"));
+
+        p.setPen(QPen(QBrush(grad), bw));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r, radius, radius);
+        // 不拦截，让子控件继续绘制
+    }
+
     if (event->type() == QEvent::Wheel) {
 #if (QT_VERSION >= QT_VERSION_CHECK(5,12,0))
         QCoreApplication::sendEvent(this->currItemsWidget()->horizontalScrollbar(), event);
@@ -584,23 +653,21 @@ void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
     QWidget::keyReleaseEvent(event);
 }
 
+void MPasteWidget::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+}
+
 void MPasteWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    const qreal bw = 2.0;
+    const qreal bw = 3.0;
     const qreal radius = 10.0;
     QRectF r = QRectF(rect()).adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
 
-    // Shape: top-left & top-right rounded, bottom-left & bottom-right square
+    // All 4 corners rounded — matches DWM native DWMWCP_ROUND clipping
     QPainterPath path;
-    path.moveTo(r.left(), r.bottom());                        // bottom-left (sharp)
-    path.lineTo(r.left(), r.top() + radius);                  // left edge up
-    path.quadTo(r.left(), r.top(), r.left() + radius, r.top()); // top-left arc
-    path.lineTo(r.right() - radius, r.top());                 // top edge
-    path.quadTo(r.right(), r.top(), r.right(), r.top() + radius); // top-right arc
-    path.lineTo(r.right(), r.bottom());                       // right edge down
-    path.closeSubpath();                                       // bottom edge (sharp)
+    path.addRoundedRect(r, radius, radius);
 
     // Gradient border
     QConicalGradient grad(r.center(), 135);

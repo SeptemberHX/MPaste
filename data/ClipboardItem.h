@@ -11,8 +11,12 @@
 #include <QVariant>
 #include <QUrl>
 #include <QBuffer>
+#include <algorithm>
 
 class ClipboardItem {
+public:
+    enum ContentType { All = 0, Text, Link, Image, RichText, File, Color };
+
 private:
     QString name_;
     QPixmap icon_;
@@ -329,6 +333,44 @@ public:
 
     void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }
+
+    ContentType getContentType() const {
+        if (!mimeData_) return Text;
+
+        // Color highest priority
+        if (mimeData_->hasColor()) return Color;
+
+        // URLs without HTML: File or Link
+        if (mimeData_->hasUrls() && !mimeData_->hasHtml()) {
+            QList<QUrl> urls = mimeData_->urls();
+            bool allValid = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
+                [](const QUrl &url) { return url.isValid() && !url.isRelative(); });
+            if (allValid) {
+                // Check if all URLs are local files
+                bool allFiles = std::all_of(urls.begin(), urls.end(),
+                    [](const QUrl &url) { return url.isLocalFile(); });
+                return allFiles ? File : Link;
+            }
+            return Text;
+        }
+
+        // HTML: Link or RichText
+        if (mimeData_->hasHtml()) {
+            QString text = mimeData_->text().trimmed();
+            if (!mimeData_->formats().contains("Rich Text Format") &&
+                !text.contains("\n") &&
+                (text.startsWith("http://") || text.startsWith("https://"))) {
+                return Link;
+            }
+            return RichText;
+        }
+
+        // Image
+        if (mimeData_->hasImage()) return Image;
+
+        // Fallback: Text
+        return Text;
+    }
 };
 
 #endif //MPASTE_CLIPBOARDITEM_H

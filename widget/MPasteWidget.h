@@ -33,6 +33,7 @@ public:
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void showEvent(QShowEvent *event) override;
@@ -93,6 +94,9 @@ private:
 
         // 存储切换的 button
         QButtonGroup *buttonGroup;
+
+        // 类型过滤按钮组
+        QButtonGroup *typeButtonGroup;
 
         // 剪贴板，必须要存在
         ScrollItemsWidget *clipboardWidget;

@@ -22,6 +22,7 @@ public:
     bool addOneItem(const ClipboardItem &item);
     bool addAndSaveItem(const ClipboardItem &item);
     void filterByKeyword(const QString &keyword);
+    void filterByType(ClipboardItem::ContentType type);
     void setShortcutInfo();
     void cleanShortCutInfo();
     void loadFromSaveDir();
@@ -36,6 +37,8 @@ public:
     void scrollToFirst();
     void scrollToLast();
     QString getCategory() const;
+    void removeItemByContent(const ClipboardItem &item);
+    void setItemFavorite(const ClipboardItem &item, bool favorite);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -43,6 +46,7 @@ signals:
     void doubleClicked(const ClipboardItem &item);
     void itemCountChanged(int itemCount);
     void itemStared(const ClipboardItem &item);
+    void itemUnstared(const ClipboardItem &item);
 
 private slots:
     void itemClicked();
@@ -52,6 +56,7 @@ private:
     void setSelectedItem(ClipboardItemWidget *item);
     QString getItemFilePath(const ClipboardItem &item);
     void setFirstVisibleItemSelected();
+    void applyFilters();
     void saveItem(const ClipboardItem &item);
     void checkSaveDir();
     void moveItemToFirst(ClipboardItemWidget *widget);
@@ -64,6 +69,9 @@ private:
 
     ClipboardItemWidget *currItemWidget;
     LocalSaver *saver;
+
+    QString currentKeyword_;
+    ClipboardItem::ContentType currentTypeFilter_ = ClipboardItem::All;
 
 };
 
