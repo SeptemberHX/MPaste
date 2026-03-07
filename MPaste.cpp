@@ -78,8 +78,9 @@ int main(int argc, char* argv[]) {
         PlatformRelated::startWindowTracking();
 
         HotkeyManager hotkeyManager;
-        if (!hotkeyManager.registerHotkey(QKeySequence("Alt+V"))) {
-            qWarning() << "Failed to register global hotkey Alt+V";
+        QString shortcutStr = MPasteSettings::getInst()->getShortcutStr();
+        if (!hotkeyManager.registerHotkey(QKeySequence(shortcutStr))) {
+            qWarning() << "Failed to register global hotkey" << shortcutStr;
         }
 
         bool isShowingWidget = false;
@@ -128,6 +129,13 @@ int main(int argc, char* argv[]) {
                         }
                     });
                 }
+            });
+
+        // 连接快捷键变更
+        QObject::connect(&widget, &MPasteWidget::shortcutChanged,
+            [&hotkeyManager](const QString &newShortcut) {
+                hotkeyManager.unregisterHotkey();
+                hotkeyManager.registerHotkey(QKeySequence(newShortcut));
             });
 
         // 连接热键和消息处理

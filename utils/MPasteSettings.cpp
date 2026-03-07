@@ -97,6 +97,10 @@ void MPasteSettings::setShortcutStr(const QString &shortcutStr) {
     MPasteSettings::shortcutStr = shortcutStr;
 }
 
+void MPasteSettings::setMaxSize(int maxSize) {
+    MPasteSettings::maxSize = maxSize;
+}
+
 bool MPasteSettings::isTerminalTitle(const QString &title) {
     return this->terminalNames.contains(title);
 }

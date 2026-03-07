@@ -37,16 +37,19 @@ public:
 
     void setShortcutStr(const QString &shortcutStr);
 
+    void setMaxSize(int maxSize);
+
     bool isTerminalTitle(const QString &title);
 
     int getCurrFocusWinId() const;
 
     void setCurrFocusWinId(int currFocusWinId);
 
+    void saveSettings();
+
 private:
     MPasteSettings();
     void loadSettings();
-    void saveSettings();
 
     QStringList terminalNames;
 

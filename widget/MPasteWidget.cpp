@@ -103,6 +103,8 @@ void MPasteWidget::initUI() {
     ui_.aboutWidget->hide();
 
     ui_.settingsWidget = new MPasteSettingsWidget(this);
+    connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
+            this, &MPasteWidget::shortcutChanged);
 
     // 初始化剪贴板窗口
     ui_.clipboardWidget = new ScrollItemsWidget(

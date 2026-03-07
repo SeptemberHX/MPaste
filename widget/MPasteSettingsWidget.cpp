@@ -1,5 +1,7 @@
 #include "MPasteSettingsWidget.h"
 #include "ui_MPasteSettingsWidget.h"
+#include "utils/MPasteSettings.h"
+#include <QShowEvent>
 
 
 QString getWin11Style() {
@@ -68,6 +70,23 @@ QString getWin11Style() {
             image: url(:/icons/checkmark.png);  /* 需要提供对应图标 */
         }
 
+        QKeySequenceEdit {
+            background-color: #ffffff;
+            border: 1px solid #D1D1D1;
+            border-radius: 4px;
+            padding: 2px 5px;
+            min-height: 24px;
+        }
+
+        QKeySequenceEdit:hover {
+            border-color: #0078D4;
+        }
+
+        QKeySequenceEdit:focus {
+            border-color: #0078D4;
+            border-width: 2px;
+        }
+
         QDialogButtonBox {
             button-layout: 2;  /* 右对齐按钮 */
         }
@@ -117,9 +136,40 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
     // 应用样式表
     setStyleSheet(getWin11Style());
+
+    loadSettings();
 }
 
 MPasteSettingsWidget::~MPasteSettingsWidget()
 {
     delete ui;
+}
+
+void MPasteSettingsWidget::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    loadSettings();
+}
+
+void MPasteSettingsWidget::loadSettings()
+{
+    auto *settings = MPasteSettings::getInst();
+    ui->numSpinBox->setValue(settings->getMaxSize());
+    ui->shortcutEdit->setKeySequence(QKeySequence(settings->getShortcutStr()));
+}
+
+void MPasteSettingsWidget::accept()
+{
+    auto *settings = MPasteSettings::getInst();
+
+    settings->setMaxSize(ui->numSpinBox->value());
+
+    QString newShortcut = ui->shortcutEdit->keySequence().toString();
+    if (!newShortcut.isEmpty() && newShortcut != settings->getShortcutStr()) {
+        settings->setShortcutStr(newShortcut);
+        emit shortcutChanged(newShortcut);
+    }
+
+    settings->saveSettings();
+    QDialog::accept();
 }

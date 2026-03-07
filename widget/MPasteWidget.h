@@ -37,6 +37,9 @@ protected:
     void showEvent(QShowEvent *event) override;
     bool focusNextPrevChild(bool next) override;
 
+signals:
+    void shortcutChanged(const QString &newShortcut);
+
 private slots:
     void clipboardUpdated(ClipboardItem item, int wId);
     void updateItemCount(int itemCount);
