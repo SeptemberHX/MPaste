@@ -1,6 +1,5 @@
 #include <QDir>
 #include <utils/MPasteSettings.h>
-#include <iostream>
 #include "ScrollItemsWidget.h"
 #include "ui_ScrollItemsWidget.h"
 #include "ClipboardItemWidget.h"
@@ -15,6 +14,13 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     currItemWidget(nullptr)
 {
     ui->setupUi(this);
+
+    // Set dynamic scroll area height based on item scale
+    int scale = MPasteSettings::getInst()->getItemScale();
+    int scrollHeight = 300 * scale / 100 + 20;
+    ui->scrollArea->setMinimumHeight(scrollHeight);
+    ui->scrollArea->setMaximumHeight(scrollHeight + 20);
+    setFixedHeight(scrollHeight + 20);
 
     // Enable smooth scrolling using QScroller
     QScroller::grabGesture(ui->scrollArea->viewport(), QScroller::TouchGesture);
@@ -225,7 +231,6 @@ void ScrollItemsWidget::loadFromSaveDir() {
     QList<ClipboardItem> itemList;
         foreach (QFileInfo info, saveDir.entryInfoList(QStringList() << "*.mpaste", QDir::Files)) {
             ClipboardItem item = this->saver->loadFromFile(info.filePath());
-            std::cout << "Load file " << info.fileName().toStdString() << " with item name " << item.getName().toStdString() << std::endl;
             itemList << item;
         }
 
@@ -233,11 +238,9 @@ void ScrollItemsWidget::loadFromSaveDir() {
         return item1.getTime() < item2.getTime();
     });
 
-    std::cout << QDateTime::currentDateTime().toString().toStdString() << "Start addOneItem loop" << std::endl;
     foreach (const ClipboardItem &item, itemList) {
         this->addOneItem(item);
     }
-    std::cout << QDateTime::currentDateTime().toString().toStdString() << "End addOneItem loop" << std::endl;
 }
 
 QScrollBar* ScrollItemsWidget::horizontalScrollbar() {

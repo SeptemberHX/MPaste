@@ -1,5 +1,6 @@
 #include "FileThumbWidget.h"
 #include "ui_FileThumbWidget.h"
+#include "utils/MPasteSettings.h"
 #include <QFileInfo>
 #include <QFileIconProvider>
 #include <QGraphicsDropShadowEffect>
@@ -9,6 +10,22 @@ FileThumbWidget::FileThumbWidget(QWidget *parent) :
     ui(new Ui::FileThumbWidget)
 {
     ui->setupUi(this);
+
+    int scale = MPasteSettings::getInst()->getItemScale();
+
+    // Scale icon and path label heights
+    int iconH = 150 * scale / 100;
+    ui->iconLabel->setMinimumSize(180 * scale / 100, iconH);
+    ui->iconLabel->setMaximumHeight(iconH);
+
+    int pathH = 50 * scale / 100;
+    ui->pathLabel->setMinimumHeight(pathH);
+    ui->pathLabel->setMaximumHeight(pathH);
+
+    // Scale font
+    QFont f = ui->pathLabel->font();
+    f.setPointSize(9 * scale / 100);
+    ui->pathLabel->setFont(f);
     auto *coverShadow = new QGraphicsDropShadowEffect;
     coverShadow->setColor(Qt::gray);
     coverShadow->setBlurRadius(5);

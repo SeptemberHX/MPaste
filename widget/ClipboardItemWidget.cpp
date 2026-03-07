@@ -5,6 +5,7 @@
 #include <QToolButton>
 #include <QMenu>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QMouseEvent>
 
 #include "utils/MPasteSettings.h"
@@ -40,22 +41,37 @@ void ClipboardItemWidget::setupUI() {
     });
 
     ui.mainLayout->addWidget(ui.innerWidget);
+
+    // Persistent favorite indicator (small star in top-right corner)
+    int scale = MPasteSettings::getInst()->getItemScale();
+    int indicatorSz = 16 * scale / 100;
+    ui.favoriteIndicator = new QLabel(this);
+    ui.favoriteIndicator->setFixedSize(indicatorSz, indicatorSz);
+    ui.favoriteIndicator->setPixmap(
+        QPixmap(":/resources/resources/star_filled.svg")
+            .scaled(indicatorSz, indicatorSz, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    ui.favoriteIndicator->setStyleSheet("background: transparent; border: none;");
+    ui.favoriteIndicator->hide();
 }
 
 void ClipboardItemWidget::setupActionButtons() {
+    int scale = MPasteSettings::getInst()->getItemScale();
+
     // Container setup
     ui.actions.container = new QWidget(this);
-    ui.actions.container->setFixedHeight(28);
-    ui.actions.container->setStyleSheet(R"(
+    ui.actions.container->setFixedHeight(28 * scale / 100);
+    int borderR = 8 * scale / 100;
+    ui.actions.container->setStyleSheet(QString(R"(
         background: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 8px;
-    )");
+        border-radius: %1px;
+    )").arg(borderR));
     ui.actions.container->hide();
 
+    int margin = 6 * scale / 100;
     ui.actions.layout = new QHBoxLayout(ui.actions.container);
-    ui.actions.layout->setContentsMargins(6, 0, 6, 0);
-    ui.actions.layout->setSpacing(4);
+    ui.actions.layout->setContentsMargins(margin, 0, margin, 0);
+    ui.actions.layout->setSpacing(4 * scale / 100);
 
     // Create buttons
     ui.actions.favoriteBtn = createActionButton(
@@ -108,21 +124,27 @@ void ClipboardItemWidget::initializeEffects() {
 }
 
 QToolButton* ClipboardItemWidget::createActionButton(const QString& iconPath, const QString& tooltip) const {
+    int scale = MPasteSettings::getInst()->getItemScale();
+    int iconSz = 14 * scale / 100;
+    int btnSz = 22 * scale / 100;
+    int borderR = 6 * scale / 100;
+    int pad = 3 * scale / 100;
+
     auto* button = new QToolButton;
     button->setIcon(QIcon(iconPath));
-    button->setIconSize(QSize(14, 14));
-    button->setFixedSize(22, 22);
-    button->setStyleSheet(R"(
+    button->setIconSize(QSize(iconSz, iconSz));
+    button->setFixedSize(btnSz, btnSz);
+    button->setStyleSheet(QString(R"(
         QToolButton {
             background: transparent;
             border: none;
-            border-radius: 6px;
-            padding: 3px;
+            border-radius: %1px;
+            padding: %2px;
         }
         QToolButton:hover {
             background: rgba(0, 0, 0, 0.08);
         }
-    )");
+    )").arg(borderR).arg(pad));
     button->setCursor(Qt::PointingHandCursor);
     button->setToolTip(tooltip);
     return button;
@@ -164,9 +186,18 @@ void ClipboardItemWidget::updateFavoriteButton() {
     ui.actions.favoriteBtn->setIcon(QIcon(isFavorite ?
         ":/resources/resources/star_filled.svg" :
         ":/resources/resources/star_outline.svg"));
-    ui.actions.favoriteBtn->setToolTip(isFavorite ? 
-        tr("Remove from favorites") : 
+    ui.actions.favoriteBtn->setToolTip(isFavorite ?
+        tr("Remove from favorites") :
         tr("Add to favorites"));
+
+    // Update persistent indicator
+    ui.favoriteIndicator->setVisible(isFavorite);
+    if (isFavorite) {
+        int ix = ui.innerWidget->x() + ui.innerWidget->width() - ui.favoriteIndicator->width() - 6;
+        int iy = ui.innerWidget->y() + ui.innerWidget->height() - ui.favoriteIndicator->height() - 6;
+        ui.favoriteIndicator->move(ix, iy);
+        ui.favoriteIndicator->raise();
+    }
 }
 
 void ClipboardItemWidget::showItem(const ClipboardItem& item) {
@@ -212,10 +243,11 @@ void ClipboardItemWidget::contextMenuEvent(QContextMenuEvent* event) {
 void ClipboardItemWidget::enterEvent(QEnterEvent* event) {
     QWidget::enterEvent(event);
 
-    // Position buttons at the top center
+    // Position buttons at the top center, relative to innerWidget
     ui.actions.container->adjustSize();
     const int x = (width() - ui.actions.container->width()) / 2;
-    ui.actions.container->move(x, 4);
+    const int y = ui.innerWidget->y() + 4;
+    ui.actions.container->move(x, y);
     ui.actions.container->show();
     ui.actions.container->raise();
 
@@ -235,7 +267,19 @@ void ClipboardItemWidget::leaveEvent(QEvent* event) {
     animation->setDuration(50);
     animation->setStartValue(1.0);
     animation->setEndValue(0.0);
-    connect(animation, &QPropertyAnimation::finished, 
+    connect(animation, &QPropertyAnimation::finished,
             ui.actions.container, &QWidget::hide);
     animation->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+void ClipboardItemWidget::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+
+    // Reposition favorite indicator after layout settles
+    if (isFavorite && ui.favoriteIndicator) {
+        int ix = ui.innerWidget->x() + ui.innerWidget->width() - ui.favoriteIndicator->width() - 6;
+        int iy = ui.innerWidget->y() + ui.innerWidget->height() - ui.favoriteIndicator->height() - 6;
+        ui.favoriteIndicator->move(ix, iy);
+        ui.favoriteIndicator->raise();
+    }
 }

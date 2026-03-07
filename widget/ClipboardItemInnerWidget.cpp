@@ -3,6 +3,7 @@
 #include <iostream>
 #include "ClipboardItemInnerWidget.h"
 #include "ui_ClipboardItemInnerWidget.h"
+#include "utils/MPasteSettings.h"
 #include <QPlainTextEdit>
 #include <QFileInfo>
 
@@ -20,6 +21,33 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QColor borderColor, QWidget *
     this->webLinkThumbWidget = nullptr;
 
     ui->setupUi(this);
+
+    int scale = MPasteSettings::getInst()->getItemScale();
+    int w = 275 * scale / 100;
+    int h = 300 * scale / 100;
+    setFixedSize(w, h);
+
+    // Scale top header height
+    int topH = 64 * scale / 100;
+    ui->widget_2->setMinimumHeight(topH);
+    ui->widget_2->setMaximumHeight(topH);
+
+    // Scale icon size
+    int iconSz = 48 * scale / 100;
+    ui->iconLabel->setMinimumSize(iconSz, iconSz);
+    ui->iconLabel->setMaximumSize(iconSz, iconSz);
+
+    // Scale font sizes
+    auto scaleFont = [scale](QWidget *w, int basePt) {
+        QFont f = w->font();
+        f.setPointSize(basePt * scale / 100);
+        w->setFont(f);
+    };
+    scaleFont(ui->typeLabel, 12);
+    scaleFont(ui->timeLabel, 10);
+    scaleFont(ui->shortkeyLabel, 9);
+    scaleFont(ui->countLabel, 9);
+
     this->setObjectName("innerWidget");
     ui->infoWidget->setObjectName("infoWidget");
     this->mLayout = new QHBoxLayout(ui->bodyWidget);
@@ -243,9 +271,11 @@ void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
 
     // 获取设备像素比
     qreal devicePixelRatio = this->imageLabel->devicePixelRatio();
-    // 根据 DPI 调整目标尺寸
-    int targetWidth = 275 * devicePixelRatio;
-    int targetHeight = 234 * devicePixelRatio;
+    // 根据 DPI 调整目标尺寸, using dynamic card size
+    int scale = MPasteSettings::getInst()->getItemScale();
+    int topH = 64 * scale / 100;
+    int targetWidth = width() * devicePixelRatio;
+    int targetHeight = (height() - topH - 2) * devicePixelRatio;
 
     // 缩放时考虑设备像素比
     QPixmap scaled = pixmap.scaled(

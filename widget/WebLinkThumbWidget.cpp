@@ -1,6 +1,7 @@
 #include <QFontMetrics>
 #include "WebLinkThumbWidget.h"
 #include "ui_WebLinkThumbWidget.h"
+#include "utils/MPasteSettings.h"
 
 namespace {
     constexpr int DEFAULT_IMAGE_HEIGHT = 160;
@@ -12,6 +13,23 @@ WebLinkThumbWidget::WebLinkThumbWidget(QWidget *parent) :
     ui(new Ui::WebLinkThumbWidget)
 {
     ui->setupUi(this);
+
+    int scale = MPasteSettings::getInst()->getItemScale();
+
+    // Scale titleLabel height
+    int titleH = 20 * scale / 100;
+    ui->titleLabel->setMinimumHeight(titleH);
+    ui->titleLabel->setMaximumHeight(titleH);
+
+    // Scale fonts
+    auto scaleFont = [scale](QWidget *w, int basePt) {
+        QFont f = w->font();
+        f.setPointSize(basePt * scale / 100);
+        w->setFont(f);
+    };
+    scaleFont(ui->titleLabel, 10);
+    scaleFont(ui->urlLabel, 10);
+
     setDefaultStyle();
 }
 

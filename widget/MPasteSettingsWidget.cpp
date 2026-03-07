@@ -34,7 +34,7 @@ static QString settingsStyleSheet() {
         }
 
         /* ── Separators ── */
-        QFrame#sep1, QFrame#sep2, QFrame#sep3 {
+        QFrame#sep1, QFrame#sep2, QFrame#sep3, QFrame#sep4 {
             background-color: #F0F0F0;
             border: none;
             max-height: 1px;
@@ -141,6 +141,25 @@ static QString settingsStyleSheet() {
             border-color: #005499;
         }
 
+        /* ── Slider ── */
+        QSlider::groove:horizontal {
+            border: 1px solid #E0E0E0;
+            height: 4px;
+            background: #F0F0F0;
+            border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            background: #0078D4;
+            border: none;
+            width: 14px;
+            height: 14px;
+            margin: -5px 0;
+            border-radius: 7px;
+        }
+        QSlider::handle:horizontal:hover {
+            background: #006CBC;
+        }
+
         QDialogButtonBox {
             button-layout: 2;
         }
@@ -167,6 +186,11 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->playSoundCheckBox->hide();
         grid->addWidget(toggleSwitch_, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
     }
+
+    // Connect slider to label
+    connect(ui->itemScaleSlider, &QSlider::valueChanged, this, [this](int value) {
+        ui->scaleValueLabel->setText(QString("%1%").arg(value));
+    });
 
     // Card shadow
     auto *shadow = new QGraphicsDropShadowEffect(ui->generalCard);
@@ -233,6 +257,9 @@ void MPasteSettingsWidget::loadSettings()
     auto *settings = MPasteSettings::getInst();
     ui->numSpinBox->setValue(settings->getMaxSize());
     ui->shortcutEdit->setKeySequence(QKeySequence(settings->getShortcutStr()));
+    ui->itemScaleSlider->setValue(settings->getItemScale());
+    ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
+    toggleSwitch_->setChecked(settings->isPlaySound());
 }
 
 void MPasteSettingsWidget::accept()
@@ -246,6 +273,9 @@ void MPasteSettingsWidget::accept()
         settings->setShortcutStr(newShortcut);
         emit shortcutChanged(newShortcut);
     }
+
+    settings->setItemScale(ui->itemScaleSlider->value());
+    settings->setPlaySound(toggleSwitch_->isChecked());
 
     settings->saveSettings();
     QDialog::accept();

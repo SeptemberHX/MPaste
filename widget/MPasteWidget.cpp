@@ -199,6 +199,9 @@ void MPasteWidget::initUI() {
 
     ui_.staredWidget->hide();
 
+    // Adjust window height to fit content (adapts to card scale)
+    adjustSize();
+
     // 初始化 buttonGroup
     ui_.buttonGroup = new QButtonGroup(this);
     ui_.buttonGroup->setExclusive(true);
@@ -402,10 +405,12 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
     if (!clipboard_.isPasting) {
         ui_.clipboardWidget->addAndSaveItem(nItem);
 
-        misc_.player->stop();
-        misc_.player->setPosition(0);
-        if (misc_.player->playbackState() != QMediaPlayer::PlayingState) {
-            misc_.player->play();
+        if (MPasteSettings::getInst()->isPlaySound()) {
+            misc_.player->stop();
+            misc_.player->setPosition(0);
+            if (misc_.player->playbackState() != QMediaPlayer::PlayingState) {
+                misc_.player->play();
+            }
         }
 
         clipboard_.copiedWhenHide = true;

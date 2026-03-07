@@ -6,6 +6,7 @@
 #include "ClipboardItemInnerWidget.h"
 #include "data/ClipboardItem.h"
 
+class QLabel;
 class QToolButton;
 class QMenu;
 class QHBoxLayout;
@@ -45,6 +46,7 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
     void enterEvent(QEnterEvent *event) override;
     void leaveEvent(QEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     // UI Setup
@@ -77,6 +79,7 @@ private:
         } actions;
 
         QMenu* contextMenu{nullptr};
+        QLabel* favoriteIndicator{nullptr};
     } ui;
 
     // Data

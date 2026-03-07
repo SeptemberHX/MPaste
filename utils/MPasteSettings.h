@@ -39,6 +39,12 @@ public:
 
     void setMaxSize(int maxSize);
 
+    int getItemScale() const;
+    void setItemScale(int itemScale);
+
+    bool isPlaySound() const;
+    void setPlaySound(bool playSound);
+
     bool isTerminalTitle(const QString &title);
 
     int getCurrFocusWinId() const;
@@ -62,6 +68,8 @@ private:
 
     bool autoPaste;
     QString shortcutStr;
+    int itemScale;
+    bool playSound;
 
     int currFocusWinId;
 

@@ -38,6 +38,8 @@ MPasteSettings::MPasteSettings()
 
     this->autoPaste = true;
     this->shortcutStr = "Alt+Q";
+    this->itemScale = 100;
+    this->playSound = true;
 
     this->terminalNames << tr("Terminal");
 
@@ -70,6 +72,8 @@ void MPasteSettings::loadSettings() {
     this->saveDir = settings.value("main/saveDir", this->saveDir).toString();
     this->autoPaste = settings.value("main/autoPaste", this->autoPaste).toBool();
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
+    this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
+    this->playSound = settings.value("main/playSound", this->playSound).toBool();
 }
 
 void MPasteSettings::saveSettings() {
@@ -79,6 +83,8 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/saveDir", this->saveDir);
     settings.setValue("main/autoPaste", this->autoPaste);
     settings.setValue("main/shortcut", this->shortcutStr);
+    settings.setValue("main/itemScale", this->itemScale);
+    settings.setValue("main/playSound", this->playSound);
 }
 
 bool MPasteSettings::isAutoPaste() const {
@@ -99,6 +105,22 @@ void MPasteSettings::setShortcutStr(const QString &shortcutStr) {
 
 void MPasteSettings::setMaxSize(int maxSize) {
     MPasteSettings::maxSize = maxSize;
+}
+
+int MPasteSettings::getItemScale() const {
+    return itemScale;
+}
+
+void MPasteSettings::setItemScale(int itemScale) {
+    MPasteSettings::itemScale = itemScale;
+}
+
+bool MPasteSettings::isPlaySound() const {
+    return playSound;
+}
+
+void MPasteSettings::setPlaySound(bool playSound) {
+    MPasteSettings::playSound = playSound;
 }
 
 bool MPasteSettings::isTerminalTitle(const QString &title) {
