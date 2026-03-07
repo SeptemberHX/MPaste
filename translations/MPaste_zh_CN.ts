@@ -117,33 +117,57 @@
 <context>
     <name>MPasteSettingsWidget</name>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="14"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="26"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="36"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="171"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="172"/>
+        <source>Settings</source>
+        <translation>设置</translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="52"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="173"/>
+        <source>Max number of items</source>
+        <translation>最大条目数</translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="76"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="174"/>
+        <source>Maximum retention days</source>
+        <translation>最大保留天数</translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="100"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="175"/>
+        <source>Play copy sound</source>
+        <translation>复制提示音</translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="121"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="177"/>
+        <source>Activation shortcut</source>
+        <translation>唤醒快捷键</translation>
+    </message>
+    <message>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="142"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="142"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="142"/>
         <source>MPaste Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="32"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="143"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="143"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="143"/>
         <source>Max Num of Items</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="67"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="144"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="144"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="144"/>
         <source>Maximum Retention Days</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="102"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="145"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="145"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="145"/>
         <source>Play Copy Sound</source>
         <translation type="unfinished"></translation>
@@ -152,17 +176,17 @@
 <context>
     <name>MPasteWidget</name>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="201"/>
+        <location filename="../widget/MPasteWidget.cpp" line="205"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="185"/>
+        <location filename="../widget/MPasteWidget.cpp" line="189"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="216"/>
+        <location filename="../widget/MPasteWidget.cpp" line="220"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>

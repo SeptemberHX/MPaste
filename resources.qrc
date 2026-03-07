@@ -17,6 +17,9 @@
         <file>resources/preview.svg</file>
         <file>resources/star.svg</file>
 
+        <file>resources/spin_up.svg</file>
+        <file>resources/spin_down.svg</file>
+
         <file>resources/style/defaultStyle.qss</file>
     </qresource>
 </RCC>

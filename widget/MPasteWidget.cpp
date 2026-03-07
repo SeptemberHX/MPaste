@@ -7,6 +7,8 @@
 #include <QDebug>
 #include <QButtonGroup>
 #include <QWindow>
+#include <QPainter>
+#include <QPainterPath>
 #include "utils/MPasteSettings.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
@@ -516,6 +518,44 @@ void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
     }
 
     QWidget::keyReleaseEvent(event);
+}
+
+void MPasteWidget::paintEvent(QPaintEvent *) {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    const qreal bw = 2.0;
+    const qreal radius = 10.0;
+    QRectF r = QRectF(rect()).adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
+
+    // Shape: top-left & top-right rounded, bottom-left & bottom-right square
+    QPainterPath path;
+    path.moveTo(r.left(), r.bottom());                        // bottom-left (sharp)
+    path.lineTo(r.left(), r.top() + radius);                  // left edge up
+    path.quadTo(r.left(), r.top(), r.left() + radius, r.top()); // top-left arc
+    path.lineTo(r.right() - radius, r.top());                 // top edge
+    path.quadTo(r.right(), r.top(), r.right(), r.top() + radius); // top-right arc
+    path.lineTo(r.right(), r.bottom());                       // right edge down
+    path.closeSubpath();                                       // bottom edge (sharp)
+
+    // Gradient border
+    QConicalGradient grad(r.center(), 135);
+    grad.setColorAt(0.00, QColor("#4A90E2"));
+    grad.setColorAt(0.25, QColor("#1abc9c"));
+    grad.setColorAt(0.50, QColor("#fc9867"));
+    grad.setColorAt(0.75, QColor("#9B59B6"));
+    grad.setColorAt(1.00, QColor("#4A90E2"));
+
+    p.setPen(QPen(QBrush(grad), bw));
+
+    // Background fill
+    QLinearGradient bg(0, 0, r.width(), r.height());
+    bg.setColorAt(0.0, QColor(235, 246, 249));
+    bg.setColorAt(0.5, QColor(242, 245, 236));
+    bg.setColorAt(1.0, QColor(235, 246, 249));
+    p.setBrush(bg);
+
+    p.drawPath(path);
 }
 
 void MPasteWidget::showEvent(QShowEvent *event) {

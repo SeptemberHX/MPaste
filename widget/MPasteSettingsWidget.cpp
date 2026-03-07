@@ -1,131 +1,150 @@
 #include "MPasteSettingsWidget.h"
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"
+#include "ToggleSwitch.h"
 #include <QShowEvent>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QGridLayout>
+#include <QGraphicsDropShadowEffect>
 
+static const int BORDER_WIDTH = 2;
+static const int CORNER_RADIUS = 10;
 
-QString getWin11Style() {
-    return R"(
+static QString settingsStyleSheet() {
+    return QStringLiteral(R"(
+        /* ── Dialog — background is drawn in paintEvent ── */
         QDialog {
-            background-color: #ffffff;
-            border: 1px solid #E4E4E4;
+            background: transparent;
+        }
+
+        /* ── Title ── */
+        QLabel#titleLabel {
+            color: #1A1A1A;
+            font-size: 20px;
+            font-weight: 700;
+            background: transparent;
+        }
+
+        /* ── Card ── */
+        QFrame#generalCard {
+            background-color: #FFFFFF;
+            border: 1px solid #E5E5E5;
             border-radius: 8px;
         }
 
-        QLabel {
-            color: #202020;
-            font-size: 14px;
-            font-weight: 600;  /* 增加字体粗细 */
+        /* ── Separators ── */
+        QFrame#sep1, QFrame#sep2, QFrame#sep3 {
+            background-color: #F0F0F0;
+            border: none;
+            max-height: 1px;
         }
 
+        /* ── Row labels ── */
+        QFrame#generalCard QLabel {
+            color: #1A1A1A;
+            font-size: 13px;
+            font-weight: 400;
+            background: transparent;
+            padding: 0;
+            border: none;
+        }
+
+        /* ── SpinBox ── */
         QSpinBox {
-            background-color: #ffffff;
-            border: 1px solid #D1D1D1;
-            border-radius: 4px;
-            padding: 2px 5px;  /* 减小上下内边距 */
-            min-height: 24px;  /* 减小最小高度 */
+            background-color: #F5F5F5;
+            border: 1px solid #E0E0E0;
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-size: 13px;
+            color: #1A1A1A;
+            selection-background-color: #0078D4;
+            selection-color: white;
         }
-
         QSpinBox:hover {
-            border-color: #0078D4;
+            background-color: #EBEBEB;
+            border-color: #D0D0D0;
         }
-
         QSpinBox:focus {
-            border-color: #0078D4;
-            border-width: 2px;
+            background-color: #FFFFFF;
+            border: 2px solid #0078D4;
+            padding: 1px 5px;
         }
-
         QSpinBox::up-button, QSpinBox::down-button {
             width: 20px;
             border: none;
             background: transparent;
         }
-
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+            background-color: #E0E0E0;
+        }
         QSpinBox::up-arrow {
-            image: url(:/icons/up-arrow.png);  /* 需要提供对应图标 */
+            image: url(:/resources/resources/spin_up.svg);
+            width: 10px; height: 6px;
         }
-
         QSpinBox::down-arrow {
-            image: url(:/icons/down-arrow.png);  /* 需要提供对应图标 */
+            image: url(:/resources/resources/spin_down.svg);
+            width: 10px; height: 6px;
         }
 
-        QCheckBox {
-            spacing: 8px;
-        }
-
-        QCheckBox::indicator {
-            width: 20px;
-            height: 20px;
-            border: 1px solid #D1D1D1;
-            border-radius: 4px;
-        }
-
-        QCheckBox::indicator:hover {
-            border-color: #0078D4;
-        }
-
-        QCheckBox::indicator:checked {
-            background-color: #0078D4;
-            border-color: #0078D4;
-            image: url(:/icons/checkmark.png);  /* 需要提供对应图标 */
-        }
-
+        /* ── QKeySequenceEdit ── */
         QKeySequenceEdit {
-            background-color: #ffffff;
-            border: 1px solid #D1D1D1;
+            background-color: #F5F5F5;
+            border: 1px solid #E0E0E0;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 13px;
+            color: #1A1A1A;
+        }
+        QKeySequenceEdit:hover {
+            background-color: #EBEBEB;
+            border-color: #D0D0D0;
+        }
+        QKeySequenceEdit:focus {
+            background-color: #FFFFFF;
+            border: 2px solid #0078D4;
+            padding: 3px 7px;
+        }
+
+        /* ── Buttons ── */
+        QPushButton {
+            background-color: #FBFBFB;
+            border: 1px solid #E0E0E0;
             border-radius: 4px;
-            padding: 2px 5px;
+            padding: 4px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1A1A1A;
+            min-width: 60px;
             min-height: 24px;
         }
-
-        QKeySequenceEdit:hover {
-            border-color: #0078D4;
+        QPushButton:hover {
+            background-color: #F0F0F0;
+        }
+        QPushButton:pressed {
+            background-color: #E5E5E5;
+            color: #444;
         }
 
-        QKeySequenceEdit:focus {
-            border-color: #0078D4;
-            border-width: 2px;
+        /* OK — accent */
+        QPushButton[text="OK"] {
+            background-color: #0078D4;
+            border: 1px solid #0078D4;
+            color: white;
+        }
+        QPushButton[text="OK"]:hover {
+            background-color: #006CBC;
+            border-color: #006CBC;
+        }
+        QPushButton[text="OK"]:pressed {
+            background-color: #005499;
+            border-color: #005499;
         }
 
         QDialogButtonBox {
-            button-layout: 2;  /* 右对齐按钮 */
+            button-layout: 2;
         }
-
-        QPushButton {
-            background-color: #FFFFFF;
-            border: 1px solid #D1D1D1;
-            border-radius: 4px;
-            padding: 6px 22px;  /* 稍微调整按钮内边距 */
-            color: #202020;
-            font-size: 14px;
-            font-weight: 600;  /* 增加按钮文字粗细 */
-            min-height: 32px;
-        }
-
-        QPushButton:hover {
-            background-color: #F5F5F5;
-            border-color: #D1D1D1;
-        }
-
-        QPushButton:pressed {
-            background-color: #E5E5E5;
-        }
-
-        /* OK 按钮特殊样式 */
-        QPushButton[text="OK"] {
-            background-color: #0078D4;
-            border-color: #0078D4;
-            color: white;
-        }
-
-        QPushButton[text="OK"]:hover {
-            background-color: #006CBC;
-        }
-
-        QPushButton[text="OK"]:pressed {
-            background-color: #005AA3;
-        }
-    )";
+    )");
 }
 
 MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
@@ -134,8 +153,27 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // 应用样式表
-    setStyleSheet(getWin11Style());
+    // Frameless + translucent for custom-painted gradient border
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground);
+
+    setStyleSheet(settingsStyleSheet());
+
+    // Replace the placeholder QCheckBox with a proper ToggleSwitch
+    toggleSwitch_ = new ToggleSwitch(this);
+    auto *grid = qobject_cast<QGridLayout*>(ui->generalCard->layout());
+    if (grid) {
+        grid->removeWidget(ui->playSoundCheckBox);
+        ui->playSoundCheckBox->hide();
+        grid->addWidget(toggleSwitch_, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
+    }
+
+    // Card shadow
+    auto *shadow = new QGraphicsDropShadowEffect(ui->generalCard);
+    shadow->setBlurRadius(16);
+    shadow->setOffset(0, 2);
+    shadow->setColor(QColor(0, 0, 0, 25));
+    ui->generalCard->setGraphicsEffect(shadow);
 
     loadSettings();
 }
@@ -143,6 +181,45 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 MPasteSettingsWidget::~MPasteSettingsWidget()
 {
     delete ui;
+}
+
+void MPasteSettingsWidget::paintEvent(QPaintEvent *)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    QRectF r = rect().adjusted(0.5, 0.5, -0.5, -0.5);
+
+    // Gradient border — conical gradient gives a smooth color loop around the edge
+    QConicalGradient grad(r.center(), 135);
+    grad.setColorAt(0.00, QColor("#4A90E2"));  // blue
+    grad.setColorAt(0.25, QColor("#1abc9c"));  // teal
+    grad.setColorAt(0.50, QColor("#fc9867"));  // orange
+    grad.setColorAt(0.75, QColor("#9B59B6"));  // purple
+    grad.setColorAt(1.00, QColor("#4A90E2"));  // blue (loop)
+
+    QPen pen(QBrush(grad), BORDER_WIDTH);
+    p.setPen(pen);
+    p.setBrush(QColor("#F3F3F3"));
+    p.drawRoundedRect(r.adjusted(BORDER_WIDTH / 2.0, BORDER_WIDTH / 2.0,
+                                 -BORDER_WIDTH / 2.0, -BORDER_WIDTH / 2.0),
+                      CORNER_RADIUS, CORNER_RADIUS);
+}
+
+void MPasteSettingsWidget::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        dragPos_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        event->accept();
+    }
+}
+
+void MPasteSettingsWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    if (event->buttons() & Qt::LeftButton) {
+        move(event->globalPosition().toPoint() - dragPos_);
+        event->accept();
+    }
 }
 
 void MPasteSettingsWidget::showEvent(QShowEvent *event)

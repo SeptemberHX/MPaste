@@ -2,6 +2,9 @@
 #define MPASTESETTINGSWIDGET_H
 
 #include <QDialog>
+#include <QPoint>
+
+class ToggleSwitch;
 
 namespace Ui {
 class MPasteSettingsWidget;
@@ -23,11 +26,16 @@ public slots:
 
 protected:
     void showEvent(QShowEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
 
 private:
     void loadSettings();
 
     Ui::MPasteSettingsWidget *ui;
+    ToggleSwitch *toggleSwitch_;
+    QPoint dragPos_;
 };
 
 #endif // MPASTESETTINGSWIDGET_H

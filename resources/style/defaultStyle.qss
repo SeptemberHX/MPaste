@@ -1,11 +1,5 @@
 QWidget#pasteWidget {
-    background: qlineargradient(
-        x1: 0, y1: 0,
-        x2: 1, y2: 1,
-        stop: 0 rgba(235, 246, 249, 255),    /* 浅蓝白色 */
-        stop: 0.5 rgba(242, 245, 236, 255),  /* 浅绿白色 */
-        stop: 1 rgba(235, 246, 249, 255)     /* 浅蓝白色 */
-    );
+    background: transparent;  /* 背景和渐变边框由 paintEvent 绘制 */
 }
 
 #clipboardBtnWidget {
@@ -25,7 +19,8 @@ QScrollArea {
 }
 
 #topLine {
-    border: 2px solid rgba(0, 0, 0, 20);
+    border: none;
+    max-height: 0px;
 }
 
 #firstButton, #lastButton, #searchButton, #menuButton {
