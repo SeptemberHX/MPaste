@@ -19,6 +19,68 @@
 #include <windows.h>
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
+
+// Windows 11 backdrop types (DWMWA_SYSTEMBACKDROP_TYPE = 38)
+enum DWM_SYSTEMBACKDROP_TYPE {
+    DWMSBT_AUTO            = 0,
+    DWMSBT_NONE            = 1,
+    DWMSBT_MAINWINDOW      = 2, // Mica
+    DWMSBT_TRANSIENTWINDOW = 3, // Acrylic
+    DWMSBT_TABBEDWINDOW    = 4  // Mica Alt
+};
+
+// Undocumented but stable blur-behind API
+enum ACCENT_STATE {
+    ACCENT_DISABLED = 0,
+    ACCENT_ENABLE_BLURBEHIND = 3,
+    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
+};
+
+struct ACCENT_POLICY {
+    ACCENT_STATE AccentState;
+    DWORD AccentFlags;
+    DWORD GradientColor; // AABBGGRR
+    DWORD AnimationId;
+};
+
+enum WINDOWCOMPOSITIONATTRIB {
+    WCA_ACCENT_POLICY = 19
+};
+
+struct WINDOWCOMPOSITIONATTRIBDATA {
+    WINDOWCOMPOSITIONATTRIB Attrib;
+    PVOID pvData;
+    SIZE_T cbData;
+};
+
+typedef BOOL (WINAPI *pfnSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
+
+static void enableBlurBehind(HWND hwnd) {
+    // Extend DWM frame — needed for glass composition
+    MARGINS margins = {-1, -1, -1, -1};
+    DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+    // Acrylic blur via SetWindowCompositionAttribute (instant, no flicker)
+    auto user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) return;
+    auto setWCA = reinterpret_cast<pfnSetWindowCompositionAttribute>(
+        GetProcAddress(user32, "SetWindowCompositionAttribute"));
+    if (!setWCA) return;
+
+    // GradientColor format: AABBGGRR — light tint applied by DWM itself
+    DWORD tint = (160u << 24) | (249u << 16) | (246u << 8) | 235u; // rgba(235,246,249,160)
+
+    ACCENT_POLICY accent{};
+    accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
+    accent.AccentFlags = 2;
+    accent.GradientColor = tint;
+
+    WINDOWCOMPOSITIONATTRIBDATA data{};
+    data.Attrib = WCA_ACCENT_POLICY;
+    data.pvData = &accent;
+    data.cbData = sizeof(accent);
+    setWCA(hwnd, &data);
+}
 #endif
 
 // QEvent::KeyPress conflicts with the KeyPress in X.h
@@ -75,10 +137,12 @@ void MPasteWidget::initStyle() {
 #ifdef Q_OS_WIN
     setAttribute(Qt::WA_InputMethodEnabled, false);
     setAttribute(Qt::WA_KeyCompression, false);
+    setAttribute(Qt::WA_NoSystemBackground);
+    enableBlurBehind((HWND)winId());
+#else
+    setAttribute(Qt::WA_TranslucentBackground);
 #endif
 
-    setAttribute(Qt::WA_TranslucentBackground);
-    setAttribute(Qt::WA_NoSystemBackground, false);
     setAttribute(Qt::WA_AlwaysStackOnTop);
     ui_.ui->itemsWidget->setAttribute(Qt::WA_TranslucentBackground);
     ui_.ui->itemsWidget->setAttribute(Qt::WA_NoSystemBackground, false);
@@ -548,13 +612,13 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
 
     p.setPen(QPen(QBrush(grad), bw));
 
-    // Background fill
-    QLinearGradient bg(0, 0, r.width(), r.height());
-    bg.setColorAt(0.0, QColor(235, 246, 249));
-    bg.setColorAt(0.5, QColor(242, 245, 236));
-    bg.setColorAt(1.0, QColor(235, 246, 249));
-    p.setBrush(bg);
+    // Clear to transparent first so DWM glass/acrylic shows through
+    p.setCompositionMode(QPainter::CompositionMode_Clear);
+    p.fillRect(rect(), Qt::transparent);
+    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
+    // Light tint overlay on top of the acrylic blur
+    p.setBrush(QColor(245, 248, 250, 30));
     p.drawPath(path);
 }
 

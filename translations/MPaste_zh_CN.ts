@@ -176,17 +176,17 @@
 <context>
     <name>MPasteWidget</name>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="205"/>
+        <location filename="../widget/MPasteWidget.cpp" line="269"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="189"/>
+        <location filename="../widget/MPasteWidget.cpp" line="253"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="220"/>
+        <location filename="../widget/MPasteWidget.cpp" line="284"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
