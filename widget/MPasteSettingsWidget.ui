@@ -7,19 +7,19 @@
     <x>0</x>
     <y>0</y>
     <width>420</width>
-    <height>380</height>
+    <height>430</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>420</width>
-    <height>380</height>
+    <height>430</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>420</width>
-    <height>380</height>
+    <height>430</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -94,57 +94,78 @@
        </widget>
       </item>
 
-      <!-- Row 4: Play sound -->
+      <!-- Row 4: Launch at startup -->
       <item row="4" column="0">
-       <widget class="QLabel" name="label_3">
-        <property name="text"><string>Play copy sound</string></property>
+       <widget class="QLabel" name="label_autostart">
+        <property name="text"><string>Launch at startup</string></property>
         <property name="minimumSize"><size><width>0</width><height>44</height></size></property>
        </widget>
       </item>
       <item row="4" column="1" alignment="Qt::AlignRight|Qt::AlignVCenter">
-       <widget class="QCheckBox" name="playSoundCheckBox">
+       <widget class="QCheckBox" name="autoStartCheckBox">
         <property name="text"><string/></property>
        </widget>
       </item>
 
       <!-- Row 5: sep -->
       <item row="5" column="0" colspan="2">
+       <widget class="QFrame" name="sep_autostart">
+        <property name="maximumSize"><size><width>16777215</width><height>1</height></size></property>
+        <property name="frameShape"><enum>QFrame::Shape::HLine</enum></property>
+       </widget>
+      </item>
+
+      <!-- Row 6: Play sound -->
+      <item row="6" column="0">
+       <widget class="QLabel" name="label_3">
+        <property name="text"><string>Play copy sound</string></property>
+        <property name="minimumSize"><size><width>0</width><height>44</height></size></property>
+       </widget>
+      </item>
+      <item row="6" column="1" alignment="Qt::AlignRight|Qt::AlignVCenter">
+       <widget class="QCheckBox" name="playSoundCheckBox">
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+
+      <!-- Row 7: sep -->
+      <item row="7" column="0" colspan="2">
        <widget class="QFrame" name="sep3">
         <property name="maximumSize"><size><width>16777215</width><height>1</height></size></property>
         <property name="frameShape"><enum>QFrame::Shape::HLine</enum></property>
        </widget>
       </item>
 
-      <!-- Row 6: Shortcut -->
-      <item row="6" column="0">
+      <!-- Row 8: Shortcut -->
+      <item row="8" column="0">
        <widget class="QLabel" name="label_4">
         <property name="text"><string>Activation shortcut</string></property>
         <property name="minimumSize"><size><width>0</width><height>44</height></size></property>
        </widget>
       </item>
-      <item row="6" column="1" alignment="Qt::AlignRight|Qt::AlignVCenter">
+      <item row="8" column="1" alignment="Qt::AlignRight|Qt::AlignVCenter">
        <widget class="QKeySequenceEdit" name="shortcutEdit">
         <property name="minimumSize"><size><width>100</width><height>32</height></size></property>
         <property name="maximumSize"><size><width>100</width><height>32</height></size></property>
        </widget>
       </item>
 
-      <!-- Row 7: sep -->
-      <item row="7" column="0" colspan="2">
+      <!-- Row 9: sep -->
+      <item row="9" column="0" colspan="2">
        <widget class="QFrame" name="sep4">
         <property name="maximumSize"><size><width>16777215</width><height>1</height></size></property>
         <property name="frameShape"><enum>QFrame::Shape::HLine</enum></property>
        </widget>
       </item>
 
-      <!-- Row 8: Card size -->
-      <item row="8" column="0">
+      <!-- Row 10: Card size -->
+      <item row="10" column="0">
        <widget class="QLabel" name="label_5">
         <property name="text"><string>Card size</string></property>
         <property name="minimumSize"><size><width>0</width><height>44</height></size></property>
        </widget>
       </item>
-      <item row="8" column="1" alignment="Qt::AlignRight|Qt::AlignVCenter">
+      <item row="10" column="1" alignment="Qt::AlignRight|Qt::AlignVCenter">
        <widget class="QWidget" name="scaleWidget" native="true">
         <layout class="QHBoxLayout" name="scaleLayout">
          <property name="leftMargin"><number>0</number></property>

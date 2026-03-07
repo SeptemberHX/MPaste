@@ -7,6 +7,9 @@
 #include <QPainter>
 #include <QGridLayout>
 #include <QGraphicsDropShadowEffect>
+#include <QApplication>
+#include <QDir>
+#include <QSettings>
 
 static const int BORDER_WIDTH = 2;
 static const int CORNER_RADIUS = 10;
@@ -34,7 +37,7 @@ static QString settingsStyleSheet() {
         }
 
         /* ── Separators ── */
-        QFrame#sep1, QFrame#sep2, QFrame#sep3, QFrame#sep4 {
+        QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
             background-color: #F0F0F0;
             border: none;
             max-height: 1px;
@@ -178,13 +181,18 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
     setStyleSheet(settingsStyleSheet());
 
-    // Replace the placeholder QCheckBox with a proper ToggleSwitch
+    // Replace the placeholder QCheckBoxes with proper ToggleSwitches
+    autoStartSwitch_ = new ToggleSwitch(this);
     toggleSwitch_ = new ToggleSwitch(this);
     auto *grid = qobject_cast<QGridLayout*>(ui->generalCard->layout());
     if (grid) {
+        grid->removeWidget(ui->autoStartCheckBox);
+        ui->autoStartCheckBox->hide();
+        grid->addWidget(autoStartSwitch_, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
+
         grid->removeWidget(ui->playSoundCheckBox);
         ui->playSoundCheckBox->hide();
-        grid->addWidget(toggleSwitch_, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
+        grid->addWidget(toggleSwitch_, 6, 1, Qt::AlignRight | Qt::AlignVCenter);
     }
 
     // Connect slider to label
@@ -260,6 +268,11 @@ void MPasteSettingsWidget::loadSettings()
     ui->itemScaleSlider->setValue(settings->getItemScale());
     ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
     toggleSwitch_->setChecked(settings->isPlaySound());
+
+    // Read auto-start state from Windows registry
+    QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                  QSettings::NativeFormat);
+    autoStartSwitch_->setChecked(reg.contains("MPaste"));
 }
 
 void MPasteSettingsWidget::accept()
@@ -276,6 +289,15 @@ void MPasteSettingsWidget::accept()
 
     settings->setItemScale(ui->itemScaleSlider->value());
     settings->setPlaySound(toggleSwitch_->isChecked());
+
+    // Auto-start registry
+    QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                  QSettings::NativeFormat);
+    if (autoStartSwitch_->isChecked()) {
+        reg.setValue("MPaste", QDir::toNativeSeparators(qApp->applicationFilePath()));
+    } else {
+        reg.remove("MPaste");
+    }
 
     settings->saveSettings();
     QDialog::accept();

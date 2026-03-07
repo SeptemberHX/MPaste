@@ -35,6 +35,7 @@ private:
 
     Ui::MPasteSettingsWidget *ui;
     ToggleSwitch *toggleSwitch_;
+    ToggleSwitch *autoStartSwitch_;
     QPoint dragPos_;
 };
 

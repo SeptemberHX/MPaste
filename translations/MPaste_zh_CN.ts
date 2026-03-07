@@ -119,68 +119,79 @@
     <message>
         <location filename="../widget/MPasteSettingsWidget.ui" line="26"/>
         <location filename="../widget/MPasteSettingsWidget.ui" line="36"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="219"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="220"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="240"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="241"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="240"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="241"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
         <location filename="../widget/MPasteSettingsWidget.ui" line="52"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="221"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="242"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="242"/>
         <source>Max number of items</source>
         <translation>最大条目数</translation>
     </message>
     <message>
         <location filename="../widget/MPasteSettingsWidget.ui" line="76"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="222"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="243"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="243"/>
         <source>Maximum retention days</source>
         <translation>最大保留天数</translation>
     </message>
     <message>
         <location filename="../widget/MPasteSettingsWidget.ui" line="100"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="223"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="244"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="244"/>
+        <source>Launch at startup</source>
+        <translation>开机自启动</translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="121"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="246"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="246"/>
         <source>Play copy sound</source>
         <translation>复制提示音</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="121"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="225"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="142"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="248"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="248"/>
         <source>Activation shortcut</source>
         <translation>唤醒快捷键</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="143"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="226"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="164"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="249"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="249"/>
         <source>Card size</source>
         <translation>卡片大小</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="166"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="227"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="187"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="250"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="250"/>
         <source>100%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="142"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="142"/>
         <source>MPaste Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="143"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="143"/>
         <source>Max Num of Items</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="144"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="144"/>
         <source>Maximum Retention Days</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="145"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="145"/>
         <source>Play Copy Sound</source>
         <translation type="unfinished"></translation>
     </message>
@@ -210,7 +221,7 @@
         <location filename="../widget/MPasteWidget.ui" line="200"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="265"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="265"/>
         <source>Clipboard</source>
         <translation>剪贴板</translation>
     </message>
@@ -218,7 +229,7 @@
         <location filename="../widget/MPasteWidget.ui" line="224"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="198"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="266"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="198"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="266"/>
         <source>Stared</source>
         <translation>收藏夹</translation>
     </message>
@@ -226,43 +237,49 @@
         <location filename="../widget/MPasteWidget.ui" line="408"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="199"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="273"/>
-        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="199"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="273"/>
         <source>100</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="275"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="267"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="267"/>
         <source>All</source>
         <translation>全部</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="299"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="268"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="268"/>
         <source>Text</source>
         <translation>文本</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="320"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="269"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="269"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="341"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="270"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="270"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="362"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="271"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="271"/>
         <source>Rich Text</source>
         <translation>富文本</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="383"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="272"/>
+        <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="272"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
