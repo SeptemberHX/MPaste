@@ -522,6 +522,7 @@ void MPasteWidget::showEvent(QShowEvent *event) {
 }
 
 void MPasteWidget::loadFromSaveDir() {
+    std::cout << QDateTime::currentDateTime().toString().toStdString() << "Loading items for boards" << std::endl;
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
         boardWidget->loadFromSaveDir();
     }
@@ -554,6 +555,9 @@ void MPasteWidget::updateItemCount(int itemCount) {
 }
 
 void MPasteWidget::hideAndPaste() {
+    // 在隐藏前获取上一个活动窗口
+    WId previousWId = PlatformRelated::previousActiveWindow();
+
     hide();
 
 #ifdef Q_OS_WIN
@@ -569,6 +573,13 @@ void MPasteWidget::hideAndPaste() {
 
     if (MPasteSettings::getInst()->isAutoPaste()) {
         clipboard_.isPasting = true;
+
+        // 显式恢复焦点到之前的窗口
+        if (previousWId) {
+            PlatformRelated::activateWindow(previousWId);
+            QThread::msleep(100);  // 等待焦点切换完成
+        }
+
         PlatformRelated::triggerPasteShortcut();
         QTimer::singleShot(200, this, [this]() {
             clipboard_.isPasting = false;

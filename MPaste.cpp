@@ -74,6 +74,9 @@ int main(int argc, char* argv[]) {
         widget.setWindowTitle("MPaste");
         widget.setFixedWidth(QApplication::primaryScreen()->geometry().width());
 
+        // 启动前台窗口追踪
+        PlatformRelated::startWindowTracking();
+
         HotkeyManager hotkeyManager;
         if (!hotkeyManager.registerHotkey(QKeySequence("Alt+V"))) {
             qWarning() << "Failed to register global hotkey Alt+V";
@@ -82,7 +85,10 @@ int main(int argc, char* argv[]) {
         bool isShowingWidget = false;
 
         auto showWidget = [&widget, &isShowingWidget]() {
-            WId focusWinId = PlatformRelated::currActiveWindow();
+            WId focusWinId = PlatformRelated::previousActiveWindow();
+            if (!focusWinId) {
+                focusWinId = PlatformRelated::currActiveWindow();
+            }
             MPasteSettings::getInst()->setCurrFocusWinId(focusWinId);
 
             QScreen* currentScreen = getScreenForWindow(focusWinId);

@@ -154,6 +154,14 @@ void PlatformRelated::triggerPasteShortcut() {
     XUtils::triggerPasteShortcut(XUtils::currentWinId());
 }
 
+void PlatformRelated::startWindowTracking() {
+    // Linux: not implemented yet
+}
+
+WId PlatformRelated::previousActiveWindow() {
+    return PlatformRelated::currActiveWindow();
+}
+
 #elif defined(_WIN32)
 
 #include <windows.h>
@@ -161,6 +169,43 @@ void PlatformRelated::triggerPasteShortcut() {
 #include <QWindow>
 #include <QGuiApplication>
 #include <QScreen>
+
+static HWND s_previousWindow = nullptr;
+static HWINEVENTHOOK s_winEventHook = nullptr;
+
+void CALLBACK WinUtils::winEventProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd,
+                                     LONG idObject, LONG idChild, DWORD eventThread, DWORD eventTime) {
+    Q_UNUSED(hook); Q_UNUSED(event); Q_UNUSED(idObject); Q_UNUSED(idChild);
+    Q_UNUSED(eventThread); Q_UNUSED(eventTime);
+
+    if (!hwnd || !IsWindow(hwnd)) return;
+
+    // 忽略不可见窗口
+    if (!IsWindowVisible(hwnd)) return;
+
+    // 获取窗口标题，排除 MPaste 自身
+    wchar_t title[256];
+    GetWindowTextW(hwnd, title, 256);
+    QString windowTitle = QString::fromWCharArray(title);
+    if (windowTitle == "MPaste") return;
+
+    s_previousWindow = hwnd;
+}
+
+void WinUtils::startWindowTracking() {
+    if (s_winEventHook) return;
+
+    s_winEventHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+        nullptr, winEventProc,
+        0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
+    );
+}
+
+HWND WinUtils::getPreviousWindow() {
+    return s_previousWindow;
+}
 
 void WinUtils::activeWindowWin32(HWND hwnd) {
     if (IsIconic(hwnd)) {
@@ -255,7 +300,7 @@ void WinUtils::triggerPasteShortcut(HWND hwnd) {
         strstr(className, "WindowsTerminal") != nullptr) { // Windows Terminal
         simulateKeyPress('V', true, true, false); // Ctrl+Shift+V for terminals
     } else {
-        simulateKeyPress('V', true, false, false); // Ctrl+V for normal windows
+        simulateKeyPress(VK_INSERT, false, true, false); // Shift+Insert for normal windows
     }
 }
 
@@ -270,14 +315,17 @@ QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
 
     // 获取窗口的大图标
     HICON hIcon = nullptr;
+    bool ownedIcon = false;  // 标记是否需要自行销毁图标
     SendMessageTimeout(hwnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&hIcon);
+    if (hIcon) ownedIcon = true;
 
     // 如果获取大图标失败，尝试获取小图标
     if (!hIcon) {
         SendMessageTimeout(hwnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&hIcon);
+        if (hIcon) ownedIcon = true;
     }
 
-    // 如果通过消息获取失败，直接从窗口类获取
+    // 如果通过消息获取失败，直接从窗口类获取（这些图标不能销毁）
     if (!hIcon) {
         hIcon = (HICON)GetClassLongPtr(hwnd, GCLP_HICON);
     }
@@ -333,8 +381,8 @@ QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
     DeleteObject(iconInfo.hbmColor);
     DeleteObject(iconInfo.hbmMask);
 
-    // 不要销毁通过 GetClassLongPtr 获取的图标
-    if (hIcon) {
+    // 只销毁通过 WM_GETICON 获取的图标副本，GetClassLongPtr 获取的是类图标不能销毁
+    if (ownedIcon) {
         DestroyIcon(hIcon);
     }
 
@@ -355,7 +403,19 @@ WId PlatformRelated::currActiveWindow() {
 }
 
 void PlatformRelated::triggerPasteShortcut() {
-    WinUtils::triggerPasteShortcut(WinUtils::currentWinId());
+    HWND target = WinUtils::getPreviousWindow();
+    if (!target) {
+        target = WinUtils::currentWinId();
+    }
+    WinUtils::triggerPasteShortcut(target);
+}
+
+void PlatformRelated::startWindowTracking() {
+    WinUtils::startWindowTracking();
+}
+
+WId PlatformRelated::previousActiveWindow() {
+    return (WId)WinUtils::getPreviousWindow();
 }
 
 #endif

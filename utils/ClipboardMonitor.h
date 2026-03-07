@@ -6,6 +6,7 @@
 #define MPASTE_CLIPBOARDMONITOR_H
 
 #include <QObject>
+#include <QTimer>
 #include "data/ClipboardItem.h"
 
 class ClipboardMonitor : public QObject {
@@ -22,6 +23,18 @@ signals:
 
 public slots:
     void clipboardChanged();
+
+private:
+    void checkAndCapture();
+    void captureClipboard();
+
+    QTimer stabilizeTimer_;
+    int pendingWId_ = 0;
+    quint32 lastSeqNumber_ = 0;
+    int retryCount_ = 0;
+
+    static const int STABILIZE_INTERVAL = 200;  // 每次检查间隔 ms
+    static const int MAX_RETRIES = 10;           // 最多等待 2 秒
 };
 
 

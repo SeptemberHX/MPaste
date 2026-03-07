@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <iostream>
 #include "ClipboardItemInnerWidget.h"
 #include "ui_ClipboardItemInnerWidget.h"
@@ -58,32 +60,57 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &nIcon) {
 
     ui->iconLabel->setPixmap(icon);
 
-    // 计算平均颜色，跳过完全透明的像素
+    // 提取主色调：基于色相直方图找到图标的主导颜色
     QImage image = icon.toImage();
-    qint64 r = 0, g = 0, b = 0;  // 使用 qint64 避免溢出
-    int n = 0;
+    const int HUE_BINS = 12;
+    float hueBins[HUE_BINS] = {};      // 每个色相区间的加权计数
+    float hueSumSin[HUE_BINS] = {};    // 用于计算区间内精确平均色相
+    float hueSumCos[HUE_BINS] = {};
+    float satSum[HUE_BINS] = {};       // 区间内饱和度总和
+    int binCount[HUE_BINS] = {};
+    int totalColorful = 0;
+    int totalPixels = 0;
 
     for (int y = 0; y < image.height(); ++y) {
         for (int x = 0; x < image.width(); ++x) {
             QColor color(image.pixel(x, y));
-            if (color.alpha() > 0) {  // 只计算非透明像素
-                r += color.red();
-                g += color.green();
-                b += color.blue();
-                ++n;
-            }
+            if (color.alpha() < 10) continue;
+            ++totalPixels;
+
+            float h, s, l;
+            color.getHslF(&h, &s, &l);
+
+            // 只统计有色彩的像素（过滤灰色、纯白、纯黑）
+            if (s < 0.15f || l < 0.1f || l > 0.9f) continue;
+            ++totalColorful;
+
+            int bin = qBound(0, (int)(h * HUE_BINS), HUE_BINS - 1);
+            float weight = s;  // 饱和度越高权重越大
+            hueBins[bin] += weight;
+            hueSumSin[bin] += weight * sinf(h * 2 * (float)M_PI);
+            hueSumCos[bin] += weight * cosf(h * 2 * (float)M_PI);
+            satSum[bin] += s;
+            binCount[bin]++;
         }
     }
 
-    if (n > 0) {
-        // 计算平均值并使颜色更亮
-        r = qMin(255, (int)(r / n + (255 - r / n) / 6));
-        g = qMin(255, (int)(g / n + (255 - g / n) / 6));
-        b = qMin(255, (int)(b / n + (255 - b / n) / 6));
-        this->topBgColor = QColor(r, g, b, 0);
+    if (totalColorful > totalPixels * 0.05 && totalPixels > 0) {
+        // 找到权重最高的色相区间
+        int bestBin = 0;
+        for (int i = 1; i < HUE_BINS; i++) {
+            if (hueBins[i] > hueBins[bestBin]) bestBin = i;
+        }
+        // 计算区间内的精确平均色相
+        float avgHue = atan2f(hueSumSin[bestBin], hueSumCos[bestBin]) / (2 * (float)M_PI);
+        if (avgHue < 0) avgHue += 1.0f;
+        float avgSat = satSum[bestBin] / binCount[bestBin];
+
+        // 提高饱和度和降低亮度，增强不同图标之间的区分度
+        float s = qBound(0.35f, avgSat * 1.5f, 0.75f);
+        float l = 0.45f;
+        this->topBgColor = QColor::fromHslF(avgHue, s, l, 0.0);
     } else {
-        // 如果没有有效像素，使用默认颜色
-        this->topBgColor = QColor(240, 240, 240, 0);
+        this->topBgColor = QColor::fromHslF(0, 0, 0.55f, 0.0);
     }
 
     this->refreshStyleSheet();
@@ -105,14 +132,12 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
     else if (mimeData->hasUrls() && !mimeData->hasHtml()) {
         // 确保是纯URL，而不是富文本或代码中包含的URL
         QList<QUrl> urls = mimeData->urls();
-        bool allValidUrls = std::all_of(urls.begin(), urls.end(),
+        bool allValidUrls = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
             [](const QUrl& url) { return url.isValid() && !url.isRelative(); });
 
         if (allValidUrls) {
             this->showUrls(urls, item);
-        } else if (mimeData->hasHtml()) {
-            this->showHtml(mimeData->html());
-        } else {
+        } else if (mimeData->hasText()) {
             this->showText(mimeData->text(), item);
         }
     }

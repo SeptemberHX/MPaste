@@ -16,6 +16,8 @@ public:
     static QPixmap getWindowIcon(WId wId);
     static WId currActiveWindow();  // 返回 WId
     static void triggerPasteShortcut();
+    static void startWindowTracking();     // 启动前台窗口追踪
+    static WId previousActiveWindow();     // 返回上一个非 MPaste 的前台窗口
 };
 
 #if defined(__linux__)
@@ -54,9 +56,13 @@ public:
     static void triggerPasteShortcut(HWND hwnd);
     static HWND currentWinId();
     static QPixmap getWindowIconWin32(HWND hwnd);
+    static void startWindowTracking();
+    static HWND getPreviousWindow();
 
 private:
     static void simulateKeyPress(WORD key, bool ctrl = false, bool shift = false, bool alt = false);
+    static void CALLBACK winEventProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd,
+                                      LONG idObject, LONG idChild, DWORD eventThread, DWORD eventTime);
 };
 
 #endif

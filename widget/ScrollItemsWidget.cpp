@@ -43,6 +43,14 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     for (int i = 0; i < this->layout->count() - 1; ++i) {
         ClipboardItemWidget *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
         if (widget->getItem() == nItem) {
+            // 如果新数据的 HTML 更完整（Word截断修复），用新数据替换旧数据
+            if (nItem.getMimeData() && widget->getItem().getMimeData()
+                && nItem.getMimeData()->hasHtml() && widget->getItem().getMimeData()->hasHtml()
+                && nItem.getMimeData()->html().length() > widget->getItem().getMimeData()->html().length()) {
+                this->saver->removeItem(this->getItemFilePath(widget->getItem()));
+                widget->showItem(nItem);
+                this->saveItem(nItem);
+            }
             if (i != 0) {
                 this->moveItemToFirst(widget);
             }
@@ -86,6 +94,7 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     }
 
     Q_EMIT itemCountChanged(this->layout->count() - 1);
+
     return true;
 }
 
@@ -187,8 +196,9 @@ void ScrollItemsWidget::loadFromSaveDir() {
 
     QDir saveDir(this->saveDir());
     QList<ClipboardItem> itemList;
-            foreach (QFileInfo info, saveDir.entryInfoList(QStringList() << "*.mpaste", QDir::Files)) {
+        foreach (QFileInfo info, saveDir.entryInfoList(QStringList() << "*.mpaste", QDir::Files)) {
             ClipboardItem item = this->saver->loadFromFile(info.filePath());
+            std::cout << "Load file " << info.fileName().toStdString() << " with item name " << item.getName().toStdString() << std::endl;
             itemList << item;
         }
 
@@ -196,9 +206,11 @@ void ScrollItemsWidget::loadFromSaveDir() {
         return item1.getTime() < item2.getTime();
     });
 
+    std::cout << QDateTime::currentDateTime().toString().toStdString() << "Start addOneItem loop" << std::endl;
     foreach (const ClipboardItem &item, itemList) {
         this->addOneItem(item);
     }
+    std::cout << QDateTime::currentDateTime().toString().toStdString() << "End addOneItem loop" << std::endl;
 }
 
 QScrollBar* ScrollItemsWidget::horizontalScrollbar() {

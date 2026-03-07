@@ -15,7 +15,7 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
     QDataStream out(&file);
 
     // 保存基本属性
-    out << item.getTime() << item.getIcon();
+    out << item.getTime() << item.getName() << item.getIcon();
     out << item.getFavicon() << item.getTitle() << item.getUrl();
 
     const QMimeData* mimeData = item.getMimeData();
@@ -43,11 +43,12 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
 
     // 读取基本属性
     QDateTime time;
+    QString name;
     QPixmap icon;
     QPixmap favicon;
     QString title;
     QString url;
-    in >> time >> icon >> favicon >> title >> url;
+    in >> time >> name >> icon >> favicon >> title >> url;
 
     // 创建普通指针，让 ClipboardItem 的构造函数接管其所有权
     QMimeData* mimeData = new QMimeData;
@@ -62,6 +63,7 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
 
     // ClipboardItem 构造函数会接管 mimeData 的所有权
     ClipboardItem item(icon, mimeData);
+    item.setName(name);
     item.setFavicon(favicon);
     item.setTime(time);
     item.setTitle(title);

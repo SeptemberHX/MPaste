@@ -4,55 +4,55 @@
 <context>
     <name>ClipboardItemInnerWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="210"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="251"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="281"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="295"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="235"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="276"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="306"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="320"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="211"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="236"/>
         <source>Rich Text</source>
         <translation>富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="236"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="261"/>
         <source>Pixels</source>
         <translation>像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="237"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="262"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="253"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="278"/>
         <source>Plain Text</source>
         <translation>纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="267"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="292"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="294"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="319"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="301"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="326"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="308"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="333"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="367"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="392"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
@@ -118,6 +118,7 @@
     <name>MPasteSettingsWidget</name>
     <message>
         <location filename="../widget/MPasteSettingsWidget.ui" line="14"/>
+        <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="142"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="142"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="142"/>
         <source>MPaste Settings</source>
@@ -125,6 +126,7 @@
     </message>
     <message>
         <location filename="../widget/MPasteSettingsWidget.ui" line="32"/>
+        <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="143"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="143"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="143"/>
         <source>Max Num of Items</source>
@@ -132,6 +134,7 @@
     </message>
     <message>
         <location filename="../widget/MPasteSettingsWidget.ui" line="67"/>
+        <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="144"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="144"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="144"/>
         <source>Maximum Retention Days</source>
@@ -139,6 +142,7 @@
     </message>
     <message>
         <location filename="../widget/MPasteSettingsWidget.ui" line="102"/>
+        <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="145"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="145"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteSettingsWidget.h" line="145"/>
         <source>Play Copy Sound</source>
@@ -168,6 +172,7 @@
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="200"/>
+        <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
         <source>Clipboard</source>
@@ -175,6 +180,7 @@
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="224"/>
+        <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="198"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="198"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="198"/>
         <source>Stared</source>
@@ -182,6 +188,7 @@
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="252"/>
+        <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="199"/>
         <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="199"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="199"/>
         <source>100</source>

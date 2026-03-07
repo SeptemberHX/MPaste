@@ -140,6 +140,18 @@ public:
         return false;
     }
 
+    // 提取HTML中Fragment标记之间的实际内容，忽略Word等应用每次复制都会变化的header元数据
+    static QStringView htmlFragment(const QString &html) {
+        static const QString startMarker = QStringLiteral("<!--StartFragment-->");
+        static const QString endMarker = QStringLiteral("<!--EndFragment-->");
+        int start = html.indexOf(startMarker);
+        int end = html.indexOf(endMarker);
+        if (start >= 0 && end > start) {
+            return QStringView(html).mid(start + startMarker.length(), end - start - startMarker.length());
+        }
+        return QStringView(html);
+    }
+
     bool operator==(const ClipboardItem &other) const {
         // 如果两者都为空，认为相等
         if (!mimeData_ && !other.mimeData_) {
@@ -151,16 +163,23 @@ public:
         }
 
         // 比较文本内容
+        bool textMatched = false;
         if (mimeData_->hasText() || other.mimeData_->hasText()) {
             if (mimeData_->text() != other.mimeData_->text()) {
                 return false;
             }
+            textMatched = true;
         }
 
-        // 比较HTML内容
+        // 比较HTML内容（提取Fragment部分，忽略Word等应用每次复制都会变化的header元数据）
+        // 文本一致时，若HTML是截断关系（一个是另一个的前缀），视为同一内容
         if (mimeData_->hasHtml() || other.mimeData_->hasHtml()) {
-            if (mimeData_->html() != other.mimeData_->html()) {
-                return false;
+            QStringView frag1 = htmlFragment(mimeData_->html());
+            QStringView frag2 = htmlFragment(other.mimeData_->html());
+            if (frag1 != frag2) {
+                if (!textMatched || (!frag1.startsWith(frag2) && !frag2.startsWith(frag1))) {
+                    return false;
+                }
             }
         }
 
@@ -296,6 +315,7 @@ public:
     void setTitle(const QString &title) { title_ = title; }
     void setUrl(const QString &url) { url_ = url; }
 
+    void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }
 };
 
