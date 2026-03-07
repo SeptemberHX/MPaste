@@ -131,6 +131,9 @@ void ClipboardItemWidget::handleFavoriteAction() {
     isFavorite = !isFavorite;
     updateFavoriteButton();
     emit favoriteChanged(isFavorite);
+    if (isFavorite) {
+        emit itemStared(currentItem);
+    }
 }
 
 void ClipboardItemWidget::handleDeleteAction() {
