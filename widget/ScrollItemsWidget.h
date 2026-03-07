@@ -27,7 +27,7 @@ public:
     void loadFromSaveDir();
     QScrollBar* horizontalScrollbar();
     void setAllItemVisible();
-    const ClipboardItem& selectedByShortcut(int visibleOrder);
+    const ClipboardItem* selectedByShortcut(int visibleOrder);
     void selectedByEnter();
     void focusMoveLeft();
     void focusMoveRight();

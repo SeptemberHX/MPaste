@@ -497,14 +497,16 @@ void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
                 if (keyOrder >= 0 && keyOrder <= 9) {
                     qDebug() << "Alt+" << keyOrder << " detected on key release";
 
-                    const ClipboardItem& selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
-                    this->setClipboard(selectedItem);
+                    const ClipboardItem* selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
+                    if (selectedItem) {
+                        this->setClipboard(*selectedItem);
 
-                    // 等待数字键完全释放
-                    QTimer::singleShot(50, this, [this]() {
-                        hideAndPaste();
-                        currItemsWidget()->cleanShortCutInfo();
-                    });
+                        // 等待数字键完全释放
+                        QTimer::singleShot(50, this, [this]() {
+                            hideAndPaste();
+                            currItemsWidget()->cleanShortCutInfo();
+                        });
+                    }
                 }
             }
         }

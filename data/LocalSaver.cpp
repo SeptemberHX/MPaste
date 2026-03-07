@@ -61,8 +61,8 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
         mimeData->setData(format, data);  // 将数据设置到 QMimeData 中
     }
 
-    // ClipboardItem 构造函数会接管 mimeData 的所有权
     ClipboardItem item(icon, mimeData);
+    delete mimeData; // ClipboardItem 构造函数会复制数据，原始指针需要手动释放
     item.setName(name);
     item.setFavicon(favicon);
     item.setTime(time);

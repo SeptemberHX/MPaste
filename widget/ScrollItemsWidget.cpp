@@ -83,14 +83,19 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     this->layout->insertWidget(0, itemWidget);
     this->setSelectedItem(itemWidget);
 
-    for (int i = MPasteSettings::getInst()->getMaxSize(); i < this->layout->count() - 1; ++i) {
-        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+    while (this->layout->count() - 1 > MPasteSettings::getInst()->getMaxSize()) {
+        int lastIndex = this->layout->count() - 2; // -1 for stretch, -1 for last item
+        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(lastIndex)->widget());
+        if (!widget) break;
         this->saver->removeItem(this->getItemFilePath(widget->getItem()));
         this->layout->removeWidget(widget);
         if (this->currItemWidget == widget) {
             this->currItemWidget = nullptr;
-            this->setFirstVisibleItemSelected();
         }
+        widget->deleteLater();
+    }
+    if (!this->currItemWidget) {
+        this->setFirstVisibleItemSelected();
     }
 
     Q_EMIT itemCountChanged(this->layout->count() - 1);
@@ -234,21 +239,24 @@ void ScrollItemsWidget::setAllItemVisible() {
     }
 }
 
-const ClipboardItem& ScrollItemsWidget::selectedByShortcut(int keyIndex) {
+const ClipboardItem* ScrollItemsWidget::selectedByShortcut(int keyIndex) {
     if (keyIndex >= 0 && keyIndex < this->layout->count() - 1) {
         for (int i = 0, c = 0; i < this->layout->count() - 1; ++i) {
             auto widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
-            if (widget->isVisible()) {
+            if (widget && widget->isVisible()) {
                 if (c == keyIndex) {
                     this->moveItemToFirst(widget);
-                    return widget->getItem();
+                    return &widget->getItem();
                 } else {
                     ++c;
                 }
             }
         }
     }
-    return this->currItemWidget->getItem();
+    if (this->currItemWidget) {
+        return &this->currItemWidget->getItem();
+    }
+    return nullptr;
 }
 
 QString ScrollItemsWidget::saveDir() {

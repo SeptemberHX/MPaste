@@ -44,6 +44,8 @@ void OpenGraphFetcher::handle() {
 }
 
 void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
+    reply->deleteLater();
+
     if (reply->error() != QNetworkReply::NoError) {
         if (!pendingImageUrls.isEmpty()) {
             tryNextImage();

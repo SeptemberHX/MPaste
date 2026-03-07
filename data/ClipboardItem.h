@@ -194,10 +194,22 @@ public:
         if (mimeData_->hasImage() || other.mimeData_->hasImage()) {
             QPixmap img1 = getImage();
             QPixmap img2 = other.getImage();
-            if (img1.isNull() != img2.isNull() ||
-                (!img1.isNull() && img1.toImage() != img2.toImage())) {
+            if (img1.isNull() != img2.isNull()) {
                 return false;
+            }
+            if (!img1.isNull()) {
+                QImage i1 = img1.toImage();
+                QImage i2 = img2.toImage();
+                if (i1.size() != i2.size() || i1.format() != i2.format()) {
+                    return false;
                 }
+                // 逐行比较原始字节，比逐像素比较快
+                for (int y = 0; y < i1.height(); ++y) {
+                    if (memcmp(i1.constScanLine(y), i2.constScanLine(y), i1.bytesPerLine()) != 0) {
+                        return false;
+                    }
+                }
+            }
         }
 
         // 比较颜色数据
