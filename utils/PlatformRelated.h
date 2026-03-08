@@ -47,7 +47,7 @@ private:
     static QPixmap convertFromNative(const void* data, int width, int height);
 };
 
-#elif defined(__WIN32__)
+#elif defined(_WIN32)
 #include <windows.h>
 
 class WinUtils {

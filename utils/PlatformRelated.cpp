@@ -286,9 +286,7 @@ void WinUtils::simulateKeyPress(WORD key, bool ctrl, bool shift, bool alt) {
     }
 
     // 添加小延时确保窗口有足够时间处理事件
-    Sleep(10);
     SendInput(inputCount, inputs, sizeof(INPUT));
-    Sleep(10);
 }
 
 void WinUtils::triggerPasteShortcut(HWND hwnd) {

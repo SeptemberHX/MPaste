@@ -63,7 +63,7 @@ private:
 
     // 剪贴板操作
     void setClipboard(const ClipboardItem &item);
-    void handleUrlsClipboard(const ClipboardItem &item);
+    void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
 
     // 搜索操作
@@ -113,9 +113,8 @@ private:
     // 剪贴板相关
     struct {
         ClipboardMonitor *monitor;
-        QMimeData *mimeData;
-        bool isPasting;
-        bool copiedWhenHide;
+        bool isPasting = false;
+        bool copiedWhenHide = false;
     } clipboard_;
 
     // 其他组件

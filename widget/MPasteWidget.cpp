@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QButtonGroup>
+#include <QTimer>
 #include <QWindow>
 #include <QPainter>
 #include <QPainterPath>
@@ -252,8 +253,8 @@ void MPasteWidget::initSearchAnimations() {
 
 void MPasteWidget::initClipboard() {
     clipboard_.monitor = new ClipboardMonitor();
-    clipboard_.mimeData = nullptr;
     clipboard_.isPasting = false;
+    clipboard_.copiedWhenHide = false;
 }
 
 void MPasteWidget::initShortcuts() {
@@ -419,23 +420,29 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
 
 void MPasteWidget::setClipboard(const ClipboardItem &item) {
     clipboard_.monitor->disconnectMonitor();
-    clipboard_.mimeData = item.createMimeData();
 
-    // Debug information
-    qDebug() << "Setting clipboard with formats:" << clipboard_.mimeData->formats();
+    QMimeData *mimeData = item.createMimeData();
+    if (!mimeData) {
+        clipboard_.monitor->connectMonitor();
+        return;
+    }
 
-    QGuiApplication::clipboard()->setMimeData(clipboard_.mimeData);
-    // 使用延时重新连接监视器，避免触发重复提示音
+    if (item.getMimeData() && item.getMimeData()->hasUrls()) {
+        handleUrlsClipboard(mimeData, item);
+    }
+
+    qDebug() << "Setting clipboard with formats:" << mimeData->formats();
+
+    QGuiApplication::clipboard()->setMimeData(mimeData);
     QTimer::singleShot(200, this, [this]() {
         clipboard_.monitor->connectMonitor();
-
-#ifdef Q_OS_WIN
-        delete clipboard_.mimeData;
-#endif
     });
 }
+void MPasteWidget::handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item) {
+    if (!mimeData) {
+        return;
+    }
 
-void MPasteWidget::handleUrlsClipboard(const ClipboardItem &item) {
     bool files = true;
     for (const QUrl &url : item.getUrls()) {
         if (!url.isLocalFile() || !QFileInfo::exists(url.toLocalFile())) {
@@ -450,15 +457,14 @@ void MPasteWidget::handleUrlsClipboard(const ClipboardItem &item) {
         for (const QUrl &url : item.getUrls()) {
             byteArray.append(url.toEncoded()).append('\n');
         }
-        clipboard_.mimeData->setData("x-special/gnome-copied-files", byteArray);
+        mimeData->setData("x-special/gnome-copied-files", byteArray);
         nautilus.append(byteArray);
-        clipboard_.mimeData->setData("COMPOUND_TEXT", nautilus);
-        clipboard_.mimeData->setText(item.getText());
-        clipboard_.mimeData->setData("text/plain;charset=utf-8", nautilus);
+        mimeData->setData("COMPOUND_TEXT", nautilus);
+        mimeData->setText(item.getText());
+        mimeData->setData("text/plain;charset=utf-8", nautilus);
     }
-    clipboard_.mimeData->setUrls(item.getUrls());
+    mimeData->setUrls(item.getUrls());
 }
-
 void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
     switch (event->key()) {
         case Qt::Key_Escape:
@@ -735,38 +741,55 @@ void MPasteWidget::updateItemCount(int itemCount) {
 }
 
 void MPasteWidget::hideAndPaste() {
-    // 在隐藏前获取上一个活动窗口
     WId previousWId = PlatformRelated::previousActiveWindow();
 
     hide();
 
-#ifdef Q_OS_WIN
-    // 等待 Alt 键释放
-    while (GetAsyncKeyState(VK_MENU) & 0x8000) {
-        QThread::msleep(10);
+    if (!MPasteSettings::getInst()->isAutoPaste()) {
+        return;
     }
-    // 再多等待一小段时间确保键盘状态完全恢复
-    QThread::msleep(50);
-#else
-    QThread::msleep(100);
-#endif
 
-    if (MPasteSettings::getInst()->isAutoPaste()) {
-        clipboard_.isPasting = true;
+    clipboard_.isPasting = true;
 
-        // 显式恢复焦点到之前的窗口
-        if (previousWId) {
-            PlatformRelated::activateWindow(previousWId);
-            QThread::msleep(100);  // 等待焦点切换完成
-        }
-
+    auto finishPaste = [this]() {
         PlatformRelated::triggerPasteShortcut();
         QTimer::singleShot(200, this, [this]() {
             clipboard_.isPasting = false;
         });
-    }
-}
+    };
 
+    auto restoreFocusAndPaste = [this, previousWId, finishPaste]() {
+        if (previousWId) {
+            PlatformRelated::activateWindow(previousWId);
+            QTimer::singleShot(100, this, finishPaste);
+            return;
+        }
+
+        QTimer::singleShot(0, this, finishPaste);
+    };
+
+#ifdef Q_OS_WIN
+    auto *altReleaseTimer = new QTimer(this);
+    auto *pollCount = new int(0);
+    altReleaseTimer->setInterval(10);
+    connect(altReleaseTimer, &QTimer::timeout, this, [altReleaseTimer, pollCount, restoreFocusAndPaste]() {
+        const bool altReleased = (GetAsyncKeyState(VK_MENU) & 0x8000) == 0;
+        const bool timedOut = *pollCount >= 50;
+        if (altReleased || timedOut) {
+            altReleaseTimer->stop();
+            altReleaseTimer->deleteLater();
+            delete pollCount;
+            restoreFocusAndPaste();
+            return;
+        }
+
+        ++(*pollCount);
+    });
+    altReleaseTimer->start();
+#else
+    restoreFocusAndPaste();
+#endif
+}
 void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == isVisible()) return;
 

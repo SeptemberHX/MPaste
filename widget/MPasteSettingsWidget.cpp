@@ -195,6 +195,15 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         grid->addWidget(toggleSwitch_, 6, 1, Qt::AlignRight | Qt::AlignVCenter);
     }
 
+#ifndef Q_OS_WIN
+    const QString autoStartTip = tr("Auto-start is currently only supported on Windows.");
+    ui->label_autostart->setEnabled(false);
+    ui->label_autostart->setToolTip(autoStartTip);
+    autoStartSwitch_->setChecked(false);
+    autoStartSwitch_->setEnabled(false);
+    autoStartSwitch_->setToolTip(autoStartTip);
+#endif
+
     // Connect slider to label
     connect(ui->itemScaleSlider, &QSlider::valueChanged, this, [this](int value) {
         ui->scaleValueLabel->setText(QString("%1%").arg(value));
@@ -269,10 +278,13 @@ void MPasteSettingsWidget::loadSettings()
     ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
     toggleSwitch_->setChecked(settings->isPlaySound());
 
-    // Read auto-start state from Windows registry
+#ifdef Q_OS_WIN
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                   QSettings::NativeFormat);
     autoStartSwitch_->setChecked(reg.contains("MPaste"));
+#else
+    autoStartSwitch_->setChecked(false);
+#endif
 }
 
 void MPasteSettingsWidget::accept()
@@ -290,7 +302,7 @@ void MPasteSettingsWidget::accept()
     settings->setItemScale(ui->itemScaleSlider->value());
     settings->setPlaySound(toggleSwitch_->isChecked());
 
-    // Auto-start registry
+#ifdef Q_OS_WIN
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                   QSettings::NativeFormat);
     if (autoStartSwitch_->isChecked()) {
@@ -298,6 +310,7 @@ void MPasteSettingsWidget::accept()
     } else {
         reg.remove("MPaste");
     }
+#endif
 
     settings->saveSettings();
     QDialog::accept();
