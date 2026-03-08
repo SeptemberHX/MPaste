@@ -64,6 +64,43 @@ cmake ..
 make -j8
 ```
 
+### Build configuration notes
+
+On Windows, the project no longer hardcodes local Qt / MinGW paths.
+
+- Optional Qt prefix: `-DMPASTE_QT_ROOT=/path/to/Qt/6.x.x/<toolchain>`
+- Optional MinGW runtime directory: `-DMPASTE_MINGW_BIN_DIR=/path/to/mingw/bin`
+- Disable post-build Windows packaging: `-DMPASTE_ENABLE_WINDOWS_DEPLOY=OFF`
+
+Example:
+
+```shell
+cmake -B build -DMPASTE_QT_ROOT=C:/Qt/6.8.0/mingw_64
+cmake --build build
+```
+
+### Rendering backend
+
+You can optionally control the OpenGL backend with the `MPASTE_OPENGL_BACKEND` environment variable:
+
+- `auto`: do not force a backend
+- `gles`: force OpenGL ES
+- `software`: force software OpenGL
+- `software-gles`: keep the previous compatibility behavior
+
+Example:
+
+```shell
+set MPASTE_OPENGL_BACKEND=software
+MPaste.exe
+```
+
+### History file compatibility
+
+- New history files use a versioned on-disk format.
+- Older `.mpaste` files are still loaded automatically.
+- Invalid / corrupted history files are skipped instead of breaking the whole load process.
+
 * [KDSingleApplication](https://github.com/KDAB/KDSingleApplication)
 * sound effect from https://www.zapsplat.com/
 

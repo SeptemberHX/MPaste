@@ -7,6 +7,9 @@
 #include "data/ClipboardItem.h"
 #include "ClipboardItemWidget.h"
 
+class QPropertyAnimation;
+class QWheelEvent;
+
 namespace Ui {
 class ScrollItemsWidget;
 }
@@ -39,6 +42,7 @@ public:
     QString getCategory() const;
     void removeItemByContent(const ClipboardItem &item);
     void setItemFavorite(const ClipboardItem &item, bool favorite);
+    bool handleWheelScroll(QWheelEvent *event);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -53,6 +57,7 @@ private slots:
     void itemDoubleClicked();
 
 private:
+    ClipboardItemWidget *createItemWidget(const ClipboardItem &item);
     void setSelectedItem(ClipboardItemWidget *item);
     QString getItemFilePath(const ClipboardItem &item);
     void setFirstVisibleItemSelected();
@@ -61,6 +66,13 @@ private:
     void checkSaveDir();
     void moveItemToFirst(ClipboardItemWidget *widget);
     QString saveDir();
+    void animateScrollTo(int targetValue);
+    int wheelStepPixels() const;
+    void loadNextBatch(int batchSize);
+    void ensureAllItemsLoaded();
+    void maybeLoadMoreItems();
+    int itemCountForDisplay() const;
+    void trimToMaxSize();
 
     Ui::ScrollItemsWidget *ui;
     QHBoxLayout *layout;
@@ -69,9 +81,16 @@ private:
 
     ClipboardItemWidget *currItemWidget;
     LocalSaver *saver;
+    QPropertyAnimation *scrollAnimation;
+    QStringList pendingLoadFilePaths_;
+    int totalItemCount_ = 0;
 
     QString currentKeyword_;
     ClipboardItem::ContentType currentTypeFilter_ = ClipboardItem::All;
+
+    static constexpr int INITIAL_LOAD_BATCH_SIZE = 24;
+    static constexpr int LOAD_BATCH_SIZE = 16;
+    static constexpr int LOAD_MORE_THRESHOLD_PX = 640;
 
 };
 

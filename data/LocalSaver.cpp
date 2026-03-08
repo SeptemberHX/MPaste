@@ -3,8 +3,128 @@
 //
 
 #include "LocalSaver.h"
-#include <QFile>
+
+#include <QBuffer>
 #include <QDataStream>
+#include <QDebug>
+#include <QFile>
+
+namespace {
+constexpr quint32 kLocalSaverVersion = 2;
+const QString kLocalSaverMagic = QStringLiteral("MPASTE_CLIP_V2");
+
+bool hasMeaningfulMimeData(const QMimeData *mimeData) {
+    if (!mimeData) {
+        return false;
+    }
+
+    return mimeData->hasText()
+        || mimeData->hasHtml()
+        || mimeData->hasImage()
+        || mimeData->hasUrls()
+        || mimeData->hasColor()
+        || !mimeData->formats().isEmpty();
+}
+
+ClipboardItem finalizeLoadedItem(const QPixmap &icon,
+                                 const QDateTime &time,
+                                 const QString &name,
+                                 const QPixmap &favicon,
+                                 const QString &title,
+                                 const QString &url,
+                                 QMimeData *mimeData) {
+    if (!hasMeaningfulMimeData(mimeData) || name.isEmpty()) {
+        delete mimeData;
+        return ClipboardItem();
+    }
+
+    ClipboardItem item(icon, mimeData);
+    delete mimeData;
+    item.setName(name);
+    item.setFavicon(favicon);
+    item.setTime(time);
+    item.setTitle(title);
+    item.setUrl(url);
+    return item;
+}
+
+ClipboardItem loadVersion2(const QByteArray &rawData) {
+    QBuffer buffer;
+    buffer.setData(rawData);
+    if (!buffer.open(QIODevice::ReadOnly)) {
+        return ClipboardItem();
+    }
+
+    QDataStream in(&buffer);
+    QString magic;
+    quint32 version = 0;
+    QDateTime time;
+    QString name;
+    QPixmap icon;
+    QPixmap favicon;
+    QString title;
+    QString url;
+    quint32 formatCount = 0;
+
+    in >> magic >> version;
+    if (in.status() != QDataStream::Ok || magic != kLocalSaverMagic || version != kLocalSaverVersion) {
+        return ClipboardItem();
+    }
+
+    in >> time >> name >> icon >> favicon >> title >> url >> formatCount;
+    if (in.status() != QDataStream::Ok) {
+        return ClipboardItem();
+    }
+
+    auto *mimeData = new QMimeData;
+    for (quint32 i = 0; i < formatCount; ++i) {
+        QString format;
+        QByteArray data;
+        in >> format >> data;
+        if (in.status() != QDataStream::Ok) {
+            delete mimeData;
+            return ClipboardItem();
+        }
+        mimeData->setData(format, data);
+    }
+
+    return finalizeLoadedItem(icon, time, name, favicon, title, url, mimeData);
+}
+
+ClipboardItem loadLegacy(const QByteArray &rawData) {
+    QBuffer buffer;
+    buffer.setData(rawData);
+    if (!buffer.open(QIODevice::ReadOnly)) {
+        return ClipboardItem();
+    }
+
+    QDataStream in(&buffer);
+    QDateTime time;
+    QString name;
+    QPixmap icon;
+    QPixmap favicon;
+    QString title;
+    QString url;
+    in >> time >> name >> icon >> favicon >> title >> url;
+    if (in.status() != QDataStream::Ok) {
+        return ClipboardItem();
+    }
+
+    auto *mimeData = new QMimeData;
+    while (!in.atEnd()) {
+        QString format;
+        QByteArray data;
+        in >> format >> data;
+        if (in.status() != QDataStream::Ok) {
+            delete mimeData;
+            return ClipboardItem();
+        }
+        mimeData->setData(format, data);
+    }
+
+    return finalizeLoadedItem(icon, time, name, favicon, title, url, mimeData);
+}
+}
 
 bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) {
     QFile file(filePath);
@@ -13,24 +133,23 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
     }
 
     QDataStream out(&file);
-
-    // 保存基本属性
+    out << kLocalSaverMagic << kLocalSaverVersion;
     out << item.getTime() << item.getName() << item.getIcon();
     out << item.getFavicon() << item.getTitle() << item.getUrl();
 
     const QMimeData* mimeData = item.getMimeData();
     if (mimeData) {
         QStringList formats = mimeData->formats();
-
-        // 直接遍历 formats 列表并写入格式和数据
+        out << quint32(formats.size());
         for (const QString &format : formats) {
-            QByteArray data = mimeData->data(format);
-            out << format << data; // 写入格式名称和数据
+            out << format << mimeData->data(format);
         }
+    } else {
+        out << quint32(0);
     }
 
     file.close();
-    return true;
+    return out.status() == QDataStream::Ok;
 }
 
 ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
@@ -39,37 +158,19 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
         return ClipboardItem();
     }
 
-    QDataStream in(&file);
+    const QByteArray rawData = file.readAll();
+    file.close();
 
-    // 读取基本属性
-    QDateTime time;
-    QString name;
-    QPixmap icon;
-    QPixmap favicon;
-    QString title;
-    QString url;
-    in >> time >> name >> icon >> favicon >> title >> url;
-
-    // 创建普通指针，让 ClipboardItem 的构造函数接管其所有权
-    QMimeData* mimeData = new QMimeData;
-    // 循环读取格式和数据，直到文件结束
-    while (!in.atEnd()) {
-        QString format;
-        QByteArray data;
-
-        in >> format >> data;  // 读取格式和数据
-        mimeData->setData(format, data);  // 将数据设置到 QMimeData 中
+    ClipboardItem item = loadVersion2(rawData);
+    if (!item.getName().isEmpty()) {
+        return item;
     }
 
-    ClipboardItem item(icon, mimeData);
-    delete mimeData; // ClipboardItem 构造函数会复制数据，原始指针需要手动释放
-    item.setName(name);
-    item.setFavicon(favicon);
-    item.setTime(time);
-    item.setTitle(title);
-    item.setUrl(url);
+    item = loadLegacy(rawData);
+    if (item.getName().isEmpty()) {
+        qWarning() << "Failed to load clipboard history file:" << filePath;
+    }
 
-    file.close();
     return item;
 }
 

@@ -5,25 +5,27 @@ set(_VERSION_PATCH 0)
 set(VERSION "${_VERSION_MAJOR}.${_VERSION_MINOR}.${_VERSION_PATCH}")
 project(MPaste)
 
-# Set Qt installation path
-set(CMAKE_PREFIX_PATH "C:/Qt/6.8.0/mingw_64")
+set(MPASTE_QT_ROOT "" CACHE PATH "Optional Qt installation prefix (prepended to CMAKE_PREFIX_PATH)")
+if(MPASTE_QT_ROOT)
+    list(PREPEND CMAKE_PREFIX_PATH "${MPASTE_QT_ROOT}")
+endif()
+
+option(MPASTE_ENABLE_WINDOWS_DEPLOY "Enable post-build Windows deployment packaging" ON)
+set(MPASTE_MINGW_BIN_DIR "" CACHE PATH "Optional MinGW runtime bin directory used by Windows deployment")
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_CXX_STANDARD 17)  # Updated to C++17 for Qt6
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_CXX_FLAGS "-g -Wall")
 
-# generate a compile commands file
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DQT_DEBUG")
 
 set(BIN_NAME MPaste)
 
-# Sources files
 file(GLOB SRCS
         "*.h" "*.cpp"
         "widget/*.ui" "widget/*.h" "widget/*.cpp"
@@ -32,7 +34,6 @@ file(GLOB SRCS
         "utils/*.h" "utils/*.cpp"
 )
 
-# Find Qt packages (these are platform-independent)
 find_package(Qt6 COMPONENTS
         Widgets
         Multimedia
@@ -42,7 +43,6 @@ find_package(Qt6 COMPONENTS
         REQUIRED
 )
 
-# Translation files setup
 set(TS_FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/translations/MPaste_zh_CN.ts
 )
@@ -51,9 +51,7 @@ set_source_files_properties(${TS_FILES} PROPERTIES
 qt6_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} utils ${TS_FILES})
 qt6_add_translation(QM_FILES ${TS_FILES})
 
-# Platform specific configuration
-IF (UNIX)
-    # Linux specific packages
+if(UNIX)
     find_package(PkgConfig REQUIRED)
     find_package(X11 REQUIRED)
     pkg_check_modules(XCB REQUIRED xcb xcb-keysyms)
@@ -76,17 +74,15 @@ IF (UNIX)
             utils/PlatformRelated.cpp
             utils/PlatformRelated.h
     )
-ELSE()
-    # Windows specific setup
+else()
     set(PLATFORM_SPECIFIC_LIBS "")
     set(PLATFORM_SPECIFIC_INCLUDES "")
     set(PLATFORM_SPECIFIC_SOURCES "")
-ENDIF()
+endif()
 
-# Main executable - moved outside of IF(WIN32)
 if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_executable(${BIN_NAME}
-            WIN32    # Only add WIN32 flag for Release builds on Windows
+            WIN32
             ${SRCS}
             ${INTERFACES}
             ${PLATFORM_SPECIFIC_SOURCES}
@@ -107,7 +103,7 @@ target_include_directories(${BIN_NAME} PUBLIC
         ${PLATFORM_SPECIFIC_INCLUDES}
 )
 
-IF(WIN32)
+if(WIN32)
     target_link_libraries(${BIN_NAME} PRIVATE
             Qt6::Widgets
             Qt6::Multimedia
@@ -117,7 +113,7 @@ IF(WIN32)
             ${CUSTOM_LIBRARIES}
             dwmapi
     )
-ELSE ()
+else()
     target_link_libraries(${BIN_NAME} PRIVATE
             Qt6::Widgets
             Qt6::Multimedia
@@ -126,87 +122,86 @@ ELSE ()
             ${PLATFORM_SPECIFIC_LIBS}
             ${CUSTOM_LIBRARIES}
     )
-ENDIF ()
+endif()
 
-# Only include packaging on Unix systems
-IF(UNIX)
+if(UNIX)
     include(deb.cmake)
     include(CPack)
-ENDIF()
+endif()
 
 if(WIN32)
-    # 设置为 Windows GUI 应用程序
     if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_WIN32_EXECUTABLE TRUE)
     endif()
 
-    # 找到 windeployqt.exe
+    if(NOT MPASTE_MINGW_BIN_DIR)
+        get_filename_component(MPASTE_MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    endif()
+
     get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
     find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${_qt_bin_dir}")
 
-    # 使用 CLion 的 MinGW 目录
-    set(MINGW_DIR "C:/Users/tianj/AppData/Local/Programs/CLion/bin/mingw/bin")
+    set(MPASTE_MINGW_RUNTIME_DLLS "")
+    foreach(runtime_dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll)
+        set(runtime_path "${MPASTE_MINGW_BIN_DIR}/${runtime_dll}")
+        if(EXISTS "${runtime_path}")
+            list(APPEND MPASTE_MINGW_RUNTIME_DLLS "${runtime_path}")
+        endif()
+    endforeach()
 
+    if(MPASTE_ENABLE_WINDOWS_DEPLOY)
+        if(WINDEPLOYQT_EXECUTABLE)
+            set(DEPLOY_DIR "${CMAKE_BINARY_DIR}")
+            set(PACKAGE_DIR "${CMAKE_BINARY_DIR}/package/${PROJECT_NAME}")
 
-    # 两个部署目录
-    set(DEPLOY_DIR "${CMAKE_BINARY_DIR}")
-    set(PACKAGE_DIR "${CMAKE_BINARY_DIR}/package/${PROJECT_NAME}")
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}"
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_DIR}"
+                    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${PROJECT_NAME}>" "${DEPLOY_DIR}"
+                    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${PROJECT_NAME}>" "${PACKAGE_DIR}"
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}/translations"
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_DIR}/translations"
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/translations" "${DEPLOY_DIR}/translations"
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/translations" "${PACKAGE_DIR}/translations"
+                    COMMENT "Preparing Windows deployment directories..."
+            )
 
-    # 同时部署到两个目录
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            # 创建目录
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_DIR}"
+            if(MPASTE_MINGW_RUNTIME_DLLS)
+                add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MPASTE_MINGW_RUNTIME_DLLS} "${DEPLOY_DIR}/"
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MPASTE_MINGW_RUNTIME_DLLS} "${PACKAGE_DIR}/"
+                        COMMAND_EXPAND_LISTS
+                        COMMENT "Copying MinGW runtime DLLs..."
+                )
+            endif()
 
-            # 复制主程序到两个目录
-            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${PROJECT_NAME}>" "${DEPLOY_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${PROJECT_NAME}>" "${PACKAGE_DIR}"
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                    COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+                    --no-translations
+                    --no-system-d3d-compiler
+                    --no-compiler-runtime
+                    --no-opengl-sw
+                    --dir "${DEPLOY_DIR}"
+                    "${DEPLOY_DIR}/${PROJECT_NAME}.exe"
+                    COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+                    --no-translations
+                    --no-system-d3d-compiler
+                    --no-compiler-runtime
+                    --no-opengl-sw
+                    --dir "${PACKAGE_DIR}"
+                    "${PACKAGE_DIR}/${PROJECT_NAME}.exe"
+                    COMMENT "Running windeployqt..."
+            )
 
-            # 创建并复制翻译文件到两个目录
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}/translations"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_DIR}/translations"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/translations" "${DEPLOY_DIR}/translations"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/translations" "${PACKAGE_DIR}/translations"
-
-            # 复制 MinGW 运行时到两个目录
-            COMMAND ${CMAKE_COMMAND} -E copy
-            "${MINGW_DIR}/libgcc_s_seh-1.dll"
-            "${MINGW_DIR}/libstdc++-6.dll"
-            "${MINGW_DIR}/libwinpthread-1.dll"
-            "${DEPLOY_DIR}/"
-
-            COMMAND ${CMAKE_COMMAND} -E copy
-            "${MINGW_DIR}/libgcc_s_seh-1.dll"
-            "${MINGW_DIR}/libstdc++-6.dll"
-            "${MINGW_DIR}/libwinpthread-1.dll"
-            "${PACKAGE_DIR}/"
-
-            # 运行 windeployqt 部署 Qt 依赖到两个目录
-            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
-            --no-translations
-            --no-system-d3d-compiler
-            --no-compiler-runtime
-            --no-opengl-sw
-            --dir "${DEPLOY_DIR}"
-            "${DEPLOY_DIR}/${PROJECT_NAME}.exe"
-
-            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
-            --no-translations
-            --no-system-d3d-compiler
-            --no-compiler-runtime
-            --no-opengl-sw
-            --dir "${PACKAGE_DIR}"
-            "${PACKAGE_DIR}/${PROJECT_NAME}.exe"
-
-            COMMENT "Deploying to both directories..."
-    )
-
-    # 打包命令（直接打包 package 目录）
-    add_custom_target(package
-            COMMAND ${CMAKE_COMMAND} -E tar "cfv" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-${VERSION}-win64.zip" --format=zip "${PROJECT_NAME}"
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/package
-            COMMENT "Creating zip package..."
-            DEPENDS ${PROJECT_NAME}
-    )
+            add_custom_target(package
+                    COMMAND ${CMAKE_COMMAND} -E tar "cfv" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-${VERSION}-win64.zip" --format=zip "${PROJECT_NAME}"
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/package
+                    COMMENT "Creating zip package..."
+                    DEPENDS ${PROJECT_NAME}
+            )
+        else()
+            message(WARNING "windeployqt was not found; Windows deploy packaging is disabled. Set MPASTE_QT_ROOT or disable MPASTE_ENABLE_WINDOWS_DEPLOY.")
+        endif()
+    endif()
 endif()

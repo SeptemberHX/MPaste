@@ -11,7 +11,7 @@
 #include "utils/PlatformRelated.h"
 #include "utils/HotKeyManager.h"
 
-// 辅助函数保持不变
+// 杈呭姪鍑芥暟淇濇寔涓嶅彉
 QScreen* getScreenForWindow(WId windowId) {
     if (windowId) {
 #ifdef Q_OS_WIN
@@ -26,10 +26,36 @@ QScreen* getScreenForWindow(WId windowId) {
     return QGuiApplication::primaryScreen();
 }
 
+void configureOpenGLBackend() {
+    const QString backend = qEnvironmentVariable("MPASTE_OPENGL_BACKEND").trimmed().toLower();
+
+    if (backend.isEmpty() || backend == "auto" || backend == "default") {
+        return;
+    }
+
+    if (backend == "gles") {
+        QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+        return;
+    }
+
+    if (backend == "software") {
+        QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
+        return;
+    }
+
+    if (backend == "software-gles" || backend == "gles-software" || backend == "compat") {
+        QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+        QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
+        return;
+    }
+
+    qWarning() << "Unknown MPASTE_OPENGL_BACKEND value:" << backend
+               << "expected one of: auto, gles, software, software-gles";
+}
+
 int main(int argc, char* argv[]) {
-    // 设置 OpenGL 相关属性，必须在创建 QApplication 之前设置
-    QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
-    QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
+    // 璁剧疆 OpenGL 鐩稿叧灞炴€э紝蹇呴』鍦ㄥ垱寤?QApplication 涔嬪墠璁剧疆
+    configureOpenGLBackend();
 
     QSurfaceFormat format;
     format.setSwapInterval(1);
@@ -74,7 +100,7 @@ int main(int argc, char* argv[]) {
         widget.setWindowTitle("MPaste");
         widget.setFixedWidth(QApplication::primaryScreen()->geometry().width());
 
-        // 启动前台窗口追踪
+        // 鍚姩鍓嶅彴绐楀彛杩借釜
         PlatformRelated::startWindowTracking();
 
         HotkeyManager hotkeyManager;
@@ -113,12 +139,12 @@ int main(int argc, char* argv[]) {
                           currentScreen->geometry().height() -
                           widget.height());
 
-                // 确保窗口获得焦点
+                // 纭繚绐楀彛鑾峰緱鐒︾偣
                 PlatformRelated::activateWindow(widget.winId());
             });
         };
 
-        // 修改应用程序状态变化的处理
+        // 淇敼搴旂敤绋嬪簭鐘舵€佸彉鍖栫殑澶勭悊
         QObject::connect(qApp, &QGuiApplication::applicationStateChanged,
             [&widget, &isShowingWidget](Qt::ApplicationState state) {
                 if (state == Qt::ApplicationInactive) {
@@ -131,14 +157,14 @@ int main(int argc, char* argv[]) {
                 }
             });
 
-        // 连接快捷键变更
+        // 杩炴帴蹇嵎閿彉鏇?
         QObject::connect(&widget, &MPasteWidget::shortcutChanged,
             [&hotkeyManager](const QString &newShortcut) {
                 hotkeyManager.unregisterHotkey();
                 hotkeyManager.registerHotkey(QKeySequence(newShortcut));
             });
 
-        // 连接热键和消息处理
+        // 杩炴帴鐑敭鍜屾秷鎭鐞?
         QObject::connect(&hotkeyManager, &HotkeyManager::hotkeyPressed, showWidget);
         QObject::connect(&singleApp, &SingleApplication::messageReceived,
             [showWidget](const QString &) { showWidget(); });

@@ -8,6 +8,7 @@
 #include <QDebug>
 #include <QButtonGroup>
 #include <QTimer>
+#include <QWheelEvent>
 #include <QWindow>
 #include <QPainter>
 #include <QPainterPath>
@@ -589,8 +590,7 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
 
     if (event->type() == QEvent::Wheel) {
 #if (QT_VERSION >= QT_VERSION_CHECK(5,12,0))
-        QCoreApplication::sendEvent(this->currItemsWidget()->horizontalScrollbar(), event);
-        return true;
+        return this->currItemsWidget()->handleWheelScroll(static_cast<QWheelEvent *>(event));
 #endif
     } else if (event->type() == QEvent::KeyPress) {
         if (watched == ui_.ui->searchEdit) {
