@@ -5,6 +5,7 @@
 #include "ClipboardItemWidget.h"
 
 #include <QGraphicsDropShadowEffect>
+#include <QGraphicsOpacityEffect>
 #include <QPropertyAnimation>
 #include <QToolButton>
 #include <QMenu>
@@ -100,6 +101,10 @@ void ClipboardItemWidget::setupActionButtons() {
         border-radius: %1px;
     )").arg(borderR));
     ui.actions.container->hide();
+
+    auto *opacityEffect = new QGraphicsOpacityEffect(ui.actions.container);
+    opacityEffect->setOpacity(0.0);
+    ui.actions.container->setGraphicsEffect(opacityEffect);
 
     int margin = 6 * scale / 100;
     ui.actions.layout = new QHBoxLayout(ui.actions.container);
@@ -291,7 +296,8 @@ void ClipboardItemWidget::enterEvent(QEnterEvent* event) {
     ui.actions.container->raise();
 
     // Fade in animation
-    auto* animation = new QPropertyAnimation(ui.actions.container, "opacity", this);
+    auto* opacityEffect = qobject_cast<QGraphicsOpacityEffect*>(ui.actions.container->graphicsEffect());
+    auto* animation = new QPropertyAnimation(opacityEffect, "opacity", this);
     animation->setDuration(50);
     animation->setStartValue(0.0);
     animation->setEndValue(1.0);
@@ -302,7 +308,8 @@ void ClipboardItemWidget::leaveEvent(QEvent* event) {
     QWidget::leaveEvent(event);
 
     // Fade out animation
-    auto* animation = new QPropertyAnimation(ui.actions.container, "opacity", this);
+    auto* opacityEffect = qobject_cast<QGraphicsOpacityEffect*>(ui.actions.container->graphicsEffect());
+    auto* animation = new QPropertyAnimation(opacityEffect, "opacity", this);
     animation->setDuration(50);
     animation->setStartValue(1.0);
     animation->setEndValue(0.0);

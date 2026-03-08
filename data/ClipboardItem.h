@@ -124,6 +124,42 @@ private:
         return parseUrlsFromLines(filteredLines, true);
     }
 
+    static bool textMatchesUrls(const QString &text, const QList<QUrl> &urls) {
+        const QString trimmed = text.trimmed();
+        if (trimmed.isEmpty()) {
+            return true;
+        }
+
+        auto candidatesForUrl = [](const QUrl &url) {
+            QStringList candidates;
+            candidates << url.toString(QUrl::FullyEncoded);
+            candidates << QUrl::fromPercentEncoding(url.toEncoded());
+            if (url.isLocalFile()) {
+                candidates << url.toLocalFile();
+            }
+            candidates.removeAll(QString());
+            candidates.removeDuplicates();
+            return candidates;
+        };
+
+        if (urls.size() == 1) {
+            return candidatesForUrl(urls.first()).contains(trimmed);
+        }
+
+        const QStringList lines = trimmed.split(QRegularExpression(QStringLiteral("[\r\n]+")), Qt::SkipEmptyParts);
+        if (lines.size() != urls.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < urls.size(); ++i) {
+            const QString line = lines[i].trimmed();
+            if (!candidatesForUrl(urls[i]).contains(line)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     QList<QUrl> buildNormalizedUrls() const {
         if (!mimeData_) {
             return {};
@@ -131,7 +167,16 @@ private:
 
         QList<QUrl> urls = mimeData_->urls();
         if (!urls.isEmpty()) {
-            return urls;
+            const bool allLocalFiles = std::all_of(urls.begin(), urls.end(),
+                [](const QUrl &url) { return url.isLocalFile(); });
+            if (allLocalFiles) {
+                return urls;
+            }
+
+            const QString rawText = mimeData_->hasText() ? mimeData_->text() : QString();
+            if (textMatchesUrls(rawText, urls) || (!mimeData_->hasText() && !mimeData_->hasHtml())) {
+                return urls;
+            }
         }
 
         if (mimeData_->hasFormat(QStringLiteral("x-special/gnome-copied-files"))) {

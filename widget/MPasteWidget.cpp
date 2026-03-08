@@ -1,5 +1,5 @@
 // input: Depends on MPasteWidget.h, Qt runtime services, resource assets, and platform clipboard/window helpers.
-// output: Implements the main window, item interaction flow, normal paste, and plain-text paste behavior.
+// output: Implements the main window, item interaction flow, reliable quick-paste shortcuts, and plain-text paste behavior.
 // pos: Widget-layer main window implementation coordinating boards, shortcuts, and system integration.
 // update: If I change, update this header block and my folder README.md.
 #include <iostream>
@@ -8,6 +8,7 @@
 #include <QKeyEvent>
 #include <QResizeEvent>
 #include <QAudioOutput>
+#include <QDateTime>
 #include <QDir>
 #include <QDebug>
 #include <QButtonGroup>
@@ -458,10 +459,17 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
         ui_.clipboardWidget->addAndSaveItem(nItem);
 
         if (MPasteSettings::getInst()->isPlaySound()) {
-            misc_.player->stop();
-            misc_.player->setPosition(0);
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
             if (misc_.player->playbackState() != QMediaPlayer::PlayingState) {
+                if (misc_.player->mediaStatus() == QMediaPlayer::EndOfMedia) {
+                    misc_.player->setPosition(0);
+                }
                 misc_.player->play();
+                misc_.lastSoundPlayAtMs = now;
+            } else if (now - misc_.lastSoundPlayAtMs > 250) {
+                misc_.player->stop();
+                misc_.player->play();
+                misc_.lastSoundPlayAtMs = now;
             }
         }
 
@@ -623,6 +631,23 @@ void MPasteWidget::handleEnterKey(bool plainText) {
     }
 }
 
+bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
+    if (shortcutIndex < 0 || shortcutIndex > 9) {
+        return false;
+    }
+
+    const ClipboardItem *selectedItem = currItemsWidget()->selectedByShortcut(shortcutIndex);
+    if (!selectedItem || !setClipboard(*selectedItem, plainText)) {
+        return false;
+    }
+
+    QTimer::singleShot(50, this, [this]() {
+        hideAndPaste();
+        currItemsWidget()->cleanShortCutInfo();
+    });
+    return true;
+}
+
 void MPasteWidget::handleNavigationKeys(QKeyEvent *event) {
     if (!ui_.ui->searchEdit->isVisible()) {
         if (event->key() == Qt::Key_Left) {
@@ -714,8 +739,14 @@ void MPasteWidget::keyPressEvent(QKeyEvent *event) {
     if (event->modifiers() & Qt::AltModifier) {
         const int shortcutIndex = shortcutIndexForKey(event->key());
         if (shortcutIndex >= 0) {
+            if (event->isAutoRepeat()) {
+                event->accept();
+                return;
+            }
+
             misc_.pendingNumKey = shortcutIndex;
             misc_.pendingPlainTextNumKey = event->modifiers().testFlag(Qt::ShiftModifier);
+            triggerShortcutPaste(shortcutIndex, misc_.pendingPlainTextNumKey);
             event->accept();
             return;
         }
@@ -738,25 +769,6 @@ void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
     else {
         const int releasedShortcutIndex = shortcutIndexForKey(event->key());
         if (releasedShortcutIndex == misc_.pendingNumKey && misc_.pendingNumKey >= 0) {
-#ifdef Q_OS_WIN
-            bool altStillPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-#else
-            bool altStillPressed = QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier;
-#endif
-            if (altStillPressed) {
-                const int keyOrder = releasedShortcutIndex;
-                if (keyOrder >= 0 && keyOrder <= 9) {
-                    qDebug() << "Alt+" << keyOrder << " detected on key release";
-
-                    const ClipboardItem* selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
-                    if (selectedItem && this->setClipboard(*selectedItem, misc_.pendingPlainTextNumKey)) {
-                        QTimer::singleShot(50, this, [this]() {
-                            hideAndPaste();
-                            currItemsWidget()->cleanShortCutInfo();
-                        });
-                    }
-                }
-            }
             misc_.pendingNumKey = -1;
             misc_.pendingPlainTextNumKey = false;
             event->accept();

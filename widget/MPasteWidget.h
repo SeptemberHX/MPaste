@@ -1,6 +1,6 @@
 // input: Depends on Qt Widgets, board widgets, clipboard monitor, settings, and platform helpers.
-// output: Exposes the main MPaste window API, clipboard write helpers, and keyboard-driven paste flow.
-// pos: Widget-layer main window declaration coordinating all major UI features.
+// output: Exposes the main MPaste window API, clipboard write helpers, and reliable keyboard-driven paste flow.
+// pos: Widget-layer main window declaration coordinating boards, shortcuts, and major UI features.
 // update: If I change, update this header block and my folder README.md.
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
@@ -82,6 +82,7 @@ private:
     void handleNavigationKeys(QKeyEvent *event);
     void handleHomeEndKeys(QKeyEvent *event);
     void handleTabKey();
+    bool triggerShortcutPaste(int shortcutIndex, bool plainText);
 
     // 辅助方法
     ScrollItemsWidget* currItemsWidget();
@@ -127,7 +128,8 @@ private:
         QMediaPlayer *player;
         QList<int> numKeyList;
         int pendingNumKey = -1;
-        bool pendingPlainTextNumKey = false;  // 添加这个变量来跟踪按下的数字键
+        bool pendingPlainTextNumKey = false;
+        qint64 lastSoundPlayAtMs = 0;  // 添加这个变量来跟踪按下的数字键
     } misc_;
 
     static constexpr int HIDE_ANIMATION_TIME = 50;
