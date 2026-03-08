@@ -534,8 +534,6 @@ bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
         handleUrlsClipboard(mimeData, item);
     }
 
-    qDebug() << "Setting clipboard with formats:" << mimeData->formats();
-
     QGuiApplication::clipboard()->setMimeData(mimeData);
     QTimer::singleShot(200, this, [this]() {
         clipboard_.monitor->connectMonitor();

@@ -124,6 +124,56 @@ private:
         return parseUrlsFromLines(filteredLines, true);
     }
 
+    static QString decodeNullTerminatedText(const QByteArray &data, bool utf16) {
+        if (data.isEmpty()) {
+            return {};
+        }
+
+        QString text = utf16
+            ? QString::fromUtf16(reinterpret_cast<const char16_t *>(data.constData()), data.size() / 2)
+            : QString::fromUtf8(data);
+
+        const int nullIndex = text.indexOf(QChar('\0'));
+        if (nullIndex >= 0) {
+            text.truncate(nullIndex);
+        }
+        return text.trimmed();
+    }
+
+    static QList<QUrl> parseWindowsUrlMime(const QByteArray &data, bool utf16) {
+        const QString text = decodeNullTerminatedText(data, utf16);
+        if (text.isEmpty()) {
+            return {};
+        }
+
+        const QUrl url(text);
+        if (url.isValid() && !url.isRelative()) {
+            return {url};
+        }
+        return {};
+    }
+
+    static QList<QUrl> parseWindowsFileNameMime(const QByteArray &data, bool utf16) {
+        if (data.isEmpty()) {
+            return {};
+        }
+
+        QString text = utf16
+            ? QString::fromUtf16(reinterpret_cast<const char16_t *>(data.constData()), data.size() / 2)
+            : QString::fromUtf8(data);
+
+        const QStringList parts = text.split(QChar('\0'), Qt::SkipEmptyParts);
+        QList<QUrl> result;
+        for (const QString &part : parts) {
+            const QString trimmed = part.trimmed();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            result << QUrl::fromLocalFile(trimmed);
+        }
+        return result;
+    }
+
     static bool textMatchesUrls(const QString &text, const QList<QUrl> &urls) {
         const QString trimmed = text.trimmed();
         if (trimmed.isEmpty()) {
@@ -188,6 +238,24 @@ private:
             }
         }
 
+        if (mimeData_->hasFormat(QStringLiteral("application/x-qt-windows-mime;value=\"FileNameW\""))) {
+            const QList<QUrl> parsed = parseWindowsFileNameMime(
+                mimeData_->data(QStringLiteral("application/x-qt-windows-mime;value=\"FileNameW\"")),
+                true);
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
+        }
+
+        if (mimeData_->hasFormat(QStringLiteral("application/x-qt-windows-mime;value=\"FileName\""))) {
+            const QList<QUrl> parsed = parseWindowsFileNameMime(
+                mimeData_->data(QStringLiteral("application/x-qt-windows-mime;value=\"FileName\"")),
+                false);
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
+        }
+
         if (mimeData_->hasFormat(QStringLiteral("text/uri-list"))) {
             const QList<QUrl> parsed = parseUriListText(
                 QString::fromUtf8(mimeData_->data(QStringLiteral("text/uri-list"))));
@@ -196,9 +264,44 @@ private:
             }
         }
 
+        if (mimeData_->hasFormat(QStringLiteral("application/x-qt-windows-mime;value=\"UniformResourceLocatorW\""))) {
+            const QList<QUrl> parsed = parseWindowsUrlMime(
+                mimeData_->data(QStringLiteral("application/x-qt-windows-mime;value=\"UniformResourceLocatorW\"")),
+                true);
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
+        }
+
+        if (mimeData_->hasFormat(QStringLiteral("application/x-qt-windows-mime;value=\"UniformResourceLocator\""))) {
+            const QList<QUrl> parsed = parseWindowsUrlMime(
+                mimeData_->data(QStringLiteral("application/x-qt-windows-mime;value=\"UniformResourceLocator\"")),
+                false);
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
+        }
+
         const QString text = mimeData_->text();
         if (text.contains(QStringLiteral("x-special/nautilus-clipboard"))) {
             return parseProtocolTextUrls(text, false);
+        }
+
+        const QStringList plainFormats = {
+            QStringLiteral("text/plain;charset=utf-8"),
+            QStringLiteral("text/plain")
+        };
+        for (const QString &format : plainFormats) {
+            if (!mimeData_->hasFormat(format)) {
+                continue;
+            }
+            const QString rawText = QString::fromUtf8(mimeData_->data(format));
+            if (rawText.contains(QStringLiteral("x-special/nautilus-clipboard"))) {
+                const QList<QUrl> parsed = parseProtocolTextUrls(rawText, false);
+                if (!parsed.isEmpty()) {
+                    return parsed;
+                }
+            }
         }
 
         return {};

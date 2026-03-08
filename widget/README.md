@@ -54,3 +54,4 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - File/link normalization is now intentionally strict: plain text that merely looks like a path stays Text, while `#ff00aa`-style text still displays as Color in the item view.
 - `ClipboardItemWidget` now fades hover actions through a graphics opacity effect, and `MPasteWidget` replays the copy sound without MP3 seek noise.
 - `MPasteWidget` now triggers `Alt+[1-9,0]` and `Alt+Shift+[1-9,0]` quick paste on key press, avoiding flaky modifier timing on key release.
+- File items can now be recovered from more explicit file-copy/private formats without loosening plain-text heuristics.
