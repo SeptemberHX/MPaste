@@ -471,17 +471,18 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
 
 QMimeData *MPasteWidget::createPlainTextMimeData(const ClipboardItem &item) const {
     QString plainText;
+    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
 
-    if (item.getContentType() == ClipboardItem::File && item.getMimeData() && item.getMimeData()->hasUrls()) {
+    if (item.getContentType() == ClipboardItem::File && !normalizedUrls.isEmpty()) {
         QStringList urls;
-        for (const QUrl &url : item.getUrls()) {
+        for (const QUrl &url : normalizedUrls) {
             urls << (url.isLocalFile() ? url.toLocalFile() : url.toString());
         }
         plainText = urls.join(QLatin1Char('\n'));
     }
 
     if (plainText.isEmpty()) {
-        plainText = item.getText();
+        plainText = item.getNormalizedText();
     }
 
     if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasHtml()) {
@@ -490,9 +491,9 @@ QMimeData *MPasteWidget::createPlainTextMimeData(const ClipboardItem &item) cons
         plainText = doc.toPlainText();
     }
 
-    if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasUrls()) {
+    if (plainText.isEmpty() && !normalizedUrls.isEmpty()) {
         QStringList urls;
-        for (const QUrl &url : item.getUrls()) {
+        for (const QUrl &url : normalizedUrls) {
             urls << (url.isLocalFile() ? url.toLocalFile() : url.toString());
         }
         plainText = urls.join(QLatin1Char('\n'));
@@ -538,8 +539,13 @@ void MPasteWidget::handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem 
         return;
     }
 
+    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
+    if (normalizedUrls.isEmpty()) {
+        return;
+    }
+
     bool files = true;
-    for (const QUrl &url : item.getUrls()) {
+    for (const QUrl &url : normalizedUrls) {
         if (!url.isLocalFile() || !QFileInfo::exists(url.toLocalFile())) {
             files = false;
             break;
@@ -550,7 +556,7 @@ void MPasteWidget::handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem 
         QByteArray nautilus("x-special/nautilus-clipboard\n");
         QByteArray byteArray("copy\n");
         QStringList plainTextLines;
-        for (const QUrl &url : item.getUrls()) {
+        for (const QUrl &url : normalizedUrls) {
             byteArray.append(url.toEncoded()).append('\n');
             plainTextLines << url.toLocalFile();
         }
@@ -561,7 +567,7 @@ void MPasteWidget::handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem 
         mimeData->setText(plainText);
         mimeData->setData("text/plain;charset=utf-8", plainText.toUtf8());
     }
-    mimeData->setUrls(item.getUrls());
+    mimeData->setUrls(normalizedUrls);
 }
 void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
     switch (event->key()) {

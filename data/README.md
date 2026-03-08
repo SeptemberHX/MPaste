@@ -24,3 +24,5 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - `ClipboardItem` now caches searchable plain-text content to reduce repeated keyword scan cost.
 - `ClipboardItem` now exposes a lightweight content fingerprint for dedup candidate lookup.
 - `ClipboardItem` now avoids deprecated Qt hash APIs to keep Qt 6 builds warning-clean.
+- `ClipboardItem` now standardizes protocol text and raw MIME payloads into normalized URLs/text for shared type recognition.
+- Normalization now only trusts explicit URL/file evidence (`urls`, `text/uri-list`, `x-special/gnome-copied-files`, `x-special/nautilus-clipboard`) and no longer upgrades ordinary plain text heuristically.

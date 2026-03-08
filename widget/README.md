@@ -50,3 +50,5 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - `MPasteWidget` no longer relies on MSVC-only pragma linking for `dwmapi`, reducing MinGW warning noise.
 - `ClipboardItemWidget` and `ClipboardItemInnerWidget` constructors now follow member declaration order, and color detection uses the non-deprecated Qt API.
 - `MPasteWidget` now prefers file path lists over raw `text/plain` when performing plain-text paste for true file items.
+- `ClipboardItemInnerWidget` and `MPasteWidget` now consume normalized clipboard interpretation instead of duplicating raw MIME heuristics.
+- File/link normalization is now intentionally strict: plain text that merely looks like a path stays Text, while `#ff00aa`-style text still displays as Color in the item view.

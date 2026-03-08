@@ -9,9 +9,11 @@
 #include <QColor>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QImage>
 #include <QMimeData>
 #include <QPixmap>
+#include <QRegularExpression>
 #include <QScopedPointer>
 #include <QStringList>
 #include <QTextDocument>
@@ -37,6 +39,148 @@ private:
     mutable bool fingerprintCacheInitialized_ = false;
     mutable QString searchableTextCache_;
     mutable bool searchableTextCacheInitialized_ = false;
+    mutable QList<QUrl> normalizedUrlsCache_;
+    mutable bool normalizedUrlsCacheInitialized_ = false;
+
+    static QList<QUrl> parseUrlsFromLines(const QStringList &lines, bool strictMode) {
+        QList<QUrl> result;
+        for (const QString &line : lines) {
+            const QString trimmed = line.trimmed();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+
+            QUrl url(trimmed);
+            if (url.isValid() && !url.isRelative() && !trimmed.contains(QLatin1Char(' '))) {
+                result << url;
+                continue;
+            }
+
+            if ((trimmed.startsWith(QLatin1String("/"))
+                 || (trimmed.size() > 2 && trimmed[1] == QLatin1Char(':')
+                     && (trimmed[2] == QLatin1Char('/') || trimmed[2] == QLatin1Char('\\'))))
+                && QFileInfo::exists(trimmed)) {
+                result << QUrl::fromLocalFile(trimmed);
+                continue;
+            }
+
+            if (strictMode) {
+                return {};
+            }
+        }
+        return result;
+    }
+
+    static QList<QUrl> parseProtocolTextUrls(const QString &text, bool allowOperationOnlyHeader) {
+        if (text.isEmpty()) {
+            return {};
+        }
+
+        QStringList lines = text.split(QRegularExpression(QStringLiteral("[\r\n]+")), Qt::SkipEmptyParts);
+        if (lines.isEmpty()) {
+            return {};
+        }
+
+        bool protocolHeader = false;
+        QString first = lines.first().trimmed();
+        if (first == QLatin1String("x-special/nautilus-clipboard")) {
+            protocolHeader = true;
+            lines.removeFirst();
+            if (!lines.isEmpty()) {
+                const QString op = lines.first().trimmed().toLower();
+                if (op == QLatin1String("copy") || op == QLatin1String("cut")) {
+                    lines.removeFirst();
+                }
+            }
+        } else if (allowOperationOnlyHeader
+                   && (first.compare(QLatin1String("copy"), Qt::CaseInsensitive) == 0
+                       || first.compare(QLatin1String("cut"), Qt::CaseInsensitive) == 0)) {
+            protocolHeader = true;
+            lines.removeFirst();
+        }
+
+        QList<QUrl> parsed = parseUrlsFromLines(lines, protocolHeader);
+        if (!parsed.isEmpty()) {
+            return parsed;
+        }
+
+        return {};
+    }
+
+    static QList<QUrl> parseUriListText(const QString &text) {
+        if (text.isEmpty()) {
+            return {};
+        }
+
+        QStringList filteredLines;
+        const QStringList lines = text.split(QRegularExpression(QStringLiteral("[\r\n]+")), Qt::SkipEmptyParts);
+        for (const QString &line : lines) {
+            const QString trimmed = line.trimmed();
+            if (!trimmed.startsWith(QLatin1Char('#'))) {
+                filteredLines << trimmed;
+            }
+        }
+
+        return parseUrlsFromLines(filteredLines, true);
+    }
+
+    QList<QUrl> buildNormalizedUrls() const {
+        if (!mimeData_) {
+            return {};
+        }
+
+        QList<QUrl> urls = mimeData_->urls();
+        if (!urls.isEmpty()) {
+            return urls;
+        }
+
+        if (mimeData_->hasFormat(QStringLiteral("x-special/gnome-copied-files"))) {
+            const QList<QUrl> parsed = parseProtocolTextUrls(
+                QString::fromUtf8(mimeData_->data(QStringLiteral("x-special/gnome-copied-files"))),
+                true);
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
+        }
+
+        if (mimeData_->hasFormat(QStringLiteral("text/uri-list"))) {
+            const QList<QUrl> parsed = parseUriListText(
+                QString::fromUtf8(mimeData_->data(QStringLiteral("text/uri-list"))));
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
+        }
+
+        const QString text = mimeData_->text();
+        if (text.contains(QStringLiteral("x-special/nautilus-clipboard"))) {
+            return parseProtocolTextUrls(text, false);
+        }
+
+        return {};
+    }
+
+    QString buildNormalizedText() const {
+        const QList<QUrl> normalizedUrls = getNormalizedUrls();
+        if (!normalizedUrls.isEmpty()) {
+            QStringList lines;
+            for (const QUrl &url : normalizedUrls) {
+                lines << (url.isLocalFile() ? url.toLocalFile() : url.toString());
+            }
+            return lines.join(QLatin1Char('\n'));
+        }
+
+        if (mimeData_ && mimeData_->hasText()) {
+            return mimeData_->text();
+        }
+
+        if (mimeData_ && mimeData_->hasHtml()) {
+            QTextDocument doc;
+            doc.setHtml(mimeData_->html());
+            return doc.toPlainText();
+        }
+
+        return {};
+    }
 
     QString buildSearchableText() const {
         if (!mimeData_) {
@@ -50,16 +194,18 @@ private:
         if (!url_.isEmpty()) {
             parts << url_;
         }
-        if (mimeData_->hasText()) {
-            parts << mimeData_->text();
+        const QString normalizedText = buildNormalizedText();
+        if (!normalizedText.isEmpty()) {
+            parts << normalizedText;
         }
         if (mimeData_->hasHtml()) {
             QTextDocument doc;
             doc.setHtml(mimeData_->html());
             parts << doc.toPlainText();
         }
-        if (mimeData_->hasUrls()) {
-            for (const QUrl &url : mimeData_->urls()) {
+        const QList<QUrl> normalizedUrls = getNormalizedUrls();
+        if (!normalizedUrls.isEmpty()) {
+            for (const QUrl &url : normalizedUrls) {
                 parts << url.toString();
             }
         }
@@ -86,16 +232,18 @@ private:
             return hash.result();
         }
 
-        if (mimeData_->hasText()) {
-            hash.addData(mimeData_->text().simplified().toUtf8());
+        const QString normalizedText = buildNormalizedText();
+        if (!normalizedText.isEmpty()) {
+            hash.addData(normalizedText.simplified().toUtf8());
         } else if (mimeData_->hasHtml()) {
             QTextDocument doc;
             doc.setHtml(mimeData_->html());
             hash.addData(doc.toPlainText().simplified().toUtf8());
         }
 
-        if (mimeData_->hasUrls()) {
-            for (const QUrl &url : mimeData_->urls()) {
+        const QList<QUrl> normalizedUrls = getNormalizedUrls();
+        if (!normalizedUrls.isEmpty()) {
+            for (const QUrl &url : normalizedUrls) {
                 hash.addData(url.toString(QUrl::FullyEncoded).toUtf8());
                 hash.addData(QByteArrayLiteral("\n"));
             }
@@ -149,6 +297,8 @@ private:
     void invalidateSearchCache() {
         searchableTextCacheInitialized_ = false;
         searchableTextCache_.clear();
+        normalizedUrlsCacheInitialized_ = false;
+        normalizedUrlsCache_.clear();
     }
 
 public:
@@ -195,6 +345,8 @@ public:
         fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
         searchableTextCache_ = other.searchableTextCache_;
         searchableTextCacheInitialized_ = other.searchableTextCacheInitialized_;
+        normalizedUrlsCache_ = other.normalizedUrlsCache_;
+        normalizedUrlsCacheInitialized_ = other.normalizedUrlsCacheInitialized_;
     }
 
     ClipboardItem& operator=(const ClipboardItem &other) {
@@ -209,6 +361,8 @@ public:
             fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
             searchableTextCache_ = other.searchableTextCache_;
             searchableTextCacheInitialized_ = other.searchableTextCacheInitialized_;
+            normalizedUrlsCache_ = other.normalizedUrlsCache_;
+            normalizedUrlsCacheInitialized_ = other.normalizedUrlsCacheInitialized_;
 
             if (other.mimeData_) {
                 mimeData_.reset(new QMimeData);
@@ -334,6 +488,14 @@ public:
 
     const QMimeData* getMimeData() const { return mimeData_.data(); }
     QString getText() const { return mimeData_ ? mimeData_->text() : QString(); }
+    QString getNormalizedText() const { return buildNormalizedText(); }
+    QList<QUrl> getNormalizedUrls() const {
+        if (!normalizedUrlsCacheInitialized_) {
+            normalizedUrlsCache_ = buildNormalizedUrls();
+            normalizedUrlsCacheInitialized_ = true;
+        }
+        return normalizedUrlsCache_;
+    }
 
     QPixmap getImage() const {
         if (!mimeData_ || !mimeData_->hasImage()) {
@@ -411,8 +573,8 @@ public:
 
         if (mimeData_->hasColor()) return Color;
 
-        if (mimeData_->hasUrls() && !mimeData_->hasHtml()) {
-            QList<QUrl> urls = mimeData_->urls();
+        QList<QUrl> urls = getNormalizedUrls();
+        if (!urls.isEmpty() && !mimeData_->hasHtml()) {
             bool allValid = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
                 [](const QUrl &url) { return url.isValid() && !url.isRelative(); });
             if (allValid) {
@@ -424,7 +586,7 @@ public:
         }
 
         if (mimeData_->hasHtml()) {
-            QString text = mimeData_->text().trimmed();
+            QString text = buildNormalizedText().trimmed();
             if (!mimeData_->formats().contains("Rich Text Format")
                 && !text.contains("\n")
                 && (text.startsWith("http://") || text.startsWith("https://"))) {

@@ -156,50 +156,46 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
         return;
     }
 
-    // 从高优先级到低优先级判断
+    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
+    const QString normalizedText = item.getNormalizedText();
+
     if (mimeData->hasColor()) {
-        // 颜色数据
-        this->showColor(item.getColor(), item.getText());
+        this->showColor(item.getColor(), normalizedText);
     }
-    else if (mimeData->hasUrls() && !mimeData->hasHtml()) {
-        // 确保是纯URL，而不是富文本或代码中包含的URL
-        QList<QUrl> urls = mimeData->urls();
-        bool allValidUrls = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
+    else if (!normalizedUrls.isEmpty() && !mimeData->hasHtml()) {
+        bool allValidUrls = std::all_of(normalizedUrls.begin(), normalizedUrls.end(),
             [](const QUrl& url) { return url.isValid() && !url.isRelative(); });
 
         if (allValidUrls) {
-            this->showUrls(urls, item);
-        } else if (mimeData->hasText()) {
-            this->showText(mimeData->text(), item);
+            this->showUrls(normalizedUrls, item);
+        } else if (!normalizedText.isEmpty()) {
+            this->showText(normalizedText, item);
         }
     }
     else if (mimeData->hasHtml()) {
-        QString text = mimeData->text().trimmed();
-        // 检查是否是真正的网页链接
-        if (!mimeData->formats().contains("Rich Text Format") &&
-            !text.contains("\n") &&
-            (text.startsWith("http://") || text.startsWith("https://"))) {
+        QString text = normalizedText.trimmed();
+        if (!mimeData->formats().contains("Rich Text Format")
+            && !text.contains("\n")
+            && (text.startsWith("http://") || text.startsWith("https://"))) {
             if (this->checkWebLink(text)) {
                 this->showWebLink(text, item);
             } else {
                 this->showHtml(mimeData->html());
             }
-            } else {
-                // IDE代码或其他富文本内容
-                this->showHtml(mimeData->html());
-            }
+        } else {
+            this->showHtml(mimeData->html());
+        }
     }
     else if (mimeData->hasImage()) {
-        // 图片数据优先于其他格式
         this->showImage(item.getImage());
     }
-    else if (mimeData->hasText()) {
-        // 纯文本内容
-        this->showText(mimeData->text(), item);
+    else if (!normalizedText.isEmpty()) {
+        this->showText(normalizedText, item);
     }
 
     ui->timeLabel->setText(QLocale::system().toString(item.getTime(), QLocale::ShortFormat));
 }
+
 
 void ClipboardItemInnerWidget::showBorder(bool flag) {
     if (flag) {
@@ -335,7 +331,7 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
             if (urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
                 this->showWebLink(urls[0], item);
             } else {
-                this->showText(item.getText(), item);
+                this->showText(item.getNormalizedText(), item);
             }
             ui->countLabel->setText(QString("%1 ").arg(urlStr.size()) + tr("Characters"));
         }
