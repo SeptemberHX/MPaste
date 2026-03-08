@@ -46,3 +46,8 @@ build
 *.user*
 
 cmake-build-package
+
+# Local workspace noise
+.claude/
+%userprofile%/
+.codex_doc_*.py
