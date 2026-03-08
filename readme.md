@@ -129,8 +129,8 @@ MPaste.exe
 
 ### History file compatibility
 
-- New history files use a versioned on-disk format.
-- Older `.mpaste` files are still loaded automatically.
+- New history files now use `.mpaste v3`, a structured versioned format with explicit metadata and MIME entry counts.
+- Older `.mpaste` files are still loaded automatically and are migrated to v3 when their board is loaded.
 - Invalid / corrupted history files are skipped instead of breaking the whole load process.
 
 * [KDSingleApplication](https://github.com/KDAB/KDSingleApplication)

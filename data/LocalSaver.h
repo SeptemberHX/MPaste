@@ -1,7 +1,7 @@
-// input: 依赖 Qt 数据类型、mime/图像/时间对象与上层调用方。
-// output: 对外提供 LocalSaver 的数据声明。
-// pos: data 层中的 LocalSaver 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on ClipboardItem data, file-system paths, and LocalSaver persistence rules.
+// output: Exposes `.mpaste` save/load and migration entry points.
+// pos: Data-layer persistence interface for clipboard item files.
+// update: If I change, update this header block and my folder README.md.
 //
 // Created by ragdoll on 2021/5/24.
 //
@@ -18,6 +18,8 @@ public:
     bool saveToFile(const ClipboardItem &item, const QString &filePath);
     bool removeItem(const QString &filePath);
     ClipboardItem loadFromFile(const QString &filePath);
+    bool migrateFileToCurrentVersion(const QString &filePath);
+    void migrateDirectory(const QString &dirPath);
 };
 
 

@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 序列化/网络/图像能力。
-// output: 对外提供 LocalSaver 的数据实现。
-// pos: data 层中的 LocalSaver 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on LocalSaver.h, Qt serialization primitives, and clipboard item metadata/MIME payloads.
+// output: Implements `.mpaste` v3 persistence, backward-compatible loading, and on-disk migration helpers.
+// pos: Data-layer persistence implementation responsible for durable item storage and format evolution.
+// update: If I change, update this header block and my folder README.md.
 //
 // Created by ragdoll on 2021/5/24.
 //
@@ -11,11 +11,21 @@
 #include <QBuffer>
 #include <QDataStream>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 
 namespace {
-constexpr quint32 kLocalSaverVersion = 2;
-const QString kLocalSaverMagic = QStringLiteral("MPASTE_CLIP_V2");
+constexpr quint32 kLocalSaverVersionV2 = 2;
+constexpr quint32 kLocalSaverVersionV3 = 3;
+const QString kLocalSaverMagicV2 = QStringLiteral("MPASTE_CLIP_V2");
+const QString kLocalSaverMagicV3 = QStringLiteral("MPASTE_CLIP_V3");
+constexpr quint32 kLocalSaverFlagsV3 = 0;
+
+struct LoadResult {
+    ClipboardItem item;
+    bool recognized = false;
+    bool needsMigration = false;
+};
 
 bool hasMeaningfulMimeData(const QMimeData *mimeData) {
     if (!mimeData) {
@@ -52,11 +62,68 @@ ClipboardItem finalizeLoadedItem(const QPixmap &icon,
     return item;
 }
 
-ClipboardItem loadVersion2(const QByteArray &rawData) {
+LoadResult loadVersion3(const QByteArray &rawData) {
     QBuffer buffer;
     buffer.setData(rawData);
     if (!buffer.open(QIODevice::ReadOnly)) {
-        return ClipboardItem();
+        return {};
+    }
+
+    QDataStream in(&buffer);
+    QString magic;
+    quint32 version = 0;
+    quint32 flags = 0;
+    QDateTime time;
+    QString name;
+    QPixmap icon;
+    QPixmap favicon;
+    QString title;
+    QString url;
+    quint32 contentType = 0;
+    QString normalizedText;
+    quint32 normalizedUrlCount = 0;
+    QByteArray fingerprint;
+    quint32 formatCount = 0;
+
+    in >> magic >> version >> flags;
+    if (in.status() != QDataStream::Ok || magic != kLocalSaverMagicV3 || version != kLocalSaverVersionV3) {
+        return {};
+    }
+
+    in >> time >> name >> icon >> favicon >> title >> url;
+    in >> contentType >> normalizedText >> normalizedUrlCount;
+    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
+        QString ignoredUrl;
+        in >> ignoredUrl;
+    }
+    in >> fingerprint >> formatCount;
+    if (in.status() != QDataStream::Ok) {
+        return {};
+    }
+
+    auto *mimeData = new QMimeData;
+    for (quint32 i = 0; i < formatCount; ++i) {
+        QString format;
+        QByteArray data;
+        in >> format >> data;
+        if (in.status() != QDataStream::Ok) {
+            delete mimeData;
+            return {};
+        }
+        mimeData->setData(format, data);
+    }
+
+    LoadResult result;
+    result.item = finalizeLoadedItem(icon, time, name, favicon, title, url, mimeData);
+    result.recognized = !result.item.getName().isEmpty();
+    return result;
+}
+
+LoadResult loadVersion2(const QByteArray &rawData) {
+    QBuffer buffer;
+    buffer.setData(rawData);
+    if (!buffer.open(QIODevice::ReadOnly)) {
+        return {};
     }
 
     QDataStream in(&buffer);
@@ -71,13 +138,13 @@ ClipboardItem loadVersion2(const QByteArray &rawData) {
     quint32 formatCount = 0;
 
     in >> magic >> version;
-    if (in.status() != QDataStream::Ok || magic != kLocalSaverMagic || version != kLocalSaverVersion) {
-        return ClipboardItem();
+    if (in.status() != QDataStream::Ok || magic != kLocalSaverMagicV2 || version != kLocalSaverVersionV2) {
+        return {};
     }
 
     in >> time >> name >> icon >> favicon >> title >> url >> formatCount;
     if (in.status() != QDataStream::Ok) {
-        return ClipboardItem();
+        return {};
     }
 
     auto *mimeData = new QMimeData;
@@ -87,19 +154,23 @@ ClipboardItem loadVersion2(const QByteArray &rawData) {
         in >> format >> data;
         if (in.status() != QDataStream::Ok) {
             delete mimeData;
-            return ClipboardItem();
+            return {};
         }
         mimeData->setData(format, data);
     }
 
-    return finalizeLoadedItem(icon, time, name, favicon, title, url, mimeData);
+    LoadResult result;
+    result.item = finalizeLoadedItem(icon, time, name, favicon, title, url, mimeData);
+    result.recognized = !result.item.getName().isEmpty();
+    result.needsMigration = result.recognized;
+    return result;
 }
 
-ClipboardItem loadLegacy(const QByteArray &rawData) {
+LoadResult loadLegacy(const QByteArray &rawData) {
     QBuffer buffer;
     buffer.setData(rawData);
     if (!buffer.open(QIODevice::ReadOnly)) {
-        return ClipboardItem();
+        return {};
     }
 
     QDataStream in(&buffer);
@@ -111,7 +182,7 @@ ClipboardItem loadLegacy(const QByteArray &rawData) {
     QString url;
     in >> time >> name >> icon >> favicon >> title >> url;
     if (in.status() != QDataStream::Ok) {
-        return ClipboardItem();
+        return {};
     }
 
     auto *mimeData = new QMimeData;
@@ -121,29 +192,60 @@ ClipboardItem loadLegacy(const QByteArray &rawData) {
         in >> format >> data;
         if (in.status() != QDataStream::Ok) {
             delete mimeData;
-            return ClipboardItem();
+            return {};
         }
         mimeData->setData(format, data);
     }
 
-    return finalizeLoadedItem(icon, time, name, favicon, title, url, mimeData);
+    LoadResult result;
+    result.item = finalizeLoadedItem(icon, time, name, favicon, title, url, mimeData);
+    result.recognized = !result.item.getName().isEmpty();
+    result.needsMigration = result.recognized;
+    return result;
+}
+
+LoadResult loadAnyVersion(const QByteArray &rawData) {
+    if (rawData.isEmpty()) {
+        return {};
+    }
+
+    LoadResult result = loadVersion3(rawData);
+    if (result.recognized) {
+        return result;
+    }
+
+    result = loadVersion2(rawData);
+    if (result.recognized) {
+        return result;
+    }
+
+    return loadLegacy(rawData);
 }
 }
 
 bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) {
     QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly)) {
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return false;
     }
 
     QDataStream out(&file);
-    out << kLocalSaverMagic << kLocalSaverVersion;
+    out << kLocalSaverMagicV3 << kLocalSaverVersionV3 << kLocalSaverFlagsV3;
     out << item.getTime() << item.getName() << item.getIcon();
     out << item.getFavicon() << item.getTitle() << item.getUrl();
+    out << quint32(item.getContentType()) << item.getNormalizedText();
+
+    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
+    out << quint32(normalizedUrls.size());
+    for (const QUrl &url : normalizedUrls) {
+        out << url.toString(QUrl::FullyEncoded);
+    }
+
+    out << item.fingerprint();
 
     const QMimeData* mimeData = item.getMimeData();
     if (mimeData) {
-        QStringList formats = mimeData->formats();
+        const QStringList formats = mimeData->formats();
         out << quint32(formats.size());
         for (const QString &format : formats) {
             out << format << mimeData->data(format);
@@ -165,17 +267,48 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
     const QByteArray rawData = file.readAll();
     file.close();
 
-    ClipboardItem item = loadVersion2(rawData);
-    if (!item.getName().isEmpty()) {
-        return item;
-    }
-
-    item = loadLegacy(rawData);
-    if (item.getName().isEmpty()) {
+    const LoadResult result = loadAnyVersion(rawData);
+    if (!result.recognized) {
         qWarning() << "Failed to load clipboard history file:" << filePath;
+        return ClipboardItem();
     }
 
-    return item;
+    if (result.needsMigration) {
+        saveToFile(result.item, filePath);
+    }
+
+    return result.item;
+}
+
+bool LocalSaver::migrateFileToCurrentVersion(const QString &filePath) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    const QByteArray rawData = file.readAll();
+    file.close();
+
+    const LoadResult result = loadAnyVersion(rawData);
+    if (!result.recognized) {
+        return false;
+    }
+
+    if (!result.needsMigration) {
+        return true;
+    }
+
+    return saveToFile(result.item, filePath);
+}
+
+void LocalSaver::migrateDirectory(const QString &dirPath) {
+    QDir dir(dirPath);
+    const QFileInfoList files = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files);
+    for (const QFileInfo &info : files) {
+        if (!migrateFileToCurrentVersion(info.filePath())) {
+            qWarning() << "Failed to migrate clipboard history file to v3:" << info.filePath();
+        }
+    }
 }
 
 bool LocalSaver::removeItem(const QString &filePath) {

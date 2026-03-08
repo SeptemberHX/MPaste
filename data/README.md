@@ -28,3 +28,4 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - Normalization now only trusts explicit URL/file evidence (`urls`, `text/uri-list`, `x-special/gnome-copied-files`, `x-special/nautilus-clipboard`) and no longer upgrades ordinary plain text heuristically.
 - Native URL MIME is now only trusted when it is local-file data or matches the visible text payload, avoiding accidental promotion from stray platform clipboard formats.
 - Explicit private formats such as Windows `FileName(W)` and `UniformResourceLocator(W)` are now normalized alongside Linux file-copy protocols.
+- `LocalSaver` now writes `.mpaste v3` and migrates legacy/v2 files to v3 automatically when a save directory is loaded.

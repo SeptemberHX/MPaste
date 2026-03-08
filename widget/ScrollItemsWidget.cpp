@@ -314,6 +314,7 @@ void ScrollItemsWidget::cleanShortCutInfo() {
 
 void ScrollItemsWidget::loadFromSaveDir() {
     this->checkSaveDir();
+    this->saver->migrateDirectory(this->saveDir());
 
     while (this->layout->count() > 1) {
         auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(0)->widget());

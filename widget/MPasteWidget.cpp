@@ -81,7 +81,7 @@ static void enableBlurBehind(HWND hwnd) {
     if (!setWCA) return;
 
     // GradientColor format: AABBGGRR — light tint applied by DWM itself
-    DWORD tint = (160u << 24) | (249u << 16) | (246u << 8) | 235u; // rgba(235,246,249,160)
+    DWORD tint = (96u << 24) | (249u << 16) | (246u << 8) | 235u; // rgba(235,246,249,96)
 
     ACCENT_POLICY accent{};
     accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
@@ -810,7 +810,7 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     p.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
     // Light tint overlay on top of the acrylic blur
-    p.setBrush(QColor(245, 248, 250, 30));
+    p.setBrush(QColor(245, 248, 250, 14));
     p.drawPath(path);
 }
 
