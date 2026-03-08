@@ -11,6 +11,18 @@
 #include <QPlainTextEdit>
 #include <QFileInfo>
 
+namespace {
+QColor blendColor(const QColor &from, const QColor &to, qreal factor) {
+    const qreal t = qBound(0.0, factor, 1.0);
+    return QColor(
+        qRound(from.red() + (to.red() - from.red()) * t),
+        qRound(from.green() + (to.green() - from.green()) * t),
+        qRound(from.blue() + (to.blue() - from.blue()) * t),
+        qRound(from.alpha() + (to.alpha() - from.alpha()) * t)
+    );
+}
+}
+
 ClipboardItemInnerWidget::ClipboardItemInnerWidget(QColor borderColor, QWidget *parent) :
     QFrame(parent),
     ui(new Ui::ClipboardItemInnerWidget),
@@ -140,10 +152,12 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &nIcon) {
         // 提高饱和度和降低亮度，增强不同图标之间的区分度
         float s = qBound(0.35f, avgSat * 1.5f, 0.75f);
         float l = 0.45f;
-        this->topBgColor = QColor::fromHslF(avgHue, s, l, 0.0);
+        this->topBgColor = QColor::fromHslF(avgHue, s, l);
     } else {
-        this->topBgColor = QColor::fromHslF(0, 0, 0.55f, 0.0);
+        this->topBgColor = QColor("#4A5F7A");
     }
+
+    this->bgColor = blendColor(this->topBgColor, QColor("#FFFFFF"), 0.975);
 
     this->refreshStyleSheet();
 }
@@ -212,14 +226,29 @@ void ClipboardItemInnerWidget::refreshStyleSheet() {
 }
 
 QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topColor, QColor borderColor, int borderWidth) {
+    const QColor topStart = topColor.lighter(112);
+    const QColor topEnd = topColor.darker(108);
+    const QColor infoColor = bgColor;
+
     return QString("QWidget {background-color: %1; color: #000000; } "
                    "QWidget { border-radius: 8px; }"
-                   "#topWidget { background-color: %2;} "
+                   "#topWidget { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %2, stop:1 %3);} "
+                   "#bodyWidget { background-color: %4; } "
+                   "#infoWidget { background-color: %5; border-top: none; } "
                    "#topWidget { border-bottom-left-radius: 0px; border-bottom-right-radius: 0px; }  "
                    "#infoWidget { border-top-left-radius: 0px; border-top-right-radius: 0px; }  "
                    "#typeLabel, #timeLabel { color: #FFFFFF; } "
-                   "QFrame#innerWidget { border-radius: 12px; border: %3px solid %4;} ").arg(bgColor.name(), topColor.name(), QString::number(borderWidth), borderColor.name());
+                   "#shortkeyLabel, #countLabel, #unusedLabel { color: #556270; background: transparent; border: none; padding: 2px 8px; } "
+                   "QFrame#innerWidget { border-radius: 12px; border: %8px solid %9;} ")
+            .arg(bgColor.name(),
+                 topStart.name(),
+                 topEnd.name(),
+                 bgColor.name(),
+                 infoColor.name(),
+                 QString::number(borderWidth),
+                 borderColor.name());
 }
+
 
 void ClipboardItemInnerWidget::setShortkeyInfo(int num) {
     ui->shortkeyLabel->setText(QString("Alt+%1").arg(num));

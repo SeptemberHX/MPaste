@@ -55,3 +55,7 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - `ClipboardItemWidget` now fades hover actions through a graphics opacity effect, and `MPasteWidget` replays the copy sound without MP3 seek noise.
 - `MPasteWidget` now triggers `Alt+[1-9,0]` and `Alt+Shift+[1-9,0]` quick paste on key press, avoiding flaky modifier timing on key release.
 - File items can now be recovered from more explicit file-copy/private formats without loosening plain-text heuristics.
+- `ClipboardItemInnerWidget` keeps the original layout, but the top header now uses a richer tinted gradient instead of the flatter old fill.
+- `ClipboardItemInnerWidget` also restores a layered body/footer background split so cards keep some depth without changing the overall layout.
+- Card surfaces now derive from the same top tint: the body/footer use an even lighter near-white tint to keep the color hint without obvious darkness.
+- Footer metadata now sits directly on the `infoWidget` surface with transparent backgrounds, avoiding any extra visual separation inside the footer area.
