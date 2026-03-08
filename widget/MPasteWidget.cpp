@@ -27,7 +27,6 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <dwmapi.h>
-#pragma comment(lib, "dwmapi.lib")
 
 // Windows 11 backdrop types (DWMWA_SYSTEMBACKDROP_TYPE = 38)
 enum DWM_SYSTEMBACKDROP_TYPE {
@@ -471,7 +470,19 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
 }
 
 QMimeData *MPasteWidget::createPlainTextMimeData(const ClipboardItem &item) const {
-    QString plainText = item.getText();
+    QString plainText;
+
+    if (item.getContentType() == ClipboardItem::File && item.getMimeData() && item.getMimeData()->hasUrls()) {
+        QStringList urls;
+        for (const QUrl &url : item.getUrls()) {
+            urls << (url.isLocalFile() ? url.toLocalFile() : url.toString());
+        }
+        plainText = urls.join(QLatin1Char('\n'));
+    }
+
+    if (plainText.isEmpty()) {
+        plainText = item.getText();
+    }
 
     if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasHtml()) {
         QTextDocument doc;
@@ -510,7 +521,7 @@ bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
         return false;
     }
 
-    if (!plainText && item.getMimeData() && item.getMimeData()->hasUrls()) {
+    if (!plainText && item.getContentType() == ClipboardItem::File) {
         handleUrlsClipboard(mimeData, item);
     }
 
@@ -538,14 +549,17 @@ void MPasteWidget::handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem 
     if (files) {
         QByteArray nautilus("x-special/nautilus-clipboard\n");
         QByteArray byteArray("copy\n");
+        QStringList plainTextLines;
         for (const QUrl &url : item.getUrls()) {
             byteArray.append(url.toEncoded()).append('\n');
+            plainTextLines << url.toLocalFile();
         }
         mimeData->setData("x-special/gnome-copied-files", byteArray);
         nautilus.append(byteArray);
         mimeData->setData("COMPOUND_TEXT", nautilus);
-        mimeData->setText(item.getText());
-        mimeData->setData("text/plain;charset=utf-8", nautilus);
+        const QString plainText = plainTextLines.join(QLatin1Char('\n'));
+        mimeData->setText(plainText);
+        mimeData->setData("text/plain;charset=utf-8", plainText.toUtf8());
     }
     mimeData->setUrls(item.getUrls());
 }

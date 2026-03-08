@@ -46,3 +46,7 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - `ClipboardItemWidget` now exposes a context-menu action for plain-text paste.
 - `MPasteWidget` now supports `Ctrl+Enter` and `Alt+Shift+[1-9,0]` to paste as plain text.
 - `ScrollItemsWidget` forwards plain-text paste requests from item cards to the main window.
+- `MPasteWidget` now only uses file-clipboard MIME payloads for true `File` items, preventing text items from being rewritten as Nautilus clipboard protocol text.
+- `MPasteWidget` no longer relies on MSVC-only pragma linking for `dwmapi`, reducing MinGW warning noise.
+- `ClipboardItemWidget` and `ClipboardItemInnerWidget` constructors now follow member declaration order, and color detection uses the non-deprecated Qt API.
+- `MPasteWidget` now prefers file path lists over raw `text/plain` when performing plain-text paste for true file items.

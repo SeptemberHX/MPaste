@@ -13,11 +13,11 @@
 
 ClipboardItemInnerWidget::ClipboardItemInnerWidget(QColor borderColor, QWidget *parent) :
     QFrame(parent),
-    borderColor(borderColor),
     ui(new Ui::ClipboardItemInnerWidget),
     bgColor(Qt::white),
     topBgColor(Qt::white),
-    borderWidth(0)
+    borderWidth(0),
+    borderColor(borderColor)
 {
     this->textBrowser = nullptr;
     this->imageLabel = nullptr;
@@ -299,7 +299,7 @@ void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
 void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem &item) {
     QString trimStr = text.trimmed();
     QUrl url(trimStr);
-    if (QColor::isValidColor(trimStr)) {
+    if (QColor::isValidColorName(trimStr)) {
         this->showColor(QColor(trimStr), trimStr);
     } else if (url.isValid() && (trimStr.startsWith("http://") || trimStr.startsWith("https://"))) {
         this->showWebLink(url, item);

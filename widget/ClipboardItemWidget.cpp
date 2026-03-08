@@ -44,7 +44,7 @@ QString plainTextPasteLabel() {
 }
 
 ClipboardItemWidget::ClipboardItemWidget(QString category, QColor borderColor, QWidget *parent)
-    : category(category), borderColor(borderColor), QWidget(parent)
+    : QWidget(parent), category(category), borderColor(borderColor)
 {
     setupUI();
     setupActionButtons();

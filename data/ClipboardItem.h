@@ -97,7 +97,7 @@ private:
         if (mimeData_->hasUrls()) {
             for (const QUrl &url : mimeData_->urls()) {
                 hash.addData(url.toString(QUrl::FullyEncoded).toUtf8());
-                hash.addData("\n", 1);
+                hash.addData(QByteArrayLiteral("\n"));
             }
         }
 

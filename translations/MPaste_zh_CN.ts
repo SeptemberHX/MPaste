@@ -208,17 +208,17 @@
 <context>
     <name>MPasteWidget</name>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="344"/>
+        <location filename="../widget/MPasteWidget.cpp" line="343"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="328"/>
+        <location filename="../widget/MPasteWidget.cpp" line="327"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="359"/>
+        <location filename="../widget/MPasteWidget.cpp" line="358"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
