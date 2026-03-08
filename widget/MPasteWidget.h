@@ -19,6 +19,7 @@
 #include "data/ClipboardItem.h"
 #include "data/LocalSaver.h"
 #include "AboutWidget.h"
+#include "ClipboardItemDetailsDialog.h"
 #include "MPasteSettingsWidget.h"
 #include "ScrollItemsWidget.h"
 
@@ -93,6 +94,7 @@ private:
         Ui::MPasteWidget *ui;
         QHBoxLayout *layout;
         AboutWidget *aboutWidget;
+        ClipboardItemDetailsDialog *detailsDialog;
         MPasteSettingsWidget *settingsWidget;
 
         // 存储所有的 boardWidget

@@ -55,6 +55,7 @@ public:
 signals:
     void doubleClicked(const ClipboardItem &item);
     void plainTextPasteRequested(const ClipboardItem &item);
+    void detailsRequested(const ClipboardItem &item);
     void itemCountChanged(int itemCount);
     void itemStared(const ClipboardItem &item);
     void itemUnstared(const ClipboardItem &item);

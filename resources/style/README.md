@@ -14,4 +14,7 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 
 ## Files
 - `defaultStyle.qss`: 地位=样式表；功能=定义 defaultStyle 的外观规则。
+
+## Recent Notes
+- `defaultStyle.qss` now renders `countArea` as a smaller, lighter translucent capsule badge so it does not fight with the frosted window background.
 - `README.md`: 地位=目录说明；功能=总结本目录职责、约束与文件清单。

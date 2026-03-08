@@ -42,6 +42,7 @@ signals:
     void favoriteChanged(bool isFavorite);
     void deleteRequested();
     void saveRequested(const ClipboardItem& item);
+    void detailsRequested(const ClipboardItem& item);
     void previewRequested();
 
 protected:
@@ -69,6 +70,7 @@ private:
     void handleFavoriteAction();
     void handlePastePlainTextAction();
     void handleDeleteAction();
+    void handleDetailsAction();
     void handleSaveAction();
     void handleStarAction();
 

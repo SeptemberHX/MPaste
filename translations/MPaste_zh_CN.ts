@@ -2,57 +2,135 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_CN">
 <context>
+    <name>ClipboardItemDetailsDialog</name>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="17"/>
+        <source>Clipboard Item Details</source>
+        <translation type="unfinished">???????</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="34"/>
+        <source>Type</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="35"/>
+        <source>Time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="36"/>
+        <source>Title</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="37"/>
+        <source>URL</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="52"/>
+        <source>Normalized Text</source>
+        <translation type="unfinished">?????</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="54"/>
+        <source>Normalized URLs</source>
+        <translation type="unfinished">?????</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="56"/>
+        <source>Raw MIME Formats</source>
+        <translation type="unfinished">?? MIME ??</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="67"/>
+        <source>Text</source>
+        <translation type="unfinished">文本</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="68"/>
+        <source>Link</source>
+        <translation type="unfinished">链接</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="69"/>
+        <source>Image</source>
+        <translation type="unfinished">图片</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="70"/>
+        <source>Rich Text</source>
+        <translation type="unfinished">富文本</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="71"/>
+        <source>File</source>
+        <translation type="unfinished">文件</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="72"/>
+        <source>Color</source>
+        <translation type="unfinished">颜色</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemDetailsDialog.cpp" line="74"/>
+        <source>All</source>
+        <translation type="unfinished">全部</translation>
+    </message>
+</context>
+<context>
     <name>ClipboardItemInnerWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="267"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="310"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="340"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="354"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="278"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="323"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="355"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="369"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="268"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="279"/>
         <source>Rich Text</source>
         <translation>富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="295"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="307"/>
         <source>Pixels</source>
         <translation>像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="296"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="308"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="312"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="325"/>
         <source>Plain Text</source>
         <translation>纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="326"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="340"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="353"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="368"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="360"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="375"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="367"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="382"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="426"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="442"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
@@ -60,17 +138,22 @@
 <context>
     <name>ClipboardItemWidget</name>
     <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="145"/>
+        <source>Details</source>
+        <translation>??</translation>
+    </message>
+    <message>
         <source>Paste as Plain Text</source>
         <translation type="vanished">??????</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="116"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="149"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="121"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="155"/>
         <source>Delete</source>
         <translation>删除</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="138"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="143"/>
         <source>Save</source>
         <translation>保存</translation>
     </message>
@@ -83,28 +166,28 @@
         <translation type="vanished">添加至</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="140"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="146"/>
         <source>Preview</source>
         <translation>预览</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="145"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="151"/>
         <source>Save to Star</source>
         <translation>另存到收藏夹</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="147"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="153"/>
         <source>Save to</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="229"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="239"/>
         <source>Remove from favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="112"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="230"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="117"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="240"/>
         <source>Add to favorites</source>
         <translation type="unfinished"></translation>
     </message>
@@ -208,17 +291,17 @@
 <context>
     <name>MPasteWidget</name>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="343"/>
+        <location filename="../widget/MPasteWidget.cpp" line="348"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="327"/>
+        <location filename="../widget/MPasteWidget.cpp" line="332"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="358"/>
+        <location filename="../widget/MPasteWidget.cpp" line="363"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
@@ -229,7 +312,7 @@
     <message>
         <location filename="../widget/MPasteWidget.ui" line="206"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="197"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="265"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="264"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="265"/>
         <source>Clipboard</source>
         <translation>剪贴板</translation>
@@ -237,7 +320,7 @@
     <message>
         <location filename="../widget/MPasteWidget.ui" line="230"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="198"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="266"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="265"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="266"/>
         <source>Stared</source>
         <translation>收藏夹</translation>
@@ -245,49 +328,49 @@
     <message>
         <location filename="../widget/MPasteWidget.ui" line="414"/>
         <location filename="../build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/MPaste_autogen/include/ui_MPasteWidget.h" line="199"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="273"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="272"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="273"/>
         <source>100</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="281"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="267"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="266"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="267"/>
         <source>All</source>
         <translation>全部</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="305"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="268"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="267"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="268"/>
         <source>Text</source>
         <translation>文本</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="326"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="269"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="268"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="269"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="347"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="270"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="269"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="270"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="368"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="271"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="270"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="271"/>
         <source>Rich Text</source>
         <translation>富文本</translation>
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="389"/>
-        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="272"/>
+        <location filename="../cmake-build-debug/MPaste_autogen/include/ui_MPasteWidget.h" line="271"/>
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="272"/>
         <source>File</source>
         <translation>文件</translation>
@@ -296,7 +379,23 @@
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="35"/>
+        <source>Clipboard Item Details</source>
+        <translation type="vanished">???????</translation>
+    </message>
+    <message>
+        <source>Normalized Text</source>
+        <translation type="vanished">?????</translation>
+    </message>
+    <message>
+        <source>Normalized URLs</source>
+        <translation type="vanished">?????</translation>
+    </message>
+    <message>
+        <source>Raw MIME Formats</source>
+        <translation type="vanished">?? MIME ??</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="36"/>
         <source>Paste as Plain Text</source>
         <translation type="unfinished">??????</translation>
     </message>

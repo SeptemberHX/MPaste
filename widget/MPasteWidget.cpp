@@ -81,7 +81,7 @@ static void enableBlurBehind(HWND hwnd) {
     if (!setWCA) return;
 
     // GradientColor format: AABBGGRR — light tint applied by DWM itself
-    DWORD tint = (96u << 24) | (249u << 16) | (246u << 8) | 235u; // rgba(235,246,249,96)
+    DWORD tint = (20u << 24) | (244u << 16) | (241u << 8) | 231u; // rgba(231,241,244,20)
 
     ACCENT_POLICY accent{};
     accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
@@ -217,6 +217,10 @@ void MPasteWidget::initUI() {
     ui_.aboutWidget->setWindowFlag(Qt::Tool);
     ui_.aboutWidget->setWindowTitle("MPaste About");
     ui_.aboutWidget->hide();
+
+    ui_.detailsDialog = new ClipboardItemDetailsDialog(this);
+    ui_.detailsDialog->setWindowFlag(Qt::Tool);
+    ui_.detailsDialog->hide();
 
     ui_.settingsWidget = new MPasteSettingsWidget(this);
     connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
@@ -376,6 +380,11 @@ void MPasteWidget::setupConnections() {
             if (this->setClipboard(item, true)) {
                 this->hideAndPaste();
             }
+        });
+
+        connect(boardWidget, &ScrollItemsWidget::detailsRequested,
+        this, [this](const ClipboardItem &item) {
+            ui_.detailsDialog->showItem(item);
         });
 
         connect(boardWidget, &ScrollItemsWidget::itemCountChanged, this, [this, boardWidget](int itemCount) {
@@ -810,7 +819,7 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     p.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
     // Light tint overlay on top of the acrylic blur
-    p.setBrush(QColor(245, 248, 250, 14));
+    p.setBrush(Qt::NoBrush);
     p.drawPath(path);
 }
 

@@ -146,6 +146,10 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
         this->moveItemToFirst(itemWidget);
         emit plainTextPasteRequested(itemWidget->getItem());
     });
+    connect(itemWidget, &ClipboardItemWidget::detailsRequested, this, [this, itemWidget](const ClipboardItem &) {
+        this->setSelectedItem(itemWidget);
+        emit detailsRequested(itemWidget->getItem());
+    });
 
     itemWidget->installEventFilter(this);
     itemWidget->showItem(item);

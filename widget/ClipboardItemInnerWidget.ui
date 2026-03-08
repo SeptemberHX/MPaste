@@ -1,10 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-input: 依赖 Qt UIC 与对应 QWidget/QDialog 类。
-output: 对外提供 ClipboardItemInnerWidget 的界面布局描述。
-pos: widget 层中的 ClipboardItemInnerWidget 视图定义。
-update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
--->
 <ui version="4.0">
  <class>ClipboardItemInnerWidget</class>
  <widget class="QFrame" name="ClipboardItemInnerWidget">

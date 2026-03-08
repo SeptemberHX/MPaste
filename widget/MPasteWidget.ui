@@ -398,26 +398,23 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
       </item>
       <item>
        <widget class="QToolButton" name="countArea">
-        <property name="minimumSize">
-         <size>
-          <width>28</width>
+       <property name="minimumSize">
+        <size>
+          <width>30</width>
           <height>0</height>
-         </size>
-        </property>
+        </size>
+       </property>
         <property name="maximumSize">
          <size>
           <width>16777215</width>
-          <height>28</height>
+          <height>24</height>
          </size>
         </property>
         <property name="text">
          <string>100</string>
         </property>
         <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
        </widget>
       </item>

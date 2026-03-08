@@ -142,6 +142,7 @@ void ClipboardItemWidget::setupContextMenu() {
 
     addAction(":/resources/resources/save_black.svg", tr("Save"), &ClipboardItemWidget::handleSaveAction);
     addAction(":/resources/resources/files.svg", plainTextPasteLabel(), &ClipboardItemWidget::handlePastePlainTextAction);
+    addAction(":/resources/resources/preview.svg", tr("Details"), &ClipboardItemWidget::handleDetailsAction);
     addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
 
     ui.contextMenu->addSeparator();
@@ -216,6 +217,10 @@ void ClipboardItemWidget::handleDeleteAction() {
 
 void ClipboardItemWidget::handleSaveAction() {
     emit saveRequested(currentItem);
+}
+
+void ClipboardItemWidget::handleDetailsAction() {
+    emit detailsRequested(currentItem);
 }
 
 void ClipboardItemWidget::handlePastePlainTextAction() {

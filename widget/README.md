@@ -61,4 +61,5 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - Card surfaces now derive from the same top tint: the body/footer use an even lighter near-white tint to keep the color hint without obvious darkness.
 - Footer metadata now sits directly on the `infoWidget` surface with transparent backgrounds, avoiding any extra visual separation inside the footer area.
 - Rich-text payloads now keep local highlight colors inside the text itself; card body/footer surfaces are reset before each render so they no longer inherit stray HTML background colors.
-- `MPasteWidget` now uses a lighter acrylic tint and a softer overlay brush so the main window feels more transparent.
+- `MPasteWidget` now uses a very low-opacity acrylic tint and an almost imperceptible white overlay so the main window feels significantly less milky.
+- `ClipboardItemDetailsDialog` adds an inspector path so each item can expose normalized text/URLs and raw MIME formats from the context menu.
