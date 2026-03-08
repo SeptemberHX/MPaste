@@ -230,6 +230,10 @@ void ClipboardItemInnerWidget::resetPanelStyleOverrides() {
     ui->infoWidget->setStyleSheet(QString());
 }
 
+void ClipboardItemInnerWidget::setInfoWidgetVisible(bool visible) {
+    ui->infoWidget->setVisible(visible);
+}
+
 QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topColor, QColor borderColor, int borderWidth) {
     const QColor topStart = topColor.lighter(122);
     const QColor topEnd = topColor.darker(112);
@@ -265,6 +269,7 @@ void ClipboardItemInnerWidget::clearShortkeyInfo() {
 
 void ClipboardItemInnerWidget::showHtml(const QString &html) {
     this->initTextBrowser();
+    setInfoWidgetVisible(true);
     this->textBrowser->show();
     this->textBrowser->setHtml(html);
     resetPanelStyleOverrides();
@@ -281,9 +286,10 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
 
 void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
     this->initImageLabel();
+    setInfoWidgetVisible(true);
     this->imageLabel->show();
     resetPanelStyleOverrides();
-    this->imageLabel->setMargin(10);
+    this->imageLabel->setMargin(0);
 
     // 获取设备像素比
     qreal devicePixelRatio = this->imageLabel->devicePixelRatio();
@@ -297,7 +303,7 @@ void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
     QPixmap scaled = pixmap.scaled(
         targetWidth,
         targetHeight,
-        Qt::KeepAspectRatio,
+        Qt::KeepAspectRatioByExpanding,
         Qt::SmoothTransformation
     );
     // 设置缩放后图片的设备像素比
@@ -309,6 +315,7 @@ void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
 }
 
 void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem &item) {
+    setInfoWidgetVisible(true);
     resetPanelStyleOverrides();
     QString trimStr = text.trimmed();
     QUrl url(trimStr);
@@ -327,6 +334,7 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
 
 void ClipboardItemInnerWidget::showColor(const QColor &color, const QString &rawStr) {
     this->initImageLabel();
+    setInfoWidgetVisible(true);
     resetPanelStyleOverrides();
 
     this->imageLabel->show();
@@ -341,6 +349,7 @@ void ClipboardItemInnerWidget::showColor(const QColor &color, const QString &raw
 }
 
 void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const ClipboardItem &item) {
+    setInfoWidgetVisible(true);
     resetPanelStyleOverrides();
     if (urls.size() == 1) {
         if (urls[0].isLocalFile()) {
@@ -372,6 +381,7 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
 
 void ClipboardItemInnerWidget::showFile(const QUrl &url) {
     this->initFileThumbWidget();
+    setInfoWidgetVisible(true);
     ui->typeLabel->setText(QString("1 ") + tr("File"));
     this->fileThumbWidget->show();
     this->fileThumbWidget->showUrl(url);
@@ -379,6 +389,7 @@ void ClipboardItemInnerWidget::showFile(const QUrl &url) {
 
 void ClipboardItemInnerWidget::showFiles(const QList<QUrl> &fileUrls) {
     this->initFileThumbWidget();
+    setInfoWidgetVisible(true);
     ui->typeLabel->setText(QString::number(fileUrls.size()) + " " + tr("Files"));
     this->fileThumbWidget->show();
     this->fileThumbWidget->showUrls(fileUrls);
@@ -437,6 +448,7 @@ void ClipboardItemInnerWidget::initWebLinkThumbWidget() {
 void ClipboardItemInnerWidget::showWebLink(const QUrl &url, const ClipboardItem &item) {
     this->initWebLinkThumbWidget();
     resetPanelStyleOverrides();
+    setInfoWidgetVisible(false);
     this->webLinkThumbWidget->show();
     this->webLinkThumbWidget->showWebLink(url, item);
     ui->typeLabel->setText(tr("Link"));

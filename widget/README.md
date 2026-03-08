@@ -63,3 +63,7 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - Rich-text payloads now keep local highlight colors inside the text itself; card body/footer surfaces are reset before each render so they no longer inherit stray HTML background colors.
 - `MPasteWidget` now uses a very low-opacity acrylic tint and an almost imperceptible white overlay so the main window feels significantly less milky.
 - `ClipboardItemDetailsDialog` adds an inspector path so each item can expose normalized text/URLs and raw MIME formats from the context menu.
+- Link cards now hide the shared footer `infoWidget`, letting the preview content occupy the card more like Paste-style link items.
+- `WebLinkThumbWidget` now keeps roughly 8px horizontal padding for title/URL text and extra bottom breathing room under the URL line.
+- Image cards now use fill-and-crop rendering too, so large images center themselves and occupy the preview area more fully.
+- `WebLinkThumbWidget` now renders its preview image with fill-and-crop behavior so the main image area looks fuller and stays centered.

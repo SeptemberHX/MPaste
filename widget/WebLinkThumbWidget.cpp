@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 运行时与资源/服务组件。
-// output: 对外提供 WebLinkThumbWidget 的实现行为。
-// pos: widget 层中的 WebLinkThumbWidget 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on WebLinkThumbWidget.h, OpenGraph metadata, and image scaling rules for link previews.
+// output: Implements a link preview widget whose main image fills the preview area while staying centered, with lighter text insets.
+// pos: Widget-layer link preview implementation embedded inside clipboard item cards.
+// update: If I change, update this header block and my folder README.md.
 #include <QFontMetrics>
 #include "WebLinkThumbWidget.h"
 #include "ui_WebLinkThumbWidget.h"
@@ -33,6 +33,11 @@ WebLinkThumbWidget::WebLinkThumbWidget(QWidget *parent) :
     };
     scaleFont(ui->titleLabel, 10);
     scaleFont(ui->urlLabel, 10);
+
+    ui->titleLabel->setIndent(8);
+    ui->titleLabel->setContentsMargins(8, 0, 8, 0);
+    ui->urlLabel->setContentsMargins(8, 0, 8, 8);
+    ui->urlLabel->setMargin(0);
 
     setDefaultStyle();
 }
@@ -92,25 +97,17 @@ QPixmap WebLinkThumbWidget::processImage(const QPixmap &originalPixmap) const {
 
     const int previewWidth = ui->imageLabel->width();
     const int previewHeight = ui->imageLabel->height();
-
-    QSize imageSize = processedPixmap.size();
     QSize targetSize(previewWidth * devicePixelRatio(),
                     previewHeight * devicePixelRatio());
 
-    // Scale image only if necessary
-    if (imageSize.width() > targetSize.width() ||
-        imageSize.height() > targetSize.height() ||
-        imageSize.width() < previewWidth / 2 ||
-        imageSize.height() < previewHeight / 2) {
+    QPixmap scaled = processedPixmap.scaled(
+        targetSize,
+        Qt::KeepAspectRatioByExpanding,
+        Qt::SmoothTransformation
+    );
 
-        return processedPixmap.scaled(
-            targetSize,
-            Qt::KeepAspectRatio,
-            Qt::SmoothTransformation
-        );
-    }
-
-    return processedPixmap;
+    scaled.setDevicePixelRatio(devicePixelRatioF());
+    return scaled;
 }
 
 void WebLinkThumbWidget::setElidedText(QLabel *label, const QString &text) {
@@ -132,5 +129,5 @@ void WebLinkThumbWidget::setElidedText(QLabel *label, const QString &text) {
 void WebLinkThumbWidget::setDefaultStyle() {
     ui->titleLabel->setStyleSheet(DEFAULT_STYLE);
     ui->urlLabel->setStyleSheet(DEFAULT_STYLE);
-    ui->imageLabel->setMargin(10);
+    ui->imageLabel->setMargin(0);
 }

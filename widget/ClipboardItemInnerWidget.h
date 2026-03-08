@@ -42,6 +42,7 @@ signals:
 private:
     void refreshStyleSheet();
     void resetPanelStyleOverrides();
+    void setInfoWidgetVisible(bool visible);
     void showHtml(const QString &html);
     void showImage(const QPixmap &pixmap);
     void showText(const QString &text, const ClipboardItem &item);
