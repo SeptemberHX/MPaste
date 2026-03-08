@@ -1,6 +1,6 @@
 // input: 依赖对应头文件、Qt 运行时与资源/服务组件。
-// output: 对外提供 ClipboardItemInnerWidget 的实现行为。
-// pos: widget 层中的 ClipboardItemInnerWidget 实现文件。
+// output: Implements card chrome, type-specific rendering, and a softer left-to-right header gradient for clipboard items.
+// pos: Widget-layer inner card implementation responsible for item hierarchy, readability, and card tone.
 // update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -225,21 +225,26 @@ void ClipboardItemInnerWidget::refreshStyleSheet() {
     this->setStyleSheet(this->genStyleSheetStr(this->bgColor, this->topBgColor, this->borderColor, this->borderWidth));
 }
 
+void ClipboardItemInnerWidget::resetPanelStyleOverrides() {
+    ui->bodyWidget->setStyleSheet(QString());
+    ui->infoWidget->setStyleSheet(QString());
+}
+
 QString ClipboardItemInnerWidget::genStyleSheetStr(QColor bgColor, QColor topColor, QColor borderColor, int borderWidth) {
-    const QColor topStart = topColor.lighter(112);
-    const QColor topEnd = topColor.darker(108);
+    const QColor topStart = topColor.lighter(122);
+    const QColor topEnd = topColor.darker(112);
     const QColor infoColor = bgColor;
 
     return QString("QWidget {background-color: %1; color: #000000; } "
                    "QWidget { border-radius: 8px; }"
-                   "#topWidget { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %2, stop:1 %3);} "
+                   "#topWidget { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %2, stop:1 %3); border-top: 1px solid rgba(255,255,255,0.18);} "
                    "#bodyWidget { background-color: %4; } "
                    "#infoWidget { background-color: %5; border-top: none; } "
                    "#topWidget { border-bottom-left-radius: 0px; border-bottom-right-radius: 0px; }  "
                    "#infoWidget { border-top-left-radius: 0px; border-top-right-radius: 0px; }  "
                    "#typeLabel, #timeLabel { color: #FFFFFF; } "
                    "#shortkeyLabel, #countLabel, #unusedLabel { color: #556270; background: transparent; border: none; padding: 2px 8px; } "
-                   "QFrame#innerWidget { border-radius: 12px; border: %8px solid %9;} ")
+                   "QFrame#innerWidget { border-radius: 12px; border: %6px solid %7;} ")
             .arg(bgColor.name(),
                  topStart.name(),
                  topEnd.name(),
@@ -262,26 +267,7 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
     this->initTextBrowser();
     this->textBrowser->show();
     this->textBrowser->setHtml(html);
-
-    QRegularExpression bgColorExp("background-color:(#[A-Za-z0-9]{6})");
-    QRegularExpressionMatch match = bgColorExp.match(html.trimmed());
-
-    if (match.hasMatch()) {
-        QString colorStr = match.captured(1);
-        ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1; border-radius: 0px; }").arg(colorStr));
-        ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr));
-    } else {
-        bgColorExp = QRegularExpression(R"(background.*:[ ]*rgb\((\d*),[ ]*(\d*),[ ]*(\d*)\))");
-        match = bgColorExp.match(html.trimmed());
-        if (match.hasMatch()) {
-            int r = match.captured(1).toInt();
-            int g = match.captured(2).toInt();
-            int b = match.captured(3).toInt();
-            QColor colorStr(r, g, b);
-            ui->bodyWidget->setStyleSheet(QString("#bodyWidget {background-color:%1;  border-radius: 0px;}").arg(colorStr.name()));
-            ui->infoWidget->setStyleSheet(QString("QWidget {background-color:%1; color: #666666;}").arg(colorStr.name()));
-        }
-    }
+    resetPanelStyleOverrides();
 
     // 使用 QTextDocument 来提取纯文本内容
     QTextDocument doc;
@@ -296,6 +282,7 @@ void ClipboardItemInnerWidget::showHtml(const QString &html) {
 void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
     this->initImageLabel();
     this->imageLabel->show();
+    resetPanelStyleOverrides();
     this->imageLabel->setMargin(10);
 
     // 获取设备像素比
@@ -322,6 +309,7 @@ void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
 }
 
 void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem &item) {
+    resetPanelStyleOverrides();
     QString trimStr = text.trimmed();
     QUrl url(trimStr);
     if (QColor::isValidColorName(trimStr)) {
@@ -339,6 +327,7 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
 
 void ClipboardItemInnerWidget::showColor(const QColor &color, const QString &rawStr) {
     this->initImageLabel();
+    resetPanelStyleOverrides();
 
     this->imageLabel->show();
     QColor fontColor(255 - color.red(), 255 - color.green(), 255 - color.blue());
@@ -352,6 +341,7 @@ void ClipboardItemInnerWidget::showColor(const QColor &color, const QString &raw
 }
 
 void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const ClipboardItem &item) {
+    resetPanelStyleOverrides();
     if (urls.size() == 1) {
         if (urls[0].isLocalFile()) {
             this->showFile(urls[0]);
@@ -446,6 +436,7 @@ void ClipboardItemInnerWidget::initWebLinkThumbWidget() {
 
 void ClipboardItemInnerWidget::showWebLink(const QUrl &url, const ClipboardItem &item) {
     this->initWebLinkThumbWidget();
+    resetPanelStyleOverrides();
     this->webLinkThumbWidget->show();
     this->webLinkThumbWidget->showWebLink(url, item);
     ui->typeLabel->setText(tr("Link"));
