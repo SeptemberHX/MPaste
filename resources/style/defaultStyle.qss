@@ -1,3 +1,9 @@
+/*
+ * input: 依赖 Qt 样式系统与资源路径。
+ * output: 对外提供默认界面样式规则。
+ * pos: resources/style 目录中的主题样式文件。
+ * update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+ */
 QWidget#pasteWidget {
     background: transparent;  /* 背景和渐变边框由 paintEvent 绘制 */
 }

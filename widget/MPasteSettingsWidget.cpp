@@ -1,3 +1,7 @@
+// input: 依赖对应头文件、Qt 运行时与资源/服务组件。
+// output: 对外提供 MPasteSettingsWidget 的实现行为。
+// pos: widget 层中的 MPasteSettingsWidget 实现文件。
+// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 #include "MPasteSettingsWidget.h"
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"

@@ -1,17 +1,25 @@
-//
-// Created by ragdoll on 2021/5/22.
-//
-
+// input: 依赖 Qt 数据类型、mime/图像/时间对象与上层调用方。
+// output: 对外提供 ClipboardItem 的数据声明。
+// pos: data 层中的 ClipboardItem 接口定义。
+// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 #ifndef MPASTE_CLIPBOARDITEM_H
 #define MPASTE_CLIPBOARDITEM_H
 
+#include <QBuffer>
+#include <QColor>
+#include <QCryptographicHash>
+#include <QDateTime>
+#include <QImage>
 #include <QMimeData>
 #include <QPixmap>
-#include <QDateTime>
-#include <QVariant>
+#include <QScopedPointer>
+#include <QStringList>
+#include <QTextDocument>
 #include <QUrl>
-#include <QBuffer>
+#include <QVariant>
+
 #include <algorithm>
+#include <cstring>
 
 class ClipboardItem {
 public:
@@ -22,33 +30,143 @@ private:
     QPixmap icon_;
     QDateTime time_;
     QScopedPointer<QMimeData> mimeData_;
-
-    // og item
     QPixmap favicon_;
     QString title_;
     QString url_;
+    mutable QByteArray fingerprintCache_;
+    mutable bool fingerprintCacheInitialized_ = false;
+    mutable QString searchableTextCache_;
+    mutable bool searchableTextCacheInitialized_ = false;
+
+    QString buildSearchableText() const {
+        if (!mimeData_) {
+            return {};
+        }
+
+        QStringList parts;
+        if (!title_.isEmpty()) {
+            parts << title_;
+        }
+        if (!url_.isEmpty()) {
+            parts << url_;
+        }
+        if (mimeData_->hasText()) {
+            parts << mimeData_->text();
+        }
+        if (mimeData_->hasHtml()) {
+            QTextDocument doc;
+            doc.setHtml(mimeData_->html());
+            parts << doc.toPlainText();
+        }
+        if (mimeData_->hasUrls()) {
+            for (const QUrl &url : mimeData_->urls()) {
+                parts << url.toString();
+            }
+        }
+
+        for (const QString &format : mimeData_->formats()) {
+            if (format.startsWith("text/")
+                || format.contains("plain")
+                || format.contains("html")
+                || format.contains("xml")
+                || format.contains("json")) {
+                parts << QString::fromUtf8(mimeData_->data(format));
+            }
+        }
+
+        parts.removeAll(QString());
+        return parts.join(QLatin1Char('\n')).toLower();
+    }
+
+    QByteArray buildFingerprint() const {
+        QCryptographicHash hash(QCryptographicHash::Sha1);
+        hash.addData(QByteArray::number(static_cast<int>(getContentType())));
+
+        if (!mimeData_) {
+            return hash.result();
+        }
+
+        if (mimeData_->hasText()) {
+            hash.addData(mimeData_->text().simplified().toUtf8());
+        } else if (mimeData_->hasHtml()) {
+            QTextDocument doc;
+            doc.setHtml(mimeData_->html());
+            hash.addData(doc.toPlainText().simplified().toUtf8());
+        }
+
+        if (mimeData_->hasUrls()) {
+            for (const QUrl &url : mimeData_->urls()) {
+                hash.addData(url.toString(QUrl::FullyEncoded).toUtf8());
+                hash.addData("\n", 1);
+            }
+        }
+
+        if (mimeData_->hasColor()) {
+            hash.addData(QByteArray::number(static_cast<quint32>(getColor().rgba())));
+        }
+
+        if (mimeData_->hasImage()) {
+            QByteArray imageBytes;
+            const QStringList preferredFormats = {
+                QStringLiteral("application/x-qt-image"),
+                QStringLiteral("image/png"),
+                QStringLiteral("image/jpeg"),
+                QStringLiteral("image/bmp")
+            };
+
+            for (const QString &format : preferredFormats) {
+                imageBytes = mimeData_->data(format);
+                if (!imageBytes.isEmpty()) {
+                    break;
+                }
+            }
+
+            if (imageBytes.isEmpty()) {
+                QPixmap pixmap = getImage();
+                if (!pixmap.isNull()) {
+                    QBuffer buffer(&imageBytes);
+                    buffer.open(QIODevice::WriteOnly);
+                    pixmap.save(&buffer, "PNG");
+                }
+            }
+
+            if (!imageBytes.isEmpty()) {
+                hash.addData(imageBytes);
+            }
+        }
+
+        if (!mimeData_->hasText() && !mimeData_->hasHtml() && !mimeData_->hasUrls()
+            && !mimeData_->hasImage() && !mimeData_->hasColor()) {
+            for (const QString &format : mimeData_->formats()) {
+                hash.addData(format.toUtf8());
+                hash.addData(mimeData_->data(format));
+            }
+        }
+
+        return hash.result();
+    }
+
+    void invalidateSearchCache() {
+        searchableTextCacheInitialized_ = false;
+        searchableTextCache_.clear();
+    }
 
 public:
-    // 构造函数
     ClipboardItem(const QPixmap &icon, const QMimeData *mimeData) : icon_(icon) {
         if (mimeData) {
             mimeData_.reset(new QMimeData);
 
-            // 检查图像数据，直接获取；例如 snipaste 不会写到 data() 里
             if (mimeData->hasImage()) {
                 QImage image = qvariant_cast<QImage>(mimeData->imageData());
-                // 将图像数据存储为 PNG 格式
                 QByteArray imageData;
                 QBuffer buffer(&imageData);
                 buffer.open(QIODevice::WriteOnly);
-                image.save(&buffer, "PNG");  // 或者其他支持的格式
-
-                mimeData_->setData("application/x-qt-image", imageData); // 直接设置PNG图像数据
-                mimeData_->setData("application/x-qt-windows-mime;value=\"PNG\"", imageData); // 直接设置PNG图像数据
+                image.save(&buffer, "PNG");
+                mimeData_->setData("application/x-qt-image", imageData);
+                mimeData_->setData("application/x-qt-windows-mime;value=\"PNG\"", imageData);
             }
 
             for (const QString &format : mimeData->formats()) {
-                // qDebug() << format;
                 mimeData_->setData(format, mimeData->data(format));
             }
 
@@ -57,10 +175,8 @@ public:
         }
     }
 
-    // 默认构造函数
     ClipboardItem() = default;
 
-    // 拷贝构造函数
     ClipboardItem(const ClipboardItem &other) : icon_(other.icon_) {
         if (other.mimeData_) {
             mimeData_.reset(new QMimeData);
@@ -75,9 +191,12 @@ public:
         title_ = other.title_;
         url_ = other.url_;
         icon_ = other.icon_;
+        fingerprintCache_ = other.fingerprintCache_;
+        fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
+        searchableTextCache_ = other.searchableTextCache_;
+        searchableTextCacheInitialized_ = other.searchableTextCacheInitialized_;
     }
 
-    // 拷贝赋值操作符
     ClipboardItem& operator=(const ClipboardItem &other) {
         if (this != &other) {
             time_ = other.time_;
@@ -86,6 +205,10 @@ public:
             title_ = other.title_;
             url_ = other.url_;
             icon_ = other.icon_;
+            fingerprintCache_ = other.fingerprintCache_;
+            fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
+            searchableTextCache_ = other.searchableTextCache_;
+            searchableTextCacheInitialized_ = other.searchableTextCacheInitialized_;
 
             if (other.mimeData_) {
                 mimeData_.reset(new QMimeData);
@@ -100,51 +223,18 @@ public:
     }
 
     bool contains(const QString &keyword) const {
-        if (!mimeData_) {
+        if (!mimeData_ || keyword.isEmpty()) {
             return false;
         }
 
-        const QString keywordLower = keyword.toLower();
-
-        // 检查文本内容
-        if (mimeData_->hasText() && mimeData_->text().toLower().contains(keywordLower)) {
-            return true;
+        if (!searchableTextCacheInitialized_) {
+            searchableTextCache_ = buildSearchableText();
+            searchableTextCacheInitialized_ = true;
         }
 
-        // 检查HTML内容
-        if (mimeData_->hasHtml() && mimeData_->html().toLower().contains(keywordLower)) {
-            return true;
-        }
-
-        // 检查URLs
-        if (mimeData_->hasUrls()) {
-            for (const QUrl &url : mimeData_->urls()) {
-                if (url.toString().toLower().contains(keywordLower)) {
-                    return true;
-                }
-            }
-        }
-
-        // 检查所有可用格式中的文本数据
-        for (const QString &format : mimeData_->formats()) {
-            // 只检查可能包含文本的格式
-            if (format.startsWith("text/") ||
-                format.contains("plain") ||
-                format.contains("html") ||
-                format.contains("xml") ||
-                format.contains("json")) {
-
-                QString text = QString::fromUtf8(mimeData_->data(format));
-                if (text.toLower().contains(keywordLower)) {
-                    return true;
-                }
-                }
-        }
-
-        return false;
+        return searchableTextCache_.contains(keyword.toLower());
     }
 
-    // 提取HTML中Fragment标记之间的实际内容，忽略Word等应用每次复制都会变化的header元数据
     static QStringView htmlFragment(const QString &html) {
         static const QString startMarker = QStringLiteral("<!--StartFragment-->");
         static const QString endMarker = QStringLiteral("<!--EndFragment-->");
@@ -157,16 +247,13 @@ public:
     }
 
     bool operator==(const ClipboardItem &other) const {
-        // 如果两者都为空，认为相等
         if (!mimeData_ && !other.mimeData_) {
             return true;
         }
-        // 如果其中一个为空，另一个不为空，认为不相等
         if (!mimeData_ || !other.mimeData_) {
             return false;
         }
 
-        // 比较文本内容
         bool textMatched = false;
         if (mimeData_->hasText() || other.mimeData_->hasText()) {
             if (mimeData_->text() != other.mimeData_->text()) {
@@ -175,8 +262,6 @@ public:
             textMatched = true;
         }
 
-        // 比较HTML内容（提取Fragment部分，忽略Word等应用每次复制都会变化的header元数据）
-        // 文本一致时，若HTML是截断关系（一个是另一个的前缀），视为同一内容
         if (mimeData_->hasHtml() || other.mimeData_->hasHtml()) {
             QStringView frag1 = htmlFragment(mimeData_->html());
             QStringView frag2 = htmlFragment(other.mimeData_->html());
@@ -187,14 +272,12 @@ public:
             }
         }
 
-        // 比较URLs
         if (mimeData_->hasUrls() || other.mimeData_->hasUrls()) {
             if (mimeData_->urls() != other.mimeData_->urls()) {
                 return false;
             }
         }
 
-        // 比较图片内容
         if (mimeData_->hasImage() || other.mimeData_->hasImage()) {
             QPixmap img1 = getImage();
             QPixmap img2 = other.getImage();
@@ -207,16 +290,14 @@ public:
                 if (i1.size() != i2.size() || i1.format() != i2.format()) {
                     return false;
                 }
-                // 逐行比较原始字节，比逐像素比较快
                 for (int y = 0; y < i1.height(); ++y) {
-                    if (memcmp(i1.constScanLine(y), i2.constScanLine(y), i1.bytesPerLine()) != 0) {
+                    if (std::memcmp(i1.constScanLine(y), i2.constScanLine(y), i1.bytesPerLine()) != 0) {
                         return false;
                     }
                 }
             }
         }
 
-        // 比较颜色数据
         if (mimeData_->hasColor() || other.mimeData_->hasColor()) {
             if (getColor() != other.getColor()) {
                 return false;
@@ -226,38 +307,32 @@ public:
         return true;
     }
 
-    // Getter 方法保持不变
+    const QByteArray &fingerprint() const {
+        if (!fingerprintCacheInitialized_) {
+            fingerprintCache_ = buildFingerprint();
+            fingerprintCacheInitialized_ = true;
+        }
+        return fingerprintCache_;
+    }
+
     const QPixmap& getIcon() const { return icon_; }
 
-    // 修改 getMimeData 返回新的副本
     QMimeData* createMimeData() const {
         if (!mimeData_) {
             return nullptr;
         }
 
-        // qDebug() << "Original formats:" << mimeData_->formats();
-
         QMimeData* newMimeData = new QMimeData;
-
-        // 只复制非空数据
         for (const QString &format : mimeData_->formats()) {
             QByteArray data = mimeData_->data(format);
             if (!data.isEmpty()) {
-                // qDebug() << "Copying format:" << format << "size:" << data.size();
                 newMimeData->setData(format, data);
-            } else {
-                // qDebug() << "Skipping empty format:" << format;
             }
         }
-
-        // qDebug() << "New formats:" << newMimeData->formats();
-
         return newMimeData;
     }
 
-    // 保留只读访问
     const QMimeData* getMimeData() const { return mimeData_.data(); }
-    // 常用访问器保持不变
     QString getText() const { return mimeData_ ? mimeData_->text() : QString(); }
 
     QPixmap getImage() const {
@@ -265,7 +340,6 @@ public:
             return QPixmap();
         }
 
-        // Windows 特定格式
         const QStringList formats = mimeData_->formats();
         for (const QString &format : formats) {
             if (format.startsWith("application/x-qt-windows-mime;value=\"")) {
@@ -277,13 +351,12 @@ public:
             }
         }
 
-        // 常见图片格式
         static const QStringList commonFormats = {
-            "image/png",
-            "image/jpeg",
-            "image/gif",
-            "image/bmp",
-            "application/x-qt-image"
+            QStringLiteral("image/png"),
+            QStringLiteral("image/jpeg"),
+            QStringLiteral("image/gif"),
+            QStringLiteral("image/bmp"),
+            QStringLiteral("application/x-qt-image")
         };
 
         for (const QString &format : commonFormats) {
@@ -296,7 +369,6 @@ public:
             }
         }
 
-        // 首先尝试直接获取图片数据
         QVariant imageData = mimeData_->imageData();
         if (imageData.canConvert<QPixmap>()) {
             return qvariant_cast<QPixmap>(imageData);
@@ -328,8 +400,8 @@ public:
     QString getTitle() const { return title_; }
     QString getUrl() const { return url_; }
 
-    void setTitle(const QString &title) { title_ = title; }
-    void setUrl(const QString &url) { url_ = url; }
+    void setTitle(const QString &title) { title_ = title; invalidateSearchCache(); }
+    void setUrl(const QString &url) { url_ = url; invalidateSearchCache(); }
 
     void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }
@@ -337,16 +409,13 @@ public:
     ContentType getContentType() const {
         if (!mimeData_) return Text;
 
-        // Color highest priority
         if (mimeData_->hasColor()) return Color;
 
-        // URLs without HTML: File or Link
         if (mimeData_->hasUrls() && !mimeData_->hasHtml()) {
             QList<QUrl> urls = mimeData_->urls();
             bool allValid = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
                 [](const QUrl &url) { return url.isValid() && !url.isRelative(); });
             if (allValid) {
-                // Check if all URLs are local files
                 bool allFiles = std::all_of(urls.begin(), urls.end(),
                     [](const QUrl &url) { return url.isLocalFile(); });
                 return allFiles ? File : Link;
@@ -354,23 +423,19 @@ public:
             return Text;
         }
 
-        // HTML: Link or RichText
         if (mimeData_->hasHtml()) {
             QString text = mimeData_->text().trimmed();
-            if (!mimeData_->formats().contains("Rich Text Format") &&
-                !text.contains("\n") &&
-                (text.startsWith("http://") || text.startsWith("https://"))) {
+            if (!mimeData_->formats().contains("Rich Text Format")
+                && !text.contains("\n")
+                && (text.startsWith("http://") || text.startsWith("https://"))) {
                 return Link;
             }
             return RichText;
         }
 
-        // Image
         if (mimeData_->hasImage()) return Image;
-
-        // Fallback: Text
         return Text;
     }
 };
 
-#endif //MPASTE_CLIPBOARDITEM_H
+#endif // MPASTE_CLIPBOARDITEM_H

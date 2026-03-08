@@ -1,3 +1,7 @@
+# input: 依赖仓库生成物、本地环境文件与忽略策略。
+# output: 对外提供 Git 忽略规则。
+# pos: 根目录中的版本管理边界清单。
+# update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 # Prerequisites
 *.d
 

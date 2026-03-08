@@ -1,3 +1,7 @@
+// input: 依赖 Qt 平台抽象、系统 API 与调用方声明。
+// output: 对外提供 MPasteSettings 的工具接口。
+// pos: utils 层中的 MPasteSettings 接口定义。
+// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 //
 // Created by ragdoll on 2021/5/24.
 //

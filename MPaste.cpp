@@ -1,3 +1,7 @@
+// input: 依赖 Qt 应用框架、配置、主窗口与系统集成服务。
+// output: 对外提供应用启动流程与主事件循环。
+// pos: 根目录中的程序主入口。
+// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 #include <QApplication>
 #include <iostream>
 #include <QScreen>

@@ -1,3 +1,7 @@
+# input: 依赖 Linux 桌面环境、安装路径与启动命令。
+# output: 对外提供桌面入口与自启动元数据。
+# pos: 根目录中的桌面集成清单。
+# update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 [Desktop Entry]
 Comment=MPaste, an alternative to Paste clipboard manager on Linux
 Exec=/usr/bin/MPaste

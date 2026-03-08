@@ -1,3 +1,7 @@
+# input: 依赖 CMake、Qt、平台工具链与打包选项。
+# output: 对外提供主构建图与目标配置。
+# pos: 根目录中的主构建入口。
+# update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 cmake_minimum_required(VERSION 3.7)
 set(_VERSION_MAJOR 0)
 set(_VERSION_MINOR 6)

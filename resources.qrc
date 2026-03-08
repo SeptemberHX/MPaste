@@ -1,3 +1,9 @@
+<!--
+input: 依赖 resources 与 translations 内的资源路径。
+output: 对外提供 Qt 资源索引清单。
+pos: 根目录中的资源注册清单。
+update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+-->
 <RCC>
     <qresource prefix="/resources">
         <file>resources/sound.mp3</file>

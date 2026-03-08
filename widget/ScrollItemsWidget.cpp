@@ -1,3 +1,7 @@
+// input: 依赖对应头文件、Qt 运行时与资源/服务组件。
+// output: 对外提供 ScrollItemsWidget 的实现行为。
+// pos: widget 层中的 ScrollItemsWidget 实现文件。
+// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 #include <QDir>
 #include <QPropertyAnimation>
 #include <QScrollBar>
@@ -58,6 +62,49 @@ ScrollItemsWidget::~ScrollItemsWidget()
     delete ui;
 }
 
+ClipboardItemWidget *ScrollItemsWidget::findMatchingWidget(const ClipboardItem &item) const {
+    const auto it = fingerprintBuckets_.constFind(item.fingerprint());
+    if (it == fingerprintBuckets_.constEnd()) {
+        return nullptr;
+    }
+
+    for (ClipboardItemWidget *widget : it.value()) {
+        if (widget && widget->getItem() == item) {
+            return widget;
+        }
+    }
+
+    return nullptr;
+}
+
+void ScrollItemsWidget::registerWidgetFingerprint(ClipboardItemWidget *widget) {
+    if (!widget) {
+        return;
+    }
+
+    auto &bucket = fingerprintBuckets_[widget->getItem().fingerprint()];
+    if (!bucket.contains(widget)) {
+        bucket.append(widget);
+    }
+}
+
+void ScrollItemsWidget::unregisterWidgetFingerprint(ClipboardItemWidget *widget) {
+    if (!widget) {
+        return;
+    }
+
+    const QByteArray key = widget->getItem().fingerprint();
+    auto it = fingerprintBuckets_.find(key);
+    if (it == fingerprintBuckets_.end()) {
+        return;
+    }
+
+    it->removeAll(widget);
+    if (it->isEmpty()) {
+        fingerprintBuckets_.erase(it);
+    }
+}
+
 ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &item) {
     auto *itemWidget = new ClipboardItemWidget(this->category, QColor::fromString(this->borderColor), ui->scrollAreaWidgetContents);
     connect(itemWidget, &ClipboardItemWidget::clicked, this, &ScrollItemsWidget::itemClicked);
@@ -75,6 +122,7 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
         }
 
         this->saver->removeItem(this->getItemFilePath(itemWidget->getItem()));
+        this->unregisterWidgetFingerprint(itemWidget);
         this->layout->removeWidget(itemWidget);
         if (this->currItemWidget == itemWidget) {
             this->currItemWidget = nullptr;
@@ -106,29 +154,26 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
 }
 
 bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
-    for (int i = 0; i < this->layout->count() - 1; ++i) {
-        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
-        if (!widget) {
-            continue;
+    if (auto *widget = findMatchingWidget(nItem)) {
+        if (nItem.getMimeData() && widget->getItem().getMimeData()
+            && nItem.getMimeData()->hasHtml() && widget->getItem().getMimeData()->hasHtml()
+            && nItem.getMimeData()->html().length() > widget->getItem().getMimeData()->html().length()) {
+            this->saver->removeItem(this->getItemFilePath(widget->getItem()));
+            this->unregisterWidgetFingerprint(widget);
+            widget->showItem(nItem);
+            this->registerWidgetFingerprint(widget);
+            this->saveItem(nItem);
         }
-
-        if (widget->getItem() == nItem) {
-            if (nItem.getMimeData() && widget->getItem().getMimeData()
-                && nItem.getMimeData()->hasHtml() && widget->getItem().getMimeData()->hasHtml()
-                && nItem.getMimeData()->html().length() > widget->getItem().getMimeData()->html().length()) {
-                this->saver->removeItem(this->getItemFilePath(widget->getItem()));
-                widget->showItem(nItem);
-                this->saveItem(nItem);
-            }
-            if (i != 0) {
-                this->moveItemToFirst(widget);
-            }
-            return false;
+        const int index = this->layout->indexOf(widget);
+        if (index > 0) {
+            this->moveItemToFirst(widget);
         }
+        return false;
     }
 
     auto *itemWidget = createItemWidget(nItem);
     this->layout->insertWidget(0, itemWidget);
+    this->registerWidgetFingerprint(itemWidget);
     this->setSelectedItem(itemWidget);
 
     ++this->totalItemCount_;
@@ -271,11 +316,13 @@ void ScrollItemsWidget::loadFromSaveDir() {
         if (!widget) {
             break;
         }
+        this->unregisterWidgetFingerprint(widget);
         this->layout->removeWidget(widget);
         widget->deleteLater();
     }
 
     pendingLoadFilePaths_.clear();
+    fingerprintBuckets_.clear();
     totalItemCount_ = 0;
     currItemWidget = nullptr;
 
@@ -338,6 +385,7 @@ void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
         auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
         if (widget && widget->getItem() == item) {
             this->saver->removeItem(this->getItemFilePath(widget->getItem()));
+            this->unregisterWidgetFingerprint(widget);
             this->layout->removeWidget(widget);
             if (this->currItemWidget == widget) {
                 this->currItemWidget = nullptr;
@@ -441,6 +489,7 @@ void ScrollItemsWidget::loadNextBatch(int batchSize) {
         }
         auto *itemWidget = createItemWidget(item);
         this->layout->insertWidget(this->layout->count() - 1, itemWidget);
+        this->registerWidgetFingerprint(itemWidget);
     }
 
     if (!this->currItemWidget) {
@@ -518,6 +567,7 @@ void ScrollItemsWidget::trimToMaxSize() {
         }
 
         this->saver->removeItem(this->getItemFilePath(widget->getItem()));
+        this->unregisterWidgetFingerprint(widget);
         this->layout->removeWidget(widget);
         if (this->currItemWidget == widget) {
             this->currItemWidget = nullptr;

@@ -1,3 +1,7 @@
 #!/bin/bash
+# input: 依赖 Debian 安装生命周期与目标系统文件路径。
+# output: 对外提供安装后修正动作。
+# pos: debian/scripts 目录中的安装期脚本。
+# update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 
 chmod +x /usr/bin/MPaste

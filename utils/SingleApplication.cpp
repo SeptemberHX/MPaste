@@ -1,3 +1,7 @@
+// input: 依赖对应头文件、Qt 服务与平台系统能力。
+// output: 对外提供 SingleApplication 的工具实现。
+// pos: utils 层中的 SingleApplication 实现文件。
+// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 #include "SingleApplication.h"
 #include <QCryptographicHash>
 #include <QDataStream>

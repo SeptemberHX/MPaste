@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
+<!--
+input: 依赖 Qt Creator、本地工具链与工程状态文件格式。
+output: 对外提供 Qt Creator 的本地工程配置。
+pos: 根目录中的本地 IDE 工程状态文件。
+update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+-->
 <!-- Written by QtCreator 14.0.2, 2025-01-02T22:25:23. -->
 <qtcreator>
  <data>

@@ -1,3 +1,7 @@
+# input: 依赖 Debian 打包文档格式与发布元数据。
+# output: 对外提供 changelog 的打包文档内容。
+# pos: debian/doc 目录中的格式敏感文档文件。
+# update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 * 0.2.0
   - add tray icon
   - cmake & cpack to build deb package for deepin v20

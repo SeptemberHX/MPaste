@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
+<!--
+input: 依赖源码中的可翻译字符串与 Qt Linguist 工具链。
+output: 对外提供翻译源条目。
+pos: translations 目录中的国际化源文件。
+update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+-->
 <TS version="2.1" language="zh_CN">
 <context>
     <name>ClipboardItemInnerWidget</name>
@@ -195,21 +201,26 @@
         <source>Play Copy Sound</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../widget/MPasteSettingsWidget.cpp" line="199"/>
+        <source>Auto-start is currently only supported on Windows.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>MPasteWidget</name>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="299"/>
+        <location filename="../widget/MPasteWidget.cpp" line="301"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="283"/>
+        <location filename="../widget/MPasteWidget.cpp" line="285"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="314"/>
+        <location filename="../widget/MPasteWidget.cpp" line="316"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>

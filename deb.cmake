@@ -1,3 +1,7 @@
+# input: 依赖 CPack、Debian 打包变量与安装布局。
+# output: 对外提供 Debian 打包补充配置。
+# pos: 根目录中的 Linux 打包辅助脚本。
+# update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 set(CPACK_GENERATOR "DEB")
 
 ############下面是设置debian/control文件中的内容
