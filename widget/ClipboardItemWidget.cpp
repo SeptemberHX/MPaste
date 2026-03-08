@@ -34,11 +34,24 @@ bool looksBrokenTranslation(const QString &text) {
 
 QString plainTextPasteLabel() {
     QString label = QObject::tr("Paste as Plain Text");
+    const QLocale locale = QLocale::system();
     if (label == QLatin1String("Paste as Plain Text") || looksBrokenTranslation(label)) {
-        if (QLocale::system().language() == QLocale::Chinese) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
             return QString::fromUtf16(u"\u7EAF\u6587\u672C\u7C98\u8D34");
         }
         return QStringLiteral("Paste as Plain Text");
+    }
+    return label;
+}
+
+QString detailsLabel() {
+    QString label = QObject::tr("Details");
+    const QLocale locale = QLocale::system();
+    if (label == QLatin1String("Details") || looksBrokenTranslation(label)) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
+            return QString::fromUtf16(u"\u8BE6\u60C5");
+        }
+        return QStringLiteral("Details");
     }
     return label;
 }
@@ -142,7 +155,7 @@ void ClipboardItemWidget::setupContextMenu() {
 
     addAction(":/resources/resources/save_black.svg", tr("Save"), &ClipboardItemWidget::handleSaveAction);
     addAction(":/resources/resources/files.svg", plainTextPasteLabel(), &ClipboardItemWidget::handlePastePlainTextAction);
-    addAction(":/resources/resources/preview.svg", tr("Details"), &ClipboardItemWidget::handleDetailsAction);
+    addAction(":/resources/resources/preview.svg", detailsLabel(), &ClipboardItemWidget::handleDetailsAction);
     addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
 
     ui.contextMenu->addSeparator();

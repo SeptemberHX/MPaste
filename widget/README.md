@@ -1,46 +1,46 @@
 <!--
-input: 依赖所属目录的真实结构、职责与文件变化。
-output: 对外提供目录级架构说明与文件清单。
-pos: 目录级维护文档与变更约束入口。
-update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+input: 渚濊禆鎵€灞炵洰褰曠殑鐪熷疄缁撴瀯銆佽亴璐ｄ笌鏂囦欢鍙樺寲銆?
+output: 瀵瑰鎻愪緵鐩綍绾ф灦鏋勮鏄庝笌鏂囦欢娓呭崟銆?
+pos: 鐩綍绾х淮鎶ゆ枃妗ｄ笌鍙樻洿绾︽潫鍏ュ彛銆?
+update: 涓€鏃︽垜琚洿鏂帮紝鍔″繀鏇存柊鎴戠殑寮€澶存敞閲婏紝浠ュ強鎵€灞炵殑鏂囦欢澶圭殑 README.md銆?
 -->
 
 # widget
 
-> 一旦我所属的文件夹有所变化，请更新我。
-- 定位：widget 层承载窗口、卡片、设置与预览等界面组件。
-- 依赖：Qt Widgets 以及 data/utils 层能力。
-- 输出：可交互的剪贴板管理界面。
+> 涓€鏃︽垜鎵€灞炵殑鏂囦欢澶规湁鎵€鍙樺寲锛岃鏇存柊鎴戙€?
+- 瀹氫綅锛歸idget 灞傛壙杞界獥鍙ｃ€佸崱鐗囥€佽缃笌棰勮绛夌晫闈㈢粍浠躲€?
+- 渚濊禆锛歈t Widgets 浠ュ強 data/utils 灞傝兘鍔涖€?
+- 杈撳嚭锛氬彲浜や簰鐨勫壀璐存澘绠＄悊鐣岄潰銆?
 
 ## Files
-- `AboutWidget.cpp`: 地位=实现文件；功能=实现 AboutWidget 的运行逻辑与行为。
-- `AboutWidget.h`: 地位=接口声明；功能=声明 AboutWidget 的公开类型、信号、槽或函数。
-- `AboutWidget.ui`: 地位=界面描述；功能=定义 AboutWidget 的 Qt Designer 布局。
-- `ClipboardItemInnerWidget.cpp`: 地位=实现文件；功能=实现 ClipboardItemInnerWidget 的运行逻辑与行为。
-- `ClipboardItemInnerWidget.h`: 地位=接口声明；功能=声明 ClipboardItemInnerWidget 的公开类型、信号、槽或函数。
-- `ClipboardItemInnerWidget.ui`: 地位=界面描述；功能=定义 ClipboardItemInnerWidget 的 Qt Designer 布局。
-- `ClipboardItemWidget.cpp`: 地位=实现文件；功能=实现 ClipboardItemWidget 的运行逻辑与行为。
-- `ClipboardItemWidget.h`: 地位=接口声明；功能=声明 ClipboardItemWidget 的公开类型、信号、槽或函数。
-- `FileThumbWidget.cpp`: 地位=实现文件；功能=实现 FileThumbWidget 的运行逻辑与行为。
-- `FileThumbWidget.h`: 地位=接口声明；功能=声明 FileThumbWidget 的公开类型、信号、槽或函数。
-- `FileThumbWidget.ui`: 地位=界面描述；功能=定义 FileThumbWidget 的 Qt Designer 布局。
-- `MPasteSettingsWidget.cpp`: 地位=实现文件；功能=实现 MPasteSettingsWidget 的运行逻辑与行为。
-- `MPasteSettingsWidget.h`: 地位=接口声明；功能=声明 MPasteSettingsWidget 的公开类型、信号、槽或函数。
-- `MPasteSettingsWidget.ui`: 地位=界面描述；功能=定义 MPasteSettingsWidget 的 Qt Designer 布局。
-- `MPasteWidget.cpp`: 地位=实现文件；功能=实现 MPasteWidget 的运行逻辑与行为。
-- `MPasteWidget.h`: 地位=接口声明；功能=声明 MPasteWidget 的公开类型、信号、槽或函数。
-- `MPasteWidget.ui`: 地位=界面描述；功能=定义 MPasteWidget 的 Qt Designer 布局。
-- `MTextBrowser.cpp`: 地位=实现文件；功能=实现 MTextBrowser 的运行逻辑与行为。
-- `MTextBrowser.h`: 地位=接口声明；功能=声明 MTextBrowser 的公开类型、信号、槽或函数。
-- `README.md`: 地位=目录说明；功能=总结本目录职责、约束与文件清单。
-- `ScrollItemsWidget.cpp`: 地位=实现文件；功能=实现 ScrollItemsWidget 的运行逻辑与行为。
-- `ScrollItemsWidget.h`: 地位=接口声明；功能=声明 ScrollItemsWidget 的公开类型、信号、槽或函数。
-- `ScrollItemsWidget.ui`: 地位=界面描述；功能=定义 ScrollItemsWidget 的 Qt Designer 布局。
-- `ToggleSwitch.cpp`: 地位=实现文件；功能=实现 ToggleSwitch 的运行逻辑与行为。
-- `ToggleSwitch.h`: 地位=接口声明；功能=声明 ToggleSwitch 的公开类型、信号、槽或函数。
-- `WebLinkThumbWidget.cpp`: 地位=实现文件；功能=实现 WebLinkThumbWidget 的运行逻辑与行为。
-- `WebLinkThumbWidget.h`: 地位=接口声明；功能=声明 WebLinkThumbWidget 的公开类型、信号、槽或函数。
-- `WebLinkThumbWidget.ui`: 地位=界面描述；功能=定义 WebLinkThumbWidget 的 Qt Designer 布局。
+- `AboutWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 AboutWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `AboutWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 AboutWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `AboutWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 AboutWidget 鐨?Qt Designer 甯冨眬銆?
+- `ClipboardItemInnerWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ClipboardItemInnerWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `ClipboardItemInnerWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ClipboardItemInnerWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `ClipboardItemInnerWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 ClipboardItemInnerWidget 鐨?Qt Designer 甯冨眬銆?
+- `ClipboardItemWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ClipboardItemWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `ClipboardItemWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ClipboardItemWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `FileThumbWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 FileThumbWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `FileThumbWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 FileThumbWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `FileThumbWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 FileThumbWidget 鐨?Qt Designer 甯冨眬銆?
+- `MPasteSettingsWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 MPasteSettingsWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `MPasteSettingsWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 MPasteSettingsWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `MPasteSettingsWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 MPasteSettingsWidget 鐨?Qt Designer 甯冨眬銆?
+- `MPasteWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 MPasteWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `MPasteWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 MPasteWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `MPasteWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 MPasteWidget 鐨?Qt Designer 甯冨眬銆?
+- `MTextBrowser.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 MTextBrowser 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `MTextBrowser.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 MTextBrowser 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `README.md`: 鍦颁綅=鐩綍璇存槑锛涘姛鑳?鎬荤粨鏈洰褰曡亴璐ｃ€佺害鏉熶笌鏂囦欢娓呭崟銆?
+- `ScrollItemsWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ScrollItemsWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `ScrollItemsWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ScrollItemsWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `ScrollItemsWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 ScrollItemsWidget 鐨?Qt Designer 甯冨眬銆?
+- `ToggleSwitch.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ToggleSwitch 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `ToggleSwitch.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ToggleSwitch 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `WebLinkThumbWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 WebLinkThumbWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `WebLinkThumbWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 WebLinkThumbWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `WebLinkThumbWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 WebLinkThumbWidget 鐨?Qt Designer 甯冨眬銆?
 
 ## Recent Notes
 - `ClipboardItemWidget` now exposes a context-menu action for plain-text paste.
@@ -67,3 +67,5 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - `WebLinkThumbWidget` now keeps roughly 8px horizontal padding for title/URL text and extra bottom breathing room under the URL line.
 - Image cards now use fill-and-crop rendering too, so large images center themselves and occupy the preview area more fully.
 - `WebLinkThumbWidget` now renders its preview image with fill-and-crop behavior so the main image area looks fuller and stays centered.
+
+- ClipboardItemDetailsDialog now uses a polished rounded inspector card with runtime Chinese fallbacks, so the context-menu Details action and dialog labels no longer degrade into question marks.
