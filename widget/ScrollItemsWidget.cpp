@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 运行时与资源/服务组件。
-// output: 对外提供 ScrollItemsWidget 的实现行为。
-// pos: widget 层中的 ScrollItemsWidget 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on ScrollItemsWidget.h, LocalSaver, Qt scrolling APIs, and item-card widgets.
+// output: Implements lazy-loaded boards, fingerprint-based dedup, cached filtering, and plain-text paste forwarding.
+// pos: Widget-layer board implementation driving clipboard and favorites history lists.
+// update: If I change, update this header block and my folder README.md.
 #include <QDir>
 #include <QPropertyAnimation>
 #include <QScrollBar>
@@ -142,6 +142,10 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
     });
     connect(itemWidget, &ClipboardItemWidget::itemStared, this, &ScrollItemsWidget::itemStared);
     connect(itemWidget, &ClipboardItemWidget::itemUnstared, this, &ScrollItemsWidget::itemUnstared);
+    connect(itemWidget, &ClipboardItemWidget::pastePlainTextRequested, this, [this, itemWidget](const ClipboardItem &) {
+        this->moveItemToFirst(itemWidget);
+        emit plainTextPasteRequested(itemWidget->getItem());
+    });
 
     itemWidget->installEventFilter(this);
     itemWidget->showItem(item);
@@ -359,6 +363,13 @@ void ScrollItemsWidget::setAllItemVisible() {
     if (this->layout->count() > 1) {
         this->setSelectedItem(dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(0)->widget()));
     }
+}
+
+const ClipboardItem* ScrollItemsWidget::currentSelectedItem() const {
+    if (this->currItemWidget) {
+        return &this->currItemWidget->getItem();
+    }
+    return nullptr;
 }
 
 const ClipboardItem* ScrollItemsWidget::selectedByShortcut(int keyIndex) {
@@ -682,10 +693,12 @@ QString ScrollItemsWidget::getCategory() const {
     return this->category;
 }
 
-void ScrollItemsWidget::selectedByEnter() {
+const ClipboardItem* ScrollItemsWidget::selectedByEnter() {
     if (this->currItemWidget != nullptr) {
         this->moveItemToFirst(this->currItemWidget);
+        return &this->currItemWidget->getItem();
     }
+    return nullptr;
 }
 
 bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {

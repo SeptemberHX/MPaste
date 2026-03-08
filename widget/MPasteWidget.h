@@ -1,7 +1,7 @@
-// input: 依赖 Qt Widgets、data 层对象与同层组件声明。
-// output: 对外提供 MPasteWidget 的声明接口。
-// pos: widget 层中的 MPasteWidget 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on Qt Widgets, board widgets, clipboard monitor, settings, and platform helpers.
+// output: Exposes the main MPaste window API, clipboard write helpers, and keyboard-driven paste flow.
+// pos: Widget-layer main window declaration coordinating all major UI features.
+// update: If I change, update this header block and my folder README.md.
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
 
@@ -66,7 +66,8 @@ private:
     void setupConnections();
 
     // 剪贴板操作
-    void setClipboard(const ClipboardItem &item);
+    bool setClipboard(const ClipboardItem &item, bool plainText = false);
+    QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
     void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
 
@@ -77,7 +78,7 @@ private:
     // 键盘事件处理
     void handleKeyboardEvent(QKeyEvent *event);
     void handleEscapeKey();
-    void handleEnterKey();
+    void handleEnterKey(bool plainText = false);
     void handleNavigationKeys(QKeyEvent *event);
     void handleHomeEndKeys(QKeyEvent *event);
     void handleTabKey();
@@ -125,7 +126,8 @@ private:
     struct {
         QMediaPlayer *player;
         QList<int> numKeyList;
-        int pendingNumKey;  // 添加这个变量来跟踪按下的数字键
+        int pendingNumKey = -1;
+        bool pendingPlainTextNumKey = false;  // 添加这个变量来跟踪按下的数字键
     } misc_;
 
     static constexpr int HIDE_ANIMATION_TIME = 50;

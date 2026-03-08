@@ -41,3 +41,8 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - `WebLinkThumbWidget.cpp`: 地位=实现文件；功能=实现 WebLinkThumbWidget 的运行逻辑与行为。
 - `WebLinkThumbWidget.h`: 地位=接口声明；功能=声明 WebLinkThumbWidget 的公开类型、信号、槽或函数。
 - `WebLinkThumbWidget.ui`: 地位=界面描述；功能=定义 WebLinkThumbWidget 的 Qt Designer 布局。
+
+## Recent Notes
+- `ClipboardItemWidget` now exposes a context-menu action for plain-text paste.
+- `MPasteWidget` now supports `Ctrl+Enter` and `Alt+Shift+[1-9,0]` to paste as plain text.
+- `ScrollItemsWidget` forwards plain-text paste requests from item cards to the main window.

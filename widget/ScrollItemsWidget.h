@@ -1,7 +1,7 @@
-// input: 依赖 Qt Widgets、data 层对象与同层组件声明。
-// output: 对外提供 ScrollItemsWidget 的声明接口。
-// pos: widget 层中的 ScrollItemsWidget 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on Qt Widgets, ClipboardItem data, persistence service, and item widgets.
+// output: Exposes one history board with lazy loading, filtering, dedup indexing, and paste signals.
+// pos: Widget-layer horizontal board declaration for clipboard/favorites views.
+// update: If I change, update this header block and my folder README.md.
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
 
@@ -36,8 +36,9 @@ public:
     void loadFromSaveDir();
     QScrollBar* horizontalScrollbar();
     void setAllItemVisible();
+    const ClipboardItem* currentSelectedItem() const;
     const ClipboardItem* selectedByShortcut(int visibleOrder);
-    void selectedByEnter();
+    const ClipboardItem* selectedByEnter();
     void focusMoveLeft();
     void focusMoveRight();
     int getItemCount();
@@ -53,6 +54,7 @@ public:
 
 signals:
     void doubleClicked(const ClipboardItem &item);
+    void plainTextPasteRequested(const ClipboardItem &item);
     void itemCountChanged(int itemCount);
     void itemStared(const ClipboardItem &item);
     void itemUnstared(const ClipboardItem &item);

@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 运行时与资源/服务组件。
-// output: 对外提供 ClipboardItemWidget 的实现行为。
-// pos: widget 层中的 ClipboardItemWidget 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on ClipboardItemWidget.h, Qt Widgets runtime, and icon/resource assets.
+// output: Implements item-card actions, hover UI, context menu, and plain-text paste trigger.
+// pos: Widget-layer item card implementation used by history boards.
+// update: If I change, update this header block and my folder README.md.
 #include "ClipboardItemWidget.h"
 
 #include <QGraphicsDropShadowEffect>
@@ -10,9 +10,38 @@
 #include <QMenu>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLocale>
 #include <QMouseEvent>
 
 #include "utils/MPasteSettings.h"
+
+namespace {
+bool looksBrokenTranslation(const QString &text) {
+    if (text.isEmpty()) {
+        return true;
+    }
+
+    int suspiciousCount = 0;
+    for (const QChar ch : text) {
+        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
+            ++suspiciousCount;
+        }
+    }
+
+    return suspiciousCount >= qMax(2, text.size() / 2);
+}
+
+QString plainTextPasteLabel() {
+    QString label = QObject::tr("Paste as Plain Text");
+    if (label == QLatin1String("Paste as Plain Text") || looksBrokenTranslation(label)) {
+        if (QLocale::system().language() == QLocale::Chinese) {
+            return QString::fromUtf16(u"\u7EAF\u6587\u672C\u7C98\u8D34");
+        }
+        return QStringLiteral("Paste as Plain Text");
+    }
+    return label;
+}
+}
 
 ClipboardItemWidget::ClipboardItemWidget(QString category, QColor borderColor, QWidget *parent)
     : category(category), borderColor(borderColor), QWidget(parent)
@@ -107,17 +136,19 @@ void ClipboardItemWidget::setupContextMenu() {
     };
 
     addAction(":/resources/resources/save_black.svg", tr("Save"), &ClipboardItemWidget::handleSaveAction);
+    addAction(":/resources/resources/files.svg", plainTextPasteLabel(), &ClipboardItemWidget::handlePastePlainTextAction);
     addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
-    
+
     ui.contextMenu->addSeparator();
 
     if (this->category != MPasteSettings::STAR_CATEGORY_NAME) {
         addAction(":/resources/resources/star.svg", tr("Save to Star"), &ClipboardItemWidget::handleStarAction);
     }
     addAction(":/resources/resources/add_black.svg", tr("Save to"), &ClipboardItemWidget::handleFavoriteAction);
-    
+
     addAction(":/resources/resources/delete.svg", tr("Delete"), &ClipboardItemWidget::handleDeleteAction);
 }
+
 
 void ClipboardItemWidget::initializeEffects() {
     auto* shadowEffect = new QGraphicsDropShadowEffect(this);
@@ -180,6 +211,10 @@ void ClipboardItemWidget::handleDeleteAction() {
 
 void ClipboardItemWidget::handleSaveAction() {
     emit saveRequested(currentItem);
+}
+
+void ClipboardItemWidget::handlePastePlainTextAction() {
+    emit pastePlainTextRequested(currentItem);
 }
 
 void ClipboardItemWidget::handleStarAction() {

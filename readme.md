@@ -41,10 +41,13 @@ A clipboard manager alternative to Paste for Linux & Windows.
 * More elegant UI design
 * History search
 * auto paste
+* Paste selected item as plain text
 
 ## Shortcut
 
-* `Alt+[1-9, 0]`: quick select item. Holding `Alt` can show the shortcut tips
+* `Alt+[1-9, 0]`: quick select and paste item. Holding `Alt` can show the shortcut tips
+* `Alt+Shift+[1-9, 0]`: quick select and paste item as plain text
+* `Ctrl+Enter`: paste the currently selected item as plain text
 * Any characters: search mode
 * Global shortcut to show window: Open your shortcut settings in system settings, and assign a shortcut for command `/path/to/your/MPaste`
 

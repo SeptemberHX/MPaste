@@ -1,7 +1,7 @@
-// input: 依赖 Qt Widgets、data 层对象与同层组件声明。
-// output: 对外提供 ClipboardItemWidget 的声明接口。
-// pos: widget 层中的 ClipboardItemWidget 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on Qt Widgets, ClipboardItem data, and inner-card widget APIs.
+// output: Exposes one clipboard card widget with actions like save, favorite, preview, and plain-text paste.
+// pos: Widget-layer item card declaration used inside horizontal history boards.
+// update: If I change, update this header block and my folder README.md.
 // ClipboardItemWidget.h
 #ifndef MPASTE_CLIPBOARDITEMWIDGET_H
 #define MPASTE_CLIPBOARDITEMWIDGET_H
@@ -38,6 +38,7 @@ signals:
     void itemNeedToSave();
     void itemStared(const ClipboardItem& item);
     void itemUnstared(const ClipboardItem& item);
+    void pastePlainTextRequested(const ClipboardItem& item);
     void favoriteChanged(bool isFavorite);
     void deleteRequested();
     void saveRequested(const ClipboardItem& item);
@@ -66,6 +67,7 @@ private:
 
     // Action handlers
     void handleFavoriteAction();
+    void handlePastePlainTextAction();
     void handleDeleteAction();
     void handleSaveAction();
     void handleStarAction();

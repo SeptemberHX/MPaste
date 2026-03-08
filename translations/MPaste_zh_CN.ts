@@ -60,13 +60,17 @@
 <context>
     <name>ClipboardItemWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="87"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="119"/>
+        <source>Paste as Plain Text</source>
+        <translation type="vanished">??????</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="116"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="149"/>
         <source>Delete</source>
         <translation>删除</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="109"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="138"/>
         <source>Save</source>
         <translation>保存</translation>
     </message>
@@ -79,28 +83,28 @@
         <translation type="vanished">添加至</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="110"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="140"/>
         <source>Preview</source>
         <translation>预览</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="115"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="145"/>
         <source>Save to Star</source>
         <translation>另存到收藏夹</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="117"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="147"/>
         <source>Save to</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="194"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="229"/>
         <source>Remove from favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="83"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="195"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="112"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="230"/>
         <source>Add to favorites</source>
         <translation type="unfinished"></translation>
     </message>
@@ -204,17 +208,17 @@
 <context>
     <name>MPasteWidget</name>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="305"/>
+        <location filename="../widget/MPasteWidget.cpp" line="344"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="289"/>
+        <location filename="../widget/MPasteWidget.cpp" line="328"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="320"/>
+        <location filename="../widget/MPasteWidget.cpp" line="359"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
@@ -287,6 +291,14 @@
         <location filename="../cmake-build-package/MPaste_autogen/include/ui_MPasteWidget.h" line="272"/>
         <source>File</source>
         <translation>文件</translation>
+    </message>
+</context>
+<context>
+    <name>QObject</name>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="35"/>
+        <source>Paste as Plain Text</source>
+        <translation type="unfinished">??????</translation>
     </message>
 </context>
 </TS>

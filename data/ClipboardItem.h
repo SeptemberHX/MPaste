@@ -1,7 +1,7 @@
-// input: 依赖 Qt 数据类型、mime/图像/时间对象与上层调用方。
-// output: 对外提供 ClipboardItem 的数据声明。
-// pos: data 层中的 ClipboardItem 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on Qt mime/image/text primitives and raw clipboard payloads from the system.
+// output: Exposes a comparable clipboard item with cached search text and lightweight content fingerprint.
+// pos: Data-layer core clipboard model used by persistence, filtering, dedup, and rendering code.
+// update: If I change, update this header block and my folder README.md.
 #ifndef MPASTE_CLIPBOARDITEM_H
 #define MPASTE_CLIPBOARDITEM_H
 

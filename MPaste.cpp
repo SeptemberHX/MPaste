@@ -86,6 +86,10 @@ int main(int argc, char* argv[]) {
             QStringLiteral(":/translations/MPaste_") + locale + ".qm"
         };
 
+        if (locale.startsWith("zh")) {
+            searchPaths << QStringLiteral(":/resources/resources/app_zh.qm");
+        }
+
         bool loaded = false;
         for (const QString &path : searchPaths) {
             if (translator.load(path)) {

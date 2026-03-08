@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 运行时与资源/服务组件。
-// output: 对外提供 MPasteWidget 的实现行为。
-// pos: widget 层中的 MPasteWidget 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: Depends on MPasteWidget.h, Qt runtime services, resource assets, and platform clipboard/window helpers.
+// output: Implements the main window, item interaction flow, normal paste, and plain-text paste behavior.
+// pos: Widget-layer main window implementation coordinating boards, shortcuts, and system integration.
+// update: If I change, update this header block and my folder README.md.
 #include <iostream>
 #include <QScrollBar>
 #include <QClipboard>
@@ -11,7 +11,9 @@
 #include <QDir>
 #include <QDebug>
 #include <QButtonGroup>
+#include <QStringList>
 #include <QTimer>
+#include <QTextDocument>
 #include <QWheelEvent>
 #include <QWindow>
 #include <QPainter>
@@ -96,6 +98,43 @@ static void enableBlurBehind(HWND hwnd) {
 
 // QEvent::KeyPress conflicts with the KeyPress in X.h
 #undef KeyPress
+
+static int shortcutIndexForKey(int key) {
+    switch (key) {
+        case Qt::Key_1:
+        case Qt::Key_Exclam:
+            return 0;
+        case Qt::Key_2:
+        case Qt::Key_At:
+            return 1;
+        case Qt::Key_3:
+        case Qt::Key_NumberSign:
+            return 2;
+        case Qt::Key_4:
+        case Qt::Key_Dollar:
+            return 3;
+        case Qt::Key_5:
+        case Qt::Key_Percent:
+            return 4;
+        case Qt::Key_6:
+        case Qt::Key_AsciiCircum:
+            return 5;
+        case Qt::Key_7:
+        case Qt::Key_Ampersand:
+            return 6;
+        case Qt::Key_8:
+        case Qt::Key_Asterisk:
+            return 7;
+        case Qt::Key_9:
+        case Qt::Key_ParenLeft:
+            return 8;
+        case Qt::Key_0:
+        case Qt::Key_ParenRight:
+            return 9;
+        default:
+            return -1;
+    }
+}
 
 MPasteWidget::MPasteWidget(QWidget *parent) :
     QWidget(parent)
@@ -327,8 +366,16 @@ void MPasteWidget::setupConnections() {
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
         connect(boardWidget, &ScrollItemsWidget::doubleClicked,
         this, [this](const ClipboardItem &item) {
-            this->setClipboard(item);
-            this->hideAndPaste();
+            if (this->setClipboard(item)) {
+                this->hideAndPaste();
+            }
+        });
+
+        connect(boardWidget, &ScrollItemsWidget::plainTextPasteRequested,
+        this, [this](const ClipboardItem &item) {
+            if (this->setClipboard(item, true)) {
+                this->hideAndPaste();
+            }
         });
 
         connect(boardWidget, &ScrollItemsWidget::itemCountChanged, this, [this, boardWidget](int itemCount) {
@@ -423,16 +470,47 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
     }
 }
 
-void MPasteWidget::setClipboard(const ClipboardItem &item) {
-    clipboard_.monitor->disconnectMonitor();
+QMimeData *MPasteWidget::createPlainTextMimeData(const ClipboardItem &item) const {
+    QString plainText = item.getText();
 
-    QMimeData *mimeData = item.createMimeData();
-    if (!mimeData) {
-        clipboard_.monitor->connectMonitor();
-        return;
+    if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasHtml()) {
+        QTextDocument doc;
+        doc.setHtml(item.getHtml());
+        plainText = doc.toPlainText();
     }
 
-    if (item.getMimeData() && item.getMimeData()->hasUrls()) {
+    if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasUrls()) {
+        QStringList urls;
+        for (const QUrl &url : item.getUrls()) {
+            urls << (url.isLocalFile() ? url.toLocalFile() : url.toString());
+        }
+        plainText = urls.join(QLatin1Char('\n'));
+    }
+
+    if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasColor()) {
+        plainText = item.getColor().name(QColor::HexRgb);
+    }
+
+    if (plainText.isEmpty()) {
+        return nullptr;
+    }
+
+    auto *mimeData = new QMimeData;
+    mimeData->setText(plainText);
+    mimeData->setData("text/plain;charset=utf-8", plainText.toUtf8());
+    return mimeData;
+}
+
+bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
+    clipboard_.monitor->disconnectMonitor();
+
+    QMimeData *mimeData = plainText ? createPlainTextMimeData(item) : item.createMimeData();
+    if (!mimeData) {
+        clipboard_.monitor->connectMonitor();
+        return false;
+    }
+
+    if (!plainText && item.getMimeData() && item.getMimeData()->hasUrls()) {
         handleUrlsClipboard(mimeData, item);
     }
 
@@ -442,6 +520,7 @@ void MPasteWidget::setClipboard(const ClipboardItem &item) {
     QTimer::singleShot(200, this, [this]() {
         clipboard_.monitor->connectMonitor();
     });
+    return true;
 }
 void MPasteWidget::handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item) {
     if (!mimeData) {
@@ -479,7 +558,8 @@ void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
             currItemsWidget()->setShortcutInfo();
             break;
         case Qt::Key_Return:
-            handleEnterKey();
+        case Qt::Key_Enter:
+            handleEnterKey(event->modifiers().testFlag(Qt::ControlModifier));
             break;
         case Qt::Key_Left:
         case Qt::Key_Right:
@@ -516,9 +596,11 @@ void MPasteWidget::handleEscapeKey() {
     }
 }
 
-void MPasteWidget::handleEnterKey() {
-    currItemsWidget()->selectedByEnter();
-    hideAndPaste();
+void MPasteWidget::handleEnterKey(bool plainText) {
+    const ClipboardItem *selectedItem = currItemsWidget()->selectedByEnter();
+    if (selectedItem && setClipboard(*selectedItem, plainText)) {
+        hideAndPaste();
+    }
 }
 
 void MPasteWidget::handleNavigationKeys(QKeyEvent *event) {
@@ -610,15 +692,17 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
 
 void MPasteWidget::keyPressEvent(QKeyEvent *event) {
     if (event->modifiers() & Qt::AltModifier) {
-        // 记录按下的数字键
-        if (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9) {
-            misc_.pendingNumKey = event->key();
+        const int shortcutIndex = shortcutIndexForKey(event->key());
+        if (shortcutIndex >= 0) {
+            misc_.pendingNumKey = shortcutIndex;
+            misc_.pendingPlainTextNumKey = event->modifiers().testFlag(Qt::ShiftModifier);
             event->accept();
             return;
         }
     }
     handleKeyboardEvent(event);
 }
+
 
 
 bool MPasteWidget::focusNextPrevChild(bool next) {
@@ -628,30 +712,24 @@ bool MPasteWidget::focusNextPrevChild(bool next) {
 void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Alt) {
         currItemsWidget()->cleanShortCutInfo();
-        misc_.pendingNumKey = 0;  // 清除待处理的数字键
+        misc_.pendingNumKey = -1;
+        misc_.pendingPlainTextNumKey = false;
     }
-    // 处理数字键释放
-    else if (event->key() == misc_.pendingNumKey) {
-        int keyOrder = -1;
-        if (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9) {
+    else {
+        const int releasedShortcutIndex = shortcutIndexForKey(event->key());
+        if (releasedShortcutIndex == misc_.pendingNumKey && misc_.pendingNumKey >= 0) {
 #ifdef Q_OS_WIN
-            // 检查 Alt 键是否仍然按下
             bool altStillPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
 #else
             bool altStillPressed = QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier;
 #endif
-            // 只有当 Alt 键仍然按下时才执行操作
             if (altStillPressed) {
-                keyOrder = (event->key() == Qt::Key_0) ? 9 : event->key() - Qt::Key_1;
-
+                const int keyOrder = releasedShortcutIndex;
                 if (keyOrder >= 0 && keyOrder <= 9) {
                     qDebug() << "Alt+" << keyOrder << " detected on key release";
 
                     const ClipboardItem* selectedItem = currItemsWidget()->selectedByShortcut(keyOrder);
-                    if (selectedItem) {
-                        this->setClipboard(*selectedItem);
-
-                        // 等待数字键完全释放
+                    if (selectedItem && this->setClipboard(*selectedItem, misc_.pendingPlainTextNumKey)) {
                         QTimer::singleShot(50, this, [this]() {
                             hideAndPaste();
                             currItemsWidget()->cleanShortCutInfo();
@@ -659,14 +737,16 @@ void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
                     }
                 }
             }
+            misc_.pendingNumKey = -1;
+            misc_.pendingPlainTextNumKey = false;
+            event->accept();
+            return;
         }
-        misc_.pendingNumKey = 0;  // 清除待处理的数字键
-        event->accept();
-        return;
     }
 
     QWidget::keyReleaseEvent(event);
 }
+
 
 void MPasteWidget::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);

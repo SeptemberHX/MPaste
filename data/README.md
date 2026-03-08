@@ -19,3 +19,7 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - `OpenGraphItem.cpp`: 地位=实现文件；功能=实现 OpenGraphItem 的运行逻辑与行为。
 - `OpenGraphItem.h`: 地位=接口声明；功能=声明 OpenGraphItem 的公开类型、信号、槽或函数。
 - `README.md`: 地位=目录说明；功能=总结本目录职责、约束与文件清单。
+
+## Recent Notes
+- `ClipboardItem` now caches searchable plain-text content to reduce repeated keyword scan cost.
+- `ClipboardItem` now exposes a lightweight content fingerprint for dedup candidate lookup.
