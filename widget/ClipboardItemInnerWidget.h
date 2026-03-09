@@ -18,6 +18,7 @@
 
 class QNetworkAccessManager;
 class QNetworkReply;
+class QPaintEvent;
 
 namespace Ui {
 class ClipboardItemInnerWidget;
@@ -37,11 +38,15 @@ public:
     void showItem(const ClipboardItem& item);
 
     void showBorder(bool flag);
+    void setFavoriteHighlight(bool flag);
     void setShortkeyInfo(int num);
     void clearShortkeyInfo();
 
 signals:
     void itemNeedToSave(const ClipboardItem &item);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
 
 private:
     void refreshStyleSheet();
@@ -83,6 +88,7 @@ private:
     QString pendingHtmlImageHtml_;
 
     QColor borderColor;
+    bool favoriteHighlight{false};
 };
 
 #endif // CLIPBOARDITEMINNERWIDGET_H

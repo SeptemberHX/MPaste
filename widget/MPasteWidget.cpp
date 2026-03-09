@@ -439,6 +439,7 @@ void MPasteWidget::setupConnections() {
         connect(boardWidget, &ScrollItemsWidget::itemStared, this, [this](const ClipboardItem &item) {
             ClipboardItem updatedItem(item);
             ui_.staredWidget->addAndSaveItem(updatedItem);
+            ui_.clipboardWidget->setItemFavorite(updatedItem, true);
         });
         connect(boardWidget, &ScrollItemsWidget::itemUnstared, this, [this, boardWidget](const ClipboardItem &item) {
             ui_.staredWidget->removeItemByContent(item);
@@ -864,6 +865,10 @@ void MPasteWidget::loadFromSaveDir() {
     std::cout << QDateTime::currentDateTime().toString().toStdString() << "Loading items for boards" << std::endl;
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
         boardWidget->loadFromSaveDir();
+    }
+
+    for (const ClipboardItem &item : ui_.staredWidget->allItems()) {
+        ui_.clipboardWidget->setItemFavorite(item, true);
     }
 }
 

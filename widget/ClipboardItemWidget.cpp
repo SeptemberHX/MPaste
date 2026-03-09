@@ -253,6 +253,8 @@ void ClipboardItemWidget::updateFavoriteButton() {
         tr("Remove from favorites") :
         tr("Add to favorites"));
 
+    ui.innerWidget->setFavoriteHighlight(isFavorite);
+
     // Update persistent indicator
     ui.favoriteIndicator->setVisible(isFavorite);
     if (isFavorite) {

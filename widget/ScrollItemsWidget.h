@@ -8,6 +8,7 @@
 #include <QWidget>
 #include <QHBoxLayout>
 #include <QHash>
+#include <QSet>
 #include <data/LocalSaver.h>
 #include "data/ClipboardItem.h"
 #include "ClipboardItemWidget.h"
@@ -48,6 +49,7 @@ public:
     QString getCategory() const;
     void removeItemByContent(const ClipboardItem &item);
     void setItemFavorite(const ClipboardItem &item, bool favorite);
+    QList<ClipboardItem> allItems();
     bool handleWheelScroll(QWheelEvent *event);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -94,6 +96,7 @@ private:
     LocalSaver *saver;
     QPropertyAnimation *scrollAnimation;
     QHash<QByteArray, QList<ClipboardItemWidget*>> fingerprintBuckets_;
+    QSet<QByteArray> favoriteFingerprints_;
     QStringList pendingLoadFilePaths_;
     int totalItemCount_ = 0;
 

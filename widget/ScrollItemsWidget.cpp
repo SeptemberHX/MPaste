@@ -154,7 +154,8 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
     itemWidget->installEventFilter(this);
     itemWidget->showItem(item);
 
-    if (this->category == MPasteSettings::STAR_CATEGORY_NAME) {
+    if (this->category == MPasteSettings::STAR_CATEGORY_NAME
+        || favoriteFingerprints_.contains(item.fingerprint())) {
         itemWidget->setFavorite(true);
     }
 
@@ -434,14 +435,32 @@ void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
 }
 
 void ScrollItemsWidget::setItemFavorite(const ClipboardItem &item, bool favorite) {
-    Q_UNUSED(favorite);
+    if (favorite) {
+        favoriteFingerprints_.insert(item.fingerprint());
+    } else {
+        favoriteFingerprints_.remove(item.fingerprint());
+    }
+
     for (int i = 0; i < this->layout->count() - 1; ++i) {
         auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
-        if (widget && widget->getItem() == item) {
+        if (widget && widget->getItem().fingerprint() == item.fingerprint()) {
             widget->setFavorite(favorite);
-            return;
         }
     }
+}
+
+QList<ClipboardItem> ScrollItemsWidget::allItems() {
+    ensureAllItemsLoaded();
+
+    QList<ClipboardItem> items;
+    items.reserve(qMax(0, this->layout->count() - 1));
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (widget) {
+            items.append(widget->getItem());
+        }
+    }
+    return items;
 }
 
 QString ScrollItemsWidget::saveDir() {

@@ -15,6 +15,9 @@
 #include <QNetworkReply>
 #include <QNetworkAccessManager>
 #include <QNetworkProxy>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QLinearGradient>
 
 namespace {
 QColor blendColor(const QColor &from, const QColor &to, qreal factor) {
@@ -285,8 +288,67 @@ void ClipboardItemInnerWidget::showBorder(bool flag) {
     }
 }
 
+void ClipboardItemInnerWidget::setFavoriteHighlight(bool flag) {
+    if (favoriteHighlight == flag) {
+        return;
+    }
+
+    favoriteHighlight = flag;
+    refreshStyleSheet();
+    update();
+}
+
+void ClipboardItemInnerWidget::paintEvent(QPaintEvent *event) {
+    QFrame::paintEvent(event);
+
+    if (!favoriteHighlight) {
+        return;
+    }
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setBrush(Qt::NoBrush);
+
+    const qreal radius = 12.0;
+    const struct GlowLayer {
+        qreal inset;
+        qreal width;
+        int alpha;
+    } layers[] = {
+        {5.5, 7.0, 34},
+        {4.0, 4.8, 56},
+        {2.8, 2.6, 92}
+    };
+
+    const QColor glowColor(247, 201, 93);
+    for (const GlowLayer &layer : layers) {
+        QPen glowPen(QColor(glowColor.red(), glowColor.green(), glowColor.blue(), layer.alpha));
+        glowPen.setWidthF(layer.width);
+        painter.setPen(glowPen);
+        painter.drawRoundedRect(QRectF(rect()).adjusted(layer.inset, layer.inset, -layer.inset, -layer.inset),
+                                radius, radius);
+    }
+
+    QLinearGradient borderGradient(rect().topLeft(), rect().bottomRight());
+    borderGradient.setColorAt(0.0, QColor(255, 245, 196));
+    borderGradient.setColorAt(0.45, QColor(247, 201, 93));
+    borderGradient.setColorAt(1.0, QColor(255, 232, 160));
+
+    QPen borderPen(QBrush(borderGradient), 2.0);
+    painter.setPen(borderPen);
+    painter.drawRoundedRect(QRectF(rect()).adjusted(3.0, 3.0, -3.0, -3.0), radius, radius);
+}
+
 void ClipboardItemInnerWidget::refreshStyleSheet() {
-    this->setStyleSheet(this->genStyleSheetStr(this->bgColor, this->topBgColor, this->borderColor, this->borderWidth));
+    QColor effectiveBorderColor = this->borderColor;
+    int effectiveBorderWidth = this->borderWidth;
+
+    if (favoriteHighlight && effectiveBorderWidth == 0) {
+        effectiveBorderColor = QColor(QStringLiteral("#F4C542"));
+        effectiveBorderWidth = 2;
+    }
+
+    this->setStyleSheet(this->genStyleSheetStr(this->bgColor, this->topBgColor, effectiveBorderColor, effectiveBorderWidth));
 }
 
 void ClipboardItemInnerWidget::resetPanelStyleOverrides() {
