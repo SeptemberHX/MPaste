@@ -82,6 +82,7 @@ private:
         struct {
             QWidget* container{nullptr};
             QHBoxLayout* layout{nullptr};
+            QToolButton* detailsBtn{nullptr};
             QToolButton* favoriteBtn{nullptr};
             QToolButton* deleteBtn{nullptr};
         } actions;

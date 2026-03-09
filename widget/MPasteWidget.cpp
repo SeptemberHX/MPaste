@@ -16,7 +16,6 @@
 #include <QLocale>
 #include <QIcon>
 #include <QAction>
-#include <QElapsedTimer>
 #include <QStringList>
 #include <QTimer>
 #include <QTextDocument>
@@ -181,33 +180,18 @@ MPasteWidget::~MPasteWidget() {
 }
 
 void MPasteWidget::initializeWidget() {
-    QElapsedTimer startupTimer;
-    startupTimer.start();
-
-    auto runStartupStep = [this](const QString &name, auto &&fn) {
-        QElapsedTimer stepTimer;
-        stepTimer.start();
-        fn();
-        qInfo().noquote() << QStringLiteral("[startup] %1 took %2 ms")
-                                 .arg(name)
-                                 .arg(stepTimer.elapsed());
-    };
-
-    runStartupStep(QStringLiteral("initStyle"), [this]() { initStyle(); });
-    runStartupStep(QStringLiteral("initUI"), [this]() { initUI(); });
-    runStartupStep(QStringLiteral("initClipboard"), [this]() { initClipboard(); });
-    runStartupStep(QStringLiteral("initShortcuts"), [this]() { initShortcuts(); });
-    runStartupStep(QStringLiteral("initSystemTray"), [this]() { initSystemTray(); });
-    runStartupStep(QStringLiteral("initSound"), [this]() { initSound(); });
-    runStartupStep(QStringLiteral("setupConnections"), [this]() { setupConnections(); });
-    runStartupStep(QStringLiteral("loadFromSaveDir"), [this]() { loadFromSaveDir(); });
-    runStartupStep(QStringLiteral("clipboardChanged"), [this]() { clipboard_.monitor->clipboardChanged(); });
+    initStyle();
+    initUI();
+    initClipboard();
+    initShortcuts();
+    initSystemTray();
+    initSound();
+    setupConnections();
+    loadFromSaveDir();
+    clipboard_.monitor->clipboardChanged();
 
     setFocusOnSearch(false);
     misc_.pendingNumKey = 0;
-
-    qInfo().noquote() << QStringLiteral("[startup] initializeWidget total %1 ms")
-                             .arg(startupTimer.elapsed());
 
 #ifdef _DEBUG
     QTimer* debugTimer = new QTimer(this);
@@ -878,37 +862,11 @@ void MPasteWidget::showEvent(QShowEvent *event) {
 }
 
 void MPasteWidget::loadFromSaveDir() {
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-    std::cout << QDateTime::currentDateTime().toString().toStdString() << " Loading items for boards" << std::endl;
-    {
-        QElapsedTimer boardTimer;
-        boardTimer.start();
-        ui_.staredWidget->loadFromSaveDir();
-        qInfo().noquote() << QStringLiteral("[startup][board] %1 loaded in %2 ms")
-                                 .arg(ui_.staredWidget->getCategory())
-                                 .arg(boardTimer.elapsed());
-    }
-
-    QElapsedTimer favoriteSyncTimer;
-    favoriteSyncTimer.start();
+    ui_.staredWidget->loadFromSaveDir();
     for (const ClipboardItem &item : ui_.staredWidget->allItems()) {
         ui_.clipboardWidget->setItemFavorite(item, true);
     }
-    qInfo().noquote() << QStringLiteral("[startup][board] favorite sync took %1 ms")
-                             .arg(favoriteSyncTimer.elapsed());
-
-    {
-        QElapsedTimer boardTimer;
-        boardTimer.start();
-        ui_.clipboardWidget->loadFromSaveDirDeferred();
-        qInfo().noquote() << QStringLiteral("[startup][board] %1 deferred in %2 ms")
-                                 .arg(ui_.clipboardWidget->getCategory())
-                                 .arg(boardTimer.elapsed());
-    }
-
-    qInfo().noquote() << QStringLiteral("[startup] loadFromSaveDir total %1 ms")
-                             .arg(totalTimer.elapsed());
+    ui_.clipboardWidget->loadFromSaveDirDeferred();
 }
 
 void MPasteWidget::setFocusOnSearch(bool flag) {

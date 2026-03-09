@@ -337,35 +337,20 @@ void ScrollItemsWidget::cleanShortCutInfo() {
 }
 
 void ScrollItemsWidget::loadFromSaveDir() {
-    QElapsedTimer totalTimer;
-    totalTimer.start();
     deferredLoadActive_ = false;
     deferredLoadTimer_->stop();
     prepareLoadFromSaveDir();
     loadNextBatch(INITIAL_LOAD_BATCH_SIZE);
     maybeLoadMoreItems();
-
-    qInfo().noquote() << QStringLiteral("[history][%1] loadFromSaveDir loaded=%2 pending=%3 total=%4 took %5 ms")
-                             .arg(this->category)
-                             .arg(qMax(0, this->layout->count() - 1))
-                             .arg(pendingLoadFilePaths_.size())
-                             .arg(totalItemCount_)
-                             .arg(totalTimer.elapsed());
 }
 
 void ScrollItemsWidget::loadFromSaveDirDeferred() {
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-
     deferredLoadActive_ = true;
     deferredLoadTimer_->stop();
     prepareLoadFromSaveDir();
 
     if (pendingLoadFilePaths_.isEmpty()) {
         deferredLoadActive_ = false;
-        qInfo().noquote() << QStringLiteral("[history][%1] deferred load finished immediately in %2 ms")
-                                 .arg(this->category)
-                                 .arg(totalTimer.elapsed());
         return;
     }
 
@@ -375,12 +360,6 @@ void ScrollItemsWidget::loadFromSaveDirDeferred() {
     } else {
         deferredLoadActive_ = false;
     }
-
-    qInfo().noquote() << QStringLiteral("[history][%1] deferred startup load primed loaded=%2 pending=%3 took %4 ms")
-                             .arg(this->category)
-                             .arg(qMax(0, this->layout->count() - 1))
-                             .arg(pendingLoadFilePaths_.size())
-                             .arg(totalTimer.elapsed());
 }
 
 bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const QByteArray &rawData) {
@@ -509,8 +488,6 @@ void ScrollItemsWidget::setItemFavorite(const ClipboardItem &item, bool favorite
 }
 
 QList<ClipboardItem> ScrollItemsWidget::allItems() {
-    QElapsedTimer loadAllTimer;
-    loadAllTimer.start();
     ensureAllItemsLoaded();
 
     QList<ClipboardItem> items;
@@ -522,10 +499,6 @@ QList<ClipboardItem> ScrollItemsWidget::allItems() {
         }
     }
 
-    qInfo().noquote() << QStringLiteral("[history][%1] allItems returned %2 items in %3 ms")
-                             .arg(this->category)
-                             .arg(items.size())
-                             .arg(loadAllTimer.elapsed());
     return items;
 }
 
@@ -578,9 +551,6 @@ void ScrollItemsWidget::loadNextBatch(int batchSize) {
         return;
     }
 
-    QElapsedTimer batchTimer;
-    batchTimer.start();
-
     const int count = qMin(batchSize, pendingLoadFilePaths_.size());
     int loadedCount = 0;
     for (int i = 0; i < count; ++i) {
@@ -606,12 +576,6 @@ void ScrollItemsWidget::loadNextBatch(int batchSize) {
     }
 
     emit itemCountChanged(this->itemCountForDisplay());
-    qInfo().noquote() << QStringLiteral("[history][%1] loadNextBatch requested=%2 loaded=%3 pending=%4 took %5 ms")
-                             .arg(this->category)
-                             .arg(count)
-                             .arg(loadedCount)
-                             .arg(pendingLoadFilePaths_.size())
-                             .arg(batchTimer.elapsed());
     updateContentWidthHint();
 }
 
@@ -685,11 +649,6 @@ void ScrollItemsWidget::prepareLoadFromSaveDir() {
         pendingLoadFilePaths_ << info.filePath();
     }
 
-    qInfo().noquote() << QStringLiteral("[history][%1] discovered %2 files under %3")
-                             .arg(this->category)
-                             .arg(fileInfos.size())
-                             .arg(this->saveDir());
-
     totalItemCount_ = pendingLoadFilePaths_.size();
     trimToMaxSize();
     updateContentWidthHint();
@@ -708,8 +667,6 @@ void ScrollItemsWidget::continueDeferredLoad() {
 
     if (deferredLoadedItems_.isEmpty() && !deferredLoadThread_ && pendingLoadFilePaths_.isEmpty()) {
         deferredLoadActive_ = false;
-        qInfo().noquote() << QStringLiteral("[history][%1] deferred load completed")
-                                 .arg(this->category);
     }
 }
 
@@ -747,8 +704,6 @@ void ScrollItemsWidget::scheduleDeferredLoadBatch() {
     deferredLoadThread_ = QThread::create([guard, batchPaths]() {
         QList<QPair<QString, QByteArray>> batchItems;
         batchItems.reserve(batchPaths.size());
-        QElapsedTimer readTimer;
-        readTimer.start();
 
         for (const QString &filePath : batchPaths) {
             QFile file(filePath);
@@ -760,11 +715,10 @@ void ScrollItemsWidget::scheduleDeferredLoadBatch() {
             batchItems.append(qMakePair(filePath, rawData));
         }
 
-        const qint64 readElapsedMs = readTimer.elapsed();
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, batchItems, readElapsedMs]() {
+            QMetaObject::invokeMethod(guard.data(), [guard, batchItems]() {
                 if (guard) {
-                    guard->handleDeferredBatchRead(batchItems, readElapsedMs);
+                    guard->handleDeferredBatchRead(batchItems);
                 }
             }, Qt::QueuedConnection);
         }
@@ -777,13 +731,8 @@ void ScrollItemsWidget::scheduleDeferredLoadBatch() {
     deferredLoadThread_->start();
 }
 
-void ScrollItemsWidget::handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchItems, qint64 readElapsedMs) {
+void ScrollItemsWidget::handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchItems) {
     deferredLoadedItems_.append(batchItems);
-    qInfo().noquote() << QStringLiteral("[history][%1] deferred read batch=%2 pending=%3 read took %4 ms")
-                             .arg(this->category)
-                             .arg(batchItems.size())
-                             .arg(pendingLoadFilePaths_.size())
-                             .arg(readElapsedMs);
 
     if (!deferredLoadTimer_->isActive()) {
         const bool widgetVisible = isVisible() && window() && window()->isVisible();
@@ -835,12 +784,6 @@ void ScrollItemsWidget::processDeferredLoadedItems() {
     }
 
     emit itemCountChanged(this->itemCountForDisplay());
-    qInfo().noquote() << QStringLiteral("[history][%1] deferred parse processed=%2 loaded=%3 queued=%4 took %5 ms")
-                             .arg(this->category)
-                             .arg(processedCount)
-                             .arg(loadedCount)
-                             .arg(deferredLoadedItems_.size())
-                             .arg(parseTimer.elapsed());
     updateContentWidthHint();
 }
 

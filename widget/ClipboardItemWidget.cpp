@@ -131,6 +131,10 @@ void ClipboardItemWidget::setupActionButtons() {
     ui.actions.layout->setSpacing(4 * scale / 100);
 
     // Create buttons
+    ui.actions.detailsBtn = createActionButton(
+        ":/resources/resources/details.svg",
+        detailsLabel()
+    );
     ui.actions.favoriteBtn = createActionButton(
         ":/resources/resources/star_outline.svg",
         tr("Add to favorites")
@@ -141,10 +145,12 @@ void ClipboardItemWidget::setupActionButtons() {
     );
 
     // Add buttons to layout
+    ui.actions.layout->addWidget(ui.actions.detailsBtn);
     ui.actions.layout->addWidget(ui.actions.favoriteBtn);
     ui.actions.layout->addWidget(ui.actions.deleteBtn);
 
     // Connect signals
+    connect(ui.actions.detailsBtn, &QToolButton::clicked, this, &ClipboardItemWidget::handleDetailsAction);
     connect(ui.actions.favoriteBtn, &QToolButton::clicked, this, &ClipboardItemWidget::handleFavoriteAction);
     connect(ui.actions.deleteBtn, &QToolButton::clicked, this, &ClipboardItemWidget::handleDeleteAction);
 }

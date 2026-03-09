@@ -11,9 +11,12 @@
 #include "data/ClipboardItem.h"
 
 class QFrame;
+class QMimeData;
+class QMouseEvent;
 class QTextEdit;
 class QLabel;
 class QToolButton;
+class QTabWidget;
 
 class ClipboardItemDetailsDialog : public QDialog {
     Q_OBJECT
@@ -23,6 +26,7 @@ public:
     void showItem(const ClipboardItem &item);
 
 protected:
+    void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
 
@@ -30,18 +34,36 @@ private:
     QString uiText(const QString &source, const QString &zhFallback) const;
     QString contentTypeLabel(ClipboardItem::ContentType type) const;
     QString joinUrls(const QList<QUrl> &urls) const;
-    QTextEdit *createReadOnlyEditor() const;
+    QString byteCountLabel(qint64 bytes) const;
+    QString mimeFormatsReport(const QMimeData *mimeData) const;
+    qint64 totalMimeBytes(const QMimeData *mimeData) const;
+    QTextEdit *createReadOnlyEditor(bool noWrap = false) const;
+    void updatePreviewVisual(const ClipboardItem &item);
 
     struct {
         QFrame *card = nullptr;
         QLabel *titleLabel = nullptr;
         QToolButton *closeButton = nullptr;
+        QTabWidget *tabs = nullptr;
+
+        QLabel *previewVisual = nullptr;
+        QLabel *previewSummaryValue = nullptr;
         QLabel *typeValue = nullptr;
         QLabel *timeValue = nullptr;
+        QLabel *nameValue = nullptr;
         QLabel *titleValue = nullptr;
         QLabel *urlValue = nullptr;
+        QLabel *fingerprintValue = nullptr;
+        QLabel *formatCountValue = nullptr;
+        QLabel *mimeBytesValue = nullptr;
+        QLabel *textLengthValue = nullptr;
+        QLabel *urlCountValue = nullptr;
+
         QTextEdit *normalizedTextEdit = nullptr;
         QTextEdit *normalizedUrlsEdit = nullptr;
+        QTextEdit *rawTextEdit = nullptr;
+        QTextEdit *rawHtmlEdit = nullptr;
+        QTextEdit *rawUrlsEdit = nullptr;
         QTextEdit *mimeFormatsEdit = nullptr;
     } ui_;
 

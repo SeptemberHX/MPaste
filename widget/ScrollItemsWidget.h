@@ -101,7 +101,7 @@ private:
     bool shouldKeepDeferredLoading() const;
     void updateContentWidthHint();
     void scheduleDeferredLoadBatch();
-    void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchItems, qint64 readElapsedMs);
+    void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchItems);
     void processDeferredLoadedItems();
     void waitForDeferredRead();
     bool appendLoadedItem(const QString &filePath, const QByteArray &rawData);
