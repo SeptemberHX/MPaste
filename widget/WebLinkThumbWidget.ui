@@ -1,10 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-input: 依赖 Qt UIC 与对应 QWidget/QDialog 类。
-output: 对外提供 WebLinkThumbWidget 的界面布局描述。
-pos: widget 层中的 WebLinkThumbWidget 视图定义。
-update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
--->
 <ui version="4.0">
  <class>WebLinkThumbWidget</class>
  <widget class="QWidget" name="WebLinkThumbWidget">
@@ -13,11 +7,11 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
     <x>0</x>
     <y>0</y>
     <width>275</width>
-    <height>210</height>
+    <height>212</height>
    </rect>
   </property>
   <property name="sizePolicy">
-   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+   <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
     <horstretch>0</horstretch>
     <verstretch>0</verstretch>
    </sizepolicy>
@@ -33,16 +27,16 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
   </property>
   <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0,0">
    <property name="spacing">
-    <number>5</number>
+    <number>1</number>
    </property>
    <property name="leftMargin">
-    <number>3</number>
+    <number>2</number>
    </property>
    <property name="topMargin">
-    <number>3</number>
+    <number>0</number>
    </property>
    <property name="rightMargin">
-    <number>3</number>
+    <number>2</number>
    </property>
    <property name="bottomMargin">
     <number>0</number>
@@ -119,6 +113,9 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
      <property name="wordWrap">
       <bool>false</bool>
      </property>
+     <property name="indent">
+      <number>1</number>
+     </property>
     </widget>
    </item>
    <item>
@@ -143,6 +140,9 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
      </property>
      <property name="wordWrap">
       <bool>false</bool>
+     </property>
+     <property name="margin">
+      <number>0</number>
      </property>
     </widget>
    </item>
