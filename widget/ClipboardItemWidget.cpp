@@ -145,6 +145,7 @@ void ClipboardItemWidget::setupActionButtons() {
 
 void ClipboardItemWidget::setupContextMenu() {
     ui.contextMenu = new QMenu(this);
+    ui.contextMenu->setObjectName(QStringLiteral("itemContextMenu"));
 
     auto addAction = [this](const QString& iconPath, const QString& text, auto slot) {
         QAction* action = new QAction(QIcon(iconPath), text, this);
@@ -154,8 +155,8 @@ void ClipboardItemWidget::setupContextMenu() {
     };
 
     addAction(":/resources/resources/save_black.svg", tr("Save"), &ClipboardItemWidget::handleSaveAction);
-    addAction(":/resources/resources/files.svg", plainTextPasteLabel(), &ClipboardItemWidget::handlePastePlainTextAction);
-    addAction(":/resources/resources/preview.svg", detailsLabel(), &ClipboardItemWidget::handleDetailsAction);
+    addAction(":/resources/resources/text_plain.svg", plainTextPasteLabel(), &ClipboardItemWidget::handlePastePlainTextAction);
+    addAction(":/resources/resources/details.svg", detailsLabel(), &ClipboardItemWidget::handleDetailsAction);
     addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
 
     ui.contextMenu->addSeparator();

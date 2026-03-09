@@ -18,10 +18,16 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
         <file>resources/star_filled.svg</file>
         <file>resources/delete.svg</file>
         <file>resources/save_black.svg</file>
+        <file>resources/text_plain.svg</file>
+        <file>resources/details.svg</file>
         <file>resources/add_black.svg</file>
         <file>resources/first.svg</file>
         <file>resources/last.svg</file>
         <file>resources/preview.svg</file>
+        <file>resources/quit.svg</file>
+        <file>resources/info.svg</file>
+        <file>resources/settings.svg</file>
+        <file>resources/menu_more.svg</file>
         <file>resources/star.svg</file>
 
         <file>resources/spin_up.svg</file>
