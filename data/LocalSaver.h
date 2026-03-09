@@ -9,6 +9,7 @@
 #ifndef MPASTE_LOCALSAVER_H
 #define MPASTE_LOCALSAVER_H
 
+#include <QByteArray>
 #include <QString>
 #include "ClipboardItem.h"
 
@@ -18,6 +19,7 @@ public:
     bool saveToFile(const ClipboardItem &item, const QString &filePath);
     bool removeItem(const QString &filePath);
     ClipboardItem loadFromFile(const QString &filePath);
+    ClipboardItem loadFromRawData(const QByteArray &rawData);
     bool migrateFileToCurrentVersion(const QString &filePath);
     void migrateDirectory(const QString &dirPath);
 };

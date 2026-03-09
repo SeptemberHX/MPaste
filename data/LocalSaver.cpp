@@ -12,7 +12,9 @@
 #include <QDataStream>
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 
 namespace {
 constexpr quint32 kLocalSaverVersionV2 = 2;
@@ -25,6 +27,13 @@ struct LoadResult {
     ClipboardItem item;
     bool recognized = false;
     bool needsMigration = false;
+};
+
+enum class SavedFormatVersion {
+    Unknown,
+    LegacyOrUnreadable,
+    V2,
+    V3,
 };
 
 bool hasMeaningfulMimeData(const QMimeData *mimeData) {
@@ -221,6 +230,33 @@ LoadResult loadAnyVersion(const QByteArray &rawData) {
 
     return loadLegacy(rawData);
 }
+
+SavedFormatVersion detectSavedFormatVersion(QIODevice *device) {
+    if (!device || !device->isOpen()) {
+        return SavedFormatVersion::Unknown;
+    }
+
+    const qint64 originalPos = device->pos();
+    QDataStream in(device);
+    QString magic;
+    quint32 version = 0;
+    in >> magic >> version;
+    device->seek(originalPos);
+
+    if (in.status() != QDataStream::Ok) {
+        return SavedFormatVersion::LegacyOrUnreadable;
+    }
+
+    if (magic == kLocalSaverMagicV3 && version == kLocalSaverVersionV3) {
+        return SavedFormatVersion::V3;
+    }
+
+    if (magic == kLocalSaverMagicV2 && version == kLocalSaverVersionV2) {
+        return SavedFormatVersion::V2;
+    }
+
+    return SavedFormatVersion::LegacyOrUnreadable;
+}
 }
 
 bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) {
@@ -259,6 +295,9 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
 }
 
 ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
+    QElapsedTimer timer;
+    timer.start();
+
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         return ClipboardItem();
@@ -267,23 +306,38 @@ ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
     const QByteArray rawData = file.readAll();
     file.close();
 
-    const LoadResult result = loadAnyVersion(rawData);
-    if (!result.recognized) {
+    const ClipboardItem item = loadFromRawData(rawData);
+    if (item.getName().isEmpty()) {
         qWarning() << "Failed to load clipboard history file:" << filePath;
         return ClipboardItem();
     }
 
-    if (result.needsMigration) {
-        saveToFile(result.item, filePath);
+    const qint64 elapsedMs = timer.elapsed();
+    if (elapsedMs >= 20 || rawData.size() >= 256 * 1024) {
+        qInfo().noquote() << QStringLiteral("[storage] loadFromFile %1 size=%2 KB took %3 ms")
+                                 .arg(QFileInfo(filePath).fileName())
+                                 .arg(QString::number(rawData.size() / 1024.0, 'f', 1))
+                                 .arg(elapsedMs);
     }
 
-    return result.item;
+    return item;
+}
+
+ClipboardItem LocalSaver::loadFromRawData(const QByteArray &rawData) {
+    const LoadResult result = loadAnyVersion(rawData);
+    return result.recognized ? result.item : ClipboardItem();
 }
 
 bool LocalSaver::migrateFileToCurrentVersion(const QString &filePath) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         return false;
+    }
+
+    const SavedFormatVersion detectedVersion = detectSavedFormatVersion(&file);
+    if (detectedVersion == SavedFormatVersion::V3) {
+        file.close();
+        return true;
     }
 
     const QByteArray rawData = file.readAll();
@@ -302,13 +356,22 @@ bool LocalSaver::migrateFileToCurrentVersion(const QString &filePath) {
 }
 
 void LocalSaver::migrateDirectory(const QString &dirPath) {
+    QElapsedTimer timer;
+    timer.start();
     QDir dir(dirPath);
     const QFileInfoList files = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files);
+    int failedCount = 0;
     for (const QFileInfo &info : files) {
         if (!migrateFileToCurrentVersion(info.filePath())) {
+            ++failedCount;
             qWarning() << "Failed to migrate clipboard history file to v3:" << info.filePath();
         }
     }
+    qInfo().noquote() << QStringLiteral("[storage] migrateDirectory %1 files=%2 failed=%3 took %4 ms")
+                             .arg(dirPath)
+                             .arg(files.size())
+                             .arg(failedCount)
+                             .arg(timer.elapsed());
 }
 
 bool LocalSaver::removeItem(const QString &filePath) {

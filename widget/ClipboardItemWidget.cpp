@@ -77,6 +77,7 @@ void ClipboardItemWidget::setupUI() {
     // Main layout
     ui.mainLayout = new QHBoxLayout(this);
     ui.mainLayout->setContentsMargins(0, 0, 3, 0);
+    ui.mainLayout->setSpacing(0);
 
     // Inner widget
     ui.innerWidget = new ClipboardItemInnerWidget(this->borderColor, this);
@@ -88,6 +89,11 @@ void ClipboardItemWidget::setupUI() {
     });
 
     ui.mainLayout->addWidget(ui.innerWidget);
+
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    const QMargins margins = ui.mainLayout->contentsMargins();
+    setFixedSize(ui.innerWidget->width() + margins.left() + margins.right(),
+                 ui.innerWidget->height() + margins.top() + margins.bottom());
 
     // Persistent favorite indicator (small star in top-right corner)
     int scale = MPasteSettings::getInst()->getItemScale();

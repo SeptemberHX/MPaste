@@ -6,15 +6,21 @@
 #define SCROLLITEMSWIDGET_H
 
 #include <QWidget>
+#include <QByteArray>
 #include <QHBoxLayout>
 #include <QHash>
+#include <QList>
+#include <QPair>
 #include <QSet>
 #include <data/LocalSaver.h>
 #include "data/ClipboardItem.h"
 #include "ClipboardItemWidget.h"
 
 class QPropertyAnimation;
+class QTimer;
+class QThread;
 class QWheelEvent;
+class QShowEvent;
 
 namespace Ui {
 class ScrollItemsWidget;
@@ -35,6 +41,7 @@ public:
     void setShortcutInfo();
     void cleanShortCutInfo();
     void loadFromSaveDir();
+    void loadFromSaveDirDeferred();
     QScrollBar* horizontalScrollbar();
     void setAllItemVisible();
     const ClipboardItem* currentSelectedItem() const;
@@ -53,6 +60,9 @@ public:
     bool handleWheelScroll(QWheelEvent *event);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
+
+protected:
+    void showEvent(QShowEvent *event) override;
 
 signals:
     void doubleClicked(const ClipboardItem &item);
@@ -86,6 +96,15 @@ private:
     void maybeLoadMoreItems();
     int itemCountForDisplay() const;
     void trimToMaxSize();
+    void prepareLoadFromSaveDir();
+    void continueDeferredLoad();
+    bool shouldKeepDeferredLoading() const;
+    void updateContentWidthHint();
+    void scheduleDeferredLoadBatch();
+    void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchItems, qint64 readElapsedMs);
+    void processDeferredLoadedItems();
+    void waitForDeferredRead();
+    bool appendLoadedItem(const QString &filePath, const QByteArray &rawData);
 
     Ui::ScrollItemsWidget *ui;
     QHBoxLayout *layout;
@@ -95,17 +114,23 @@ private:
     ClipboardItemWidget *currItemWidget;
     LocalSaver *saver;
     QPropertyAnimation *scrollAnimation;
+    QTimer *deferredLoadTimer_ = nullptr;
+    QThread *deferredLoadThread_ = nullptr;
     QHash<QByteArray, QList<ClipboardItemWidget*>> fingerprintBuckets_;
     QSet<QByteArray> favoriteFingerprints_;
+    QList<QPair<QString, QByteArray>> deferredLoadedItems_;
     QStringList pendingLoadFilePaths_;
     int totalItemCount_ = 0;
+    bool deferredLoadActive_ = false;
 
     QString currentKeyword_;
     ClipboardItem::ContentType currentTypeFilter_ = ClipboardItem::All;
 
     static constexpr int INITIAL_LOAD_BATCH_SIZE = 24;
     static constexpr int LOAD_BATCH_SIZE = 16;
+    static constexpr int DEFERRED_LOAD_BATCH_SIZE = 6;
     static constexpr int LOAD_MORE_THRESHOLD_PX = 640;
+    static constexpr int HIDDEN_PARSE_SIZE_THRESHOLD = 512 * 1024;
 
 };
 
