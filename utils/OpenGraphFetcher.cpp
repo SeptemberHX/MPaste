@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 服务与平台系统能力。
-// output: 对外提供 OpenGraphFetcher 的工具实现。
+// input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
+// output: 提供 OpenGraphFetcher 的实现逻辑。
 // pos: utils 层中的 OpenGraphFetcher 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 #include "OpenGraphFetcher.h"
 #include <QNetworkReply>
 #include <iostream>
@@ -16,19 +16,19 @@ OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
 {
     this->replaceHttpHosts << "www.baidu.com";
 
-    // 更新 favicon 正则表达式，使其更通用
+    // 更新 favicon 正则表达式，提高通用性
     this->faviconReg1.setPattern(R"(<link[^>]*(?:rel=["'](?:[^"']*\s)?(?:icon|shortcut)(?:\s[^"']*)?["'][^>]*href=["']([^"']+)["']|href=["']([^"']+)["'][^>]*rel=["'](?:[^"']*\s)?(?:icon|shortcut)(?:\s[^"']*)?["'])[^>]*>)");
 
-    // 可以再添加一个专门匹配 type="image/x-icon" 的正则
+    // 可按需额外匹配 type="image/x-icon" 的链接标签
     this->faviconReg2.setPattern(R"(<link[^>]*type=["']image/(?:x-icon|vnd\.microsoft\.icon)["'][^>]*href=["']([^"']+)["'][^>]*>)");
 
-    // 更新正则表达式以适应Qt6的QRegularExpression语法
+    // 调整正则写法以兼容 Qt 6 的 QRegularExpression
     this->ogImageReg.setPattern("<meta .*?property[ ]*=[ ]*\"og:image\"[ ]*content[ ]*=[ ]*\"(.*?)\"[ ]*/?>");
     this->ogTitleReg.setPattern(R"(<meta\s+(?=(?:[^>]*\s)?property=["']og:title["'])(?=[^>]*\scontent=["']([^"']*?)["'])[^>]*>)");
     this->titleReg.setPattern("<title.*?>(.*?)</title>");
 
 
-    // QRegularExpression默认就是最小匹配（非贪婪模式），使用 *? 代替 *
+    // QRegularExpression 默认使用最小匹配，这里用 *? 避免贪婪匹配
     
     this->naManager = new QNetworkAccessManager(this);
     connect(this->naManager, &QNetworkAccessManager::finished, this, &OpenGraphFetcher::requestFinished);

@@ -1,7 +1,7 @@
-// input: 依赖 Qt 平台抽象、系统 API 与调用方声明。
-// output: 对外提供 PlatformRelated 的工具接口。
+// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
+// output: 对外提供 PlatformRelated 的声明接口。
 // pos: utils 层中的 PlatformRelated 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 //
 // Created by ragdoll on 2021/5/26.
 //
@@ -12,16 +12,17 @@
 // must included, otherwise there is compile error on ubuntu 21.04
 #include <QtCore>
 #include <QPixmap>
+#include "MPasteSettings.h"
 
 class PlatformRelated {
 
 public:
-    static void activateWindow(WId wId);  // 使用 WId 而不是 int
+    static void activateWindow(WId wId);
     static QPixmap getWindowIcon(WId wId);
-    static WId currActiveWindow();  // 返回 WId
-    static void triggerPasteShortcut();
-    static void startWindowTracking();     // 启动前台窗口追踪
-    static WId previousActiveWindow();     // 返回上一个非 MPaste 的前台窗口
+    static WId currActiveWindow();
+    static void triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode = MPasteSettings::AutoPasteShortcut);
+    static void startWindowTracking();
+    static WId previousActiveWindow();
 };
 
 #if defined(__linux__)
@@ -37,7 +38,7 @@ extern "C" {
 class XUtils {
 public:
     static void activeWindowX11(Window winId);
-    static void triggerPasteShortcut(Window winId);
+    static void triggerPasteShortcut(Window winId, MPasteSettings::PasteShortcutMode mode);
     static Window currentWinId();
     static QPixmap getWindowIconX11(Window winId);
 
@@ -57,7 +58,7 @@ private:
 class WinUtils {
 public:
     static void activeWindowWin32(HWND hwnd);
-    static void triggerPasteShortcut(HWND hwnd);
+    static void triggerPasteShortcut(HWND hwnd, MPasteSettings::PasteShortcutMode mode);
     static HWND currentWinId();
     static QPixmap getWindowIconWin32(HWND hwnd);
     static void startWindowTracking();

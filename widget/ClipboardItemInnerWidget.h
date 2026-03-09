@@ -1,7 +1,7 @@
-// input: 濞撴碍绻嗙粋?Qt Widgets闁靛棔榫歛ta 閻忕偛鍊搁顔炬寬閳ヨ尙鐟㈤柛姘嫰閻壆绱掗崟顏咁偨濠㈠湱澧楀Σ鎴﹀Υ?
-// output: 閻庣數鎳撻ˇ濠氬箵閹邦亞杩?ClipboardItemInnerWidget 闁汇劌瀚敍鎰板及鎼淬垹澶嶉柛娆欑祷閳?
-// pos: widget 閻忕偛鍊烽懙鎴︽儍?ClipboardItemInnerWidget 闁规亽鍎辫ぐ娑氣偓瑙勭煯缁犵喖濡?
-// update: 濞戞挴鍋撻柡鍐块檮閸ㄦ粎鎮锝嗙函闁哄倸搴滅槐婵嬪礉閳ュ磭绠戦柡鍥х摠閺屽﹪骞嬮幋鐘崇暠鐎殿喒鍋撳璺虹摠閺佺偤鏌屾繝蹇曠濞寸姰鍎卞鐑藉箥閳ь剛浠﹂悙鍨暠闁哄倸娲ｅ▎銏″緞閸︻厽鐣?README.md闁?
+// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
+// output: 对外提供 ClipboardItemInnerWidget 的声明接口。
+// pos: widget 层中的 ClipboardItemInnerWidget 接口定义。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 #ifndef CLIPBOARDITEMINNERWIDGET_H
 #define CLIPBOARDITEMINNERWIDGET_H
 

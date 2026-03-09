@@ -1,7 +1,7 @@
-// input: 依赖 Qt 应用框架、配置、主窗口与系统集成服务。
-// output: 对外提供应用启动流程与主事件循环。
-// pos: 根目录中的程序主入口。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// input: 依赖 Qt 应用入口、翻译加载、全局热键与主窗口初始化流程。
+// output: 提供 MPaste 应用启动、单实例控制和主窗口装配逻辑。
+// pos: 项目入口层中的 MPaste 应用入口实现文件。
+// update: 修改本文件时，同步更新文件头注释与根目录 README.md。
 #include <QApplication>
 #include <iostream>
 #include <QScreen>
@@ -15,7 +15,6 @@
 #include "utils/PlatformRelated.h"
 #include "utils/HotKeyManager.h"
 
-// 杈呭姪鍑芥暟淇濇寔涓嶅彉
 QScreen* getScreenForWindow(WId windowId) {
     if (windowId) {
 #ifdef Q_OS_WIN
@@ -58,7 +57,6 @@ void configureOpenGLBackend() {
 }
 
 int main(int argc, char* argv[]) {
-    // 璁剧疆 OpenGL 鐩稿叧灞炴€э紝蹇呴』鍦ㄥ垱寤?QApplication 涔嬪墠璁剧疆
     configureOpenGLBackend();
 
     QSurfaceFormat format;
@@ -86,9 +84,6 @@ int main(int argc, char* argv[]) {
             QStringLiteral(":/translations/MPaste_") + locale + ".qm"
         };
 
-        if (locale.startsWith("zh")) {
-            searchPaths << QStringLiteral(":/resources/resources/app_zh.qm");
-        }
 
         bool loaded = false;
         for (const QString &path : searchPaths) {
@@ -108,7 +103,6 @@ int main(int argc, char* argv[]) {
         widget.setWindowTitle("MPaste");
         widget.setFixedWidth(QApplication::primaryScreen()->geometry().width());
 
-        // 鍚姩鍓嶅彴绐楀彛杩借釜
         PlatformRelated::startWindowTracking();
 
         HotkeyManager hotkeyManager;
@@ -147,12 +141,10 @@ int main(int argc, char* argv[]) {
                           currentScreen->geometry().height() -
                           widget.height());
 
-                // 纭繚绐楀彛鑾峰緱鐒︾偣
                 PlatformRelated::activateWindow(widget.winId());
             });
         };
 
-        // 淇敼搴旂敤绋嬪簭鐘舵€佸彉鍖栫殑澶勭悊
         QObject::connect(qApp, &QGuiApplication::applicationStateChanged,
             [&widget, &isShowingWidget](Qt::ApplicationState state) {
                 if (state == Qt::ApplicationInactive) {
@@ -165,15 +157,22 @@ int main(int argc, char* argv[]) {
                 }
             });
 
-        // 杩炴帴蹇嵎閿彉鏇?
+
+        auto toggleWidget = [&widget, &isShowingWidget, showWidget]() {
+            if (widget.isVisible() || isShowingWidget) {
+                widget.setVisibleWithAnnimation(false);
+                isShowingWidget = false;
+                return;
+            }
+            showWidget();
+        };
         QObject::connect(&widget, &MPasteWidget::shortcutChanged,
             [&hotkeyManager](const QString &newShortcut) {
                 hotkeyManager.unregisterHotkey();
                 hotkeyManager.registerHotkey(QKeySequence(newShortcut));
             });
 
-        // 杩炴帴鐑敭鍜屾秷鎭鐞?
-        QObject::connect(&hotkeyManager, &HotkeyManager::hotkeyPressed, showWidget);
+        QObject::connect(&hotkeyManager, &HotkeyManager::hotkeyPressed, toggleWidget);
         QObject::connect(&singleApp, &SingleApplication::messageReceived,
             [showWidget](const QString &) { showWidget(); });
 

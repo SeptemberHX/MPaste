@@ -4,11 +4,13 @@
 // update: If I change, update this header block and my folder README.md.
 #include "ClipboardItemDetailsDialog.h"
 
+#include <QApplication>
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QFontDatabase>
 #include <QLocale>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -43,6 +45,27 @@ QString zh(const char16_t *text) {
 
 QString dashText() {
     return QString::fromUtf16(u"\u2014");
+}
+
+QFont preferredEditorFont() {
+    QFont font = QApplication::font();
+    font.setPointSize(10);
+
+    const QStringList preferredFamilies = {
+        QStringLiteral("Cascadia Mono"),
+        QStringLiteral("Cascadia Code"),
+        QStringLiteral("Consolas"),
+        QStringLiteral("Courier New")
+    };
+    const QStringList availableFamilies = QFontDatabase::families();
+    for (const QString &family : preferredFamilies) {
+        if (availableFamilies.contains(family, Qt::CaseInsensitive)) {
+            font.setFamily(family);
+            break;
+        }
+    }
+
+    return font;
 }
 }
 
@@ -272,10 +295,7 @@ QTextEdit *ClipboardItemDetailsDialog::createReadOnlyEditor() const {
     edit->setReadOnly(true);
     edit->setAcceptRichText(false);
     edit->setLineWrapMode(QTextEdit::NoWrap);
-    QFont mono(QStringLiteral("Consolas"));
-    mono.setStyleHint(QFont::Monospace);
-    mono.setPointSize(10);
-    edit->setFont(mono);
+    edit->setFont(preferredEditorFont());
     return edit;
 }
 

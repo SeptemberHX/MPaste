@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 服务与平台系统能力。
-// output: 对外提供 PlatformRelated 的工具实现。
+// input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
+// output: 提供 PlatformRelated 的实现逻辑。
 // pos: utils 层中的 PlatformRelated 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 //
 // Created by ragdoll on 2021/5/26.
 //
@@ -34,7 +34,7 @@ void XUtils::activeWindowX11(Window winId) {
     xdo_activate_window(m_xdo, winId);
 }
 
-void XUtils::triggerPasteShortcut(Window winId) {
+void XUtils::triggerPasteShortcut(Window winId, MPasteSettings::PasteShortcutMode mode) {
     openXdo();
 
     // Get window class to identify terminals
@@ -54,12 +54,20 @@ void XUtils::triggerPasteShortcut(Window winId) {
         XFree(hint.res_class);
     }
 
-    if (isTerminal) {
-        xdo_send_keysequence_window_up(m_xdo, winId, "Alt", 100);
+    const bool useTerminalPaste = (mode == MPasteSettings::CtrlShiftVShortcut)
+        || (mode == MPasteSettings::AutoPasteShortcut && isTerminal);
+    const bool useCtrlV = (mode == MPasteSettings::CtrlVShortcut)
+        || (mode == MPasteSettings::AutoPasteShortcut && !isTerminal);
+
+    xdo_send_keysequence_window_up(m_xdo, winId, "Alt", 0);
+    if (useTerminalPaste) {
         xdo_send_keysequence_window(m_xdo, winId, "Control+Shift+v", 100);
+    } else if (useCtrlV) {
+        xdo_send_keysequence_window(m_xdo, winId, "Control+v", 100);
+    } else if (mode == MPasteSettings::ShiftInsertShortcut) {
+        xdo_send_keysequence_window(m_xdo, winId, "Shift+Insert", 100);
     } else {
-        xdo_send_keysequence_window_up(m_xdo, 0, "Alt", 0);
-        xdo_send_keysequence_window(m_xdo, 0, "Control+v", 12000);
+        xdo_send_keysequence_window(m_xdo, winId, "Alt+Insert", 100);
     }
 }
 
@@ -154,8 +162,8 @@ WId PlatformRelated::currActiveWindow() {
     return (WId)XUtils::currentWinId();
 }
 
-void PlatformRelated::triggerPasteShortcut() {
-    XUtils::triggerPasteShortcut(XUtils::currentWinId());
+void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode) {
+    XUtils::triggerPasteShortcut(XUtils::currentWinId(), mode);
 }
 
 void PlatformRelated::startWindowTracking() {
@@ -184,10 +192,10 @@ void CALLBACK WinUtils::winEventProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd,
 
     if (!hwnd || !IsWindow(hwnd)) return;
 
-    // 忽略不可见窗口
+    // 蹇界暐涓嶅彲瑙佺獥鍙?
     if (!IsWindowVisible(hwnd)) return;
 
-    // 获取窗口标题，排除 MPaste 自身
+    // 鑾峰彇绐楀彛鏍囬锛屾帓闄?MPaste 鑷韩
     wchar_t title[256];
     GetWindowTextW(hwnd, title, 256);
     QString windowTitle = QString::fromWCharArray(title);
@@ -223,7 +231,7 @@ void WinUtils::simulateKeyPress(WORD key, bool ctrl, bool shift, bool alt) {
     INPUT inputs[8] = {};
     int inputCount = 0;
 
-    // 获取扫描码
+    // 鑾峰彇鎵弿鐮?
     WORD scanCode = MapVirtualKey(key, MAPVK_VK_TO_VSC);
     WORD ctrlScan = MapVirtualKey(VK_CONTROL, MAPVK_VK_TO_VSC);
     WORD shiftScan = MapVirtualKey(VK_SHIFT, MAPVK_VK_TO_VSC);
@@ -289,20 +297,38 @@ void WinUtils::simulateKeyPress(WORD key, bool ctrl, bool shift, bool alt) {
         inputCount++;
     }
 
-    // 添加小延时确保窗口有足够时间处理事件
+    // 统一发送构造好的按键事件
     SendInput(inputCount, inputs, sizeof(INPUT));
 }
 
-void WinUtils::triggerPasteShortcut(HWND hwnd) {
+void WinUtils::triggerPasteShortcut(HWND hwnd, MPasteSettings::PasteShortcutMode mode) {
     char className[256];
     GetClassNameA(hwnd, className, 256);
 
-    // Check if it's a terminal window (you might need to add more terminal class names)
-    if (strcmp(className, "ConsoleWindowClass") == 0 ||  // CMD
-        strstr(className, "WindowsTerminal") != nullptr) { // Windows Terminal
-        simulateKeyPress('V', true, true, false); // Ctrl+Shift+V for terminals
-    } else {
-        simulateKeyPress(VK_INSERT, false, true, false); // Shift+Insert for normal windows
+    const bool isTerminal = strcmp(className, "ConsoleWindowClass") == 0
+        || strstr(className, "WindowsTerminal") != nullptr;
+
+    switch (mode) {
+        case MPasteSettings::AutoPasteShortcut:
+            if (isTerminal) {
+                simulateKeyPress('V', true, true, false);
+            } else {
+                simulateKeyPress('V', true, false, false);
+            }
+            break;
+        case MPasteSettings::CtrlVShortcut:
+            simulateKeyPress('V', true, false, false);
+            break;
+        case MPasteSettings::ShiftInsertShortcut:
+            simulateKeyPress(VK_INSERT, false, true, false);
+            break;
+        case MPasteSettings::CtrlShiftVShortcut:
+            simulateKeyPress('V', true, true, false);
+            break;
+        case MPasteSettings::AltInsertShortcut:
+        default:
+            simulateKeyPress(VK_INSERT, false, false, true);
+            break;
     }
 }
 
@@ -315,19 +341,18 @@ QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
         return QPixmap(":/resources/resources/unknown.svg");
     }
 
-    // 获取窗口的大图标
+    // 优先获取窗口的大图标
     HICON hIcon = nullptr;
-    bool ownedIcon = false;  // 标记是否需要自行销毁图标
+    bool ownedIcon = false;  // 标记图标句柄是否需要在结束时释放
     SendMessageTimeout(hwnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&hIcon);
     if (hIcon) ownedIcon = true;
 
-    // 如果获取大图标失败，尝试获取小图标
+    // 如果没有大图标，再尝试获取小图标
     if (!hIcon) {
         SendMessageTimeout(hwnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&hIcon);
         if (hIcon) ownedIcon = true;
     }
 
-    // 如果通过消息获取失败，直接从窗口类获取（这些图标不能销毁）
     if (!hIcon) {
         hIcon = (HICON)GetClassLongPtr(hwnd, GCLP_HICON);
     }
@@ -336,38 +361,37 @@ QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
         hIcon = (HICON)GetClassLongPtr(hwnd, GCLP_HICONSM);
     }
 
-    // 如果所有方法都失败了，返回空图标
     if (!hIcon) {
         return QPixmap();
     }
 
-    // 获取图标信息
+    // 读取图标位图信息
     ICONINFO iconInfo;
     if (!GetIconInfo(hIcon, &iconInfo)) {
         return QPixmap();
     }
 
-    // 获取图标尺寸
+    // 获取图标位图尺寸
     BITMAP bm;
     GetObject(iconInfo.hbmColor, sizeof(BITMAP), &bm);
 
-    // 创建设备上下文
+    // 创建屏幕 DC 和兼容内存 DC
     HDC screenDC = GetDC(0);
     HDC memDC = CreateCompatibleDC(screenDC);
 
-    // 创建兼容位图
+    // 创建兼容位图并选入内存 DC
     HBITMAP hBitmap = CreateCompatibleBitmap(screenDC, bm.bmWidth, bm.bmHeight);
     HGDIOBJ oldBitmap = SelectObject(memDC, hBitmap);
 
-    // 绘制图标
+    // 将图标绘制到位图上
     DrawIcon(memDC, 0, 0, hIcon);
 
-    // 转换为 QImage，再转换为 QPixmap
+    // 从位图像素构造 QImage，再转换为 QPixmap
     BITMAPINFO bmi;
     ZeroMemory(&bmi, sizeof(BITMAPINFO));
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = bm.bmWidth;
-    bmi.bmiHeader.biHeight = -bm.bmHeight; // 自上而下
+    bmi.bmiHeader.biHeight = -bm.bmHeight; // 负高度表示自顶向下的位图
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
@@ -375,7 +399,7 @@ QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
     QImage image(bm.bmWidth, bm.bmHeight, QImage::Format_ARGB32_Premultiplied);
     GetDIBits(memDC, hBitmap, 0, bm.bmHeight, image.bits(), &bmi, DIB_RGB_COLORS);
 
-    // 清理资源
+    // 清理 GDI 资源
     SelectObject(memDC, oldBitmap);
     DeleteObject(hBitmap);
     DeleteDC(memDC);
@@ -383,7 +407,6 @@ QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
     DeleteObject(iconInfo.hbmColor);
     DeleteObject(iconInfo.hbmMask);
 
-    // 只销毁通过 WM_GETICON 获取的图标副本，GetClassLongPtr 获取的是类图标不能销毁
     if (ownedIcon) {
         DestroyIcon(hIcon);
     }
@@ -401,15 +424,15 @@ QPixmap PlatformRelated::getWindowIcon(WId wId) {
 }
 
 WId PlatformRelated::currActiveWindow() {
-    return (WId)WinUtils::currentWinId();  // 使用 WId 类型转换
+    return (WId)WinUtils::currentWinId();  // 浣跨敤 WId 绫诲瀷杞崲
 }
 
-void PlatformRelated::triggerPasteShortcut() {
+void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode) {
     HWND target = WinUtils::getPreviousWindow();
     if (!target) {
         target = WinUtils::currentWinId();
     }
-    WinUtils::triggerPasteShortcut(target);
+    WinUtils::triggerPasteShortcut(target, mode);
 }
 
 void PlatformRelated::startWindowTracking() {

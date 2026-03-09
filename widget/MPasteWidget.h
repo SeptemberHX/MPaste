@@ -1,7 +1,7 @@
-// input: Depends on Qt Widgets, board widgets, clipboard monitor, settings, and platform helpers.
-// output: Exposes the main MPaste window API, clipboard write helpers, and reliable keyboard-driven paste flow.
-// pos: Widget-layer main window declaration coordinating boards, shortcuts, and major UI features.
-// update: If I change, update this header block and my folder README.md.
+// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
+// output: 对外提供 MPasteWidget 的声明接口。
+// pos: widget 层中的 MPasteWidget 接口定义。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
 
@@ -10,6 +10,8 @@
 #include <QHBoxLayout>
 #include <QMimeData>
 #include <QMenu>
+#include <QAudioOutput>
+#include <QMediaDevices>
 #include <QMediaPlayer>
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
@@ -54,7 +56,6 @@ private slots:
     void debugKeyState();
 
 private:
-    // 闁告帗绻傞～鎰板礌閺嶎偅绁查柛?
     void initializeWidget();
     void initStyle();
     void initUI();
@@ -66,17 +67,14 @@ private:
     void initMenu();
     void setupConnections();
 
-    // 闁告搩浜ｉ崚娑㈠级閹稿孩鎯欏ù?
     bool setClipboard(const ClipboardItem &item, bool plainText = false);
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
     void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
 
-    // 闁瑰吋绮庨崒銊╁箼瀹ュ嫮绋?
     void setFocusOnSearch(bool flag);
     void handleSearchInput(QKeyEvent *event);
 
-    // 闂佹鍠氬ú蹇旂鐎ｂ晜顐藉璺哄閹?
     void handleKeyboardEvent(QKeyEvent *event);
     void handleEscapeKey();
     void handleEnterKey(bool plainText = false);
@@ -85,11 +83,9 @@ private:
     void handleTabKey();
     bool triggerShortcutPaste(int shortcutIndex, bool plainText);
 
-    // 閺夊牆鎳庢慨顏堝棘鐟欏嫮銆?
     ScrollItemsWidget* currItemsWidget();
 
 private:
-    // UI 缂備礁瀚▎?
     struct {
         Ui::MPasteWidget *ui;
         QHBoxLayout *layout;
@@ -97,19 +93,14 @@ private:
         ClipboardItemDetailsDialog *detailsDialog;
         MPasteSettingsWidget *settingsWidget;
 
-        // 閻庢稒锚閸嬪秹骞嶉埀顒勫嫉婢跺本鐣?boardWidget
         QMap<QString, ScrollItemsWidget*> boardWidgetMap;
 
-        // 閻庢稒锚閸嬪秹宕氶崶銊ュ簥闁?button
         QButtonGroup *buttonGroup;
 
-        // 缂侇偉顕ч悗閿嬫交閸ャ劍濮㈤柟绋款樀閹稿磭绱?
         QButtonGroup *typeButtonGroup;
 
-        // 闁告搩浜ｉ崚娑㈠级閸栵紕绀夐煫鍥ф嚇閵嗗繒鎲版担鍝ユ憼闁?
         ScrollItemsWidget *clipboardWidget;
 
-        // 闁衡偓閹増顥戝鍓佹缁辨繆绠涢崨娣偓蹇曟啺娴ｅ摜鎽犻柛?
         ScrollItemsWidget *staredWidget;
 
         QPropertyAnimation *searchShowAnim;
@@ -118,16 +109,16 @@ private:
         QMenu *menu;
     } ui_;
 
-    // 闁告搩浜ｉ崚娑㈠级鐠恒劍绁查柛?
     struct {
         ClipboardMonitor *monitor;
         bool isPasting = false;
         bool copiedWhenHide = false;
     } clipboard_;
 
-    // 闁稿繑婀圭划顒傜磼閸曨亝顐?
     struct {
         QMediaPlayer *player;
+        QAudioOutput *audioOutput = nullptr;
+        QMediaDevices *mediaDevices = nullptr;
         QList<int> numKeyList;
         int pendingNumKey = -1;
         bool pendingPlainTextNumKey = false;

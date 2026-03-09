@@ -1,7 +1,7 @@
-// input: 娓氭繆绂?Qt 楠炲啿褰撮幎鍊熻杽閵嗕胶閮寸紒?API 娑撳氦鐨熼悽銊︽煙婢圭増妲戦妴?
-// output: 鐎电懓顦婚幓鎰返 ClipboardMonitor 閻ㄥ嫬浼愰崗閿嬪复閸欙絻鈧?
-// pos: utils 鐏炲倷鑵戦惃?ClipboardMonitor 閹恒儱褰涚€规矮绠熼妴?
-// update: 娑撯偓閺冿附鍨滅悮顐ｆ纯閺傚府绱濋崝鈥崇箑閺囧瓨鏌婇幋鎴犳畱瀵偓婢跺瓨鏁為柌濠忕礉娴犮儱寮烽幍鈧仦鐐垫畱閺傚洣娆㈡径鍦畱 README.md閵?
+// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
+// output: 对外提供 ClipboardMonitor 的声明接口。
+// pos: utils 层中的 ClipboardMonitor 接口定义。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 //
 // Created by ragdoll on 2021/5/22.
 //
@@ -56,8 +56,8 @@ private:
     QNetworkAccessManager *imageFetchManager_ = nullptr;
     QPointer<QNetworkReply> pendingImageFetchReply_;
 
-    static const int STABILIZE_INTERVAL = 200;  // 濠殿噯绲界换鎴︻敃閻撳宫娑㈠焵椤掑嫬钃熼柕澶嗘櫆閿涚喖姊?ms
-    static const int MAX_RETRIES = 10;           // 闂佸搫鐗冮崑鎾愁熆閼稿灚鐨戦柣鈩冨灥椤?2 缂?
+    static const int STABILIZE_INTERVAL = 200;
+    static const int MAX_RETRIES = 10;
     static const int WPS_SETTLE_INTERVAL = 700;  // WPS staged clipboard settle window in ms
 };
 

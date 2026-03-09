@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 服务与平台系统能力。
-// output: 对外提供 MPasteSettings 的工具实现。
+// input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
+// output: 提供 MPasteSettings 的实现逻辑。
 // pos: utils 层中的 MPasteSettings 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 //
 // Created by ragdoll on 2021/5/24.
 //
@@ -41,6 +41,7 @@ MPasteSettings::MPasteSettings()
     this->port = 7890;
 
     this->autoPaste = true;
+    this->pasteShortcutMode = AutoPasteShortcut;
     this->shortcutStr = "Alt+Q";
     this->itemScale = 100;
     this->playSound = true;
@@ -75,6 +76,7 @@ void MPasteSettings::loadSettings() {
     this->maxSize = settings.value("main/historySize", this->maxSize).toInt();
     this->saveDir = settings.value("main/saveDir", this->saveDir).toString();
     this->autoPaste = settings.value("main/autoPaste", this->autoPaste).toBool();
+    this->pasteShortcutMode = static_cast<PasteShortcutMode>(settings.value("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode)).toInt());
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
     this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
@@ -86,6 +88,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/historySize", this->maxSize);
     settings.setValue("main/saveDir", this->saveDir);
     settings.setValue("main/autoPaste", this->autoPaste);
+    settings.setValue("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode));
     settings.setValue("main/shortcut", this->shortcutStr);
     settings.setValue("main/itemScale", this->itemScale);
     settings.setValue("main/playSound", this->playSound);
@@ -97,6 +100,30 @@ bool MPasteSettings::isAutoPaste() const {
 
 void MPasteSettings::setAutoPaste(bool autoPaste) {
     MPasteSettings::autoPaste = autoPaste;
+}
+
+MPasteSettings::PasteShortcutMode MPasteSettings::getPasteShortcutMode() const {
+    return pasteShortcutMode;
+}
+
+void MPasteSettings::setPasteShortcutMode(MPasteSettings::PasteShortcutMode mode) {
+    pasteShortcutMode = mode;
+}
+
+QString MPasteSettings::pasteShortcutModeLabel(MPasteSettings::PasteShortcutMode mode) {
+    switch (mode) {
+        case CtrlVShortcut:
+            return QStringLiteral("Ctrl+V");
+        case ShiftInsertShortcut:
+            return QStringLiteral("Shift+Insert");
+        case CtrlShiftVShortcut:
+            return QStringLiteral("Ctrl+Shift+V");
+        case AltInsertShortcut:
+            return QStringLiteral("Alt+Insert");
+        case AutoPasteShortcut:
+        default:
+            return QStringLiteral("Auto");
+    }
 }
 
 const QString &MPasteSettings::getShortcutStr() const {

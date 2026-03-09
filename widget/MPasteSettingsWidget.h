@@ -1,7 +1,7 @@
-// input: 依赖 Qt Widgets、data 层对象与同层组件声明。
+// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
 // output: 对外提供 MPasteSettingsWidget 的声明接口。
 // pos: widget 层中的 MPasteSettingsWidget 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 #ifndef MPASTESETTINGSWIDGET_H
 #define MPASTESETTINGSWIDGET_H
 
@@ -9,6 +9,8 @@
 #include <QPoint>
 
 class ToggleSwitch;
+class QLabel;
+class QComboBox;
 
 namespace Ui {
 class MPasteSettingsWidget;
@@ -40,6 +42,8 @@ private:
     Ui::MPasteSettingsWidget *ui;
     ToggleSwitch *toggleSwitch_;
     ToggleSwitch *autoStartSwitch_;
+    QLabel *pasteShortcutLabel_ = nullptr;
+    QComboBox *pasteShortcutCombo_ = nullptr;
     QPoint dragPos_;
 };
 

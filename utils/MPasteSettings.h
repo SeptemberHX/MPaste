@@ -1,7 +1,7 @@
-// input: 依赖 Qt 平台抽象、系统 API 与调用方声明。
-// output: 对外提供 MPasteSettings 的工具接口。
+// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
+// output: 对外提供 MPasteSettings 的声明接口。
 // pos: utils 层中的 MPasteSettings 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 //
 // Created by ragdoll on 2021/5/24.
 //
@@ -16,6 +16,8 @@ class MPasteSettings : public QObject {
     Q_OBJECT
 
 public:
+    enum PasteShortcutMode { AutoPasteShortcut = 0, CtrlVShortcut, ShiftInsertShortcut, CtrlShiftVShortcut, AltInsertShortcut };
+
     static MPasteSettings* getInst();
 
     static const QString CLIPBOARD_CATEGORY_NAME;
@@ -36,6 +38,10 @@ public:
     bool isAutoPaste() const;
 
     void setAutoPaste(bool autoPaste);
+
+    PasteShortcutMode getPasteShortcutMode() const;
+    void setPasteShortcutMode(PasteShortcutMode mode);
+    static QString pasteShortcutModeLabel(PasteShortcutMode mode);
 
     const QString &getShortcutStr() const;
 
@@ -71,6 +77,7 @@ private:
     int port;
 
     bool autoPaste;
+    PasteShortcutMode pasteShortcutMode;
     QString shortcutStr;
     int itemScale;
     bool playSound;

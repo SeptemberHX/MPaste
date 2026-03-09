@@ -1,7 +1,7 @@
-// input: 濠电偞鎸荤喊宥囨崲閸℃瑧鐭夐柛鈩冪憿閸嬫捇鎮介崹顐㈡畬缂備降鍔屽璺侯嚗閸曨厸鍋撳☉娅虫垿鎮楅娴庡綊鎮╅搹鐟扮墯闂侀€炲苯鍘搁柛灞藉祿 闂備礁鎼悧鍡欑矓鐎涙ɑ鍙忛柣鏂挎憸閳绘棃骞栨潏鍓х瘈闁瑰壊鍓熼弻娑樷枎閹邦剦妫嗛梻渚囧枛椤曨厾妲愰幒妤佸亜閻犲洦褰冮獮瀣⒑閸涘﹥鈷愮紒瀣箻閸┾偓?
-// output: 闂佽娴烽弫鎼佸箠閹惧嚢鍥ㄧ節濮橆剛顔岄梺褰掑亰娴滅偞娼?ClipboardMonitor 闂備焦鐪归崝宀€鈧凹鍓氱€靛ジ骞囬弶璺槯閻庣懓瀚竟鍡涘级娴犲鐓熸繝濠傛閻掍粙鏌?
-// pos: utils 闂佽绻掗崑娑㈠磹閻戣姤鍤堥柟杈鹃檮閸?ClipboardMonitor 闂佽楠稿﹢閬嶅磻閻旇偐宓侀柛銉墮濡﹢鏌涢妷顖炴妞ゆ劒绮欓弻?
-// update: 濠电偞鍨堕幐鎾磻閹剧粯鐓涢柛鎰健濡绢噣鏌涢妸锔剧煂闁诡噮鍣ｉ、鏇㈡晲閸℃瑥鍤遍梻浣告惈閸婂憡鎯斿鍛潟婵犻潧顑呯粈澶愭煃閵夈儳锛嶇紒鐘冲灴閺岋繝宕惰閹界娀鏌＄仦鏂よ含妤犵偛顑夐獮瀣偐瀹曞洦娈搁柣搴㈩問閸犳帡宕戦幘鎰佺唵閻犻缚娅ｉ幗鐘绘煛娴ｅ搫浠遍柡灞芥湰缁绘繆绠涢弴鐙€妲峰┑鐐差嚟婵即宕曢崡鐑嗗殨闁绘垼妫勭粻銉╂煃瑜滈崜娑欑閿曞倹鍊烽柛顭戝亞閺嗙娀姊洪崫鍕偓绋棵洪敐鍛瀻闁靛繆鈧磭绐為梺闈╁瘜閸樹粙鎮?README.md闂?
+// input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
+// output: 提供 ClipboardMonitor 的实现逻辑。
+// pos: utils 层中的 ClipboardMonitor 实现文件。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 //
 // Created by ragdoll on 2021/5/22.
 //
@@ -15,6 +15,7 @@
 #include <QGuiApplication>
 #include <QMimeData>
 #include <memory>
+#include <functional>
 #include <QRegularExpression>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -74,7 +75,6 @@ static quint32 getClipboardSeqNumber() {
 #ifdef Q_OS_WIN
     return GetClipboardSequenceNumber();
 #else
-    // Linux/macOS 婵犵數濮烽弫鎼佸磻濞戞瑥绶為柛銉墮缁€鍫熺節闂堟稒锛旈柤鏉跨仢闇夐柨婵嗙墛椤忕姴顪冮悷鏉挎毐妞ゎ叀娉曢幑鍕瑹椤栨艾澹夋繝?API闂傚倸鍊烽悞锔锯偓绗涘懐鐭欓柟杈鹃檮閸庢棃鏌ｉ幘宕囩槏婵炲樊浜滈柨銈嗕繆閵堝倸浜剧紓浣哄У婵炲﹪寮婚弴鐔风窞闁割偅绻傞‖瀣磽娴ｅ搫校闁绘搫绻濆?0
     return 0;
 #endif
 }

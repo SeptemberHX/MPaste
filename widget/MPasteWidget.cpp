@@ -7,11 +7,15 @@
 #include <QClipboard>
 #include <QKeyEvent>
 #include <QResizeEvent>
+#include <QAudioDevice>
 #include <QAudioOutput>
 #include <QDateTime>
 #include <QDir>
 #include <QDebug>
 #include <QButtonGroup>
+#include <QLocale>
+#include <QIcon>
+#include <QAction>
 #include <QStringList>
 #include <QTimer>
 #include <QTextDocument>
@@ -24,6 +28,35 @@
 #include "ui_MPasteWidget.h"
 #include "ClipboardItemWidget.h"
 #include "utils/PlatformRelated.h"
+
+namespace {
+bool looksBrokenTranslation(const QString &text) {
+    if (text.isEmpty()) {
+        return true;
+    }
+
+    int suspiciousCount = 0;
+    for (const QChar ch : text) {
+        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
+            ++suspiciousCount;
+        }
+    }
+
+    return suspiciousCount >= qMax(2, text.size() / 2);
+}
+
+QString menuText(const char *source, const QString &zhFallback) {
+    const QString translated = QObject::tr(source);
+    const QLocale locale = QLocale::system();
+    if (translated == QLatin1String(source) || looksBrokenTranslation(translated)) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
+            return zhFallback;
+        }
+        return QString::fromUtf8(source);
+    }
+    return translated;
+}
+}
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -65,11 +98,9 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
 typedef BOOL (WINAPI *pfnSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
 static void enableBlurBehind(HWND hwnd) {
-    // Extend DWM frame 閳?needed for glass composition
     MARGINS margins = {-1, -1, -1, -1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
 
-    // Native rounded corners (Windows 11) 閳?DWMWA_WINDOW_CORNER_PREFERENCE = 33
     DWORD preference = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hwnd, 33, &preference, sizeof(preference));
 
@@ -80,7 +111,6 @@ static void enableBlurBehind(HWND hwnd) {
         GetProcAddress(user32, "SetWindowCompositionAttribute"));
     if (!setWCA) return;
 
-    // GradientColor format: AABBGGRR 閳?light tint applied by DWM itself
     DWORD tint = (20u << 24) | (244u << 16) | (241u << 8) | 231u; // rgba(231,241,244,20)
 
     ACCENT_POLICY accent{};
@@ -161,24 +191,21 @@ void MPasteWidget::initializeWidget() {
     loadFromSaveDir();
     clipboard_.monitor->clipboardChanged();
     setFocusOnSearch(false);
-    misc_.pendingNumKey = 0;  // 閸掓繂顫愰崠鏍х窡婢跺嫮鎮婇惃鍕殶鐎涙鏁?
+    misc_.pendingNumKey = 0;
 
 #ifdef _DEBUG
-    // 濞ｈ濮炵拫鍐槸鐠佲剝妞傞崳?
     QTimer* debugTimer = new QTimer(this);
     connect(debugTimer, &QTimer::timeout, this, &MPasteWidget::debugKeyState);
-    debugTimer->start(1000);  // 濮ｅ繒顫楀Λ鈧弻銉ょ濞嗭繝鏁惄妯煎Ц閹?
+    debugTimer->start(1000);
 #endif
 }
 
 void MPasteWidget::initStyle() {
-    // 娣囨繃瀵旈崢鐔告箒閻ㄥ嫬鐔€绾偓缁愭褰涢弽鍥х箶
     Qt::WindowFlags flags = Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint;
 
 #ifdef Q_OS_LINUX
-    // Linux 閻楃懓鐣鹃惃鍕崶閸欙絾鐖ｈ箛妤€鎷扮仦鐐粹偓?
-    flags |= Qt::X11BypassWindowManagerHint;  // 缂佹洝绻冪粣妤€褰涚粻锛勬倞閸ｃ劎娈戞稉鈧禍娑橆槱閻?
-    flags |= Qt::Window;  // 绾喕绻氱粣妤€褰涢崣顖欎簰鐟曞棛娲婇崗鏈电铂缁愭褰?
+    flags |= Qt::X11BypassWindowManagerHint;
+    flags |= Qt::Window;
 #endif
     setWindowFlags(flags);
 
@@ -209,10 +236,8 @@ void MPasteWidget::initStyle() {
 }
 
 void MPasteWidget::initUI() {
-    // 閸掓繂顫愰崠鏍ㄦ偝缁便垹濮╅悽?
     initSearchAnimations();
 
-    // 閸掓繂顫愰崠鏍у彠娴滃海鐛ラ崣?
     ui_.aboutWidget = new AboutWidget(this);
     ui_.aboutWidget->setWindowFlag(Qt::Tool);
     ui_.aboutWidget->setWindowTitle("MPaste About");
@@ -226,7 +251,6 @@ void MPasteWidget::initUI() {
     connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
             this, &MPasteWidget::shortcutChanged);
 
-    // 閸掓繂顫愰崠鏍у鐠愬瓨婢樼粣妤€褰?
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
     ui_.ui->clipboardButton->setProperty("category", ui_.clipboardWidget->getCategory());
@@ -239,7 +263,6 @@ void MPasteWidget::initUI() {
     ui_.staredWidget->installEventFilter(this);
     ui_.boardWidgetMap.insert(ui_.staredWidget->getCategory(), ui_.staredWidget);
 
-    // 鐠佸墽鐤嗙敮鍐ㄧ湰
     ui_.layout = new QHBoxLayout(ui_.ui->itemsWidget);
     ui_.layout->setContentsMargins(0, 0, 0, 0);
     ui_.layout->setSpacing(0);
@@ -248,16 +271,29 @@ void MPasteWidget::initUI() {
 
     ui_.staredWidget->hide();
 
+    ui_.ui->clipboardButton->setText(menuText("Clipboard", QStringLiteral("剪贴板")));
+    ui_.ui->staredButton->setText(menuText("Stared", QStringLiteral("收藏夹")));
+    ui_.ui->allTypeBtn->setText(menuText("All", QStringLiteral("全部")));
+    ui_.ui->textTypeBtn->setText(menuText("Text", QStringLiteral("文本")));
+    ui_.ui->linkTypeBtn->setText(menuText("Link", QStringLiteral("链接")));
+    ui_.ui->imageTypeBtn->setText(menuText("Image", QStringLiteral("图片")));
+    ui_.ui->richTextTypeBtn->setText(menuText("Rich Text", QStringLiteral("富文本")));
+    ui_.ui->fileTypeBtn->setText(menuText("File", QStringLiteral("文件")));
+
+    ui_.ui->menuButton->setText(QString());
+    ui_.ui->menuButton->setIcon(QIcon(QStringLiteral(":/resources/resources/menu_more.svg")));
+    ui_.ui->menuButton->setIconSize(QSize(16, 16));
+    ui_.ui->menuButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    ui_.ui->menuButton->setToolTip(menuText("More", QStringLiteral("更多")));
+
     // Adjust window height to fit content (adapts to card scale)
     adjustSize();
 
-    // 閸掓繂顫愰崠?buttonGroup
     ui_.buttonGroup = new QButtonGroup(this);
     ui_.buttonGroup->setExclusive(true);
     ui_.buttonGroup->addButton(ui_.ui->clipboardButton);
     ui_.buttonGroup->addButton(ui_.ui->staredButton);
 
-    // 閸掓繂顫愰崠鏍閸ㄥ绻冨?buttonGroup
     ui_.typeButtonGroup = new QButtonGroup(this);
     ui_.typeButtonGroup->setExclusive(true);
 
@@ -277,10 +313,8 @@ void MPasteWidget::initUI() {
 
     ui_.ui->allTypeBtn->setChecked(true);
 
-    // 姒涙顓婚弰鍓с仛
     ui_.ui->clipboardButton->setChecked(true);
 
-    // 閸掓繂顫愰崠鏍綅閸?
     initMenu();
 
     ui_.ui->searchEdit->installEventFilter(this);
@@ -314,8 +348,15 @@ void MPasteWidget::initShortcuts() {
 void MPasteWidget::initSound() {
     std::cout << "Init media player..." << std::endl;
     misc_.player = new QMediaPlayer(this);
-    QAudioOutput *audioOutput = new QAudioOutput(this);
-    misc_.player->setAudioOutput(audioOutput);
+    misc_.audioOutput = new QAudioOutput(this);
+    misc_.mediaDevices = new QMediaDevices(this);
+    misc_.audioOutput->setDevice(QMediaDevices::defaultAudioOutput());
+    misc_.player->setAudioOutput(misc_.audioOutput);
+    connect(misc_.mediaDevices, &QMediaDevices::audioOutputsChanged, this, [this]() {
+        if (misc_.audioOutput) {
+            misc_.audioOutput->setDevice(QMediaDevices::defaultAudioOutput());
+        }
+    });
     misc_.player->setSource(QUrl("qrc:/resources/resources/sound.mp3"));
     std::cout << "Sound effect loaded finished" << std::endl;
 }
@@ -329,42 +370,44 @@ void MPasteWidget::initSystemTray() {
 
 void MPasteWidget::initMenu() {
     ui_.menu = new QMenu(this);
-    ui_.menu->addAction(tr("About"), [this]() {
-        // 閼惧嘲褰囪ぐ鎾冲鐏炲繐绠?
+
+    ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/info.svg")),
+        menuText("About", QStringLiteral("关于")), [this]() {
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
         if (!screen)
             return;
 
-        // 鐏忓棛鐛ラ崣锝囆╅崝銊ュ煂鐏炲繐绠锋稉顓炪亷
         QRect screenGeometry = screen->geometry();
         int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
         int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
         ui_.aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
-
         ui_.aboutWidget->show();
     });
-    ui_.menu->addAction(tr("Settings"), [this]() {
-        // 閼惧嘲褰囪ぐ鎾冲鐏炲繐绠?
+
+    ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/settings.svg")),
+        menuText("Settings", QStringLiteral("设置")), [this]() {
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
         if (!screen)
             return;
 
-        // 鐏忓棛鐛ラ崣锝囆╅崝銊ュ煂鐏炲繐绠锋稉顓炪亷
         QRect screenGeometry = screen->geometry();
         int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
         int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
         ui_.settingsWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
         ui_.settingsWidget->show();
     });
-    ui_.menu->addAction(tr("Quit"), [this]() { qApp->exit(0); });
+
+    ui_.menu->addSeparator();
+    ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/quit.svg")),
+        menuText("Quit", QStringLiteral("退出")), [this]() { qApp->exit(0); });
 }
 
+
 void MPasteWidget::setupConnections() {
-    // 閸擃亣鍒涢弶鑳箾閹?
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardUpdated,
             this, &MPasteWidget::clipboardUpdated);
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
@@ -406,12 +449,10 @@ void MPasteWidget::setupConnections() {
         });
     }
 
-    // 閼挎粌宕熼幐澶愭尦鏉╃偞甯?
     connect(ui_.ui->menuButton, &QToolButton::clicked, this, [this]() {
         ui_.menu->popup(ui_.ui->menuButton->mapToGlobal(ui_.ui->menuButton->rect().bottomLeft()));
     });
 
-    // 閹兼粎鍌ㄩ崝鐔诲厴鏉╃偞甯?
     connect(ui_.ui->searchEdit, &QLineEdit::textChanged, this, [this](const QString &str) {
         this->currItemsWidget()->filterByKeyword(str);
     });
@@ -419,7 +460,6 @@ void MPasteWidget::setupConnections() {
         this->setFocusOnSearch(flag);
     });
 
-    // Home & End 閹稿鎸虫潻鐐村复
     connect(ui_.ui->firstButton, &QPushButton::clicked, this, [this]() {
         this->currItemsWidget()->scrollToFirst();
     });
@@ -427,7 +467,6 @@ void MPasteWidget::setupConnections() {
         this->currItemsWidget()->scrollToLast();
     });
 
-    // 缁崵绮洪幍妯兼磸鏉╃偞甯?
     connect(ui_.trayIcon, &QSystemTrayIcon::activated, this,
             [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger) {
@@ -435,27 +474,22 @@ void MPasteWidget::setupConnections() {
         }
     });
 
-    // 缁鐎锋潻鍥ㄦ姢閹稿鎸虫潻鐐村复
     connect(ui_.typeButtonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
         [this](QAbstractButton *button) {
             auto type = static_cast<ClipboardItem::ContentType>(button->property("contentType").toInt());
             this->currItemsWidget()->filterByType(type);
         });
 
-    // 婢跺嫮鎮婇崚鍥ㄥ床娴滃娆?
     connect(ui_.buttonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
         [this](QAbstractButton *button) {
-            // 閼惧嘲褰囪ぐ鎾冲缁鐎锋潻鍥ㄦ姢
             auto typeBtn = ui_.typeButtonGroup->checkedButton();
             auto type = typeBtn ? static_cast<ClipboardItem::ContentType>(typeBtn->property("contentType").toInt())
                                 : ClipboardItem::All;
 
-            // 婢跺嫮鎮婇崚鍥ㄥ床闁槒绶?
             for (auto *toolButton : ui_.buttonGroup->buttons()) {
                 auto *boardWidget = ui_.boardWidgetMap[toolButton->property("category").toString()];
                 boardWidget->setVisible(toolButton == button);
                 if (toolButton == button) {
-                    // 鐠佸墽鐤嗘潻鍥ㄦ姢閸ｃ劌鑻熺紒鐔剁鎼存梻鏁ら敍鍧抜lterByKeyword 閸愬懘鍎存导姘崇殶閻?applyFilters閿?
                     boardWidget->filterByType(type);
                     boardWidget->filterByKeyword(ui_.ui->searchEdit->text());
                 }
@@ -615,7 +649,6 @@ void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
 }
 
 void MPasteWidget::handleTabKey() {
-    // 閸掑洦宕查崚棰佺瑓娑撯偓娑?tab 閹稿鎸?
     QAbstractButton* currentButton = ui_.buttonGroup->checkedButton();
     QList<QAbstractButton*> buttons = ui_.buttonGroup->buttons();
     int currentIndex = buttons.indexOf(currentButton);
@@ -701,9 +734,7 @@ void MPasteWidget::handleSearchInput(QKeyEvent *event) {
     event->accept();
 }
 
-// 娴滃娆㈡径鍕倞閻╃鍙?
 bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
-    // 娑撻缚宓傛稉绋款啇閸ｃ劎绮崚鍓佸亽瑜扳晜绗庨崣妯跨珶濡?
     if (event->type() == QEvent::Paint &&
         (watched == ui_.ui->clipboardBtnWidget || watched == ui_.ui->typeBtnWidget)) {
         QWidget *w = qobject_cast<QWidget*>(watched);
@@ -724,7 +755,6 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
         p.setPen(QPen(QBrush(grad), bw));
         p.setBrush(Qt::NoBrush);
         p.drawRoundedRect(r, radius, radius);
-        // 娑撳秵瀚ら幋顏庣礉鐠佲晛鐡欓幒褌娆㈢紒褏鐢荤紒妯哄煑
     }
 
     if (event->type() == QEvent::Wheel) {
@@ -800,7 +830,6 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     const qreal radius = 10.0;
     QRectF r = QRectF(rect()).adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
 
-    // All 4 corners rounded 閳?matches DWM native DWMWCP_ROUND clipping
     QPainterPath path;
     path.addRoundedRect(r, radius, radius);
 
@@ -876,7 +905,7 @@ void MPasteWidget::hideAndPaste() {
     clipboard_.isPasting = true;
 
     auto finishPaste = [this]() {
-        PlatformRelated::triggerPasteShortcut();
+        PlatformRelated::triggerPasteShortcut(MPasteSettings::getInst()->getPasteShortcutMode());
         QTimer::singleShot(200, this, [this]() {
             clipboard_.isPasting = false;
         });

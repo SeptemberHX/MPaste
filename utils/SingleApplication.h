@@ -1,7 +1,7 @@
-// input: 依赖 Qt 平台抽象、系统 API 与调用方声明。
-// output: 对外提供 SingleApplication 的工具接口。
+// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
+// output: 对外提供 SingleApplication 的声明接口。
 // pos: utils 层中的 SingleApplication 接口定义。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 #ifndef MPASTE_SINGLEAPPLICATION_H
 #define MPASTE_SINGLEAPPLICATION_H
 

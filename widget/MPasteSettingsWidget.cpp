@@ -1,7 +1,7 @@
-// input: 依赖对应头文件、Qt 运行时与资源/服务组件。
-// output: 对外提供 MPasteSettingsWidget 的实现行为。
+﻿// input: 依赖对应头文件、Qt Widgets/布局、设置对象与自定义开关组件。
+// output: 提供设置窗口的界面初始化、样式和交互逻辑实现。
 // pos: widget 层中的 MPasteSettingsWidget 实现文件。
-// update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+// update: 修改本文件时，同步更新文件头注释与 `widget/README.md`。
 #include "MPasteSettingsWidget.h"
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"
@@ -14,18 +14,47 @@
 #include <QApplication>
 #include <QDir>
 #include <QSettings>
+#include <QLabel>
+#include <QComboBox>
+#include <QLocale>
 
 static const int BORDER_WIDTH = 2;
 static const int CORNER_RADIUS = 10;
 
+namespace {
+bool looksBrokenTranslation(const QString &text) {
+    if (text.isEmpty()) {
+        return true;
+    }
+
+    int suspiciousCount = 0;
+    for (const QChar ch : text) {
+        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
+            ++suspiciousCount;
+        }
+    }
+    return suspiciousCount >= qMax(2, text.size() / 2);
+}
+
+QString uiText(const char *source, const QString &zhFallback) {
+    const QString translated = QObject::tr(source);
+    const QLocale locale = QLocale::system();
+    if (translated == QLatin1String(source) || looksBrokenTranslation(translated)) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
+            return zhFallback;
+        }
+        return QString::fromUtf8(source);
+    }
+    return translated;
+}
+}
+
 static QString settingsStyleSheet() {
     return QStringLiteral(R"(
-        /* ── Dialog — background is drawn in paintEvent ── */
         QDialog {
             background: transparent;
         }
 
-        /* ── Title ── */
         QLabel#titleLabel {
             color: #1A1A1A;
             font-size: 20px;
@@ -33,21 +62,18 @@ static QString settingsStyleSheet() {
             background: transparent;
         }
 
-        /* ── Card ── */
         QFrame#generalCard {
             background-color: #FFFFFF;
             border: 1px solid #E5E5E5;
             border-radius: 8px;
         }
 
-        /* ── Separators ── */
         QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
             background-color: #F0F0F0;
             border: none;
             max-height: 1px;
         }
 
-        /* ── Row labels ── */
         QFrame#generalCard QLabel {
             color: #1A1A1A;
             font-size: 13px;
@@ -57,7 +83,6 @@ static QString settingsStyleSheet() {
             border: none;
         }
 
-        /* ── SpinBox ── */
         QSpinBox {
             background-color: #F5F5F5;
             border: 1px solid #E0E0E0;
@@ -94,7 +119,6 @@ static QString settingsStyleSheet() {
             width: 10px; height: 6px;
         }
 
-        /* ── QKeySequenceEdit ── */
         QKeySequenceEdit {
             background-color: #F5F5F5;
             border: 1px solid #E0E0E0;
@@ -113,7 +137,6 @@ static QString settingsStyleSheet() {
             padding: 3px 7px;
         }
 
-        /* ── Buttons ── */
         QPushButton {
             background-color: #FBFBFB;
             border: 1px solid #E0E0E0;
@@ -133,7 +156,6 @@ static QString settingsStyleSheet() {
             color: #444;
         }
 
-        /* OK — accent */
         QPushButton[text="OK"] {
             background-color: #0078D4;
             border: 1px solid #0078D4;
@@ -148,7 +170,6 @@ static QString settingsStyleSheet() {
             border-color: #005499;
         }
 
-        /* ── Slider ── */
         QSlider::groove:horizontal {
             border: 1px solid #E0E0E0;
             height: 4px;
@@ -185,6 +206,15 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
     setStyleSheet(settingsStyleSheet());
 
+    setWindowTitle(uiText("Settings", QStringLiteral("设置")));
+    ui->titleLabel->setText(uiText("Settings", QStringLiteral("设置")));
+    ui->label->setText(uiText("Max number of items", QStringLiteral("最大条目数")));
+    ui->label_2->setText(uiText("Maximum retention days", QStringLiteral("最大保留天数")));
+    ui->label_autostart->setText(uiText("Launch at startup", QStringLiteral("开机自启动")));
+    ui->label_3->setText(uiText("Play copy sound", QStringLiteral("播放复制提示音")));
+    ui->label_4->setText(uiText("Activation shortcut", QStringLiteral("唤起快捷键")));
+    ui->label_5->setText(uiText("Card size", QStringLiteral("卡片大小")));
+
     // Replace the placeholder QCheckBoxes with proper ToggleSwitches
     autoStartSwitch_ = new ToggleSwitch(this);
     toggleSwitch_ = new ToggleSwitch(this);
@@ -197,6 +227,19 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         grid->removeWidget(ui->playSoundCheckBox);
         ui->playSoundCheckBox->hide();
         grid->addWidget(toggleSwitch_, 6, 1, Qt::AlignRight | Qt::AlignVCenter);
+
+        pasteShortcutLabel_ = new QLabel(uiText("Auto-paste shortcut", QStringLiteral("自动粘贴快捷键")), this);
+        pasteShortcutLabel_->setMinimumHeight(44);
+        pasteShortcutCombo_ = new QComboBox(this);
+        pasteShortcutCombo_->setMinimumSize(QSize(140, 32));
+        pasteShortcutCombo_->setMaximumHeight(32);
+        pasteShortcutCombo_->addItem(uiText("Auto (Recommended)", QStringLiteral("自动（推荐）")), static_cast<int>(MPasteSettings::AutoPasteShortcut));
+        pasteShortcutCombo_->addItem(QStringLiteral("Ctrl+V"), static_cast<int>(MPasteSettings::CtrlVShortcut));
+        pasteShortcutCombo_->addItem(QStringLiteral("Shift+Insert"), static_cast<int>(MPasteSettings::ShiftInsertShortcut));
+        pasteShortcutCombo_->addItem(QStringLiteral("Ctrl+Shift+V"), static_cast<int>(MPasteSettings::CtrlShiftVShortcut));
+        pasteShortcutCombo_->addItem(QStringLiteral("Alt+Insert"), static_cast<int>(MPasteSettings::AltInsertShortcut));
+        grid->addWidget(pasteShortcutLabel_, 11, 0);
+        grid->addWidget(pasteShortcutCombo_, 11, 1, Qt::AlignRight | Qt::AlignVCenter);
     }
 
 #ifndef Q_OS_WIN
@@ -235,7 +278,6 @@ void MPasteSettingsWidget::paintEvent(QPaintEvent *)
 
     QRectF r = rect().adjusted(0.5, 0.5, -0.5, -0.5);
 
-    // Gradient border — conical gradient gives a smooth color loop around the edge
     QConicalGradient grad(r.center(), 135);
     grad.setColorAt(0.00, QColor("#4A90E2"));  // blue
     grad.setColorAt(0.25, QColor("#1abc9c"));  // teal
@@ -278,6 +320,10 @@ void MPasteSettingsWidget::loadSettings()
     auto *settings = MPasteSettings::getInst();
     ui->numSpinBox->setValue(settings->getMaxSize());
     ui->shortcutEdit->setKeySequence(QKeySequence(settings->getShortcutStr()));
+    if (pasteShortcutCombo_) {
+        const int index = pasteShortcutCombo_->findData(static_cast<int>(settings->getPasteShortcutMode()));
+        pasteShortcutCombo_->setCurrentIndex(index >= 0 ? index : 0);
+    }
     ui->itemScaleSlider->setValue(settings->getItemScale());
     ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
     toggleSwitch_->setChecked(settings->isPlaySound());
@@ -303,6 +349,9 @@ void MPasteSettingsWidget::accept()
         emit shortcutChanged(newShortcut);
     }
 
+    if (pasteShortcutCombo_) {
+        settings->setPasteShortcutMode(static_cast<MPasteSettings::PasteShortcutMode>(pasteShortcutCombo_->currentData().toInt()));
+    }
     settings->setItemScale(ui->itemScaleSlider->value());
     settings->setPlaySound(toggleSwitch_->isChecked());
 
