@@ -1,28 +1,34 @@
 <!--
-input: 依赖所属目录的真实结构、职责与文件变化。
-output: 对外提供目录级架构说明与文件清单。
-pos: 目录级维护文档与变更约束入口。
-update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+input: 渚濊禆鎵€灞炵洰褰曠殑鐪熷疄缁撴瀯銆佽亴璐ｄ笌鏂囦欢鍙樺寲銆?
+output: 瀵瑰鎻愪緵鐩綍绾ф灦鏋勮鏄庝笌鏂囦欢娓呭崟銆?
+pos: 鐩綍绾х淮鎶ゆ枃妗ｄ笌鍙樻洿绾︽潫鍏ュ彛銆?
+update: 涓€鏃︽垜琚洿鏂帮紝鍔″繀鏇存柊鎴戠殑寮€澶存敞閲婏紝浠ュ強鎵€灞炵殑鏂囦欢澶圭殑 README.md銆?
 -->
 
 # utils
 
-> 一旦我所属的文件夹有所变化，请更新我。
-- 定位：utils 层承载跨平台系统能力与通用服务。
-- 依赖：Qt 平台抽象、系统 API 与网络能力。
-- 输出：监控、热键、单实例、平台桥接等基础服务。
+> 涓€鏃︽垜鎵€灞炵殑鏂囦欢澶规湁鎵€鍙樺寲锛岃鏇存柊鎴戙€?
+- 瀹氫綅锛歶tils 灞傛壙杞借法骞冲彴绯荤粺鑳藉姏涓庨€氱敤鏈嶅姟銆?
+- 渚濊禆锛歈t 骞冲彴鎶借薄銆佺郴缁?API 涓庣綉缁滆兘鍔涖€?
+- 杈撳嚭锛氱洃鎺с€佺儹閿€佸崟瀹炰緥銆佸钩鍙版ˉ鎺ョ瓑鍩虹鏈嶅姟銆?
 
 ## Files
-- `ClipboardMonitor.cpp`: 地位=实现文件；功能=实现 ClipboardMonitor 的运行逻辑与行为。
-- `ClipboardMonitor.h`: 地位=接口声明；功能=声明 ClipboardMonitor 的公开类型、信号、槽或函数。
-- `HotKeyManager.cpp`: 地位=实现文件；功能=实现 HotKeyManager 的运行逻辑与行为。
-- `HotKeyManager.h`: 地位=接口声明；功能=声明 HotKeyManager 的公开类型、信号、槽或函数。
-- `MPasteSettings.cpp`: 地位=实现文件；功能=实现 MPasteSettings 的运行逻辑与行为。
-- `MPasteSettings.h`: 地位=接口声明；功能=声明 MPasteSettings 的公开类型、信号、槽或函数。
-- `OpenGraphFetcher.cpp`: 地位=实现文件；功能=实现 OpenGraphFetcher 的运行逻辑与行为。
-- `OpenGraphFetcher.h`: 地位=接口声明；功能=声明 OpenGraphFetcher 的公开类型、信号、槽或函数。
-- `PlatformRelated.cpp`: 地位=实现文件；功能=实现 PlatformRelated 的运行逻辑与行为。
-- `PlatformRelated.h`: 地位=接口声明；功能=声明 PlatformRelated 的公开类型、信号、槽或函数。
-- `README.md`: 地位=目录说明；功能=总结本目录职责、约束与文件清单。
-- `SingleApplication.cpp`: 地位=实现文件；功能=实现 SingleApplication 的运行逻辑与行为。
-- `SingleApplication.h`: 地位=接口声明；功能=声明 SingleApplication 的公开类型、信号、槽或函数。
+- `ClipboardMonitor.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ClipboardMonitor 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `ClipboardMonitor.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ClipboardMonitor 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `HotKeyManager.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 HotKeyManager 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `HotKeyManager.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 HotKeyManager 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `MPasteSettings.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 MPasteSettings 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `MPasteSettings.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 MPasteSettings 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `OpenGraphFetcher.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 OpenGraphFetcher 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `OpenGraphFetcher.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 OpenGraphFetcher 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `PlatformRelated.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 PlatformRelated 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `PlatformRelated.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 PlatformRelated 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+- `README.md`: 鍦颁綅=鐩綍璇存槑锛涘姛鑳?鎬荤粨鏈洰褰曡亴璐ｃ€佺害鏉熶笌鏂囦欢娓呭崟銆?
+- `SingleApplication.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 SingleApplication 鐨勮繍琛岄€昏緫涓庤涓恒€?
+- `SingleApplication.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 SingleApplication 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+
+- ClipboardMonitor now downloads WPS single-image HTML payloads during capture when needed, so newly captured WPS images can be materialized into standard PNG MIME before the item is saved.
+- `ClipboardMonitor` now uses raw-string regex literals for WPS HTML image URL extraction, avoiding MinGW unknown-escape warning noise.
+
+- ClipboardMonitor now gives WPS/Kingsoft staged clipboard writes an extra settle window, so one Ctrl+C is less likely to emit both an intermediate payload and the final rich payload as two separate items.
+

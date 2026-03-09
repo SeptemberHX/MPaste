@@ -54,7 +54,7 @@ private slots:
     void debugKeyState();
 
 private:
-    // 初始化相关
+    // 闁告帗绻傞～鎰板礌閺嶎偅绁查柛?
     void initializeWidget();
     void initStyle();
     void initUI();
@@ -66,17 +66,17 @@ private:
     void initMenu();
     void setupConnections();
 
-    // 剪贴板操作
+    // 闁告搩浜ｉ崚娑㈠级閹稿孩鎯欏ù?
     bool setClipboard(const ClipboardItem &item, bool plainText = false);
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
     void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
 
-    // 搜索操作
+    // 闁瑰吋绮庨崒銊╁箼瀹ュ嫮绋?
     void setFocusOnSearch(bool flag);
     void handleSearchInput(QKeyEvent *event);
 
-    // 键盘事件处理
+    // 闂佹鍠氬ú蹇旂鐎ｂ晜顐藉璺哄閹?
     void handleKeyboardEvent(QKeyEvent *event);
     void handleEscapeKey();
     void handleEnterKey(bool plainText = false);
@@ -85,11 +85,11 @@ private:
     void handleTabKey();
     bool triggerShortcutPaste(int shortcutIndex, bool plainText);
 
-    // 辅助方法
+    // 閺夊牆鎳庢慨顏堝棘鐟欏嫮銆?
     ScrollItemsWidget* currItemsWidget();
 
 private:
-    // UI 组件
+    // UI 缂備礁瀚▎?
     struct {
         Ui::MPasteWidget *ui;
         QHBoxLayout *layout;
@@ -97,19 +97,19 @@ private:
         ClipboardItemDetailsDialog *detailsDialog;
         MPasteSettingsWidget *settingsWidget;
 
-        // 存储所有的 boardWidget
+        // 閻庢稒锚閸嬪秹骞嶉埀顒勫嫉婢跺本鐣?boardWidget
         QMap<QString, ScrollItemsWidget*> boardWidgetMap;
 
-        // 存储切换的 button
+        // 閻庢稒锚閸嬪秹宕氶崶銊ュ簥闁?button
         QButtonGroup *buttonGroup;
 
-        // 类型过滤按钮组
+        // 缂侇偉顕ч悗閿嬫交閸ャ劍濮㈤柟绋款樀閹稿磭绱?
         QButtonGroup *typeButtonGroup;
 
-        // 剪贴板，必须要存在
+        // 闁告搩浜ｉ崚娑㈠级閸栵紕绀夐煫鍥ф嚇閵嗗繒鎲版担鍝ユ憼闁?
         ScrollItemsWidget *clipboardWidget;
 
-        // 收藏夹，必须要存在
+        // 闁衡偓閹増顥戝鍓佹缁辨繆绠涢崨娣偓蹇曟啺娴ｅ摜鎽犻柛?
         ScrollItemsWidget *staredWidget;
 
         QPropertyAnimation *searchShowAnim;
@@ -118,23 +118,24 @@ private:
         QMenu *menu;
     } ui_;
 
-    // 剪贴板相关
+    // 闁告搩浜ｉ崚娑㈠级鐠恒劍绁查柛?
     struct {
         ClipboardMonitor *monitor;
         bool isPasting = false;
         bool copiedWhenHide = false;
     } clipboard_;
 
-    // 其他组件
+    // 闁稿繑婀圭划顒傜磼閸曨亝顐?
     struct {
         QMediaPlayer *player;
         QList<int> numKeyList;
         int pendingNumKey = -1;
         bool pendingPlainTextNumKey = false;
-        qint64 lastSoundPlayAtMs = 0;  // 添加这个变量来跟踪按下的数字键
+        qint64 lastSoundPlayAtMs = 0;
     } misc_;
 
     static constexpr int HIDE_ANIMATION_TIME = 50;
+    static constexpr qint64 SOUND_BURST_WINDOW_MS = 500;
 };
 
 

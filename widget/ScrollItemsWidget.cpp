@@ -352,10 +352,11 @@ QScrollBar* ScrollItemsWidget::horizontalScrollbar() {
 }
 
 bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
-    if (this->addOneItem(nItem)) {
+    const bool added = this->addOneItem(nItem);
+    if (added) {
         this->saveItem(nItem);
     }
-    return true;
+    return added;
 }
 
 void ScrollItemsWidget::setAllItemVisible() {

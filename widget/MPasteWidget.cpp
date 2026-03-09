@@ -65,11 +65,11 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
 typedef BOOL (WINAPI *pfnSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
 static void enableBlurBehind(HWND hwnd) {
-    // Extend DWM frame — needed for glass composition
+    // Extend DWM frame 閳?needed for glass composition
     MARGINS margins = {-1, -1, -1, -1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
 
-    // Native rounded corners (Windows 11) — DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    // Native rounded corners (Windows 11) 閳?DWMWA_WINDOW_CORNER_PREFERENCE = 33
     DWORD preference = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hwnd, 33, &preference, sizeof(preference));
 
@@ -80,7 +80,7 @@ static void enableBlurBehind(HWND hwnd) {
         GetProcAddress(user32, "SetWindowCompositionAttribute"));
     if (!setWCA) return;
 
-    // GradientColor format: AABBGGRR — light tint applied by DWM itself
+    // GradientColor format: AABBGGRR 閳?light tint applied by DWM itself
     DWORD tint = (20u << 24) | (244u << 16) | (241u << 8) | 231u; // rgba(231,241,244,20)
 
     ACCENT_POLICY accent{};
@@ -161,24 +161,24 @@ void MPasteWidget::initializeWidget() {
     loadFromSaveDir();
     clipboard_.monitor->clipboardChanged();
     setFocusOnSearch(false);
-    misc_.pendingNumKey = 0;  // 初始化待处理的数字键
+    misc_.pendingNumKey = 0;  // 閸掓繂顫愰崠鏍х窡婢跺嫮鎮婇惃鍕殶鐎涙鏁?
 
 #ifdef _DEBUG
-    // 添加调试计时器
+    // 濞ｈ濮炵拫鍐槸鐠佲剝妞傞崳?
     QTimer* debugTimer = new QTimer(this);
     connect(debugTimer, &QTimer::timeout, this, &MPasteWidget::debugKeyState);
-    debugTimer->start(1000);  // 每秒检查一次键盘状态
+    debugTimer->start(1000);  // 濮ｅ繒顫楀Λ鈧弻銉ょ濞嗭繝鏁惄妯煎Ц閹?
 #endif
 }
 
 void MPasteWidget::initStyle() {
-    // 保持原有的基础窗口标志
+    // 娣囨繃瀵旈崢鐔告箒閻ㄥ嫬鐔€绾偓缁愭褰涢弽鍥х箶
     Qt::WindowFlags flags = Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint;
 
 #ifdef Q_OS_LINUX
-    // Linux 特定的窗口标志和属性
-    flags |= Qt::X11BypassWindowManagerHint;  // 绕过窗口管理器的一些处理
-    flags |= Qt::Window;  // 确保窗口可以覆盖其他窗口
+    // Linux 閻楃懓鐣鹃惃鍕崶閸欙絾鐖ｈ箛妤€鎷扮仦鐐粹偓?
+    flags |= Qt::X11BypassWindowManagerHint;  // 缂佹洝绻冪粣妤€褰涚粻锛勬倞閸ｃ劎娈戞稉鈧禍娑橆槱閻?
+    flags |= Qt::Window;  // 绾喕绻氱粣妤€褰涢崣顖欎簰鐟曞棛娲婇崗鏈电铂缁愭褰?
 #endif
     setWindowFlags(flags);
 
@@ -209,10 +209,10 @@ void MPasteWidget::initStyle() {
 }
 
 void MPasteWidget::initUI() {
-    // 初始化搜索动画
+    // 閸掓繂顫愰崠鏍ㄦ偝缁便垹濮╅悽?
     initSearchAnimations();
 
-    // 初始化关于窗口
+    // 閸掓繂顫愰崠鏍у彠娴滃海鐛ラ崣?
     ui_.aboutWidget = new AboutWidget(this);
     ui_.aboutWidget->setWindowFlag(Qt::Tool);
     ui_.aboutWidget->setWindowTitle("MPaste About");
@@ -226,7 +226,7 @@ void MPasteWidget::initUI() {
     connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
             this, &MPasteWidget::shortcutChanged);
 
-    // 初始化剪贴板窗口
+    // 閸掓繂顫愰崠鏍у鐠愬瓨婢樼粣妤€褰?
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
     ui_.ui->clipboardButton->setProperty("category", ui_.clipboardWidget->getCategory());
@@ -239,7 +239,7 @@ void MPasteWidget::initUI() {
     ui_.staredWidget->installEventFilter(this);
     ui_.boardWidgetMap.insert(ui_.staredWidget->getCategory(), ui_.staredWidget);
 
-    // 设置布局
+    // 鐠佸墽鐤嗙敮鍐ㄧ湰
     ui_.layout = new QHBoxLayout(ui_.ui->itemsWidget);
     ui_.layout->setContentsMargins(0, 0, 0, 0);
     ui_.layout->setSpacing(0);
@@ -251,13 +251,13 @@ void MPasteWidget::initUI() {
     // Adjust window height to fit content (adapts to card scale)
     adjustSize();
 
-    // 初始化 buttonGroup
+    // 閸掓繂顫愰崠?buttonGroup
     ui_.buttonGroup = new QButtonGroup(this);
     ui_.buttonGroup->setExclusive(true);
     ui_.buttonGroup->addButton(ui_.ui->clipboardButton);
     ui_.buttonGroup->addButton(ui_.ui->staredButton);
 
-    // 初始化类型过滤 buttonGroup
+    // 閸掓繂顫愰崠鏍閸ㄥ绻冨?buttonGroup
     ui_.typeButtonGroup = new QButtonGroup(this);
     ui_.typeButtonGroup->setExclusive(true);
 
@@ -277,10 +277,10 @@ void MPasteWidget::initUI() {
 
     ui_.ui->allTypeBtn->setChecked(true);
 
-    // 默认显示
+    // 姒涙顓婚弰鍓с仛
     ui_.ui->clipboardButton->setChecked(true);
 
-    // 初始化菜单
+    // 閸掓繂顫愰崠鏍綅閸?
     initMenu();
 
     ui_.ui->searchEdit->installEventFilter(this);
@@ -330,14 +330,14 @@ void MPasteWidget::initSystemTray() {
 void MPasteWidget::initMenu() {
     ui_.menu = new QMenu(this);
     ui_.menu->addAction(tr("About"), [this]() {
-        // 获取当前屏幕
+        // 閼惧嘲褰囪ぐ鎾冲鐏炲繐绠?
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
         if (!screen)
             return;
 
-        // 将窗口移动到屏幕中央
+        // 鐏忓棛鐛ラ崣锝囆╅崝銊ュ煂鐏炲繐绠锋稉顓炪亷
         QRect screenGeometry = screen->geometry();
         int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
         int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
@@ -346,14 +346,14 @@ void MPasteWidget::initMenu() {
         ui_.aboutWidget->show();
     });
     ui_.menu->addAction(tr("Settings"), [this]() {
-        // 获取当前屏幕
+        // 閼惧嘲褰囪ぐ鎾冲鐏炲繐绠?
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
         if (!screen)
             return;
 
-        // 将窗口移动到屏幕中央
+        // 鐏忓棛鐛ラ崣锝囆╅崝銊ュ煂鐏炲繐绠锋稉顓炪亷
         QRect screenGeometry = screen->geometry();
         int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
         int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
@@ -364,7 +364,7 @@ void MPasteWidget::initMenu() {
 }
 
 void MPasteWidget::setupConnections() {
-    // 剪贴板连接
+    // 閸擃亣鍒涢弶鑳箾閹?
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardUpdated,
             this, &MPasteWidget::clipboardUpdated);
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
@@ -406,12 +406,12 @@ void MPasteWidget::setupConnections() {
         });
     }
 
-    // 菜单按钮连接
+    // 閼挎粌宕熼幐澶愭尦鏉╃偞甯?
     connect(ui_.ui->menuButton, &QToolButton::clicked, this, [this]() {
         ui_.menu->popup(ui_.ui->menuButton->mapToGlobal(ui_.ui->menuButton->rect().bottomLeft()));
     });
 
-    // 搜索功能连接
+    // 閹兼粎鍌ㄩ崝鐔诲厴鏉╃偞甯?
     connect(ui_.ui->searchEdit, &QLineEdit::textChanged, this, [this](const QString &str) {
         this->currItemsWidget()->filterByKeyword(str);
     });
@@ -419,7 +419,7 @@ void MPasteWidget::setupConnections() {
         this->setFocusOnSearch(flag);
     });
 
-    // Home & End 按钮连接
+    // Home & End 閹稿鎸虫潻鐐村复
     connect(ui_.ui->firstButton, &QPushButton::clicked, this, [this]() {
         this->currItemsWidget()->scrollToFirst();
     });
@@ -427,7 +427,7 @@ void MPasteWidget::setupConnections() {
         this->currItemsWidget()->scrollToLast();
     });
 
-    // 系统托盘连接
+    // 缁崵绮洪幍妯兼磸鏉╃偞甯?
     connect(ui_.trayIcon, &QSystemTrayIcon::activated, this,
             [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger) {
@@ -435,27 +435,27 @@ void MPasteWidget::setupConnections() {
         }
     });
 
-    // 类型过滤按钮连接
+    // 缁鐎锋潻鍥ㄦ姢閹稿鎸虫潻鐐村复
     connect(ui_.typeButtonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
         [this](QAbstractButton *button) {
             auto type = static_cast<ClipboardItem::ContentType>(button->property("contentType").toInt());
             this->currItemsWidget()->filterByType(type);
         });
 
-    // 处理切换事件
+    // 婢跺嫮鎮婇崚鍥ㄥ床娴滃娆?
     connect(ui_.buttonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
         [this](QAbstractButton *button) {
-            // 获取当前类型过滤
+            // 閼惧嘲褰囪ぐ鎾冲缁鐎锋潻鍥ㄦ姢
             auto typeBtn = ui_.typeButtonGroup->checkedButton();
             auto type = typeBtn ? static_cast<ClipboardItem::ContentType>(typeBtn->property("contentType").toInt())
                                 : ClipboardItem::All;
 
-            // 处理切换逻辑
+            // 婢跺嫮鎮婇崚鍥ㄥ床闁槒绶?
             for (auto *toolButton : ui_.buttonGroup->buttons()) {
                 auto *boardWidget = ui_.boardWidgetMap[toolButton->property("category").toString()];
                 boardWidget->setVisible(toolButton == button);
                 if (toolButton == button) {
-                    // 设置过滤器并统一应用（filterByKeyword 内部会调用 applyFilters）
+                    // 鐠佸墽鐤嗘潻鍥ㄦ姢閸ｃ劌鑻熺紒鐔剁鎼存梻鏁ら敍鍧抜lterByKeyword 閸愬懘鍎存导姘崇殶閻?applyFilters閿?
                     boardWidget->filterByType(type);
                     boardWidget->filterByKeyword(ui_.ui->searchEdit->text());
                 }
@@ -465,24 +465,25 @@ void MPasteWidget::setupConnections() {
 
 void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
     if (!clipboard_.isPasting) {
-        ui_.clipboardWidget->addAndSaveItem(nItem);
+        const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
 
         if (MPasteSettings::getInst()->isPlaySound()) {
             const qint64 now = QDateTime::currentMSecsSinceEpoch();
-            if (misc_.player->playbackState() != QMediaPlayer::PlayingState) {
+            if (now - misc_.lastSoundPlayAtMs >= SOUND_BURST_WINDOW_MS) {
                 if (misc_.player->mediaStatus() == QMediaPlayer::EndOfMedia) {
                     misc_.player->setPosition(0);
                 }
-                misc_.player->play();
-                misc_.lastSoundPlayAtMs = now;
-            } else if (now - misc_.lastSoundPlayAtMs > 250) {
-                misc_.player->stop();
+                if (misc_.player->playbackState() == QMediaPlayer::PlayingState) {
+                    misc_.player->stop();
+                }
                 misc_.player->play();
                 misc_.lastSoundPlayAtMs = now;
             }
         }
 
-        clipboard_.copiedWhenHide = true;
+        if (added) {
+            clipboard_.copiedWhenHide = true;
+        }
     }
 }
 
@@ -614,7 +615,7 @@ void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
 }
 
 void MPasteWidget::handleTabKey() {
-    // 切换到下一个 tab 按钮
+    // 閸掑洦宕查崚棰佺瑓娑撯偓娑?tab 閹稿鎸?
     QAbstractButton* currentButton = ui_.buttonGroup->checkedButton();
     QList<QAbstractButton*> buttons = ui_.buttonGroup->buttons();
     int currentIndex = buttons.indexOf(currentButton);
@@ -700,9 +701,9 @@ void MPasteWidget::handleSearchInput(QKeyEvent *event) {
     event->accept();
 }
 
-// 事件处理相关
+// 娴滃娆㈡径鍕倞閻╃鍙?
 bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
-    // 为药丸容器绘制炫彩渐变边框
+    // 娑撻缚宓傛稉绋款啇閸ｃ劎绮崚鍓佸亽瑜扳晜绗庨崣妯跨珶濡?
     if (event->type() == QEvent::Paint &&
         (watched == ui_.ui->clipboardBtnWidget || watched == ui_.ui->typeBtnWidget)) {
         QWidget *w = qobject_cast<QWidget*>(watched);
@@ -723,7 +724,7 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
         p.setPen(QPen(QBrush(grad), bw));
         p.setBrush(Qt::NoBrush);
         p.drawRoundedRect(r, radius, radius);
-        // 不拦截，让子控件继续绘制
+        // 娑撳秵瀚ら幋顏庣礉鐠佲晛鐡欓幒褌娆㈢紒褏鐢荤紒妯哄煑
     }
 
     if (event->type() == QEvent::Wheel) {
@@ -799,7 +800,7 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     const qreal radius = 10.0;
     QRectF r = QRectF(rect()).adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
 
-    // All 4 corners rounded — matches DWM native DWMWCP_ROUND clipping
+    // All 4 corners rounded 閳?matches DWM native DWMWCP_ROUND clipping
     QPainterPath path;
     path.addRoundedRect(r, radius, radius);
 

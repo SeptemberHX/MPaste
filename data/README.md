@@ -1,25 +1,11 @@
 <!--
-input: 依赖所属目录的真实结构、职责与文件变化。
-output: 对外提供目录级架构说明与文件清单。
-pos: 目录级维护文档与变更约束入口。
-update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
--->
+input: 娓氭繆绂嗛幍鈧仦鐐垫窗瑜版洜娈戦惇鐔风杽缂佹挻鐎妴浣戒捍鐠愶絼绗岄弬鍥︽閸欐ê瀵查妴?output: 鐎电懓顦婚幓鎰返閻╊喖缍嶇痪褎鐏﹂弸鍕嚛閺勫簼绗岄弬鍥︽濞撳懎宕熼妴?pos: 閻╊喖缍嶇痪褏娣幎銈嗘瀮濡楋絼绗岄崣妯绘纯缁撅附娼崗銉ュ經閵?update: 娑撯偓閺冿附鍨滅悮顐ｆ纯閺傚府绱濋崝鈥崇箑閺囧瓨鏌婇幋鎴犳畱瀵偓婢跺瓨鏁為柌濠忕礉娴犮儱寮烽幍鈧仦鐐垫畱閺傚洣娆㈡径鍦畱 README.md閵?-->
 
 # data
 
-> 一旦我所属的文件夹有所变化，请更新我。
-- 定位：data 层承载剪贴板数据模型、序列化与持久化规则。
-- 依赖：Qt Core/Gui 的 mime、图像与时间类型。
-- 输出：可存储、可比较、可恢复的数据对象。
-
+> 娑撯偓閺冿附鍨滈幍鈧仦鐐垫畱閺傚洣娆㈡径瑙勬箒閹碘偓閸欐ê瀵查敍宀冾嚞閺囧瓨鏌婇幋鎴欌偓?- 鐎规矮缍呴敍姝瀉ta 鐏炲倹澹欐潪钘夊鐠愬瓨婢橀弫鐗堝祦濡€崇€烽妴浣哥碍閸掓瀵叉稉搴㈠瘮娑斿懎瀵茬憴鍕灟閵?- 娓氭繆绂嗛敍姝坱 Core/Gui 閻?mime閵嗕礁娴橀崓蹇庣瑢閺冨爼妫跨猾璇茬€烽妴?- 鏉堟挸鍤敍姘讲鐎涙ê鍋嶉妴浣稿讲濮ｆ棁绶濋妴浣稿讲閹垹顦查惃鍕殶閹诡喖顕挒掳鈧?
 ## Files
-- `ClipboardItem.h`: 地位=接口声明；功能=声明 ClipboardItem 的公开类型、信号、槽或函数。
-- `LocalSaver.cpp`: 地位=实现文件；功能=实现 LocalSaver 的运行逻辑与行为。
-- `LocalSaver.h`: 地位=接口声明；功能=声明 LocalSaver 的公开类型、信号、槽或函数。
-- `OpenGraphItem.cpp`: 地位=实现文件；功能=实现 OpenGraphItem 的运行逻辑与行为。
-- `OpenGraphItem.h`: 地位=接口声明；功能=声明 OpenGraphItem 的公开类型、信号、槽或函数。
-- `README.md`: 地位=目录说明；功能=总结本目录职责、约束与文件清单。
-
+- `ClipboardItem.h`: 閸﹂缍?閹恒儱褰涙竟鐗堟閿涙稑濮涢懗?婢圭増妲?ClipboardItem 閻ㄥ嫬鍙曞鈧猾璇茬€烽妴浣蜂繆閸欐灚鈧焦蝎閹存牕鍤遍弫鑸偓?- `LocalSaver.cpp`: 閸﹂缍?鐎圭偟骞囬弬鍥︽閿涙稑濮涢懗?鐎圭偟骞?LocalSaver 閻ㄥ嫯绻嶇悰宀勨偓鏄忕帆娑撳氦顢戞稉鎭掆偓?- `LocalSaver.h`: 閸﹂缍?閹恒儱褰涙竟鐗堟閿涙稑濮涢懗?婢圭増妲?LocalSaver 閻ㄥ嫬鍙曞鈧猾璇茬€烽妴浣蜂繆閸欐灚鈧焦蝎閹存牕鍤遍弫鑸偓?- `OpenGraphItem.cpp`: 閸﹂缍?鐎圭偟骞囬弬鍥︽閿涙稑濮涢懗?鐎圭偟骞?OpenGraphItem 閻ㄥ嫯绻嶇悰宀勨偓鏄忕帆娑撳氦顢戞稉鎭掆偓?- `OpenGraphItem.h`: 閸﹂缍?閹恒儱褰涙竟鐗堟閿涙稑濮涢懗?婢圭増妲?OpenGraphItem 閻ㄥ嫬鍙曞鈧猾璇茬€烽妴浣蜂繆閸欐灚鈧焦蝎閹存牕鍤遍弫鑸偓?- `README.md`: 閸﹂缍?閻╊喖缍嶇拠瀛樻閿涙稑濮涢懗?閹崵绮ㄩ張顒傛窗瑜版洝浜寸拹锝冣偓浣哄閺夌喍绗岄弬鍥︽濞撳懎宕熼妴?
 ## Recent Notes
 - `ClipboardItem` now caches searchable plain-text content to reduce repeated keyword scan cost.
 - `ClipboardItem` now exposes a lightweight content fingerprint for dedup candidate lookup.
@@ -29,3 +15,5 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - Native URL MIME is now only trusted when it is local-file data or matches the visible text payload, avoiding accidental promotion from stray platform clipboard formats.
 - Explicit private formats such as Windows `FileName(W)` and `UniformResourceLocator(W)` are now normalized alongside Linux file-copy protocols.
 - `LocalSaver` now writes `.mpaste v3` and migrates legacy/v2 files to v3 automatically when a save directory is loaded.
+- `ClipboardItem` now extracts a stable identity from WPS/Kingsoft single-image HTML payloads, so different copied images no longer collapse into the same dedupe bucket.
+- `ClipboardItem` now uses raw-string regex literals for WPS HTML image identity parsing, avoiding MinGW unknown-escape warning noise.

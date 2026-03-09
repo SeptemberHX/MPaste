@@ -1,46 +1,46 @@
 <!--
-input: 渚濊禆鎵€灞炵洰褰曠殑鐪熷疄缁撴瀯銆佽亴璐ｄ笌鏂囦欢鍙樺寲銆?
-output: 瀵瑰鎻愪緵鐩綍绾ф灦鏋勮鏄庝笌鏂囦欢娓呭崟銆?
-pos: 鐩綍绾х淮鎶ゆ枃妗ｄ笌鍙樻洿绾︽潫鍏ュ彛銆?
-update: 涓€鏃︽垜琚洿鏂帮紝鍔″繀鏇存柊鎴戠殑寮€澶存敞閲婏紝浠ュ強鎵€灞炵殑鏂囦欢澶圭殑 README.md銆?
+input: 婵炴挻纰嶇换鍡欑矉閸℃稑绠ラ柍褜鍓涙禒锕傛倷閸偆鐛ラ悷婊呭濞叉粌鈻撻幋锔藉剳闁绘棃顥撻弶鐣岀磽娴ｈ灏伴柣搴灦婵″瓨鎷呴幋鎺撳磽闁荤姵鍔х徊鑲╃箔瀹€鍕闁搞儻闄勯浠嬫煕濞嗘兎顏嗏偓鍨叀婵?
+output: 闁诲海鏁搁幊鎾凰囨繝姘闁归偊浜炴潻鏃堟煟閳哄﹤鏋涚紓宥呯Ф閻ヮ亣顦抽柣蹇ョ畵瀵悂宕熼鍛闂佸搫瀚花鑲╃箔瀹€鍕闁搞儻闄勯鑺ョ箾閹捐櫕鍣圭€规洜鍠栨俊?
+pos: 闂佺儵鏅╅崰鏍礊瀹ュ洨妫憸蹇撉庨鈧獮搴ㄥΧ閸℃鈧喗淇婂Δ瀣缂佹鐭傚畷锝呂熺紒妯煎嚱缂備焦鎷濋梽鍕焽椤愶箑绀傞柕澶堝劚缂嶆捇鏌?
+update: 婵炴垶鎸撮崑鎾绘煛閸愬潡妾柛銊︾矌閹噣顢曢敐鍡欏嚱闂佸搫鍊告惔婊呮濠靛绀夐柍銉ョ－缁犳垿鏌￠崶褏鎽犻柡灞斤躬楠炲骞嬮悩宕囨殸閻庢鍠掗崑鎾愁熆鐠鸿櫣鎽犻柡浣哄仱閺屽本绻濊箛鏇狀槷婵炲濮伴崕鍗烆嚕閻戣棄绠ラ柍褜鍓涙禒锕傛倷閸偆鏆犻梺鍝勫€稿ú锝呪枎閵忊€崇窞闁革富鍘介悾?README.md闂?
 -->
 
 # widget
 
-> 涓€鏃︽垜鎵€灞炵殑鏂囦欢澶规湁鎵€鍙樺寲锛岃鏇存柊鎴戙€?
-- 瀹氫綅锛歸idget 灞傛壙杞界獥鍙ｃ€佸崱鐗囥€佽缃笌棰勮绛夌晫闈㈢粍浠躲€?
-- 渚濊禆锛歈t Widgets 浠ュ強 data/utils 灞傝兘鍔涖€?
-- 杈撳嚭锛氬彲浜や簰鐨勫壀璐存澘绠＄悊鐣岄潰銆?
+> 婵炴垶鎸撮崑鎾绘煛閸愬潡妾柛銊︾矒楠炲秹鍩€椤掑倷娌柣鎰仛閻ｉ亶鏌￠崒姘煑婵炲棎鍨哄鍕喆閸曨剛鐣抽梺鍦暯閸嬫捇鏌涘▎鎯奉亞鈧灚鐓￠弫宥呯暆閸愭儳娈查梺鍝勬搐閻°劑寮绘繝鍥х闁瑰瓨鐟㈤崑?
+- 闁诲氦顫夐惌顔剧礊閸涘瓨鏅慨婵堢彣dget 闁诲繒鍋涢崐瑙勭珶濞嗘劖濮滈柣锝呯灱瀹曞爼鏌涘▎娆戠シ闁逞屽厸缁€浣哥暦闁秵鍋嬮柛銉ｅ劗閸嬫挻鎷呯粵瀣櫗缂傚倸鍠氶崰鏇犵箔鐏炴拝绱ｉ柛鏇ㄥ櫘濞兼梻绱掑☉姗嗘Ш闁哄拋鍋婂Λ鍐閵忋垻鐓佹繛瀵稿Ь缂堜即鍩€?
+- 婵炴挻纰嶇换鍡欑矉閸℃稒鏅慨婵嗘緟 Widgets 婵炲濮伴崕鍗烆嚕?data/utils 闁诲繒鍋涢崐浠嬪礂濮椻偓瀹曟繂鈽夐弽銈呬壕?
+- 闁哄鐗婇幐鎼佸吹椤撱垺鏅慨姗嗗墮鐠佹彃霉濠у灝鈧挾鑺辨导瀛樺剭闁告洦鍋勯ˉ鍛存偣閹邦剛鎽犳繝銏☆焽缁鏁嶉崟顒€鈧偤鏌ｉ敐鍛劯婵為棿鍗虫俊?
 
 ## Files
-- `AboutWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 AboutWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `AboutWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 AboutWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `AboutWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 AboutWidget 鐨?Qt Designer 甯冨眬銆?
-- `ClipboardItemInnerWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ClipboardItemInnerWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `ClipboardItemInnerWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ClipboardItemInnerWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `ClipboardItemInnerWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 ClipboardItemInnerWidget 鐨?Qt Designer 甯冨眬銆?
-- `ClipboardItemWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ClipboardItemWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `ClipboardItemWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ClipboardItemWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `FileThumbWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 FileThumbWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `FileThumbWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 FileThumbWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `FileThumbWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 FileThumbWidget 鐨?Qt Designer 甯冨眬銆?
-- `MPasteSettingsWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 MPasteSettingsWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `MPasteSettingsWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 MPasteSettingsWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `MPasteSettingsWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 MPasteSettingsWidget 鐨?Qt Designer 甯冨眬銆?
-- `MPasteWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 MPasteWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `MPasteWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 MPasteWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `MPasteWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 MPasteWidget 鐨?Qt Designer 甯冨眬銆?
-- `MTextBrowser.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 MTextBrowser 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `MTextBrowser.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 MTextBrowser 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `README.md`: 鍦颁綅=鐩綍璇存槑锛涘姛鑳?鎬荤粨鏈洰褰曡亴璐ｃ€佺害鏉熶笌鏂囦欢娓呭崟銆?
-- `ScrollItemsWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ScrollItemsWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `ScrollItemsWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ScrollItemsWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `ScrollItemsWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 ScrollItemsWidget 鐨?Qt Designer 甯冨眬銆?
-- `ToggleSwitch.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ToggleSwitch 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `ToggleSwitch.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ToggleSwitch 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `WebLinkThumbWidget.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 WebLinkThumbWidget 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `WebLinkThumbWidget.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 WebLinkThumbWidget 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `WebLinkThumbWidget.ui`: 鍦颁綅=鐣岄潰鎻忚堪锛涘姛鑳?瀹氫箟 WebLinkThumbWidget 鐨?Qt Designer 甯冨眬銆?
+- `AboutWidget.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?AboutWidget 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `AboutWidget.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?AboutWidget 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `AboutWidget.ui`: 闂侀潻绠撻。锔剧礊?闂佷紮绲介惌鍌氼焽娴兼潙绠甸煫鍥ㄨ壘閻楁岸鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲氦顫夐惌顔剧不?AboutWidget 闂?Qt Designer 闁汇埄鍨伴崯顐︽儑椤掑嫬违?
+- `ClipboardItemInnerWidget.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?ClipboardItemInnerWidget 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `ClipboardItemInnerWidget.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?ClipboardItemInnerWidget 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `ClipboardItemInnerWidget.ui`: 闂侀潻绠撻。锔剧礊?闂佷紮绲介惌鍌氼焽娴兼潙绠甸煫鍥ㄨ壘閻楁岸鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲氦顫夐惌顔剧不?ClipboardItemInnerWidget 闂?Qt Designer 闁汇埄鍨伴崯顐︽儑椤掑嫬违?
+- `ClipboardItemWidget.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?ClipboardItemWidget 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `ClipboardItemWidget.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?ClipboardItemWidget 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `FileThumbWidget.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?FileThumbWidget 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `FileThumbWidget.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?FileThumbWidget 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `FileThumbWidget.ui`: 闂侀潻绠撻。锔剧礊?闂佷紮绲介惌鍌氼焽娴兼潙绠甸煫鍥ㄨ壘閻楁岸鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲氦顫夐惌顔剧不?FileThumbWidget 闂?Qt Designer 闁汇埄鍨伴崯顐︽儑椤掑嫬违?
+- `MPasteSettingsWidget.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?MPasteSettingsWidget 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `MPasteSettingsWidget.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?MPasteSettingsWidget 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `MPasteSettingsWidget.ui`: 闂侀潻绠撻。锔剧礊?闂佷紮绲介惌鍌氼焽娴兼潙绠甸煫鍥ㄨ壘閻楁岸鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲氦顫夐惌顔剧不?MPasteSettingsWidget 闂?Qt Designer 闁汇埄鍨伴崯顐︽儑椤掑嫬违?
+- `MPasteWidget.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?MPasteWidget 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `MPasteWidget.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?MPasteWidget 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `MPasteWidget.ui`: 闂侀潻绠撻。锔剧礊?闂佷紮绲介惌鍌氼焽娴兼潙绠甸煫鍥ㄨ壘閻楁岸鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲氦顫夐惌顔剧不?MPasteWidget 闂?Qt Designer 闁汇埄鍨伴崯顐︽儑椤掑嫬违?
+- `MTextBrowser.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?MTextBrowser 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `MTextBrowser.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?MTextBrowser 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `README.md`: 闂侀潻绠撻。锔剧礊?闂佺儵鏅╅崰鏍礊瀹ュ洦瀚氶悗娑櫳戦～鏍煥濞戞瑧鈽夊┑顔界洴閹?闂佽鍓濆畷鐢靛垝閵娾晛瀚夋い鎺戝€圭粣妤冩喐閻楀牊绀夊ù婊冾嚟閹峰綊鏁愰崘锝呬壕濞达絽鎼濠囨煛婢跺苯鏋嶇紒妤€鐭傚顒勫炊閿旂瓔鍋ㄥ┑鐐存尭閹冲骸鐣烽悢鐓幬?
+- `ScrollItemsWidget.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?ScrollItemsWidget 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `ScrollItemsWidget.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?ScrollItemsWidget 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `ScrollItemsWidget.ui`: 闂侀潻绠撻。锔剧礊?闂佷紮绲介惌鍌氼焽娴兼潙绠甸煫鍥ㄨ壘閻楁岸鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲氦顫夐惌顔剧不?ScrollItemsWidget 闂?Qt Designer 闁汇埄鍨伴崯顐︽儑椤掑嫬违?
+- `ToggleSwitch.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?ToggleSwitch 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `ToggleSwitch.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?ToggleSwitch 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `WebLinkThumbWidget.cpp`: 闂侀潻绠撻。锔剧礊?闁诲骸婀遍崑鐔肩嵁閸ヮ剙妫橀柛銉檮椤愪粙鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲骸婀遍崑鐔肩嵁?WebLinkThumbWidget 闂佹眹鍔岀€氼垳鎹㈠鍥ㄥ仒鐎光偓閸曘劌浜鹃柡鍕箳鐢棗鈽夐幘铏攭妞ゃ垺鍨剁粙澶愬箒閹哄棗浜?
+- `WebLinkThumbWidget.h`: 闂侀潻绠撻。锔剧礊?闂佽浜介崕杈亹濞戞瑧鐝堕柣妤€鐗婇～鏍煥濞戞瑧鈽夊┑顔界洴閹?婵犮垹婀辨晶妤€危?WebLinkThumbWidget 闂佹眹鍔岀€氼剟宕ｉ弴鐑嗗殨闁逞屽墰閻氬墽鎷犻懠顑藉亾閻戣棄违濞达綀娓圭换鍡涙煕濞嗘劗浠涢柍褜鍏涢悞锕佹綍闂佺懓鐡ㄩ悧鏇㈠吹闁秴鏋侀柤鍓插厴閸?
+- `WebLinkThumbWidget.ui`: 闂侀潻绠撻。锔剧礊?闂佷紮绲介惌鍌氼焽娴兼潙绠甸煫鍥ㄨ壘閻楁岸鏌ㄥ☉娆戔槈濠殿喗鐩幊?闁诲氦顫夐惌顔剧不?WebLinkThumbWidget 闂?Qt Designer 闁汇埄鍨伴崯顐︽儑椤掑嫬违?
 
 ## Recent Notes
 - `ClipboardItemWidget` now exposes a context-menu action for plain-text paste.
@@ -69,3 +69,6 @@ update: 涓€鏃︽垜琚洿鏂帮紝鍔″繀鏇存柊鎴戠殑寮€澶存
 - `WebLinkThumbWidget` now renders its preview image with fill-and-crop behavior so the main image area looks fuller and stays centered.
 
 - ClipboardItemDetailsDialog now uses a polished rounded inspector card with runtime Chinese fallbacks, so the context-menu Details action and dialog labels no longer degrade into question marks.
+- `ClipboardItemInnerWidget` now loads WPS/Kingsoft HTML image previews through the extracted `<img src>` URL, with redirect support and a non-blank fallback when the remote image cannot be fetched.
+- `MPasteWidget` now plays the copy sound only for the first newly-added item in a short burst window, so staged clipboard writes feel like one copy instead of repeated pings.
+- `MPasteWidget` now suppresses repeated sound pings only within a short burst window, while ordinary clipboard copies still play one prompt even when the item is deduplicated or moved to the front.
