@@ -49,6 +49,7 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
 private:
+    void prepareTextBrowserDocument();
     void refreshStyleSheet();
     void resetPanelStyleOverrides();
     void setInfoWidgetVisible(bool visible);

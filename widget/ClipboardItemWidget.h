@@ -21,6 +21,7 @@ class ClipboardItemWidget : public QWidget {
 public:
     explicit ClipboardItemWidget(QString category, QColor borderColor, QWidget *parent = nullptr);
     ~ClipboardItemWidget() override = default;
+    static QSize scaledOuterSize(int scale);
 
     // Public API
     [[nodiscard]] const ClipboardItem& getItem() const;

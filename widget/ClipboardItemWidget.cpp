@@ -17,6 +17,11 @@
 #include "utils/MPasteSettings.h"
 
 namespace {
+constexpr int kCardBaseWidth = 275;
+constexpr int kCardBaseHeight = 300;
+constexpr int kShadowRightPadding = 10;
+constexpr int kShadowBottomPadding = 12;
+
 bool looksBrokenTranslation(const QString &text) {
     if (text.isEmpty()) {
         return true;
@@ -57,6 +62,11 @@ QString detailsLabel() {
 }
 }
 
+QSize ClipboardItemWidget::scaledOuterSize(int scale) {
+    return QSize(kCardBaseWidth * scale / 100 + qMax(4, kShadowRightPadding * scale / 100),
+                 kCardBaseHeight * scale / 100 + qMax(6, kShadowBottomPadding * scale / 100));
+}
+
 ClipboardItemWidget::ClipboardItemWidget(QString category, QColor borderColor, QWidget *parent)
     : QWidget(parent), category(category), borderColor(borderColor)
 {
@@ -67,6 +77,11 @@ ClipboardItemWidget::ClipboardItemWidget(QString category, QColor borderColor, Q
 }
 
 void ClipboardItemWidget::setupUI() {
+    const int scale = MPasteSettings::getInst()->getItemScale();
+    const QSize outerSize = scaledOuterSize(scale);
+    const int innerWidth = kCardBaseWidth * scale / 100;
+    const int innerHeight = kCardBaseHeight * scale / 100;
+
     // Widget attributes
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground);
@@ -76,7 +91,7 @@ void ClipboardItemWidget::setupUI() {
 
     // Main layout
     ui.mainLayout = new QHBoxLayout(this);
-    ui.mainLayout->setContentsMargins(0, 0, 3, 0);
+    ui.mainLayout->setContentsMargins(0, 0, outerSize.width() - innerWidth, outerSize.height() - innerHeight);
     ui.mainLayout->setSpacing(0);
 
     // Inner widget
@@ -91,12 +106,9 @@ void ClipboardItemWidget::setupUI() {
     ui.mainLayout->addWidget(ui.innerWidget);
 
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    const QMargins margins = ui.mainLayout->contentsMargins();
-    setFixedSize(ui.innerWidget->width() + margins.left() + margins.right(),
-                 ui.innerWidget->height() + margins.top() + margins.bottom());
+    setFixedSize(outerSize);
 
     // Persistent favorite indicator (small star in top-right corner)
-    int scale = MPasteSettings::getInst()->getItemScale();
     int indicatorSz = 16 * scale / 100;
     ui.favoriteIndicator = new QLabel(this);
     ui.favoriteIndicator->setFixedSize(indicatorSz, indicatorSz);
@@ -322,7 +334,7 @@ void ClipboardItemWidget::enterEvent(QEnterEvent* event) {
 
     // Position buttons at the top center, relative to innerWidget
     ui.actions.container->adjustSize();
-    const int x = (width() - ui.actions.container->width()) / 2;
+    const int x = ui.innerWidget->x() + (ui.innerWidget->width() - ui.actions.container->width()) / 2;
     const int y = ui.innerWidget->y() + 4;
     ui.actions.container->move(x, y);
     ui.actions.container->show();

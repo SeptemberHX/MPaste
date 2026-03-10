@@ -131,6 +131,7 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QColor borderColor, QWidget *
     ui->infoWidget->setObjectName("infoWidget");
     this->mLayout = new QHBoxLayout(ui->bodyWidget);
     this->mLayout->setContentsMargins(0, 0, 0, 0);
+    this->mLayout->setSpacing(0);
 
     ui->iconLabel->setAttribute(Qt::WA_TranslucentBackground);
     ui->widget_2->setAttribute(Qt::WA_TranslucentBackground);
@@ -396,6 +397,7 @@ void ClipboardItemInnerWidget::clearShortkeyInfo() {
 
 void ClipboardItemInnerWidget::showHtml(const QString &html) {
     this->initTextBrowser();
+    prepareTextBrowserDocument();
     setInfoWidgetVisible(true);
     this->textBrowser->show();
     this->textBrowser->setHtml(html);
@@ -525,6 +527,7 @@ void ClipboardItemInnerWidget::showHtmlImagePayload(const QString &html) {
     }
 
     this->initTextBrowser();
+    prepareTextBrowserDocument();
     this->textBrowser->show();
     this->textBrowser->setHtml(html);
 }
@@ -566,6 +569,7 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
         this->showWebLink(url, item);
     } else {
         this->initTextBrowser();
+        prepareTextBrowserDocument();
         this->textBrowser->show();
         this->textBrowser->setPlainText(text);
         ui->countLabel->setText(QString("%1 ").arg(text.size()) + tr("Characters"));
@@ -608,6 +612,7 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
         this->showFiles(urls);
     } else {
         this->initTextBrowser();
+        prepareTextBrowserDocument();
 
         this->textBrowser->show();
         QString str;
@@ -622,7 +627,7 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
 
 void ClipboardItemInnerWidget::showFile(const QUrl &url) {
     this->initFileThumbWidget();
-    setInfoWidgetVisible(true);
+    setInfoWidgetVisible(false);
     ui->typeLabel->setText(QString("1 ") + tr("File"));
     this->fileThumbWidget->show();
     this->fileThumbWidget->showUrl(url);
@@ -630,26 +635,39 @@ void ClipboardItemInnerWidget::showFile(const QUrl &url) {
 
 void ClipboardItemInnerWidget::showFiles(const QList<QUrl> &fileUrls) {
     this->initFileThumbWidget();
-    setInfoWidgetVisible(true);
+    setInfoWidgetVisible(false);
     ui->typeLabel->setText(QString::number(fileUrls.size()) + " " + tr("Files"));
     this->fileThumbWidget->show();
     this->fileThumbWidget->showUrls(fileUrls);
+}
+
+void ClipboardItemInnerWidget::prepareTextBrowserDocument() {
+    if (!this->textBrowser) {
+        return;
+    }
+
+    // Reset default block spacing from pasted HTML so the bottom edge stays tighter.
+    this->textBrowser->document()->setDefaultStyleSheet(
+        QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
 }
 
 void ClipboardItemInnerWidget::initTextBrowser() {
     if (this->textBrowser != nullptr) return;
 
     this->textBrowser = new MTextBrowser(ui->bodyWidget);
-    this->textBrowser->setStyleSheet("QTextBrowser { border-radius: 0px; padding: 10px; }");
+    this->textBrowser->setStyleSheet(
+        "QTextBrowser { border-radius: 0px; padding: 6px 10px 2px 10px; }");
     this->textBrowser->setFrameStyle(QFrame::NoFrame);
     this->textBrowser->setReadOnly(true);
     this->textBrowser->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->textBrowser->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->textBrowser->setContentsMargins(0, 0, 0, 0);
+    this->textBrowser->viewport()->setContentsMargins(0, 0, 0, 0);
     this->textBrowser->document()->setDocumentMargin(0);
     this->textBrowser->setWordWrapMode(QTextOption::WordWrap);
     this->textBrowser->setAttribute(Qt::WA_TranslucentBackground);
     this->textBrowser->setDisabled(true);
+    this->textBrowser->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     this->mLayout->addWidget(this->textBrowser);
     this->textBrowser->hide();
 }
@@ -660,6 +678,7 @@ void ClipboardItemInnerWidget::initImageLabel() {
     this->imageLabel = new QLabel(ui->bodyWidget);
     this->imageLabel->hide();
     this->imageLabel->setAlignment(Qt::AlignCenter);
+    this->imageLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     this->imageLabel->setStyleSheet("QWidget { border-radius: 0px; } ");
     this->mLayout->addWidget(this->imageLabel);
 }
@@ -668,6 +687,7 @@ void ClipboardItemInnerWidget::initFileThumbWidget() {
     if (this->fileThumbWidget != nullptr) return;
 
     this->fileThumbWidget = new FileThumbWidget(ui->bodyWidget);
+    this->fileThumbWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     this->fileThumbWidget->setStyleSheet("QWidget { border-radius: 0px; } ");
     this->fileThumbWidget->hide();
     this->mLayout->addWidget(this->fileThumbWidget);
@@ -677,6 +697,7 @@ void ClipboardItemInnerWidget::initWebLinkThumbWidget() {
     if (this->webLinkThumbWidget != nullptr) return;
 
     this->webLinkThumbWidget = new WebLinkThumbWidget(ui->bodyWidget);
+    this->webLinkThumbWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     this->webLinkThumbWidget->setStyleSheet("QWidget { border-radius: 0px; } ");
     this->webLinkThumbWidget->hide();
     this->mLayout->addWidget(this->webLinkThumbWidget);

@@ -9,9 +9,11 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QPointer>
+#include <QPainter>
 #include <QPropertyAnimation>
 #include <QScrollBar>
 #include <QScroller>
+#include <QResizeEvent>
 #include <QShowEvent>
 #include <QTimer>
 #include <QThread>
@@ -22,6 +24,58 @@
 #include "ScrollItemsWidget.h"
 #include "ui_ScrollItemsWidget.h"
 #include "ClipboardItemWidget.h"
+
+namespace {
+class EdgeFadeOverlay final : public QWidget {
+public:
+    enum Side {
+        Left,
+        Right
+    };
+
+    explicit EdgeFadeOverlay(Side side, QWidget *parent = nullptr)
+        : QWidget(parent), side_(side) {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_NoSystemBackground);
+        setAttribute(Qt::WA_TranslucentBackground);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        Q_UNUSED(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+
+        const QPoint startPoint = side_ == Left ? rect().topLeft() : rect().topRight();
+        const QPoint endPoint = side_ == Left ? rect().topRight() : rect().topLeft();
+        QLinearGradient gradient(startPoint, endPoint);
+
+        const QColor mistColor(244, 247, 249);
+        QColor solid = mistColor;
+        solid.setAlpha(238);
+        QColor dense = mistColor;
+        dense.setAlpha(192);
+        QColor soft = mistColor;
+        soft.setAlpha(104);
+        QColor faint = mistColor;
+        faint.setAlpha(36);
+        QColor transparent = mistColor;
+        transparent.setAlpha(0);
+
+        gradient.setColorAt(0.00, solid);
+        gradient.setColorAt(0.18, solid);
+        gradient.setColorAt(0.38, dense);
+        gradient.setColorAt(0.62, soft);
+        gradient.setColorAt(0.84, faint);
+        gradient.setColorAt(1.00, transparent);
+        painter.fillRect(rect(), gradient);
+    }
+
+private:
+    Side side_;
+};
+}
 
 ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &borderColor, QWidget *parent) :
     QWidget(parent),
@@ -36,10 +90,14 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     ui->setupUi(this);
 
     int scale = MPasteSettings::getInst()->getItemScale();
-    int scrollHeight = 300 * scale / 100 + 20;
-    ui->scrollArea->setMinimumHeight(scrollHeight);
-    ui->scrollArea->setMaximumHeight(scrollHeight + 20);
-    setFixedHeight(scrollHeight + 20);
+    const QSize itemOuterSize = ClipboardItemWidget::scaledOuterSize(scale);
+    const int scrollbarHeight = qMax(12, ui->scrollArea->horizontalScrollBar()->sizeHint().height());
+    const int scrollHeight = itemOuterSize.height() + scrollbarHeight;
+    edgeContentPadding_ = qMax(6, 8 * scale / 100);
+    edgeFadeWidth_ = qMax(12, 16 * scale / 100);
+    ui->scrollArea->setFixedHeight(scrollHeight);
+    ui->scrollAreaWidgetContents->setMinimumHeight(itemOuterSize.height());
+    setFixedHeight(scrollHeight);
 
     QScroller::grabGesture(ui->scrollArea->viewport(), QScroller::TouchGesture);
     QScroller *scroller = QScroller::scroller(ui->scrollArea->viewport());
@@ -60,11 +118,17 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     connect(deferredLoadTimer_, &QTimer::timeout, this, &ScrollItemsWidget::continueDeferredLoad);
 
     this->layout = new QHBoxLayout(ui->scrollAreaWidgetContents);
-    this->layout->setContentsMargins(0, 0, 0, 0);
+    this->layout->setContentsMargins(edgeContentPadding_, 0, edgeContentPadding_, 0);
     this->layout->setSpacing(qMax(6, 8 * scale / 100));
     this->layout->addStretch(1);
     this->saver = new LocalSaver();
     updateContentWidthHint();
+
+    leftEdgeFadeOverlay_ = new EdgeFadeOverlay(EdgeFadeOverlay::Left, ui->scrollArea->viewport());
+    rightEdgeFadeOverlay_ = new EdgeFadeOverlay(EdgeFadeOverlay::Right, ui->scrollArea->viewport());
+    updateEdgeFadeOverlays();
+    leftEdgeFadeOverlay_->show();
+    rightEdgeFadeOverlay_->show();
 
     ui->scrollArea->installEventFilter(this);
     ui->scrollArea->viewport()->installEventFilter(this);
@@ -156,6 +220,7 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
             this->setFirstVisibleItemSelected();
         }
         this->maybeLoadMoreItems();
+        this->refreshContentWidthHint();
 
         emit itemCountChanged(this->itemCountForDisplay());
     });
@@ -209,6 +274,7 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     if (!this->currItemWidget) {
         this->setFirstVisibleItemSelected();
     }
+    this->refreshContentWidthHint();
 
     emit itemCountChanged(this->itemCountForDisplay());
     return true;
@@ -313,6 +379,7 @@ void ScrollItemsWidget::applyFilters() {
         }
     }
     this->setFirstVisibleItemSelected();
+    this->refreshContentWidthHint();
 
     emit itemCountChanged(visibleCount);
 }
@@ -455,6 +522,7 @@ void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
                 this->setFirstVisibleItemSelected();
             }
             this->maybeLoadMoreItems();
+            this->refreshContentWidthHint();
             emit itemCountChanged(this->itemCountForDisplay());
             return;
         }
@@ -468,6 +536,7 @@ void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
         if (this->totalItemCount_ > 0) {
             --this->totalItemCount_;
         }
+        this->refreshContentWidthHint();
         emit itemCountChanged(this->itemCountForDisplay());
     }
 }
@@ -790,15 +859,32 @@ void ScrollItemsWidget::processDeferredLoadedItems() {
 void ScrollItemsWidget::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
 
+    updateEdgeFadeOverlays();
     if (!deferredLoadedItems_.isEmpty() && !deferredLoadTimer_->isActive()) {
         deferredLoadTimer_->start(0);
     }
+}
+
+void ScrollItemsWidget::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    refreshContentWidthHint();
+    updateEdgeFadeOverlays();
 }
 
 void ScrollItemsWidget::waitForDeferredRead() {
     if (deferredLoadThread_) {
         deferredLoadThread_->wait();
         QCoreApplication::processEvents(QEventLoop::AllEvents);
+    }
+}
+
+void ScrollItemsWidget::refreshContentWidthHint() {
+    updateContentWidthHint();
+    updateEdgeFadeOverlays();
+
+    auto *scrollBar = ui->scrollArea ? ui->scrollArea->horizontalScrollBar() : nullptr;
+    if (scrollBar) {
+        scrollBar->setValue(qMin(scrollBar->value(), scrollBar->maximum()));
     }
 }
 
@@ -813,17 +899,41 @@ void ScrollItemsWidget::updateContentWidthHint() {
 
     if (itemWidth <= 0) {
         const int scale = MPasteSettings::getInst()->getItemScale();
-        itemWidth = (275 * scale / 100) + 3;
+        itemWidth = ClipboardItemWidget::scaledOuterSize(scale).width();
     }
 
-    const int itemCount = qMax(totalItemCount_, this->layout->count() - 1);
+    const int itemCount = (currentKeyword_.isEmpty() && currentTypeFilter_ == ClipboardItem::All)
+        ? qMax(totalItemCount_, this->layout->count() - 1)
+        : itemCountForDisplay();
     const int spacing = this->layout->spacing();
+    const QMargins contentMargins = this->layout->contentsMargins();
     const int viewportWidth = ui->scrollArea && ui->scrollArea->viewport() ? ui->scrollArea->viewport()->width() : 0;
     const int estimatedWidth = itemCount > 0
-        ? itemCount * itemWidth + qMax(0, itemCount - 1) * spacing
+        ? itemCount * itemWidth + qMax(0, itemCount - 1) * spacing + contentMargins.left() + contentMargins.right()
         : viewportWidth;
 
     ui->scrollAreaWidgetContents->setMinimumWidth(qMax(viewportWidth, estimatedWidth));
+}
+
+void ScrollItemsWidget::updateEdgeFadeOverlays() {
+    QWidget *viewport = ui->scrollArea ? ui->scrollArea->viewport() : nullptr;
+    if (!viewport || !leftEdgeFadeOverlay_ || !rightEdgeFadeOverlay_) {
+        return;
+    }
+
+    const int fadeWidth = qMin(edgeFadeWidth_, qMax(0, viewport->width() / 3));
+    if (fadeWidth <= 0 || viewport->height() <= 0) {
+        leftEdgeFadeOverlay_->hide();
+        rightEdgeFadeOverlay_->hide();
+        return;
+    }
+
+    leftEdgeFadeOverlay_->setGeometry(0, 0, fadeWidth, viewport->height());
+    rightEdgeFadeOverlay_->setGeometry(viewport->width() - fadeWidth, 0, fadeWidth, viewport->height());
+    leftEdgeFadeOverlay_->raise();
+    rightEdgeFadeOverlay_->raise();
+    leftEdgeFadeOverlay_->show();
+    rightEdgeFadeOverlay_->show();
 }
 
 int ScrollItemsWidget::itemCountForDisplay() const {
@@ -984,6 +1094,11 @@ bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::Wheel
         && (watched == ui->scrollArea || watched == ui->scrollArea->viewport())) {
         return handleWheelScroll(static_cast<QWheelEvent *>(event));
+    }
+
+    if (event->type() == QEvent::Resize
+        && (watched == ui->scrollArea || watched == ui->scrollArea->viewport())) {
+        refreshContentWidthHint();
     }
 
     if (event->type() == QEvent::KeyPress) {

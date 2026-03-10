@@ -893,6 +893,9 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
 
 void MPasteWidget::updateItemCount(int itemCount) {
     ui_.ui->countArea->setText(QString::number(itemCount));
+    ui_.ui->countArea->adjustSize();
+    ui_.ui->countArea->setFixedWidth(qMax(30, ui_.ui->countArea->sizeHint().width()));
+    ui_.ui->countArea->updateGeometry();
 }
 
 void MPasteWidget::hideAndPaste() {

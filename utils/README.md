@@ -1,34 +1,37 @@
 <!--
-input: 渚濊禆鎵€灞炵洰褰曠殑鐪熷疄缁撴瀯銆佽亴璐ｄ笌鏂囦欢鍙樺寲銆?
-output: 瀵瑰鎻愪緵鐩綍绾ф灦鏋勮鏄庝笌鏂囦欢娓呭崟銆?
-pos: 鐩綍绾х淮鎶ゆ枃妗ｄ笌鍙樻洿绾︽潫鍏ュ彛銆?
-update: 涓€鏃︽垜琚洿鏂帮紝鍔″繀鏇存柊鎴戠殑寮€澶存敞閲婏紝浠ュ強鎵€灞炵殑鏂囦欢澶圭殑 README.md銆?
+input: 依赖 utils 目录的实际结构、工具职责与近期实现变化。
+output: 提供 utils 目录的中文说明与文件清单。
+pos: 工具层目录说明文档。
+update: 修改本目录文件时，同步更新本 README。
 -->
 
 # utils
 
-> 涓€鏃︽垜鎵€灞炵殑鏂囦欢澶规湁鎵€鍙樺寲锛岃鏇存柊鎴戙€?
-- 瀹氫綅锛歶tils 灞傛壙杞借法骞冲彴绯荤粺鑳藉姏涓庨€氱敤鏈嶅姟銆?
-- 渚濊禆锛歈t 骞冲彴鎶借薄銆佺郴缁?API 涓庣綉缁滆兘鍔涖€?
-- 杈撳嚭锛氱洃鎺с€佺儹閿€佸崟瀹炰緥銆佸钩鍙版ˉ鎺ョ瓑鍩虹鏈嶅姟銆?
+> `utils` 目录承载跨模块复用的系统能力，包括剪贴板监听、热键、设置、平台适配和单实例控制。
 
-## Files
-- `ClipboardMonitor.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 ClipboardMonitor 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `ClipboardMonitor.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 ClipboardMonitor 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `HotKeyManager.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 HotKeyManager 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `HotKeyManager.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 HotKeyManager 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `MPasteSettings.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 MPasteSettings 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `MPasteSettings.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 MPasteSettings 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `OpenGraphFetcher.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 OpenGraphFetcher 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `OpenGraphFetcher.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 OpenGraphFetcher 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `PlatformRelated.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 PlatformRelated 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `PlatformRelated.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 PlatformRelated 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
-- `README.md`: 鍦颁綅=鐩綍璇存槑锛涘姛鑳?鎬荤粨鏈洰褰曡亴璐ｃ€佺害鏉熶笌鏂囦欢娓呭崟銆?
-- `SingleApplication.cpp`: 鍦颁綅=瀹炵幇鏂囦欢锛涘姛鑳?瀹炵幇 SingleApplication 鐨勮繍琛岄€昏緫涓庤涓恒€?
-- `SingleApplication.h`: 鍦颁綅=鎺ュ彛澹版槑锛涘姛鑳?澹版槑 SingleApplication 鐨勫叕寮€绫诲瀷銆佷俊鍙枫€佹Ы鎴栧嚱鏁般€?
+## 目录职责
 
-- ClipboardMonitor now downloads WPS single-image HTML payloads during capture when needed, so newly captured WPS images can be materialized into standard PNG MIME before the item is saved.
-- `ClipboardMonitor` now uses raw-string regex literals for WPS HTML image URL extraction, avoiding MinGW unknown-escape warning noise.
+- 监听系统剪贴板并将原始事件整理成应用可消费的数据。
+- 管理全局快捷键、应用设置以及平台相关行为。
+- 提供链接元数据抓取、单实例控制等通用基础能力。
 
-- ClipboardMonitor now gives WPS/Kingsoft staged clipboard writes an extra settle window, so one Ctrl+C is less likely to emit both an intermediate payload and the final rich payload as two separate items.
+## 文件说明
 
+- `ClipboardMonitor.h` / `ClipboardMonitor.cpp`：系统剪贴板监听与采集逻辑。
+- `HotKeyManager.h` / `HotKeyManager.cpp`：全局快捷键注册与管理。
+- `MPasteSettings.h` / `MPasteSettings.cpp`：运行配置、持久化设置与默认值管理。
+- `OpenGraphFetcher.h` / `OpenGraphFetcher.cpp`：抓取网页 Open Graph 元数据，供链接卡片预览使用。
+- `PlatformRelated.h` / `PlatformRelated.cpp`：平台相关辅助能力，例如粘贴注入、窗口行为和系统交互。
+- `SingleApplication.h` / `SingleApplication.cpp`：单实例启动控制。
+
+## 维护约定
+
+- 修改平台相关逻辑时，同时检查 Windows / Linux 的行为是否一致。
+- 新增设置项时，同时补齐默认值、读写路径和界面联动。
+- 若本目录结构或职责发生变化，请同步更新本 README。
+
+## Recent Notes
+
+- `ClipboardMonitor` 现在会在需要时额外等待 WPS / 金山的分阶段剪贴板写入，减少一次复制产生两条记录的问题。
+- `ClipboardMonitor` 现在能在捕获阶段下载并落地 WPS 单图 HTML 载荷，方便后续统一保存为标准图片数据。
+- `PlatformRelated` 现在支持可配置的自动粘贴快捷键模式，可在多种粘贴方案之间切换。

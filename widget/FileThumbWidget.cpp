@@ -19,12 +19,16 @@ FileThumbWidget::FileThumbWidget(QWidget *parent) :
 
     // Scale icon and path label heights
     int iconH = 150 * scale / 100;
+    ui->verticalLayout->setContentsMargins(0, 0, 0, 0);
+    ui->verticalLayout->setSpacing(0);
+    ui->verticalLayout->setStretch(0, 1);
     ui->iconLabel->setMinimumSize(180 * scale / 100, iconH);
-    ui->iconLabel->setMaximumHeight(iconH);
+    ui->iconLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     int pathH = 50 * scale / 100;
     ui->pathLabel->setMinimumHeight(pathH);
     ui->pathLabel->setMaximumHeight(pathH);
+    ui->pathLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
     // Scale font
     QFont f = ui->pathLabel->font();

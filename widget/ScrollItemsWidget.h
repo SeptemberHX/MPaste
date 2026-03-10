@@ -17,6 +17,7 @@
 #include "ClipboardItemWidget.h"
 
 class QPropertyAnimation;
+class QResizeEvent;
 class QTimer;
 class QThread;
 class QWheelEvent;
@@ -62,6 +63,7 @@ public:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 protected:
+    void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
 
 signals:
@@ -99,7 +101,9 @@ private:
     void prepareLoadFromSaveDir();
     void continueDeferredLoad();
     bool shouldKeepDeferredLoading() const;
+    void refreshContentWidthHint();
     void updateContentWidthHint();
+    void updateEdgeFadeOverlays();
     void scheduleDeferredLoadBatch();
     void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchItems);
     void processDeferredLoadedItems();
@@ -116,10 +120,14 @@ private:
     QPropertyAnimation *scrollAnimation;
     QTimer *deferredLoadTimer_ = nullptr;
     QThread *deferredLoadThread_ = nullptr;
+    QWidget *leftEdgeFadeOverlay_ = nullptr;
+    QWidget *rightEdgeFadeOverlay_ = nullptr;
     QHash<QByteArray, QList<ClipboardItemWidget*>> fingerprintBuckets_;
     QSet<QByteArray> favoriteFingerprints_;
     QList<QPair<QString, QByteArray>> deferredLoadedItems_;
     QStringList pendingLoadFilePaths_;
+    int edgeContentPadding_ = 0;
+    int edgeFadeWidth_ = 0;
     int totalItemCount_ = 0;
     bool deferredLoadActive_ = false;
 

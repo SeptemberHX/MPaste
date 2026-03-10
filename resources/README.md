@@ -1,36 +1,35 @@
 <!--
-input: 依赖所属目录的真实结构、职责与文件变化。
-output: 对外提供目录级架构说明与文件清单。
-pos: 目录级维护文档与变更约束入口。
-update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+input: 依赖 resources 目录的实际资源结构与用途说明。
+output: 提供 resources 目录的中文说明与文件清单。
+pos: 资源目录说明文档。
+update: 修改本目录文件时，同步更新本 README。
 -->
 
 # resources
 
-> 一旦我所属的文件夹有所变化，请更新我。
-- 定位：resources 目录承载运行时打包进程序的静态资源。
-- 依赖：Qt Resource System 与界面视觉规范。
-- 输出：图标、音效、已编译翻译与样式资源。
+> `resources` 目录存放应用打包进程序的静态资源，包括图标、音效、翻译产物和样式子目录。
 
-## Files
-- `add_black.svg`: 地位=矢量资源；功能=提供 add_black.svg 对应的图标资产。
-- `app_zh.qm`: 地位=翻译产物；功能=提供 app_zh.qm 对应的运行时翻译资源。
-- `broken.svg`: 地位=矢量资源；功能=提供 broken.svg 对应的图标资产。
-- `delete.svg`: 地位=矢量资源；功能=提供 delete.svg 对应的图标资产。
-- `files.svg`: 地位=矢量资源；功能=提供 files.svg 对应的图标资产。
-- `first.svg`: 地位=矢量资源；功能=提供 first.svg 对应的图标资产。
-- `last.svg`: 地位=矢量资源；功能=提供 last.svg 对应的图标资产。
-- `mpaste.png`: 地位=位图资源；功能=提供 mpaste.png 对应的图片资产。
-- `mpaste.svg`: 地位=矢量资源；功能=提供 mpaste.svg 对应的图标资产。
-- `preview.svg`: 地位=矢量资源；功能=提供 preview.svg 对应的图标资产。
-- `README.md`: 地位=目录说明；功能=总结本目录职责、约束与文件清单。
-- `save_black.svg`: 地位=矢量资源；功能=提供 save_black.svg 对应的图标资产。
-- `search.svg`: 地位=矢量资源；功能=提供 search.svg 对应的图标资产。
-- `sound.mp3`: 地位=音效资源；功能=提供 sound.mp3 对应的运行时音效。
-- `spin_down.svg`: 地位=矢量资源；功能=提供 spin_down.svg 对应的图标资产。
-- `spin_up.svg`: 地位=矢量资源；功能=提供 spin_up.svg 对应的图标资产。
-- `star.svg`: 地位=矢量资源；功能=提供 star.svg 对应的图标资产。
-- `star_filled.svg`: 地位=矢量资源；功能=提供 star_filled.svg 对应的图标资产。
-- `star_outline.svg`: 地位=矢量资源；功能=提供 star_outline.svg 对应的图标资产。
-- `unknown.svg`: 地位=矢量资源；功能=提供 unknown.svg 对应的图标资产。
-- `unknown_favico.svg`: 地位=矢量资源；功能=提供 unknown_favico.svg 对应的图标资产。
+## 目录职责
+
+- 提供界面图标、菜单图标和状态图标等 SVG / PNG 资源。
+- 提供应用提示音等多媒体资源。
+- 承载编译后的翻译资源与样式目录入口。
+
+## 文件说明
+
+- `*.svg`：界面图标资源，例如保存、删除、详情、设置、收藏、菜单等按钮图标。
+- `mpaste.png` / `mpaste.svg`：应用图标资源。
+- `sound.mp3`：复制提示音。
+- `app_zh.qm`：中文翻译编译产物。
+- `style/`：QSS 样式目录。
+- `README.md`：当前目录说明文档。
+
+## 维护约定
+
+- 新增资源时，确认已经加入 `resources.qrc` 并且命名语义清晰。
+- 替换图标时，注意界面中现有尺寸、颜色和可读性是否仍然合适。
+- 若本目录结构或职责发生变化，请同步更新本 README。
+
+## Recent Notes
+
+- 新增了 `menu_more.svg`、`settings.svg`、`info.svg` 和 `quit.svg`，用于主窗口溢出菜单与图标按钮。

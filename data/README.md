@@ -1,19 +1,35 @@
 <!--
-input: 娓氭繆绂嗛幍鈧仦鐐垫窗瑜版洜娈戦惇鐔风杽缂佹挻鐎妴浣戒捍鐠愶絼绗岄弬鍥︽閸欐ê瀵查妴?output: 鐎电懓顦婚幓鎰返閻╊喖缍嶇痪褎鐏﹂弸鍕嚛閺勫簼绗岄弬鍥︽濞撳懎宕熼妴?pos: 閻╊喖缍嶇痪褏娣幎銈嗘瀮濡楋絼绗岄崣妯绘纯缁撅附娼崗銉ュ經閵?update: 娑撯偓閺冿附鍨滅悮顐ｆ纯閺傚府绱濋崝鈥崇箑閺囧瓨鏌婇幋鎴犳畱瀵偓婢跺瓨鏁為柌濠忕礉娴犮儱寮烽幍鈧仦鐐垫畱閺傚洣娆㈡径鍦畱 README.md閵?-->
+input: 依赖 data 目录的实际结构、职责分工与近期实现变化。
+output: 提供 data 目录的中文说明与文件清单。
+pos: 数据层目录说明文档。
+update: 修改本目录文件时，同步更新本 README。
+-->
 
 # data
 
-> 娑撯偓閺冿附鍨滈幍鈧仦鐐垫畱閺傚洣娆㈡径瑙勬箒閹碘偓閸欐ê瀵查敍宀冾嚞閺囧瓨鏌婇幋鎴欌偓?- 鐎规矮缍呴敍姝瀉ta 鐏炲倹澹欐潪钘夊鐠愬瓨婢橀弫鐗堝祦濡€崇€烽妴浣哥碍閸掓瀵叉稉搴㈠瘮娑斿懎瀵茬憴鍕灟閵?- 娓氭繆绂嗛敍姝坱 Core/Gui 閻?mime閵嗕礁娴橀崓蹇庣瑢閺冨爼妫跨猾璇茬€烽妴?- 鏉堟挸鍤敍姘讲鐎涙ê鍋嶉妴浣稿讲濮ｆ棁绶濋妴浣稿讲閹垹顦查惃鍕殶閹诡喖顕挒掳鈧?
-## Files
-- `ClipboardItem.h`: 閸﹂缍?閹恒儱褰涙竟鐗堟閿涙稑濮涢懗?婢圭増妲?ClipboardItem 閻ㄥ嫬鍙曞鈧猾璇茬€烽妴浣蜂繆閸欐灚鈧焦蝎閹存牕鍤遍弫鑸偓?- `LocalSaver.cpp`: 閸﹂缍?鐎圭偟骞囬弬鍥︽閿涙稑濮涢懗?鐎圭偟骞?LocalSaver 閻ㄥ嫯绻嶇悰宀勨偓鏄忕帆娑撳氦顢戞稉鎭掆偓?- `LocalSaver.h`: 閸﹂缍?閹恒儱褰涙竟鐗堟閿涙稑濮涢懗?婢圭増妲?LocalSaver 閻ㄥ嫬鍙曞鈧猾璇茬€烽妴浣蜂繆閸欐灚鈧焦蝎閹存牕鍤遍弫鑸偓?- `OpenGraphItem.cpp`: 閸﹂缍?鐎圭偟骞囬弬鍥︽閿涙稑濮涢懗?鐎圭偟骞?OpenGraphItem 閻ㄥ嫯绻嶇悰宀勨偓鏄忕帆娑撳氦顢戞稉鎭掆偓?- `OpenGraphItem.h`: 閸﹂缍?閹恒儱褰涙竟鐗堟閿涙稑濮涢懗?婢圭増妲?OpenGraphItem 閻ㄥ嫬鍙曞鈧猾璇茬€烽妴浣蜂繆閸欐灚鈧焦蝎閹存牕鍤遍弫鑸偓?- `README.md`: 閸﹂缍?閻╊喖缍嶇拠瀛樻閿涙稑濮涢懗?閹崵绮ㄩ張顒傛窗瑜版洝浜寸拹锝冣偓浣哄閺夌喍绗岄弬鍥︽濞撳懎宕熼妴?
+> `data` 目录负责剪贴板条目的数据模型、持久化存储以及链接元数据结构。
+
+## 目录职责
+
+- 统一定义剪贴板条目的数据表示、比较逻辑与类型识别结果。
+- 负责 `.mpaste` 文件的读写、迁移与目录级加载。
+- 为链接预览等功能提供可持久化的结构体模型。
+
+## 文件说明
+
+- `ClipboardItem.h`：剪贴板条目核心模型，负责文本、图片、文件、链接等内容的统一表示。
+- `LocalSaver.h` / `LocalSaver.cpp`：本地存储服务，负责条目序列化、反序列化与版本迁移。
+- `OpenGraphItem.h` / `OpenGraphItem.cpp`：链接元数据模型，用于保存标题、描述、预览图等信息。
+
+## 维护约定
+
+- 新增数据字段时，同时检查序列化格式与历史数据兼容性。
+- 修改条目判等、指纹或归一化逻辑时，注意去重、筛选和保存路径是否受到影响。
+- 若本目录结构或职责发生变化，请同步更新本 README。
+
 ## Recent Notes
-- `ClipboardItem` now caches searchable plain-text content to reduce repeated keyword scan cost.
-- `ClipboardItem` now exposes a lightweight content fingerprint for dedup candidate lookup.
-- `ClipboardItem` now avoids deprecated Qt hash APIs to keep Qt 6 builds warning-clean.
-- `ClipboardItem` now standardizes protocol text and raw MIME payloads into normalized URLs/text for shared type recognition.
-- Normalization now only trusts explicit URL/file evidence (`urls`, `text/uri-list`, `x-special/gnome-copied-files`, `x-special/nautilus-clipboard`) and no longer upgrades ordinary plain text heuristically.
-- Native URL MIME is now only trusted when it is local-file data or matches the visible text payload, avoiding accidental promotion from stray platform clipboard formats.
-- Explicit private formats such as Windows `FileName(W)` and `UniformResourceLocator(W)` are now normalized alongside Linux file-copy protocols.
-- `LocalSaver` now writes `.mpaste v3` and migrates legacy/v2 files to v3 automatically when a save directory is loaded.
-- `ClipboardItem` now extracts a stable identity from WPS/Kingsoft single-image HTML payloads, so different copied images no longer collapse into the same dedupe bucket.
-- `ClipboardItem` now uses raw-string regex literals for WPS HTML image identity parsing, avoiding MinGW unknown-escape warning noise.
+
+- `ClipboardItem` 现在会缓存可搜索纯文本，减少重复关键字扫描开销。
+- `ClipboardItem` 现在提供轻量级内容指纹，用于更快地定位去重候选项。
+- `ClipboardItem` 现在会把协议文本和原始 MIME 数据统一归一化为 URLs / 文本，供共享的类型识别逻辑使用。
+- `LocalSaver` 现在默认写入 `.mpaste v3`，并在加载目录时自动迁移旧版本文件。
