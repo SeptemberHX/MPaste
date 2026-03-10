@@ -50,6 +50,7 @@ A clipboard manager alternative to Paste for Linux & Windows.
 * `Ctrl+Enter`: paste the currently selected item as plain text
 * Any characters: search mode
 * Global shortcut to show window: Open your shortcut settings in system settings, and assign a shortcut for command `/path/to/your/MPaste`
+* On Windows, `Alt`-based global show/hide now avoids more Office/WPS ribbon-keytip side effects by changing when the window grabs or releases focus
 
 > On Gnome, please install the extension: https://extensions.gnome.org/extension/1005/focus-my-window/  
 > Or the window will not get focused after appearing with shortcut

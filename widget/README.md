@@ -42,7 +42,8 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemDetailsDialog` 现在提供更完整的条目检查视图，可查看归一化结果与原始 MIME 数据。
 - `ClipboardItemInnerWidget` 现在支持通过提取 HTML 中的 `<img src>` 来加载 WPS / 金山图片预览。
 - `MPasteWidget` 现在会在短时间内抑制重复提示音，减少一次复制触发多次响声的问题。
-- `MPasteWidget` 现在会在设备列表变化和每次播放提示音前同步默认音频输出，减少运行中切换耳机后提示音仍走旧设备的问题。
+- `MPasteWidget` 现在会在每次播放提示音前按当前默认输出设备重建播放链路，减少运行中切换耳机后提示音仍走旧设备的问题，同时避免设备变化回调触发的重复重建。
+- `MPasteWidget` 现在会把提示音播放器指针初始化为 `nullptr`，避免重建播放链路时因未初始化指针导致的启动崩溃。
 - `WebLinkThumbWidget` 和图片卡片现在使用更饱满的 fill-and-crop 预览方式。
 - `ClipboardItemWidget` 现在会为右下阴影预留外层占位，`ScrollItemsWidget` 也会按卡片外框高度计算滚动区，减少卡片底边被截断的视觉问题。
 - `ScrollItemsWidget` 现在会在列表左右预留呼吸边距，并在视口边缘绘制接近主窗口淡灰玻璃底色的轻雾渐变遮罩，让横向滚动时更接近贴边淡出的效果。
@@ -50,3 +51,5 @@ update: 修改本目录文件时，同步更新本 README。
 - `FileThumbWidget` 现在移除了默认布局边距，并让图标展示区垂直扩展，减少文件卡片正文与底部之间的空白。
 - `ClipboardItemInnerWidget` 现在统一让正文区子控件按可用空间扩展，减少文本、富文本、图片、文件和链接卡片正文与底部信息区之间的空白。
 - `ClipboardItemInnerWidget` 现在会收紧 `QTextBrowser` 的上下内边距，并把富文本默认段落外边距归零，减轻正文与底部信息区之间的额外留白。
+- 链接预览图、图片卡片和图片文件缩略图现在都优先占满可用高度，只在宽度超出时做左右居中裁剪。
+- `WebLinkThumbWidget` 在抓不到网页预览图时，现在会生成一个基于域名配色与字母徽标的兜底封面，不再只是默认图标。

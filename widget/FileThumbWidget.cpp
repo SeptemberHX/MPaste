@@ -9,6 +9,28 @@
 #include <QFileIconProvider>
 #include <QGraphicsDropShadowEffect>
 
+namespace {
+QPixmap scaleToFillHeightCropWidth(const QPixmap &pixmap, const QSize &targetSize, qreal devicePixelRatio) {
+    if (pixmap.isNull() || !targetSize.isValid()) {
+        return pixmap;
+    }
+
+    const QSize pixelTargetSize = targetSize * devicePixelRatio;
+    if (!pixelTargetSize.isValid()) {
+        return pixmap;
+    }
+
+    QPixmap scaled = pixmap.scaledToHeight(pixelTargetSize.height(), Qt::SmoothTransformation);
+    if (scaled.width() > pixelTargetSize.width()) {
+        const int x = (scaled.width() - pixelTargetSize.width()) / 2;
+        scaled = scaled.copy(x, 0, pixelTargetSize.width(), pixelTargetSize.height());
+    }
+
+    scaled.setDevicePixelRatio(devicePixelRatio);
+    return scaled;
+}
+}
+
 FileThumbWidget::FileThumbWidget(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::FileThumbWidget)
@@ -69,10 +91,13 @@ void FileThumbWidget::showUrl(const QUrl &fileUrl) {
     }
 
     // 统一处理 DPI 缩放
-    QPixmap scaledPixmap = pixmap.scaled(targetSize,
-                                        Qt::KeepAspectRatio,
-                                        Qt::SmoothTransformation);
-    scaledPixmap.setDevicePixelRatio(dpr);
+    QPixmap scaledPixmap;
+    if (info.exists() && db.mimeTypeForFile(info).name().startsWith("image")) {
+        scaledPixmap = scaleToFillHeightCropWidth(pixmap, ui->iconLabel->size(), dpr);
+    } else {
+        scaledPixmap = pixmap.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        scaledPixmap.setDevicePixelRatio(dpr);
+    }
     ui->iconLabel->setPixmap(scaledPixmap);
 
     this->setElidedText(fileUrl.toLocalFile());

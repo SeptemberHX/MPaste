@@ -2,7 +2,6 @@
 // output: Implements the main window, item interaction flow, reliable quick-paste shortcuts, and plain-text paste behavior.
 // pos: Widget-layer main window implementation coordinating boards, shortcuts, and system integration.
 // update: If I change, update this header block and my folder README.md.
-#include <iostream>
 #include <QScrollBar>
 #include <QClipboard>
 #include <QKeyEvent>
@@ -346,29 +345,37 @@ void MPasteWidget::initShortcuts() {
 }
 
 void MPasteWidget::initSound() {
-    std::cout << "Init media player..." << std::endl;
+    rebuildSoundPlaybackChain(QMediaDevices::defaultAudioOutput());
+}
+
+void MPasteWidget::rebuildSoundPlaybackChain(const QAudioDevice &device) {
+    if (misc_.player) {
+        misc_.player->stop();
+        misc_.player->setAudioOutput(nullptr);
+        delete misc_.player;
+        misc_.player = nullptr;
+    }
+
+    if (misc_.audioOutput) {
+        delete misc_.audioOutput;
+        misc_.audioOutput = nullptr;
+    }
+
     misc_.player = new QMediaPlayer(this);
     misc_.audioOutput = new QAudioOutput(this);
-    misc_.mediaDevices = new QMediaDevices(this);
+    misc_.audioOutput->setDevice(device);
     misc_.player->setAudioOutput(misc_.audioOutput);
-    syncSoundOutputDevice();
-    connect(misc_.mediaDevices, &QMediaDevices::audioOutputsChanged,
-            this, &MPasteWidget::syncSoundOutputDevice);
-    misc_.player->setSource(QUrl("qrc:/resources/resources/sound.mp3"));
-    std::cout << "Sound effect loaded finished" << std::endl;
+    misc_.player->setSource(QUrl(QStringLiteral("qrc:/resources/resources/sound.mp3")));
 }
 
 void MPasteWidget::syncSoundOutputDevice() {
-    if (!misc_.audioOutput) {
-        return;
-    }
-
     const QAudioDevice defaultDevice = QMediaDevices::defaultAudioOutput();
-    if (misc_.audioOutput->device().id() == defaultDevice.id()) {
+    if (misc_.player && misc_.audioOutput
+        && misc_.audioOutput->device().id() == defaultDevice.id()) {
         return;
     }
 
-    misc_.audioOutput->setDevice(defaultDevice);
+    rebuildSoundPlaybackChain(defaultDevice);
 }
 
 void MPasteWidget::initSystemTray() {

@@ -33,3 +33,4 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItem` 现在提供轻量级内容指纹，用于更快地定位去重候选项。
 - `ClipboardItem` 现在会把协议文本和原始 MIME 数据统一归一化为 URLs / 文本，供共享的类型识别逻辑使用。
 - `LocalSaver` 现在默认写入 `.mpaste v3`，并在加载目录时自动迁移旧版本文件。
+- `ClipboardItem` 现在会优先把已物化的本地图片 MIME 载荷判成 `Image`，避免带着 WPS HTML 的条目在后续显示时又回退到远程 HTML 图片路径。

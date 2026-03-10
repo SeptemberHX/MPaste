@@ -29,6 +29,29 @@ QScreen* getScreenForWindow(WId windowId) {
     return QGuiApplication::primaryScreen();
 }
 
+#ifdef Q_OS_WIN
+template <typename Func>
+void runAfterAltReleased(QObject *context, Func &&func, int intervalMs = 10, int maxPollCount = 50) {
+    auto *timer = new QTimer(context);
+    auto *pollCount = new int(0);
+    timer->setInterval(intervalMs);
+    QObject::connect(timer, &QTimer::timeout, context, [timer, pollCount, fn = std::forward<Func>(func), maxPollCount]() mutable {
+        const bool altReleased = (GetAsyncKeyState(VK_MENU) & 0x8000) == 0;
+        const bool timedOut = *pollCount >= maxPollCount;
+        if (altReleased || timedOut) {
+            timer->stop();
+            timer->deleteLater();
+            delete pollCount;
+            fn();
+            return;
+        }
+
+        ++(*pollCount);
+    });
+    timer->start();
+}
+#endif
+
 void configureOpenGLBackend() {
     const QString backend = qEnvironmentVariable("MPASTE_OPENGL_BACKEND").trimmed().toLower();
 
@@ -113,7 +136,16 @@ int main(int argc, char* argv[]) {
 
         bool isShowingWidget = false;
 
-        auto showWidget = [&widget, &isShowingWidget]() {
+        auto shortcutUsesAlt = []() {
+            const QKeySequence shortcut(MPasteSettings::getInst()->getShortcutStr());
+            if (shortcut.isEmpty()) {
+                return false;
+            }
+            const auto modifiers = Qt::KeyboardModifiers(shortcut[0] & Qt::KeyboardModifierMask);
+            return modifiers.testFlag(Qt::AltModifier);
+        };
+
+        auto showWidget = [&widget, &isShowingWidget](bool immediateForAltHotkey = false) {
             WId focusWinId = PlatformRelated::previousActiveWindow();
             if (!focusWinId) {
                 focusWinId = PlatformRelated::currActiveWindow();
@@ -132,7 +164,8 @@ int main(int argc, char* argv[]) {
 
             isShowingWidget = true;
 
-            QTimer::singleShot(50, [&widget, currentScreen]() {
+            const int showDelayMs = immediateForAltHotkey ? 0 : 50;
+            QTimer::singleShot(showDelayMs, [&widget, currentScreen]() {
                 widget.setVisibleWithAnnimation(true);
                 widget.raise();
                 widget.activateWindow();
@@ -158,13 +191,25 @@ int main(int argc, char* argv[]) {
             });
 
 
-        auto toggleWidget = [&widget, &isShowingWidget, showWidget]() {
+        auto toggleWidget = [&widget, &isShowingWidget, showWidget, shortcutUsesAlt]() {
+            const bool altHotkey = shortcutUsesAlt();
             if (widget.isVisible() || isShowingWidget) {
-                widget.setVisibleWithAnnimation(false);
-                isShowingWidget = false;
+                auto hideWidget = [&widget, &isShowingWidget]() {
+                    widget.setVisibleWithAnnimation(false);
+                    isShowingWidget = false;
+                };
+#ifdef Q_OS_WIN
+                if (altHotkey) {
+                    runAfterAltReleased(&widget, hideWidget);
+                } else {
+                    hideWidget();
+                }
+#else
+                hideWidget();
+#endif
                 return;
             }
-            showWidget();
+            showWidget(altHotkey);
         };
         QObject::connect(&widget, &MPasteWidget::shortcutChanged,
             [&hotkeyManager](const QString &newShortcut) {

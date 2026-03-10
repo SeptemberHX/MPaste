@@ -511,6 +511,51 @@ private:
         return false;
     }
 
+    bool hasMaterializedImagePayload() const {
+        if (!mimeData_) {
+            return false;
+        }
+
+        if (mimeData_->hasImage()) {
+            return true;
+        }
+
+        static const QStringList preferredFormats = {
+            QStringLiteral("application/x-qt-image"),
+            QStringLiteral("image/png"),
+            QStringLiteral("image/jpeg"),
+            QStringLiteral("image/gif"),
+            QStringLiteral("image/bmp")
+        };
+
+        for (const QString &format : preferredFormats) {
+            if (!mimeData_->hasFormat(format)) {
+                continue;
+            }
+
+            QPixmap pixmap;
+            const QByteArray data = mimeData_->data(format);
+            if (!data.isEmpty() && pixmap.loadFromData(data)) {
+                return true;
+            }
+        }
+
+        const QStringList formats = mimeData_->formats();
+        for (const QString &format : formats) {
+            if (!format.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
+                continue;
+            }
+
+            QPixmap pixmap;
+            const QByteArray data = mimeData_->data(format);
+            if (!data.isEmpty() && pixmap.loadFromData(data)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool shouldSkipImageDecodeFormat(const QString &format) const {
         const QString lower = format.toLower();
         return lower.startsWith(QStringLiteral("text/"))
@@ -1006,6 +1051,10 @@ public:
         if (!mimeData_) return Text;
 
         if (mimeData_->hasColor()) return Color;
+
+        if (hasMaterializedImagePayload()) {
+            return Image;
+        }
 
         QList<QUrl> urls = getNormalizedUrls();
         if (!urls.isEmpty() && !mimeData_->hasHtml()) {

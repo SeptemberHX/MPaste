@@ -67,6 +67,7 @@ private:
     void initMenu();
     void setupConnections();
     void syncSoundOutputDevice();
+    void rebuildSoundPlaybackChain(const QAudioDevice &device);
 
     bool setClipboard(const ClipboardItem &item, bool plainText = false);
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
@@ -117,7 +118,7 @@ private:
     } clipboard_;
 
     struct {
-        QMediaPlayer *player;
+        QMediaPlayer *player = nullptr;
         QAudioOutput *audioOutput = nullptr;
         QMediaDevices *mediaDevices = nullptr;
         QList<int> numKeyList;

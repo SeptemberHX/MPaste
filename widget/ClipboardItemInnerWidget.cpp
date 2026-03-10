@@ -29,6 +29,26 @@ QColor blendColor(const QColor &from, const QColor &to, qreal factor) {
         qRound(from.alpha() + (to.alpha() - from.alpha()) * t)
     );
 }
+
+QPixmap scaleToFillHeightCropWidth(const QPixmap &pixmap, const QSize &targetSize, qreal devicePixelRatio) {
+    if (pixmap.isNull() || !targetSize.isValid()) {
+        return pixmap;
+    }
+
+    const QSize pixelTargetSize = targetSize * devicePixelRatio;
+    if (!pixelTargetSize.isValid()) {
+        return pixmap;
+    }
+
+    QPixmap scaled = pixmap.scaledToHeight(pixelTargetSize.height(), Qt::SmoothTransformation);
+    if (scaled.width() > pixelTargetSize.width()) {
+        const int x = (scaled.width() - pixelTargetSize.width()) / 2;
+        scaled = scaled.copy(x, 0, pixelTargetSize.width(), pixelTargetSize.height());
+    }
+
+    scaled.setDevicePixelRatio(devicePixelRatio);
+    return scaled;
+}
 }
 
 
@@ -540,18 +560,16 @@ void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap) {
     this->imageLabel->setMargin(0);
 
     qreal devicePixelRatio = this->imageLabel->devicePixelRatio();
+    QSize targetSize = ui->bodyWidget->size();
     int scale = MPasteSettings::getInst()->getItemScale();
-    int topH = 64 * scale / 100;
-    int targetWidth = width() * devicePixelRatio;
-    int targetHeight = (height() - topH - 2) * devicePixelRatio;
+    const int topH = 64 * scale / 100;
+    const int infoH = ui->infoWidget->isVisible() ? ui->infoWidget->sizeHint().height() : 0;
+    const QSize fallbackTargetSize(width(), height() - topH - infoH);
+    if (!targetSize.isValid() || targetSize.height() < fallbackTargetSize.height() / 2) {
+        targetSize = fallbackTargetSize;
+    }
 
-    QPixmap scaled = pixmap.scaled(
-        targetWidth,
-        targetHeight,
-        Qt::KeepAspectRatioByExpanding,
-        Qt::SmoothTransformation
-    );
-    scaled.setDevicePixelRatio(devicePixelRatio);
+    QPixmap scaled = scaleToFillHeightCropWidth(pixmap, targetSize, devicePixelRatio);
 
     this->imageLabel->setPixmap(scaled);
     ui->countLabel->setText(QString("%1 x %2 ").arg(pixmap.height()).arg(pixmap.width()) + tr("Pixels"));
