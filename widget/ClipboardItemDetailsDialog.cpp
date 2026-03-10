@@ -9,7 +9,6 @@
 #include <QGuiApplication>
 #include <QFontDatabase>
 #include <QFrame>
-#include <QGraphicsDropShadowEffect>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -29,6 +28,9 @@
 #include <QWindow>
 
 namespace {
+constexpr int kDetailsDialogWidth = 860;
+constexpr int kDetailsDialogHeight = 640;
+
 bool looksBrokenTranslation(const QString &text) {
     if (text.isEmpty()) {
         return true;
@@ -59,7 +61,7 @@ QString dashText() {
 
 QFont preferredEditorFont() {
     QFont font = QApplication::font();
-    font.setPointSize(10);
+    font.setPointSize(11);
 
     const QStringList preferredFamilies = {
         QStringLiteral("Cascadia Mono"),
@@ -84,7 +86,8 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
     setModal(false);
     setAttribute(Qt::WA_TranslucentBackground);
-    resize(860, 640);
+    setFixedWidth(kDetailsDialogWidth);
+    resize(kDetailsDialogWidth, kDetailsDialogHeight);
 
     auto *rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(10, 10, 10, 10);
@@ -99,13 +102,13 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
         }
         QLabel#detailsTitle {
             color: #1E2936;
-            font-size: 17px;
+            font-size: 19px;
             font-weight: 700;
             background: transparent;
         }
         QLabel#sectionLabel {
             color: #6A7A8C;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 700;
             background: transparent;
             letter-spacing: 0.4px;
@@ -113,7 +116,7 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
         }
         QLabel#valueLabel {
             color: #1E2936;
-            font-size: 12px;
+            font-size: 13px;
             background: transparent;
         }
         QLabel#previewVisual {
@@ -144,7 +147,7 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
             border: 1px solid rgba(74, 144, 226, 16);
             border-radius: 14px;
             color: #5E7084;
-            font-size: 16px;
+            font-size: 17px;
             font-weight: 700;
             min-width: 28px;
             min-height: 28px;
@@ -171,6 +174,7 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
             padding: 6px 12px;
             margin-right: 6px;
             font-weight: 600;
+            font-size: 12px;
         }
         QTabBar::tab:selected {
             background-color: #FFFFFF;
@@ -181,12 +185,6 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
             background-color: #F7FAFF;
         }
     )"));
-
-    auto *shadow = new QGraphicsDropShadowEffect(ui_.card);
-    shadow->setBlurRadius(28);
-    shadow->setOffset(0, 12);
-    shadow->setColor(QColor(18, 31, 48, 34));
-    ui_.card->setGraphicsEffect(shadow);
 
     rootLayout->addWidget(ui_.card);
 
@@ -222,6 +220,7 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
         auto *label = new QLabel(ui_.card);
         label->setObjectName("valueLabel");
         label->setWordWrap(true);
+        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         label->setTextInteractionFlags(Qt::TextSelectableByMouse);
         return label;
     };

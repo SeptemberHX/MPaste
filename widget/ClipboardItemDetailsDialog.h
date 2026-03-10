@@ -1,5 +1,5 @@
 // input: Depends on Qt Widgets and ClipboardItem data to inspect normalized and raw clipboard content.
-// output: Exposes a lightweight details dialog for one clipboard item.
+// output: Exposes a lightweight details dialog for one clipboard item with a stable inspector width and no card shadow.
 // pos: Widget-layer inspector dialog declaration used to debug and understand clipboard items.
 // update: If I change, update this header block and my folder README.md.
 #ifndef MPASTE_CLIPBOARDITEMDETAILSDIALOG_H
