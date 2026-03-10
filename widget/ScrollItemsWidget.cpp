@@ -51,9 +51,9 @@ protected:
         const QPoint endPoint = side_ == Left ? rect().topRight() : rect().topLeft();
         QLinearGradient gradient(startPoint, endPoint);
 
-        const QColor mistColor(244, 247, 249);
+        const QColor mistColor(232, 236, 239);
         QColor solid = mistColor;
-        solid.setAlpha(238);
+        solid.setAlpha(236);
         QColor dense = mistColor;
         dense.setAlpha(192);
         QColor soft = mistColor;

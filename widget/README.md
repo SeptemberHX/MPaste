@@ -44,7 +44,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `MPasteWidget` 现在会在短时间内抑制重复提示音，减少一次复制触发多次响声的问题。
 - `WebLinkThumbWidget` 和图片卡片现在使用更饱满的 fill-and-crop 预览方式。
 - `ClipboardItemWidget` 现在会为右下阴影预留外层占位，`ScrollItemsWidget` 也会按卡片外框高度计算滚动区，减少卡片底边被截断的视觉问题。
-- `ScrollItemsWidget` 现在会在列表左右预留呼吸边距，并在视口边缘绘制轻雾渐变遮罩，让横向滚动时更接近贴边淡出的效果。
+- `ScrollItemsWidget` 现在会在列表左右预留呼吸边距，并在视口边缘绘制接近主窗口淡灰玻璃底色的轻雾渐变遮罩，让横向滚动时更接近贴边淡出的效果。
 - 文件类卡片现在也会像链接卡片一样隐藏底部 `infoWidget`，让缩略图区域更完整。
 - `FileThumbWidget` 现在移除了默认布局边距，并让图标展示区垂直扩展，减少文件卡片正文与底部之间的空白。
 - `ClipboardItemInnerWidget` 现在统一让正文区子控件按可用空间扩展，减少文本、富文本、图片、文件和链接卡片正文与底部信息区之间的空白。
