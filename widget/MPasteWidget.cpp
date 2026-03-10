@@ -350,15 +350,25 @@ void MPasteWidget::initSound() {
     misc_.player = new QMediaPlayer(this);
     misc_.audioOutput = new QAudioOutput(this);
     misc_.mediaDevices = new QMediaDevices(this);
-    misc_.audioOutput->setDevice(QMediaDevices::defaultAudioOutput());
     misc_.player->setAudioOutput(misc_.audioOutput);
-    connect(misc_.mediaDevices, &QMediaDevices::audioOutputsChanged, this, [this]() {
-        if (misc_.audioOutput) {
-            misc_.audioOutput->setDevice(QMediaDevices::defaultAudioOutput());
-        }
-    });
+    syncSoundOutputDevice();
+    connect(misc_.mediaDevices, &QMediaDevices::audioOutputsChanged,
+            this, &MPasteWidget::syncSoundOutputDevice);
     misc_.player->setSource(QUrl("qrc:/resources/resources/sound.mp3"));
     std::cout << "Sound effect loaded finished" << std::endl;
+}
+
+void MPasteWidget::syncSoundOutputDevice() {
+    if (!misc_.audioOutput) {
+        return;
+    }
+
+    const QAudioDevice defaultDevice = QMediaDevices::defaultAudioOutput();
+    if (misc_.audioOutput->device().id() == defaultDevice.id()) {
+        return;
+    }
+
+    misc_.audioOutput->setDevice(defaultDevice);
 }
 
 void MPasteWidget::initSystemTray() {
@@ -505,6 +515,7 @@ void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
         if (MPasteSettings::getInst()->isPlaySound()) {
             const qint64 now = QDateTime::currentMSecsSinceEpoch();
             if (now - misc_.lastSoundPlayAtMs >= SOUND_BURST_WINDOW_MS) {
+                syncSoundOutputDevice();
                 if (misc_.player->mediaStatus() == QMediaPlayer::EndOfMedia) {
                     misc_.player->setPosition(0);
                 }

@@ -66,6 +66,7 @@ private:
     void initSound();
     void initMenu();
     void setupConnections();
+    void syncSoundOutputDevice();
 
     bool setClipboard(const ClipboardItem &item, bool plainText = false);
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;

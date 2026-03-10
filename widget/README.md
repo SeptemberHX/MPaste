@@ -42,6 +42,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemDetailsDialog` 现在提供更完整的条目检查视图，可查看归一化结果与原始 MIME 数据。
 - `ClipboardItemInnerWidget` 现在支持通过提取 HTML 中的 `<img src>` 来加载 WPS / 金山图片预览。
 - `MPasteWidget` 现在会在短时间内抑制重复提示音，减少一次复制触发多次响声的问题。
+- `MPasteWidget` 现在会在设备列表变化和每次播放提示音前同步默认音频输出，减少运行中切换耳机后提示音仍走旧设备的问题。
 - `WebLinkThumbWidget` 和图片卡片现在使用更饱满的 fill-and-crop 预览方式。
 - `ClipboardItemWidget` 现在会为右下阴影预留外层占位，`ScrollItemsWidget` 也会按卡片外框高度计算滚动区，减少卡片底边被截断的视觉问题。
 - `ScrollItemsWidget` 现在会在列表左右预留呼吸边距，并在视口边缘绘制接近主窗口淡灰玻璃底色的轻雾渐变遮罩，让横向滚动时更接近贴边淡出的效果。
