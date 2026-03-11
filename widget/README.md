@@ -38,9 +38,11 @@ update: 修改本目录文件时，同步更新本 README。
 ## Recent Notes
 
 - `MPasteWidget` currently prints clipboard-update and sound-play diagnostics so repeated copy prompts can be traced from app-level updates to actual sound playback decisions.
+- `MPasteWidget` 和 `ScrollItemsWidget` 现在会输出启动、窗口 show、延迟历史加载和后台条目补全的阶段耗时日志，方便定位卡顿发生在哪一步。
 - `MPasteWidget` 现在会在监控器首次观察到有效复制动作时立即播放提示音，不再等待后续 WPS settle / 抓图完成。
 - `ClipboardItemWidget` 现在支持上下文菜单中的“纯文本粘贴”动作。
 - `ScrollItemsWidget` 会把纯文本粘贴请求继续转发给主窗口。
+- `ScrollItemsWidget` 现在会先快速插入轻量条目，再在后台线程补做缩略图和保存落盘，减少复制大图时卡住界面。
 - `ClipboardItemDetailsDialog` 现在提供更完整的条目检查视图，可查看归一化结果与原始 MIME 数据。
 - `ClipboardItemDetailsDialog` 现在锁定了检查器宽度，并让概览页长链接/长标题优先在窗口内换行，避免详情窗口被内容横向撑开。
 - `ClipboardItemDetailsDialog` 现在移除了外层卡片阴影，让详情窗口里的组件视觉更干净。
@@ -52,6 +54,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemInnerWidget` 现在会把 HTML 预览首次渲染为缓存快照，后续列表里直接显示快照图，减少滚动时反复做 HTML 文档布局。
 - `ClipboardItemInnerWidget` 现在会按卡片正文区尺寸和 label 的 device pixel ratio 重采样富文本快照，避免只显示左上角或高分屏发糊。
 - `ClipboardItemInnerWidget` 和 `ScrollItemsWidget` 现在会把富文本快照预览放大系数跟随当前 device pixel ratio，提升列表里小字号 HTML 的可读性。
+- 图片与富文本缩略图现在统一按目标卡片框做 `KeepAspectRatioByExpanding` 的居中 cover 裁切，避免长条图生成过窄的缩略图。
 - `ClipboardItemInnerWidget` 现在会把复杂 HTML 的首帧快照裁成卡片缩略图并回写保存，让这类条目后续也有稳定缩略图。
 - `ClipboardItemInnerWidget` 现在还会对当前可见、缺少缩略图的轻加载富文本条目补载 MIME 并回写快照缩略图，让旧历史项也能逐步补齐预览。
 - `ClipboardItemInnerWidget` 现在支持通过提取 HTML 中的 `<img src>` 来加载 WPS / 金山图片预览。

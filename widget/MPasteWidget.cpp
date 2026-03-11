@@ -11,6 +11,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QButtonGroup>
 #include <QLocale>
 #include <QIcon>
@@ -198,18 +199,49 @@ MPasteWidget::~MPasteWidget() {
 }
 
 void MPasteWidget::initializeWidget() {
+    misc_.startupPerfTimer.start();
+    qInfo() << "[startup] initializeWidget begin";
+
     initStyle();
+    qInfo().noquote() << QStringLiteral("[startup] initStyle done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     initUI();
+    qInfo().noquote() << QStringLiteral("[startup] initUI done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     initClipboard();
+    qInfo().noquote() << QStringLiteral("[startup] initClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     initShortcuts();
+    qInfo().noquote() << QStringLiteral("[startup] initShortcuts done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     initSystemTray();
+    qInfo().noquote() << QStringLiteral("[startup] initSystemTray done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     initSound();
+    qInfo().noquote() << QStringLiteral("[startup] initSound done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     setupConnections();
+    qInfo().noquote() << QStringLiteral("[startup] setupConnections done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     loadFromSaveDir();
+    qInfo().noquote() << QStringLiteral("[startup] loadFromSaveDir done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     clipboard_.monitor->primeCurrentClipboard();
+    qInfo().noquote() << QStringLiteral("[startup] primeCurrentClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
 
     setFocusOnSearch(false);
     misc_.pendingNumKey = 0;
+    qInfo().noquote() << QStringLiteral("[startup] initializeWidget end totalElapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
+    QTimer::singleShot(0, this, [this]() {
+        qInfo().noquote() << QStringLiteral("[startup] event-loop checkpoint 0ms elapsedMs=%1 visible=%2 active=%3")
+            .arg(misc_.startupPerfTimer.elapsed())
+            .arg(isVisible())
+            .arg(isActiveWindow());
+    });
+    QTimer::singleShot(100, this, [this]() {
+        qInfo().noquote() << QStringLiteral("[startup] event-loop checkpoint 100ms elapsedMs=%1 visible=%2 active=%3")
+            .arg(misc_.startupPerfTimer.elapsed())
+            .arg(isVisible())
+            .arg(isActiveWindow());
+    });
+    QTimer::singleShot(500, this, [this]() {
+        qInfo().noquote() << QStringLiteral("[startup] event-loop checkpoint 500ms elapsedMs=%1 visible=%2 active=%3")
+            .arg(misc_.startupPerfTimer.elapsed())
+            .arg(isVisible())
+            .arg(isActiveWindow());
+    });
 
 #ifdef _DEBUG
     QTimer* debugTimer = new QTimer(this);
@@ -929,6 +961,9 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
 
 void MPasteWidget::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
+    qInfo().noquote() << QStringLiteral("[startup] MPasteWidget showEvent elapsedMs=%1 visible=%2")
+        .arg(misc_.startupPerfTimer.isValid() ? misc_.startupPerfTimer.elapsed() : -1)
+        .arg(isVisible());
     activateWindow();
     raise();
     setFocus();

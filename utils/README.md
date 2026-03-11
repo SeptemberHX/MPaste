@@ -37,4 +37,6 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardMonitor` 现在会在需要时额外等待 WPS / 金山的分阶段剪贴板写入，减少一次复制产生两条记录的问题。
 - `ClipboardMonitor` 现在能在捕获阶段下载并落地 WPS 单图 HTML 载荷，方便后续统一保存为标准图片数据。
 - `ClipboardMonitor` 现在会在观察到有效剪贴板变化时立刻发出早期活动信号，供界面先播提示音，再静默完成后续 settle / 抓图。
+- `ClipboardMonitor` 现在会优先发出跳过立即图片解码的轻量条目，配合界面层的后台完善流程，减少复制大图时卡死主线程。
+- `ClipboardMonitor` 现在会记录启动时的 prime capture 和后续捕获阶段日志，便于和界面层的 show/deferred-load 日志对照排查卡顿。
 - `PlatformRelated` 现在支持可配置的自动粘贴快捷键模式，可在多种粘贴方案之间切换。

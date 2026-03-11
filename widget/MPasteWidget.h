@@ -15,6 +15,7 @@
 #include <QMediaPlayer>
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
+#include <QElapsedTimer>
 
 #include "utils/ClipboardMonitor.h"
 #include "ClipboardItemWidget.h"
@@ -127,6 +128,7 @@ private:
         int pendingNumKey = -1;
         bool pendingPlainTextNumKey = false;
         qint64 lastSoundPlayAtMs = 0;
+        QElapsedTimer startupPerfTimer;
     } misc_;
 
     static constexpr int HIDE_ANIMATION_TIME = 50;

@@ -105,10 +105,10 @@ private:
     void updateContentWidthHint();
     void updateEdgeFadeOverlays();
     void scheduleDeferredLoadBatch();
-    void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchItems);
+    void handleDeferredBatchRead(const QStringList &batchPaths);
     void processDeferredLoadedItems();
     void waitForDeferredRead();
-    bool appendLoadedItem(const QString &filePath, const QByteArray &rawData);
+    void processPendingItemAsync(const ClipboardItem &item, ClipboardItemWidget *targetWidget = nullptr);
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
     QPair<int, int> displaySequenceForWidget(const ClipboardItemWidget *widget) const;
 
@@ -122,11 +122,12 @@ private:
     QPropertyAnimation *scrollAnimation;
     QTimer *deferredLoadTimer_ = nullptr;
     QThread *deferredLoadThread_ = nullptr;
+    QList<QThread*> processingThreads_;
     QWidget *leftEdgeFadeOverlay_ = nullptr;
     QWidget *rightEdgeFadeOverlay_ = nullptr;
     QHash<QByteArray, QList<ClipboardItemWidget*>> fingerprintBuckets_;
     QSet<QByteArray> favoriteFingerprints_;
-    QList<QPair<QString, QByteArray>> deferredLoadedItems_;
+    QStringList deferredLoadedItems_;
     QStringList pendingLoadFilePaths_;
     int edgeContentPadding_ = 0;
     int edgeFadeWidth_ = 0;
@@ -140,8 +141,6 @@ private:
     static constexpr int LOAD_BATCH_SIZE = 16;
     static constexpr int DEFERRED_LOAD_BATCH_SIZE = 6;
     static constexpr int LOAD_MORE_THRESHOLD_PX = 640;
-    static constexpr int HIDDEN_PARSE_SIZE_THRESHOLD = 512 * 1024;
-
 };
 
 #endif // SCROLLITEMSWIDGET_H

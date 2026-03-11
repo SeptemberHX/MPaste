@@ -66,15 +66,11 @@ QByteArray captureKeyForItem(const ClipboardItem &item) {
         return hash.result();
     }
 
-    const QPixmap image = item.getImage();
-    if (!image.isNull()) {
-        QByteArray pngBytes;
-        QBuffer buffer(&pngBytes);
-        if (buffer.open(QIODevice::WriteOnly) && image.save(&buffer, "PNG")) {
-            hash.addData(QByteArrayLiteral("image\n"));
-            hash.addData(pngBytes);
-            return hash.result();
-        }
+    const QByteArray imageBytes = item.imagePayloadBytesFast();
+    if (!imageBytes.isEmpty()) {
+        hash.addData(QByteArrayLiteral("image\n"));
+        hash.addData(imageBytes);
+        return hash.result();
     }
 
     const QString html = item.getHtml().trimmed();
@@ -139,15 +135,14 @@ QString mimeSummary(const QMimeData *mimeData) {
 QString itemSummary(const ClipboardItem &item) {
     const QString normalizedText = elideForLog(item.getNormalizedText());
     const QList<QUrl> urls = item.getNormalizedUrls();
-    const QPixmap image = item.getImage();
     return QStringLiteral("type=%1 fp=%2 key=%3 text=\"%4\" urlCount=%5 image=%6x%7 htmlLen=%8")
         .arg(QString::fromLatin1(contentTypeName(item.getContentType())))
         .arg(shortHex(item.fingerprint()))
         .arg(shortHex(captureKeyForItem(item)))
         .arg(normalizedText)
         .arg(urls.size())
-        .arg(image.isNull() ? 0 : image.width())
-        .arg(image.isNull() ? 0 : image.height())
+        .arg(item.getImagePixelSize().isValid() ? item.getImagePixelSize().width() : 0)
+        .arg(item.getImagePixelSize().isValid() ? item.getImagePixelSize().height() : 0)
         .arg(item.getHtml().size());
 }
 }
@@ -224,6 +219,7 @@ void ClipboardMonitor::clipboardChanged() {
 }
 
 void ClipboardMonitor::primeCurrentClipboard() {
+    qInfo() << "[clipboard-monitor] primeCurrentClipboard";
     beginClipboardCapture(false);
 }
 
@@ -275,8 +271,8 @@ void ClipboardMonitor::captureClipboard() {
     stabilizeTimer_.setInterval(STABILIZE_INTERVAL);
     wpsSettlePending_ = false;
 
-    ClipboardItem immediateItem(PlatformRelated::getWindowIcon(pendingWId_), mimeData);
-    if (!immediateItem.getImage().isNull()) {
+    ClipboardItem immediateItem = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(pendingWId_), mimeData);
+    if (!immediateItem.imagePayloadBytesFast().isEmpty()) {
         qInfo().noquote() << QStringLiteral("[clipboard-monitor] immediate image item token=%1 %2")
             .arg(captureToken_)
             .arg(itemSummary(immediateItem));
@@ -466,14 +462,14 @@ void ClipboardMonitor::emitCapturedItem(const ClipboardItem &item, int wId) {
 void ClipboardMonitor::fetchWpsImageAndEmit(const QMimeData *mimeData, const QUrl &url, int wId, quint64 captureToken) {
     if (!imageFetchManager_) {
         qInfo().noquote() << QStringLiteral("[clipboard-monitor] no network manager, emit immediate token=%1").arg(captureToken);
-        emitCapturedItem(ClipboardItem(PlatformRelated::getWindowIcon(wId), mimeData), wId);
+        emitCapturedItem(ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeData), wId);
         return;
     }
 
     std::shared_ptr<QMimeData> mimeDataCopy(cloneMimeData(mimeData));
     if (!mimeDataCopy) {
         qInfo().noquote() << QStringLiteral("[clipboard-monitor] clone mime failed, emit immediate token=%1").arg(captureToken);
-        emitCapturedItem(ClipboardItem(PlatformRelated::getWindowIcon(wId), mimeData), wId);
+        emitCapturedItem(ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeData), wId);
         return;
     }
 
@@ -484,7 +480,7 @@ void ClipboardMonitor::fetchWpsImageAndEmit(const QMimeData *mimeData, const QUr
     *startNextRequest = [this, mimeDataCopy, wId, captureToken, candidates, startNextRequest]() {
         if (candidates->isEmpty()) {
             qInfo().noquote() << QStringLiteral("[clipboard-monitor] image fetch exhausted token=%1, emit fallback").arg(captureToken);
-            emitCapturedItem(ClipboardItem(PlatformRelated::getWindowIcon(wId), mimeDataCopy.get()), wId);
+            emitCapturedItem(ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeDataCopy.get()), wId);
             return;
         }
 
@@ -526,7 +522,7 @@ void ClipboardMonitor::fetchWpsImageAndEmit(const QMimeData *mimeData, const QUr
                                 .arg(pixmap.width())
                                 .arg(pixmap.height());
                             materializePng(mimeDataCopy.get(), pngBytes);
-                            emitCapturedItem(ClipboardItem(PlatformRelated::getWindowIcon(wId), mimeDataCopy.get()), wId);
+                            emitCapturedItem(ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeDataCopy.get()), wId);
                             return;
                         }
                     }

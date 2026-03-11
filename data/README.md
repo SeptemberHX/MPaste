@@ -32,6 +32,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItem` 现在会缓存可搜索纯文本，减少重复关键字扫描开销。
 - `ClipboardItem` 现在提供轻量级内容指纹，用于更快地定位去重候选项。
 - `ClipboardItem` 现在会把协议文本和原始 MIME 数据统一归一化为 URLs / 文本，供共享的类型识别逻辑使用。
+- `ClipboardItem` 现在支持创建保留原始 MIME 但跳过立即图片物化的轻量快照条目，减少复制大图时的主线程阻塞。
 - `LocalSaver` 现在只读写当前 `.mpaste v4`，并依赖按 `275x218` 逻辑尺寸、带 HiDPI backing pixels 的居中缩略图与 MIME 偏移来支持轻加载。
 - `LocalSaver` 现在只会在轻加载阶段把“无文本、无链接但带缩略图且头部漂移成 Text”的条目纠正回 `Image`，避免富文本快照被误判成图片。
 - `ClipboardItem` 现在会优先把已物化的本地图片 MIME 载荷判成 `Image`，避免带着 WPS HTML 的条目在后续显示时又回退到远程 HTML 图片路径。

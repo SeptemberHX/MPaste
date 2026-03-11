@@ -107,18 +107,17 @@ QPixmap buildCardThumbnail(const ClipboardItem &item) {
         return fullImage;
     }
 
-    QPixmap scaled = fullImage.scaledToHeight(pixelTargetSize.height(), Qt::SmoothTransformation);
+    QPixmap scaled = fullImage.scaled(pixelTargetSize,
+        Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
     if (scaled.isNull()) {
         return QPixmap();
     }
 
-    QPixmap thumbnail = scaled;
-    if (scaled.width() > pixelTargetSize.width()) {
-        const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-        thumbnail = scaled.copy(x, 0,
-                                qMin(scaled.width(), pixelTargetSize.width()),
-                                scaled.height());
-    }
+    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
+    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
+    QPixmap thumbnail = scaled.copy(x, y,
+                                    qMin(scaled.width(), pixelTargetSize.width()),
+                                    qMin(scaled.height(), pixelTargetSize.height()));
     thumbnail.setDevicePixelRatio(thumbnailDpr);
     return thumbnail;
 }
@@ -266,6 +265,11 @@ ScrollItemsWidget::~ScrollItemsWidget()
     if (deferredLoadThread_) {
         deferredLoadThread_->wait();
     }
+    for (QThread *thread : processingThreads_) {
+        if (thread) {
+            thread->wait();
+        }
+    }
     delete ui;
 }
 
@@ -380,7 +384,11 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
             this->unregisterWidgetFingerprint(widget);
             widget->showItem(nItem);
             this->registerWidgetFingerprint(widget);
-            this->saveItem(nItem);
+            if (!nItem.isMimeDataLoaded() && nItem.sourceFilePath().isEmpty()) {
+                processPendingItemAsync(nItem, widget);
+            } else {
+                this->saveItem(nItem);
+            }
         }
         const int index = this->layout->indexOf(widget);
         if (index > 0) {
@@ -531,21 +539,93 @@ void ScrollItemsWidget::cleanShortCutInfo() {
     }
 }
 
+void ScrollItemsWidget::processPendingItemAsync(const ClipboardItem &item, ClipboardItemWidget *targetWidget) {
+    const QString filePath = this->getItemFilePath(item);
+    const QString expectedName = item.getName();
+    QPointer<ScrollItemsWidget> guard(this);
+    QPointer<ClipboardItemWidget> widgetGuard(targetWidget);
+    qInfo().noquote() << QStringLiteral("[scroll-items] async process queued category=%1 name=%2 type=%3 hasThumb=%4 path=%5")
+        .arg(category)
+        .arg(expectedName)
+        .arg(item.getContentType())
+        .arg(item.hasThumbnail())
+        .arg(filePath);
+
+    QThread *thread = QThread::create([guard, widgetGuard, item, filePath, expectedName]() mutable {
+        QElapsedTimer timer;
+        timer.start();
+        ClipboardItem preparedItem = prepareItemForDisplayAndSave(item);
+        LocalSaver saver;
+        saver.saveToFile(preparedItem, filePath);
+        qInfo().noquote() << QStringLiteral("[scroll-items] async process finished name=%1 type=%2 hasThumb=%3 elapsedMs=%4 path=%5")
+            .arg(expectedName)
+            .arg(preparedItem.getContentType())
+            .arg(preparedItem.hasThumbnail())
+            .arg(timer.elapsed())
+            .arg(filePath);
+
+        if (guard) {
+            QMetaObject::invokeMethod(guard.data(), [guard, widgetGuard, filePath, expectedName]() {
+                if (!guard) {
+                    return;
+                }
+
+                ClipboardItem reloadedItem = guard->saver->loadFromFileLight(filePath);
+                if (reloadedItem.getName().isEmpty() || reloadedItem.getName() != expectedName) {
+                    return;
+                }
+
+                if (widgetGuard && widgetGuard->getItem().getName() == expectedName) {
+                    widgetGuard->showItem(reloadedItem);
+                    return;
+                }
+
+                if (ClipboardItemWidget *widget = guard->findMatchingWidget(reloadedItem)) {
+                    widget->showItem(reloadedItem);
+                }
+            }, Qt::QueuedConnection);
+        }
+    });
+
+    processingThreads_.append(thread);
+    connect(thread, &QThread::finished, this, [this, thread]() {
+        processingThreads_.removeAll(thread);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+}
+
 void ScrollItemsWidget::loadFromSaveDir() {
     deferredLoadActive_ = false;
     deferredLoadTimer_->stop();
+    QElapsedTimer timer;
+    timer.start();
+    qInfo().noquote() << QStringLiteral("[scroll-items] loadFromSaveDir begin category=%1").arg(category);
     prepareLoadFromSaveDir();
     loadNextBatch(INITIAL_LOAD_BATCH_SIZE);
     maybeLoadMoreItems();
+    qInfo().noquote() << QStringLiteral("[scroll-items] loadFromSaveDir end category=%1 totalCount=%2 visibleCount=%3 elapsedMs=%4")
+        .arg(category)
+        .arg(totalItemCount_)
+        .arg(itemCountForDisplay())
+        .arg(timer.elapsed());
 }
 
 void ScrollItemsWidget::loadFromSaveDirDeferred() {
     deferredLoadActive_ = true;
     deferredLoadTimer_->stop();
+    QElapsedTimer timer;
+    timer.start();
+    qInfo().noquote() << QStringLiteral("[scroll-items] loadFromSaveDirDeferred begin category=%1").arg(category);
     prepareLoadFromSaveDir();
 
     if (pendingLoadFilePaths_.isEmpty()) {
         deferredLoadActive_ = false;
+        qInfo().noquote() << QStringLiteral("[scroll-items] loadFromSaveDirDeferred end category=%1 totalCount=%2 visibleCount=%3 elapsedMs=%4")
+            .arg(category)
+            .arg(totalItemCount_)
+            .arg(itemCountForDisplay())
+            .arg(timer.elapsed());
         return;
     }
 
@@ -555,19 +635,12 @@ void ScrollItemsWidget::loadFromSaveDirDeferred() {
     } else {
         deferredLoadActive_ = false;
     }
-}
-
-bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const QByteArray &rawData) {
-    ClipboardItem item = this->saver->loadFromRawData(rawData);
-    if (item.getName().isEmpty() || (!item.getMimeData() && item.isMimeDataLoaded())) {
-        this->saver->removeItem(filePath);
-        if (this->totalItemCount_ > 0) {
-            --this->totalItemCount_;
-        }
-        return false;
-    }
-
-    return appendLoadedItem(filePath, item);
+    qInfo().noquote() << QStringLiteral("[scroll-items] loadFromSaveDirDeferred end category=%1 totalCount=%2 visibleCount=%3 elapsedMs=%4 deferredActive=%5")
+        .arg(category)
+        .arg(totalItemCount_)
+        .arg(itemCountForDisplay())
+        .arg(timer.elapsed())
+        .arg(deferredLoadActive_);
 }
 
 bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const ClipboardItem &item) {
@@ -622,10 +695,15 @@ QScrollBar* ScrollItemsWidget::horizontalScrollbar() {
 }
 
 bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
-    ClipboardItem preparedItem = prepareItemForDisplayAndSave(nItem);
+    const bool isPendingClipboardSnapshot = !nItem.isMimeDataLoaded() && nItem.sourceFilePath().isEmpty();
+    ClipboardItem preparedItem = isPendingClipboardSnapshot ? nItem : prepareItemForDisplayAndSave(nItem);
     const bool added = this->addOneItem(preparedItem);
     if (added) {
-        this->saveItem(preparedItem);
+        if (isPendingClipboardSnapshot) {
+            processPendingItemAsync(preparedItem, findMatchingWidget(preparedItem));
+        } else {
+            this->saveItem(preparedItem);
+        }
     }
     return added;
 }
@@ -785,7 +863,14 @@ void ScrollItemsWidget::loadNextBatch(int batchSize) {
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
     const int count = qMin(batchSize, pendingLoadFilePaths_.size());
+    qInfo().noquote() << QStringLiteral("[scroll-items] loadNextBatch begin category=%1 batchRequest=%2 batchActual=%3 pendingBefore=%4")
+        .arg(category)
+        .arg(batchSize)
+        .arg(count)
+        .arg(pendingLoadFilePaths_.size());
     int loadedCount = 0;
     for (int i = 0; i < count; ++i) {
         const QString filePath = pendingLoadFilePaths_.takeFirst();
@@ -811,6 +896,11 @@ void ScrollItemsWidget::loadNextBatch(int batchSize) {
 
     emit itemCountChanged(this->itemCountForDisplay());
     updateContentWidthHint();
+    qInfo().noquote() << QStringLiteral("[scroll-items] loadNextBatch end category=%1 loaded=%2 pendingAfter=%3 elapsedMs=%4")
+        .arg(category)
+        .arg(loadedCount)
+        .arg(pendingLoadFilePaths_.size())
+        .arg(timer.elapsed());
 }
 
 void ScrollItemsWidget::ensureAllItemsLoaded() {
@@ -878,15 +968,25 @@ void ScrollItemsWidget::prepareLoadFromSaveDir() {
 
     QDir saveDir(this->saveDir());
     const QFileInfoList fileInfos = saveDir.entryInfoList(QStringList() << "*.mpaste", QDir::Files, QDir::Name | QDir::Reversed);
+    int acceptedCount = 0;
+    int skippedCount = 0;
     for (const QFileInfo &info : fileInfos) {
         if (LocalSaver::isCurrentFormatFile(info.filePath())) {
             pendingLoadFilePaths_ << info.filePath();
+            ++acceptedCount;
+        } else {
+            ++skippedCount;
         }
     }
 
     totalItemCount_ = pendingLoadFilePaths_.size();
     trimToMaxSize();
     updateContentWidthHint();
+    qInfo().noquote() << QStringLiteral("[scroll-items] prepareLoadFromSaveDir category=%1 files=%2 accepted=%3 skipped=%4")
+        .arg(category)
+        .arg(fileInfos.size())
+        .arg(acceptedCount)
+        .arg(skippedCount);
 }
 
 void ScrollItemsWidget::continueDeferredLoad() {
@@ -894,6 +994,10 @@ void ScrollItemsWidget::continueDeferredLoad() {
         return;
     }
 
+    qInfo().noquote() << QStringLiteral("[scroll-items] continueDeferredLoad category=%1 queued=%2 pendingPaths=%3")
+        .arg(category)
+        .arg(deferredLoadedItems_.size())
+        .arg(pendingLoadFilePaths_.size());
     processDeferredLoadedItems();
 
     if (deferredLoadedItems_.isEmpty() && !deferredLoadThread_ && !pendingLoadFilePaths_.isEmpty()) {
@@ -934,26 +1038,17 @@ void ScrollItemsWidget::scheduleDeferredLoadBatch() {
     for (int i = 0; i < count; ++i) {
         batchPaths << pendingLoadFilePaths_.takeFirst();
     }
+    qInfo().noquote() << QStringLiteral("[scroll-items] scheduleDeferredLoadBatch category=%1 batch=%2 pendingAfterTake=%3")
+        .arg(category)
+        .arg(batchPaths.size())
+        .arg(pendingLoadFilePaths_.size());
 
     QPointer<ScrollItemsWidget> guard(this);
     deferredLoadThread_ = QThread::create([guard, batchPaths]() {
-        QList<QPair<QString, QByteArray>> batchItems;
-        batchItems.reserve(batchPaths.size());
-
-        for (const QString &filePath : batchPaths) {
-            QFile file(filePath);
-            QByteArray rawData;
-            if (file.open(QIODevice::ReadOnly)) {
-                rawData = file.readAll();
-                file.close();
-            }
-            batchItems.append(qMakePair(filePath, rawData));
-        }
-
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, batchItems]() {
+            QMetaObject::invokeMethod(guard.data(), [guard, batchPaths]() {
                 if (guard) {
-                    guard->handleDeferredBatchRead(batchItems);
+                    guard->handleDeferredBatchRead(batchPaths);
                 }
             }, Qt::QueuedConnection);
         }
@@ -966,8 +1061,8 @@ void ScrollItemsWidget::scheduleDeferredLoadBatch() {
     deferredLoadThread_->start();
 }
 
-void ScrollItemsWidget::handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchItems) {
-    deferredLoadedItems_.append(batchItems);
+void ScrollItemsWidget::handleDeferredBatchRead(const QStringList &batchPaths) {
+    deferredLoadedItems_.append(batchPaths);
 
     if (!deferredLoadTimer_->isActive()) {
         const bool widgetVisible = isVisible() && window() && window()->isVisible();
@@ -992,19 +1087,21 @@ void ScrollItemsWidget::processDeferredLoadedItems() {
     int processedCount = 0;
     int loadedCount = 0;
     const int initialQueuedCount = deferredLoadedItems_.size();
-    int skippedLargeCount = 0;
+    qInfo().noquote() << QStringLiteral("[scroll-items] processDeferredLoadedItems begin category=%1 queued=%2 visible=%3 maxItems=%4 maxMs=%5")
+        .arg(category)
+        .arg(initialQueuedCount)
+        .arg(widgetVisible)
+        .arg(maxItemsPerTick)
+        .arg(maxParseMs);
     while (!deferredLoadedItems_.isEmpty() && processedCount < maxItemsPerTick && parseTimer.elapsed() < maxParseMs) {
-        const auto itemData = deferredLoadedItems_.takeFirst();
-
-        if (!widgetVisible
-            && itemData.second.size() >= HIDDEN_PARSE_SIZE_THRESHOLD
-            && skippedLargeCount < initialQueuedCount) {
-            deferredLoadedItems_.append(itemData);
-            ++skippedLargeCount;
-            continue;
-        }
-
-        if (appendLoadedItem(itemData.first, itemData.second)) {
+        const QString filePath = deferredLoadedItems_.takeFirst();
+        ClipboardItem item = this->saver->loadFromFileLight(filePath);
+        if (item.getName().isEmpty()) {
+            this->saver->removeItem(filePath);
+            if (this->totalItemCount_ > 0) {
+                --this->totalItemCount_;
+            }
+        } else if (appendLoadedItem(filePath, item)) {
             ++loadedCount;
         }
         ++processedCount;
@@ -1020,11 +1117,22 @@ void ScrollItemsWidget::processDeferredLoadedItems() {
 
     emit itemCountChanged(this->itemCountForDisplay());
     updateContentWidthHint();
+    qInfo().noquote() << QStringLiteral("[scroll-items] processDeferredLoadedItems end category=%1 processed=%2 loaded=%3 remaining=%4 skippedLarge=%5 elapsedMs=%6")
+        .arg(category)
+        .arg(processedCount)
+        .arg(loadedCount)
+        .arg(deferredLoadedItems_.size())
+        .arg(0)
+        .arg(parseTimer.elapsed());
 }
 
 void ScrollItemsWidget::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
 
+    qInfo().noquote() << QStringLiteral("[scroll-items] showEvent category=%1 queuedDeferred=%2 pendingPaths=%3")
+        .arg(category)
+        .arg(deferredLoadedItems_.size())
+        .arg(pendingLoadFilePaths_.size());
     updateEdgeFadeOverlays();
     if (!deferredLoadedItems_.isEmpty() && !deferredLoadTimer_->isActive()) {
         deferredLoadTimer_->start(0);
@@ -1033,6 +1141,10 @@ void ScrollItemsWidget::showEvent(QShowEvent *event) {
 
 void ScrollItemsWidget::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
+    qInfo().noquote() << QStringLiteral("[scroll-items] resizeEvent category=%1 size=%2x%3")
+        .arg(category)
+        .arg(width())
+        .arg(height());
     refreshContentWidthHint();
     updateEdgeFadeOverlays();
 }
