@@ -490,7 +490,10 @@ ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath) {
     // Build a light-loaded ClipboardItem (no MIME data, no full image decode).
     ClipboardItem item;
     ClipboardItem::ContentType effectiveType = static_cast<ClipboardItem::ContentType>(contentType);
-    if (!thumbnail.isNull() && effectiveType != ClipboardItem::Image) {
+    if (!thumbnail.isNull()
+        && effectiveType == ClipboardItem::Text
+        && normalizedText.trimmed().isEmpty()
+        && normalizedUrls.isEmpty()) {
         effectiveType = ClipboardItem::Image;
     }
     item.setIcon(icon);

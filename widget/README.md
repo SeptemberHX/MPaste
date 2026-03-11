@@ -48,6 +48,11 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemDetailsDialog` 现在会显示当前条目在当前列表里的序号，方便确认它是第几个条目。
 - `ClipboardItemDetailsDialog` 现在会在主预览图下方额外显示横向缩略图，并在摘要里标出缩略图尺寸。
 - `ClipboardItemDetailsDialog` 现在会按标签的 device pixel ratio 先缩放主预览和缩略图，减少高分屏下的发糊。
+- `ClipboardItemDetailsDialog` 现在会对带缩略图的富文本条目直接显示其快照缩略图，而不是退回默认图标。
+- `ClipboardItemInnerWidget` 现在会把 HTML 预览首次渲染为缓存快照，后续列表里直接显示快照图，减少滚动时反复做 HTML 文档布局。
+- `ClipboardItemInnerWidget` 现在会按卡片正文区尺寸和 label 的 device pixel ratio 重采样富文本快照，避免只显示左上角或高分屏发糊。
+- `ClipboardItemInnerWidget` 现在会把复杂 HTML 的首帧快照裁成卡片缩略图并回写保存，让这类条目后续也有稳定缩略图。
+- `ClipboardItemInnerWidget` 现在还会对当前可见、缺少缩略图的轻加载富文本条目补载 MIME 并回写快照缩略图，让旧历史项也能逐步补齐预览。
 - `ClipboardItemInnerWidget` 现在支持通过提取 HTML 中的 `<img src>` 来加载 WPS / 金山图片预览。
 - `MPasteWidget` 现在会在短时间内抑制重复提示音，减少一次复制触发多次响声的问题。
 - `MPasteWidget` 现在会在每次播放提示音前按当前默认输出设备重建播放链路，减少运行中切换耳机后提示音仍走旧设备的问题，同时避免设备变化回调触发的重复重建。

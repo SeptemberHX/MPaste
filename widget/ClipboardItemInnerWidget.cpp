@@ -8,16 +8,19 @@
 #include "ClipboardItemInnerWidget.h"
 #include "ui_ClipboardItemInnerWidget.h"
 #include "utils/MPasteSettings.h"
+#include <QCache>
+#include <QCryptographicHash>
 #include <QPlainTextEdit>
 #include <QFileInfo>
-#include <QRegularExpression>
-#include <QNetworkRequest>
-#include <QNetworkReply>
 #include <QNetworkAccessManager>
 #include <QNetworkProxy>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QLinearGradient>
+#include <QRegularExpression>
+#include <QTextDocument>
 
 namespace {
 QColor blendColor(const QColor &from, const QColor &to, qreal factor) {
@@ -51,6 +54,122 @@ QPixmap scaleToFillHeightCropWidth(const QPixmap &pixmap, const QSize &targetSiz
 
     scaled.setDevicePixelRatio(devicePixelRatio);
     return scaled;
+}
+
+QPixmap scalePixmapForLabel(const QPixmap &pixmap, const QSize &targetSize, qreal devicePixelRatio) {
+    if (pixmap.isNull() || !targetSize.isValid()) {
+        return pixmap;
+    }
+
+    const QSize pixelTargetSize = targetSize * devicePixelRatio;
+    if (!pixelTargetSize.isValid()) {
+        return pixmap;
+    }
+
+    QPixmap scaled = pixmap.scaled(pixelTargetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    scaled.setDevicePixelRatio(devicePixelRatio);
+    return scaled;
+}
+
+QCache<QString, QPixmap> &htmlPreviewSnapshotCache() {
+    static QCache<QString, QPixmap> cache(64 * 1024);
+    return cache;
+}
+
+QString htmlPreviewSnapshotCacheKey(const QByteArray &snapshotKey,
+                                    const QString &html,
+                                    const QSize &targetSize,
+                                    qreal devicePixelRatio) {
+    QByteArray keyBytes = snapshotKey;
+    if (keyBytes.isEmpty()) {
+        keyBytes = QCryptographicHash::hash(html.toUtf8(), QCryptographicHash::Sha1);
+    }
+    return QStringLiteral("%1:%2x%3@%4")
+        .arg(QString::fromLatin1(keyBytes.toHex()))
+        .arg(targetSize.width())
+        .arg(targetSize.height())
+        .arg(qRound(devicePixelRatio * 100.0));
+}
+
+QPixmap renderHtmlPreviewSnapshot(const QString &html, const QSize &targetSize, qreal devicePixelRatio) {
+    if (html.isEmpty() || !targetSize.isValid()) {
+        return QPixmap();
+    }
+
+    const QSize pixelTargetSize = targetSize * devicePixelRatio;
+    if (!pixelTargetSize.isValid()) {
+        return QPixmap();
+    }
+
+    const int leftPadding = qRound(10 * devicePixelRatio);
+    const int rightPadding = qRound(10 * devicePixelRatio);
+    const int topPadding = qRound(6 * devicePixelRatio);
+    const int bottomPadding = qRound(2 * devicePixelRatio);
+    const QSize contentSize(
+        qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
+        qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
+
+    QTextDocument document;
+    document.setDocumentMargin(0);
+    document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
+    document.setHtml(html);
+    document.setPageSize(QSizeF(contentSize));
+    document.setTextWidth(contentSize.width());
+
+    QPixmap snapshot(pixelTargetSize);
+    snapshot.fill(Qt::transparent);
+
+    QPainter painter(&snapshot);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.translate(leftPadding, topPadding);
+    painter.setClipRect(QRectF(0, 0, contentSize.width(), contentSize.height()));
+    document.drawContents(&painter, QRectF(0, 0, contentSize.width(), contentSize.height()));
+    painter.end();
+
+    snapshot.setDevicePixelRatio(devicePixelRatio);
+    return snapshot;
+}
+
+QPixmap buildCardThumbnailPixmap(const QPixmap &pixmap) {
+    if (pixmap.isNull()) {
+        return QPixmap();
+    }
+
+    constexpr int cardW = 275;
+    constexpr int cardH = 218;
+    const qreal dpr = pixmap.devicePixelRatio() > 0.0 ? pixmap.devicePixelRatio() : 1.0;
+    const QSize pixelTargetSize = QSize(cardW, cardH) * dpr;
+    if (!pixelTargetSize.isValid()) {
+        return pixmap;
+    }
+
+    QPixmap scaled = pixmap.scaledToHeight(pixelTargetSize.height(), Qt::SmoothTransformation);
+    if (scaled.isNull()) {
+        return QPixmap();
+    }
+
+    QPixmap thumbnail = scaled;
+    if (scaled.width() > pixelTargetSize.width()) {
+        const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
+        thumbnail = scaled.copy(x, 0,
+                                qMin(scaled.width(), pixelTargetSize.width()),
+                                scaled.height());
+    }
+    thumbnail.setDevicePixelRatio(dpr);
+    return thumbnail;
+}
+
+QSize contentPreviewTargetSize(const QWidget *container, const QWidget *bodyWidget, const QWidget *infoWidget, int scale) {
+    QSize targetSize = bodyWidget ? bodyWidget->size() : QSize();
+    const int topHeight = 64 * scale / 100;
+    const int infoHeight = infoWidget && infoWidget->isVisible() ? infoWidget->sizeHint().height() : 0;
+    const QSize fallbackTargetSize(container ? container->width() : 0,
+                                   container ? container->height() - topHeight - infoHeight : 0);
+    if (!targetSize.isValid() || targetSize.height() < fallbackTargetSize.height() / 2) {
+        targetSize = fallbackTargetSize;
+    }
+    return targetSize;
 }
 }
 
@@ -243,10 +362,11 @@ void ClipboardItemInnerWidget::setIcon(const QPixmap &nIcon) {
 }
 
 void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
+    currentItem_ = item;
     this->setIcon(item.getIcon());
 
     // For light-loaded items, use cached metadata + thumbnail without triggering full MIME load
-    const bool lightLoaded = !item.isMimeDataLoaded();
+    bool lightLoaded = !item.isMimeDataLoaded();
 
     if (!lightLoaded) {
         const QMimeData* mimeData = item.getMimeData();
@@ -259,6 +379,13 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
     const QString normalizedText = item.getNormalizedText();
 
     const ClipboardItem::ContentType contentType = item.getContentType();
+    if (lightLoaded && contentType == ClipboardItem::RichText && !item.hasThumbnail()) {
+        ClipboardItem &mutableItem = const_cast<ClipboardItem&>(item);
+        mutableItem.ensureMimeDataLoaded();
+        currentItem_ = item;
+        lightLoaded = false;
+    }
+
     const bool usingThumbnailPreview = lightLoaded && item.hasThumbnail();
     const QSize itemImagePixelSize = contentType == ClipboardItem::Image ? item.getImagePixelSize() : QSize();
     const QPixmap itemImage = usingThumbnailPreview ? item.thumbnail() : item.getImage();
@@ -286,6 +413,9 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
     else if (contentType == ClipboardItem::Image && mimeData && mimeData->hasHtml()) {
         this->showHtmlImagePayload(mimeData->html());
     }
+    else if (contentType == ClipboardItem::RichText && lightLoaded && item.hasThumbnail()) {
+        this->showHtmlSnapshot(item.thumbnail(), normalizedText.length());
+    }
     else if (mimeData && mimeData->hasHtml()) {
         QString text = normalizedText.trimmed();
         if (contentType == ClipboardItem::Link
@@ -295,10 +425,10 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
             if (this->checkWebLink(text)) {
                 this->showWebLink(text, item);
             } else {
-                this->showHtml(mimeData->html());
+                this->showHtml(mimeData->html(), item.fingerprint());
             }
         } else {
-            this->showHtml(mimeData->html());
+            this->showHtml(mimeData->html(), item.fingerprint());
         }
     }
     else if (!itemImage.isNull()) {
@@ -320,6 +450,10 @@ void ClipboardItemInnerWidget::showBorder(bool flag) {
         this->borderWidth = 0;
         this->refreshStyleSheet();
     }
+}
+
+QPixmap ClipboardItemInnerWidget::buildCardThumbnail(const QPixmap &pixmap) {
+    return buildCardThumbnailPixmap(pixmap);
 }
 
 void ClipboardItemInnerWidget::setFavoriteHighlight(bool flag) {
@@ -428,21 +562,88 @@ void ClipboardItemInnerWidget::clearShortkeyInfo() {
     ui->shortkeyLabel->setText("");
 }
 
-void ClipboardItemInnerWidget::showHtml(const QString &html) {
-    this->initTextBrowser();
-    prepareTextBrowserDocument();
-    setInfoWidgetVisible(true);
-    this->textBrowser->show();
-    this->textBrowser->setHtml(html);
-    resetPanelStyleOverrides();
+void ClipboardItemInnerWidget::hideContentWidgets() {
+    if (this->textBrowser) {
+        this->textBrowser->hide();
+    }
+    if (this->imageLabel) {
+        this->imageLabel->hide();
+        this->imageLabel->setPixmap(QPixmap());
+        this->imageLabel->setText(QString());
+    }
+    if (this->fileThumbWidget) {
+        this->fileThumbWidget->hide();
+    }
+    if (this->webLinkThumbWidget) {
+        this->webLinkThumbWidget->hide();
+    }
+}
 
-    QTextDocument doc;
-    doc.setHtml(html);
-    QString plainText = doc.toPlainText();
-    int charCount = plainText.length();
+void ClipboardItemInnerWidget::showHtmlSnapshot(const QPixmap &pixmap, int charCount) {
+    if (pixmap.isNull()) {
+        return;
+    }
+
+    setInfoWidgetVisible(true);
+    resetPanelStyleOverrides();
+    hideContentWidgets();
+
+    this->initImageLabel();
+    this->imageLabel->setStyleSheet("QWidget { border-radius: 0px; } ");
+    this->imageLabel->setMargin(0);
+    this->imageLabel->setAlignment(Qt::AlignCenter);
+    const int scale = MPasteSettings::getInst()->getItemScale();
+    const QSize targetSize = contentPreviewTargetSize(this, ui->bodyWidget, ui->infoWidget, scale);
+    this->imageLabel->setPixmap(scalePixmapForLabel(pixmap, targetSize, this->imageLabel->devicePixelRatioF()));
+    this->imageLabel->show();
 
     ui->countLabel->setText(QString("%1 ").arg(charCount) + tr("Characters"));
     ui->typeLabel->setText(tr("Rich Text"));
+}
+
+void ClipboardItemInnerWidget::showHtml(const QString &html, const QByteArray &snapshotKey) {
+    setInfoWidgetVisible(true);
+    resetPanelStyleOverrides();
+    hideContentWidgets();
+
+    QTextDocument doc;
+    doc.setHtml(html);
+    const int charCount = doc.toPlainText().length();
+
+    const int scale = MPasteSettings::getInst()->getItemScale();
+    const QSize targetSize = contentPreviewTargetSize(this, ui->bodyWidget, ui->infoWidget, scale);
+    const qreal devicePixelRatio = devicePixelRatioF();
+    const QString cacheKey = htmlPreviewSnapshotCacheKey(snapshotKey, html, targetSize, devicePixelRatio);
+
+    QPixmap snapshot;
+    if (QPixmap *cachedSnapshot = htmlPreviewSnapshotCache().object(cacheKey)) {
+        snapshot = *cachedSnapshot;
+    } else {
+        this->initTextBrowser();
+        prepareTextBrowserDocument();
+        this->textBrowser->show();
+        this->textBrowser->setHtml(html);
+
+        snapshot = renderHtmlPreviewSnapshot(html, targetSize, devicePixelRatio);
+        if (!snapshot.isNull()) {
+            const int cacheCost = qMax(1, (snapshot.width() * snapshot.height() * 4) / 1024);
+            htmlPreviewSnapshotCache().insert(cacheKey, new QPixmap(snapshot), cacheCost);
+        }
+    }
+
+    if (!snapshot.isNull()) {
+        if (!currentItem_.hasThumbnail()) {
+            const QPixmap thumbnail = buildCardThumbnail(snapshot);
+            if (!thumbnail.isNull()) {
+                currentItem_.setThumbnail(thumbnail);
+                Q_EMIT itemNeedToSave(currentItem_);
+            }
+        }
+        this->showHtmlSnapshot(snapshot, charCount);
+    } else {
+        ui->countLabel->setText(QString("%1 ").arg(charCount) + tr("Characters"));
+        ui->typeLabel->setText(tr("Rich Text"));
+    }
 }
 
 
@@ -494,9 +695,15 @@ void ClipboardItemInnerWidget::loadHtmlImagePreview(const QUrl &url) {
             if (this->imageLabel) {
                 this->imageLabel->setText(tr("Preview unavailable"));
             }
-            if (this->textBrowser && !pendingHtmlImageHtml_.isEmpty()) {
-                this->textBrowser->show();
-                this->textBrowser->setHtml(pendingHtmlImageHtml_);
+            if (!pendingHtmlImageHtml_.isEmpty()) {
+                this->showHtml(pendingHtmlImageHtml_);
+                const QSize imageSize = extractHtmlImageSize(pendingHtmlImageHtml_);
+                if (imageSize.isValid()) {
+                    ui->countLabel->setText(QString("%1 x %2 ").arg(imageSize.width()).arg(imageSize.height()) + tr("Pixels"));
+                } else {
+                    ui->countLabel->setText(QString());
+                }
+                ui->typeLabel->setText(tr("Image"));
             }
             return;
         }
@@ -536,6 +743,7 @@ void ClipboardItemInnerWidget::loadHtmlImagePreview(const QUrl &url) {
 void ClipboardItemInnerWidget::showHtmlImagePayload(const QString &html) {
     resetPanelStyleOverrides();
     setInfoWidgetVisible(true);
+    hideContentWidgets();
 
     const QSize imageSize = extractHtmlImageSize(html);
     if (imageSize.isValid()) {
@@ -548,9 +756,7 @@ void ClipboardItemInnerWidget::showHtmlImagePayload(const QString &html) {
     const QUrl imageUrl = extractHtmlImageUrl(html);
     if (imageUrl.isValid() && (imageUrl.scheme().startsWith(QStringLiteral("http")) || imageUrl.scheme().isEmpty())) {
         this->initImageLabel();
-        this->initTextBrowser();
         pendingHtmlImageHtml_ = html;
-        this->textBrowser->hide();
         this->imageLabel->setPixmap(QPixmap());
         this->imageLabel->setText(tr("Loading preview..."));
         this->imageLabel->setAlignment(Qt::AlignCenter);
@@ -559,28 +765,28 @@ void ClipboardItemInnerWidget::showHtmlImagePayload(const QString &html) {
         return;
     }
 
-    this->initTextBrowser();
-    prepareTextBrowserDocument();
-    this->textBrowser->show();
-    this->textBrowser->setHtml(html);
+    this->showHtml(html);
+    if (imageSize.isValid()) {
+        ui->countLabel->setText(QString("%1 x %2 ").arg(imageSize.width()).arg(imageSize.height()) + tr("Pixels"));
+    } else {
+        ui->countLabel->setText(QString());
+    }
+    ui->typeLabel->setText(tr("Image"));
 }
 
 void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap, const QSize &sourceSize, bool allowPixmapSizeFallback) {
     this->initImageLabel();
     setInfoWidgetVisible(true);
-    this->imageLabel->show();
     resetPanelStyleOverrides();
+    hideContentWidgets();
+    this->imageLabel->show();
+    this->imageLabel->setStyleSheet("QWidget { border-radius: 0px; } ");
     this->imageLabel->setMargin(0);
+    this->imageLabel->setAlignment(Qt::AlignCenter);
 
     qreal devicePixelRatio = this->imageLabel->devicePixelRatio();
-    QSize targetSize = ui->bodyWidget->size();
     int scale = MPasteSettings::getInst()->getItemScale();
-    const int topH = 64 * scale / 100;
-    const int infoH = ui->infoWidget->isVisible() ? ui->infoWidget->sizeHint().height() : 0;
-    const QSize fallbackTargetSize(width(), height() - topH - infoH);
-    if (!targetSize.isValid() || targetSize.height() < fallbackTargetSize.height() / 2) {
-        targetSize = fallbackTargetSize;
-    }
+    QSize targetSize = contentPreviewTargetSize(this, ui->bodyWidget, ui->infoWidget, scale);
 
     QPixmap scaled = scaleToFillHeightCropWidth(pixmap, targetSize, devicePixelRatio);
 
@@ -599,6 +805,7 @@ void ClipboardItemInnerWidget::showImage(const QPixmap &pixmap, const QSize &sou
 void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem &item) {
     setInfoWidgetVisible(true);
     resetPanelStyleOverrides();
+    hideContentWidgets();
     QString trimStr = text.trimmed();
     QUrl url(trimStr);
     if (QColor::isValidColorName(trimStr)) {
@@ -619,6 +826,7 @@ void ClipboardItemInnerWidget::showColor(const QColor &color, const QString &raw
     this->initImageLabel();
     setInfoWidgetVisible(true);
     resetPanelStyleOverrides();
+    hideContentWidgets();
 
     this->imageLabel->show();
     QColor fontColor(255 - color.red(), 255 - color.green(), 255 - color.blue());
@@ -634,6 +842,7 @@ void ClipboardItemInnerWidget::showColor(const QColor &color, const QString &raw
 void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const ClipboardItem &item) {
     setInfoWidgetVisible(true);
     resetPanelStyleOverrides();
+    hideContentWidgets();
     if (urls.size() == 1) {
         if (urls[0].isLocalFile()) {
             this->showFile(urls[0]);
@@ -666,6 +875,7 @@ void ClipboardItemInnerWidget::showUrls(const QList<QUrl> &urls, const Clipboard
 void ClipboardItemInnerWidget::showFile(const QUrl &url) {
     this->initFileThumbWidget();
     setInfoWidgetVisible(false);
+    hideContentWidgets();
     ui->typeLabel->setText(QString("1 ") + tr("File"));
     this->fileThumbWidget->show();
     this->fileThumbWidget->showUrl(url);
@@ -674,6 +884,7 @@ void ClipboardItemInnerWidget::showFile(const QUrl &url) {
 void ClipboardItemInnerWidget::showFiles(const QList<QUrl> &fileUrls) {
     this->initFileThumbWidget();
     setInfoWidgetVisible(false);
+    hideContentWidgets();
     ui->typeLabel->setText(QString::number(fileUrls.size()) + " " + tr("Files"));
     this->fileThumbWidget->show();
     this->fileThumbWidget->showUrls(fileUrls);
@@ -749,6 +960,7 @@ void ClipboardItemInnerWidget::showWebLink(const QUrl &url, const ClipboardItem 
     this->initWebLinkThumbWidget();
     resetPanelStyleOverrides();
     setInfoWidgetVisible(false);
+    hideContentWidgets();
     this->webLinkThumbWidget->show();
     this->webLinkThumbWidget->showWebLink(url, item);
     ui->typeLabel->setText(tr("Link"));

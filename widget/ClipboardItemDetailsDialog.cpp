@@ -543,6 +543,20 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
             }
             break;
         }
+        case ClipboardItem::RichText: {
+            if (item.hasThumbnail()) {
+                previewPixmap = item.thumbnail();
+                thumbnailPixmap = item.thumbnail();
+                summary = uiText(QStringLiteral("Rich Text Snapshot"), zh(u"富文本快照"));
+                summary += QStringLiteral(" | %1: %2 × %3 px")
+                               .arg(uiText(QStringLiteral("Thumbnail"), zh(u"缩略图")))
+                               .arg(thumbnailPixmap.width())
+                               .arg(thumbnailPixmap.height());
+            } else {
+                summary = uiText(QStringLiteral("Rich Text"), zh(u"富文本"));
+            }
+            break;
+        }
         case ClipboardItem::Color: {
             const QColor color = item.getColor();
             if (color.isValid()) {

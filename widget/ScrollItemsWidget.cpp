@@ -18,6 +18,7 @@
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QTimer>
+#include <QTextDocument>
 #include <QThread>
 #include <QWheelEvent>
 
@@ -118,10 +119,71 @@ QPixmap buildCardThumbnail(const ClipboardItem &item) {
     return thumbnail;
 }
 
+QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
+    const QMimeData *mimeData = item.getMimeData();
+    if (!mimeData || !mimeData->hasHtml()) {
+        return QPixmap();
+    }
+
+    const QString html = mimeData->html();
+    if (html.isEmpty()) {
+        return QPixmap();
+    }
+
+    constexpr int cardW = 275;
+    constexpr int cardH = 218;
+    qreal thumbnailDpr = 1.0;
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    for (QScreen *screen : screens) {
+        if (screen) {
+            thumbnailDpr = qMax(thumbnailDpr, screen->devicePixelRatio());
+        }
+    }
+
+    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
+    if (!pixelTargetSize.isValid()) {
+        return QPixmap();
+    }
+
+    const int leftPadding = qRound(10 * thumbnailDpr);
+    const int rightPadding = qRound(10 * thumbnailDpr);
+    const int topPadding = qRound(6 * thumbnailDpr);
+    const int bottomPadding = qRound(2 * thumbnailDpr);
+    const QSize contentSize(
+        qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
+        qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
+
+    QTextDocument document;
+    document.setDocumentMargin(0);
+    document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
+    document.setHtml(html);
+    document.setPageSize(QSizeF(contentSize));
+    document.setTextWidth(contentSize.width());
+
+    QPixmap snapshot(pixelTargetSize);
+    snapshot.fill(Qt::transparent);
+
+    QPainter painter(&snapshot);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.translate(leftPadding, topPadding);
+    painter.setClipRect(QRectF(0, 0, contentSize.width(), contentSize.height()));
+    document.drawContents(&painter, QRectF(0, 0, contentSize.width(), contentSize.height()));
+    painter.end();
+
+    snapshot.setDevicePixelRatio(thumbnailDpr);
+    return snapshot;
+}
+
 ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {
     ClipboardItem item(source);
-    if (item.getContentType() == ClipboardItem::Image && !item.hasThumbnail()) {
+    if (!item.hasThumbnail() && item.getContentType() == ClipboardItem::Image) {
         const QPixmap thumbnail = buildCardThumbnail(item);
+        if (!thumbnail.isNull()) {
+            item.setThumbnail(thumbnail);
+        }
+    } else if (!item.hasThumbnail() && item.getContentType() == ClipboardItem::RichText) {
+        const QPixmap thumbnail = buildRichTextThumbnail(item);
         if (!thumbnail.isNull()) {
             item.setThumbnail(thumbnail);
         }

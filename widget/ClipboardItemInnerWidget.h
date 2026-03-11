@@ -7,6 +7,7 @@
 
 #include <QFrame>
 #include <QWidget>
+#include <QByteArray>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QTextEdit>
@@ -30,6 +31,7 @@ class ClipboardItemInnerWidget : public QFrame
 
 public:
     static QString genStyleSheetStr(QColor bgColor, QColor topColor, QColor borderColor, int bw);
+    static QPixmap buildCardThumbnail(const QPixmap &pixmap);
 
     explicit ClipboardItemInnerWidget(QColor borderColor, QWidget *parent = nullptr);
     ~ClipboardItemInnerWidget();
@@ -49,11 +51,13 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
 private:
+    void hideContentWidgets();
     void prepareTextBrowserDocument();
     void refreshStyleSheet();
     void resetPanelStyleOverrides();
     void setInfoWidgetVisible(bool visible);
-    void showHtml(const QString &html);
+    void showHtmlSnapshot(const QPixmap &pixmap, int charCount);
+    void showHtml(const QString &html, const QByteArray &snapshotKey = QByteArray());
     void showHtmlImagePayload(const QString &html);
     QUrl extractHtmlImageUrl(const QString &html) const;
     void loadHtmlImagePreview(const QUrl &url);
@@ -87,6 +91,7 @@ private:
     QNetworkReply *htmlImagePreviewReply = nullptr;
     QString htmlImagePreviewUrl_;
     QString pendingHtmlImageHtml_;
+    ClipboardItem currentItem_;
 
     QColor borderColor;
     bool favoriteHighlight{false};
