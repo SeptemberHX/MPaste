@@ -15,6 +15,7 @@
 #include <QPixmap>
 #include <QRegularExpression>
 #include <QScopedPointer>
+#include <QSize>
 #include <QStringList>
 #include <QTextDocument>
 #include <QUrl>
@@ -41,6 +42,19 @@ private:
     mutable bool searchableTextCacheInitialized_ = false;
     mutable QList<QUrl> normalizedUrlsCache_;
     mutable bool normalizedUrlsCacheInitialized_ = false;
+    mutable QPixmap imageCache_;
+    mutable bool imageCacheInitialized_ = false;
+    mutable QSize imageSizeCache_;
+    mutable bool imageSizeCacheInitialized_ = false;
+
+    // Lazy-load support (V4 format)
+    QPixmap thumbnail_;
+    QString sourceFilePath_;
+    quint64 mimeDataFileOffset_ = 0;
+    bool mimeDataLoaded_ = true;
+    mutable ContentType cachedContentType_ = Text;
+    mutable QString cachedNormalizedText_;
+    mutable QList<QUrl> cachedNormalizedUrls_;
 
     static QList<QUrl> parseUrlsFromLines(const QStringList &lines, bool strictMode) {
         QList<QUrl> result;
@@ -803,6 +817,17 @@ public:
         searchableTextCacheInitialized_ = other.searchableTextCacheInitialized_;
         normalizedUrlsCache_ = other.normalizedUrlsCache_;
         normalizedUrlsCacheInitialized_ = other.normalizedUrlsCacheInitialized_;
+        imageCache_ = other.imageCache_;
+        imageCacheInitialized_ = other.imageCacheInitialized_;
+        imageSizeCache_ = other.imageSizeCache_;
+        imageSizeCacheInitialized_ = other.imageSizeCacheInitialized_;
+        thumbnail_ = other.thumbnail_;
+        sourceFilePath_ = other.sourceFilePath_;
+        mimeDataFileOffset_ = other.mimeDataFileOffset_;
+        mimeDataLoaded_ = other.mimeDataLoaded_;
+        cachedContentType_ = other.cachedContentType_;
+        cachedNormalizedText_ = other.cachedNormalizedText_;
+        cachedNormalizedUrls_ = other.cachedNormalizedUrls_;
     }
 
     ClipboardItem& operator=(const ClipboardItem &other) {
@@ -819,6 +844,17 @@ public:
             searchableTextCacheInitialized_ = other.searchableTextCacheInitialized_;
             normalizedUrlsCache_ = other.normalizedUrlsCache_;
             normalizedUrlsCacheInitialized_ = other.normalizedUrlsCacheInitialized_;
+            imageCache_ = other.imageCache_;
+            imageCacheInitialized_ = other.imageCacheInitialized_;
+            imageSizeCache_ = other.imageSizeCache_;
+            imageSizeCacheInitialized_ = other.imageSizeCacheInitialized_;
+            thumbnail_ = other.thumbnail_;
+            sourceFilePath_ = other.sourceFilePath_;
+            mimeDataFileOffset_ = other.mimeDataFileOffset_;
+            mimeDataLoaded_ = other.mimeDataLoaded_;
+            cachedContentType_ = other.cachedContentType_;
+            cachedNormalizedText_ = other.cachedNormalizedText_;
+            cachedNormalizedUrls_ = other.cachedNormalizedUrls_;
 
             if (other.mimeData_) {
                 mimeData_.reset(new QMimeData);
@@ -833,7 +869,18 @@ public:
     }
 
     bool contains(const QString &keyword) const {
-        if (!mimeData_ || keyword.isEmpty()) {
+        if (keyword.isEmpty()) {
+            return false;
+        }
+
+        if (!mimeDataLoaded_) {
+            const QString lower = keyword.toLower();
+            return cachedNormalizedText_.toLower().contains(lower)
+                || title_.toLower().contains(lower)
+                || url_.toLower().contains(lower);
+        }
+
+        if (!mimeData_) {
             return false;
         }
 
@@ -861,6 +908,13 @@ public:
             return true;
         }
         if (!mimeData_ || !other.mimeData_) {
+            // When either item is light-loaded (no MIME data), compare via fingerprint
+            if (fingerprintCacheInitialized_ && other.fingerprintCacheInitialized_) {
+                return fingerprintCache_ == other.fingerprintCache_;
+            }
+            if (!mimeDataLoaded_ || !other.mimeDataLoaded_) {
+                return fingerprint() == other.fingerprint();
+            }
             return false;
         }
 
@@ -936,9 +990,16 @@ public:
         return fingerprintCache_;
     }
 
+    void setFingerprintCache(const QByteArray &fp) {
+        fingerprintCache_ = fp;
+        fingerprintCacheInitialized_ = true;
+    }
+
     const QPixmap& getIcon() const { return icon_; }
+    void setIcon(const QPixmap &icon) { icon_ = icon; }
 
     QMimeData* createMimeData() const {
+        const_cast<ClipboardItem*>(this)->ensureMimeDataLoaded();
         if (!mimeData_) {
             return nullptr;
         }
@@ -953,10 +1014,21 @@ public:
         return newMimeData;
     }
 
-    const QMimeData* getMimeData() const { return mimeData_.data(); }
+    const QMimeData* getMimeData() const {
+        const_cast<ClipboardItem*>(this)->ensureMimeDataLoaded();
+        return mimeData_.data();
+    }
     QString getText() const { return mimeData_ ? mimeData_->text() : QString(); }
-    QString getNormalizedText() const { return buildNormalizedText(); }
+    QString getNormalizedText() const {
+        if (!mimeDataLoaded_) {
+            return cachedNormalizedText_;
+        }
+        return buildNormalizedText();
+    }
     QList<QUrl> getNormalizedUrls() const {
+        if (!mimeDataLoaded_) {
+            return cachedNormalizedUrls_;
+        }
         if (!normalizedUrlsCacheInitialized_) {
             normalizedUrlsCache_ = buildNormalizedUrls();
             normalizedUrlsCacheInitialized_ = true;
@@ -965,8 +1037,18 @@ public:
     }
 
     QPixmap getImage() const {
+        if (!mimeDataLoaded_ && !thumbnail_.isNull()) {
+            return thumbnail_;
+        }
+
+        if (imageCacheInitialized_) {
+            return imageCache_;
+        }
+
         if (!mimeData_) {
-            return QPixmap();
+            imageCache_ = QPixmap();
+            imageCacheInitialized_ = true;
+            return imageCache_;
         }
 
         const QStringList formats = mimeData_->formats();
@@ -975,7 +1057,9 @@ public:
                 QPixmap pixmap;
                 QByteArray data = mimeData_->data(format);
                 if (!data.isEmpty() && pixmap.loadFromData(data)) {
-                    return pixmap;
+                    imageCache_ = pixmap;
+                    imageCacheInitialized_ = true;
+                    return imageCache_;
                 }
             }
         }
@@ -993,7 +1077,9 @@ public:
                 QPixmap pixmap;
                 QByteArray data = mimeData_->data(format);
                 if (!data.isEmpty() && pixmap.loadFromData(data)) {
-                    return pixmap;
+                    imageCache_ = pixmap;
+                    imageCacheInitialized_ = true;
+                    return imageCache_;
                 }
             }
         }
@@ -1006,23 +1092,36 @@ public:
             QPixmap pixmap;
             const QByteArray data = mimeData_->data(format);
             if (!data.isEmpty() && pixmap.loadFromData(data)) {
-                return pixmap;
+                imageCache_ = pixmap;
+                imageCacheInitialized_ = true;
+                return imageCache_;
             }
         }
 
         QVariant imageData = mimeData_->imageData();
         if (imageData.canConvert<QPixmap>()) {
-            return qvariant_cast<QPixmap>(imageData);
+            QPixmap pixmap = qvariant_cast<QPixmap>(imageData);
+            if (!pixmap.isNull()) {
+                imageCache_ = pixmap;
+                imageCacheInitialized_ = true;
+                return imageCache_;
+            }
         }
         if (imageData.canConvert<QImage>()) {
             QImage img = qvariant_cast<QImage>(imageData);
             if (!img.isNull()) {
-                return QPixmap::fromImage(img);
+                imageCache_ = QPixmap::fromImage(img);
+                imageCacheInitialized_ = true;
+                return imageCache_;
             }
         }
 
-        return QPixmap();
+        imageCache_ = QPixmap();
+        imageCacheInitialized_ = true;
+        return imageCache_;
     }
+
+    QSize getImagePixelSize() const;
 
     QString getHtml() const { return mimeData_ ? mimeData_->html() : QString(); }
     QList<QUrl> getUrls() const { return mimeData_ ? mimeData_->urls() : QList<QUrl>(); }
@@ -1047,7 +1146,29 @@ public:
     void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }
 
+    bool hasThumbnail() const { return !thumbnail_.isNull(); }
+    const QPixmap& thumbnail() const { return thumbnail_; }
+    void setThumbnail(const QPixmap &thumb) { thumbnail_ = thumb; }
+    void setSourceFilePath(const QString &path) { sourceFilePath_ = path; }
+    const QString& sourceFilePath() const { return sourceFilePath_; }
+    void setMimeDataFileOffset(quint64 offset) { mimeDataFileOffset_ = offset; }
+    quint64 mimeDataFileOffset() const { return mimeDataFileOffset_; }
+    bool isMimeDataLoaded() const { return mimeDataLoaded_; }
+
+    void setLightLoaded(ContentType type, const QString &normText, const QList<QUrl> &normUrls) {
+        mimeDataLoaded_ = false;
+        cachedContentType_ = type;
+        cachedNormalizedText_ = normText;
+        cachedNormalizedUrls_ = normUrls;
+    }
+
+    // Implemented in LocalSaver.cpp to avoid circular dependency
+    void ensureMimeDataLoaded();
+
     ContentType getContentType() const {
+        if (!mimeDataLoaded_) {
+            return cachedContentType_;
+        }
         if (!mimeData_) return Text;
 
         if (mimeData_->hasColor()) return Color;

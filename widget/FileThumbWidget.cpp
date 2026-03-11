@@ -1,5 +1,5 @@
 // input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
-// output: 提供 FileThumbWidget 的实现逻辑。
+// output: 提供 FileThumbWidget 的实现逻辑，统一使用文件图标预览文件条目。
 // pos: widget 层中的 FileThumbWidget 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 #include "FileThumbWidget.h"
@@ -8,28 +8,6 @@
 #include <QFileInfo>
 #include <QFileIconProvider>
 #include <QGraphicsDropShadowEffect>
-
-namespace {
-QPixmap scaleToFillHeightCropWidth(const QPixmap &pixmap, const QSize &targetSize, qreal devicePixelRatio) {
-    if (pixmap.isNull() || !targetSize.isValid()) {
-        return pixmap;
-    }
-
-    const QSize pixelTargetSize = targetSize * devicePixelRatio;
-    if (!pixelTargetSize.isValid()) {
-        return pixmap;
-    }
-
-    QPixmap scaled = pixmap.scaledToHeight(pixelTargetSize.height(), Qt::SmoothTransformation);
-    if (scaled.width() > pixelTargetSize.width()) {
-        const int x = (scaled.width() - pixelTargetSize.width()) / 2;
-        scaled = scaled.copy(x, 0, pixelTargetSize.width(), pixelTargetSize.height());
-    }
-
-    scaled.setDevicePixelRatio(devicePixelRatio);
-    return scaled;
-}
-}
 
 FileThumbWidget::FileThumbWidget(QWidget *parent) :
     QWidget(parent),
@@ -70,7 +48,7 @@ FileThumbWidget::~FileThumbWidget()
 }
 
 void FileThumbWidget::showUrl(const QUrl &fileUrl) {
-    // 获取一次 DPI 比例和目标尺寸
+    // 统一按文件图标渲染，避免本地图片文件再次走整图解码。
     const qreal dpr = ui->iconLabel->devicePixelRatioF();
     const QSize targetSize = ui->iconLabel->size() * dpr;
 
@@ -78,26 +56,15 @@ void FileThumbWidget::showUrl(const QUrl &fileUrl) {
 
     QFileInfo info(fileUrl.toLocalFile());
     if (info.exists()) {
-        QMimeType mime = db.mimeTypeForFile(info);
-        if (mime.name().startsWith("image")) {
-            pixmap = QPixmap(info.absoluteFilePath());
-        } else {
-            QFileIconProvider provider;
-            QIcon icon = provider.icon(info);
-            pixmap = icon.pixmap(targetSize);
-        }
+        QFileIconProvider provider;
+        QIcon icon = provider.icon(info);
+        pixmap = icon.pixmap(targetSize);
     } else {
         pixmap = QPixmap(":/resources/resources/broken.svg");
     }
 
-    // 统一处理 DPI 缩放
-    QPixmap scaledPixmap;
-    if (info.exists() && db.mimeTypeForFile(info).name().startsWith("image")) {
-        scaledPixmap = scaleToFillHeightCropWidth(pixmap, ui->iconLabel->size(), dpr);
-    } else {
-        scaledPixmap = pixmap.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        scaledPixmap.setDevicePixelRatio(dpr);
-    }
+    QPixmap scaledPixmap = pixmap.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    scaledPixmap.setDevicePixelRatio(dpr);
     ui->iconLabel->setPixmap(scaledPixmap);
 
     this->setElidedText(fileUrl.toLocalFile());

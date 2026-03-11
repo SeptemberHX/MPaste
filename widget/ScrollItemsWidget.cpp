@@ -8,10 +8,12 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QFile>
+#include <QGuiApplication>
 #include <QPointer>
 #include <QPainter>
 #include <QPropertyAnimation>
 #include <QScrollBar>
+#include <QScreen>
 #include <QScroller>
 #include <QResizeEvent>
 #include <QShowEvent>
@@ -75,6 +77,57 @@ protected:
 private:
     Side side_;
 };
+
+QPixmap buildCardThumbnail(const ClipboardItem &item) {
+    if (item.hasThumbnail()) {
+        return item.thumbnail();
+    }
+
+    const QPixmap fullImage = item.getImage();
+    if (fullImage.isNull()) {
+        return QPixmap();
+    }
+
+    constexpr int cardW = 275;
+    constexpr int cardH = 218;
+    qreal thumbnailDpr = 1.0;
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    for (QScreen *screen : screens) {
+        if (screen) {
+            thumbnailDpr = qMax(thumbnailDpr, screen->devicePixelRatio());
+        }
+    }
+    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
+    if (!pixelTargetSize.isValid()) {
+        return fullImage;
+    }
+
+    QPixmap scaled = fullImage.scaledToHeight(pixelTargetSize.height(), Qt::SmoothTransformation);
+    if (scaled.isNull()) {
+        return QPixmap();
+    }
+
+    QPixmap thumbnail = scaled;
+    if (scaled.width() > pixelTargetSize.width()) {
+        const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
+        thumbnail = scaled.copy(x, 0,
+                                qMin(scaled.width(), pixelTargetSize.width()),
+                                scaled.height());
+    }
+    thumbnail.setDevicePixelRatio(thumbnailDpr);
+    return thumbnail;
+}
+
+ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {
+    ClipboardItem item(source);
+    if (item.getContentType() == ClipboardItem::Image && !item.hasThumbnail()) {
+        const QPixmap thumbnail = buildCardThumbnail(item);
+        if (!thumbnail.isNull()) {
+            item.setThumbnail(thumbnail);
+        }
+    }
+    return item;
+}
 }
 
 ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &borderColor, QWidget *parent) :
@@ -312,7 +365,10 @@ void ScrollItemsWidget::moveItemToFirst(ClipboardItemWidget *widget) {
         return;
     }
 
-    ClipboardItem item(widget->getItem());
+    // Force full MIME load while the source file still exists on disk
+    widget->getItem().getMimeData();
+
+    ClipboardItem item = prepareItemForDisplayAndSave(widget->getItem());
     this->saver->removeItem(this->getItemFilePath(widget->getItem()));
     this->saveItem(item);
     this->layout->removeWidget(widget);
@@ -431,7 +487,7 @@ void ScrollItemsWidget::loadFromSaveDirDeferred() {
 
 bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const QByteArray &rawData) {
     ClipboardItem item = this->saver->loadFromRawData(rawData);
-    if (item.getName().isEmpty() || !item.getMimeData()) {
+    if (item.getName().isEmpty() || (!item.getMimeData() && item.isMimeDataLoaded())) {
         this->saver->removeItem(filePath);
         if (this->totalItemCount_ > 0) {
             --this->totalItemCount_;
@@ -439,6 +495,10 @@ bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const QByteArr
         return false;
     }
 
+    return appendLoadedItem(filePath, item);
+}
+
+bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const ClipboardItem &item) {
     if (findMatchingWidget(item)) {
         this->saver->removeItem(filePath);
         if (this->totalItemCount_ > 0) {
@@ -458,9 +518,10 @@ QScrollBar* ScrollItemsWidget::horizontalScrollbar() {
 }
 
 bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
-    const bool added = this->addOneItem(nItem);
+    ClipboardItem preparedItem = prepareItemForDisplayAndSave(nItem);
+    const bool added = this->addOneItem(preparedItem);
     if (added) {
-        this->saveItem(nItem);
+        this->saveItem(preparedItem);
     }
     return added;
 }
@@ -624,8 +685,10 @@ void ScrollItemsWidget::loadNextBatch(int batchSize) {
     int loadedCount = 0;
     for (int i = 0; i < count; ++i) {
         const QString filePath = pendingLoadFilePaths_.takeFirst();
-        QFile file(filePath);
-        if (!file.open(QIODevice::ReadOnly)) {
+
+        // Try light load (V4 files load only header + thumbnail)
+        ClipboardItem item = this->saver->loadFromFileLight(filePath);
+        if (item.getName().isEmpty()) {
             this->saver->removeItem(filePath);
             if (this->totalItemCount_ > 0) {
                 --this->totalItemCount_;
@@ -633,9 +696,7 @@ void ScrollItemsWidget::loadNextBatch(int batchSize) {
             continue;
         }
 
-        const QByteArray rawData = file.readAll();
-        file.close();
-        if (appendLoadedItem(filePath, rawData)) {
+        if (appendLoadedItem(filePath, item)) {
             ++loadedCount;
         }
     }
@@ -695,7 +756,6 @@ void ScrollItemsWidget::maybeLoadMoreItems() {
 
 void ScrollItemsWidget::prepareLoadFromSaveDir() {
     this->checkSaveDir();
-    this->saver->migrateDirectory(this->saveDir());
 
     while (this->layout->count() > 1) {
         auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(0)->widget());
@@ -715,7 +775,9 @@ void ScrollItemsWidget::prepareLoadFromSaveDir() {
     QDir saveDir(this->saveDir());
     const QFileInfoList fileInfos = saveDir.entryInfoList(QStringList() << "*.mpaste", QDir::Files, QDir::Name | QDir::Reversed);
     for (const QFileInfo &info : fileInfos) {
-        pendingLoadFilePaths_ << info.filePath();
+        if (LocalSaver::isCurrentFormatFile(info.filePath())) {
+            pendingLoadFilePaths_ << info.filePath();
+        }
     }
 
     totalItemCount_ = pendingLoadFilePaths_.size();

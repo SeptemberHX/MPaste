@@ -47,6 +47,7 @@ private:
         QTabWidget *tabs = nullptr;
 
         QLabel *previewVisual = nullptr;
+        QLabel *previewThumbnail = nullptr;
         QLabel *previewSummaryValue = nullptr;
         QLabel *typeValue = nullptr;
         QLabel *timeValue = nullptr;

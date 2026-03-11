@@ -109,6 +109,7 @@ private:
     void processDeferredLoadedItems();
     void waitForDeferredRead();
     bool appendLoadedItem(const QString &filePath, const QByteArray &rawData);
+    bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
 
     Ui::ScrollItemsWidget *ui;
     QHBoxLayout *layout;

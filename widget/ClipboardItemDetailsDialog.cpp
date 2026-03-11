@@ -59,6 +59,21 @@ QString dashText() {
     return QString::fromUtf16(u"\u2014");
 }
 
+QPixmap scalePixmapForLabel(const QPixmap &pixmap, const QSize &targetSize, qreal devicePixelRatio) {
+    if (pixmap.isNull() || !targetSize.isValid()) {
+        return pixmap;
+    }
+
+    const QSize pixelTargetSize = targetSize * devicePixelRatio;
+    if (!pixelTargetSize.isValid()) {
+        return pixmap;
+    }
+
+    QPixmap scaled = pixmap.scaled(pixelTargetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    scaled.setDevicePixelRatio(devicePixelRatio);
+    return scaled;
+}
+
 QFont preferredEditorFont() {
     QFont font = QApplication::font();
     font.setPointSize(11);
@@ -119,12 +134,15 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
             font-size: 13px;
             background: transparent;
         }
-        QLabel#previewVisual {
+        QLabel#previewVisual, QLabel#previewThumbnail {
             background-color: #FFFFFF;
             border: 1px solid rgba(74, 144, 226, 16);
             border-radius: 14px;
             color: #5F7286;
             padding: 12px;
+        }
+        QLabel#previewThumbnail {
+            padding: 8px;
         }
         QFrame#metaCard, QFrame#previewCard {
             background-color: #FFFFFF;
@@ -257,8 +275,15 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
     ui_.previewVisual->setMaximumHeight(144);
     ui_.previewVisual->setScaledContents(false);
     ui_.previewVisual->setWordWrap(true);
+    ui_.previewThumbnail = new QLabel(previewCard);
+    ui_.previewThumbnail->setObjectName("previewThumbnail");
+    ui_.previewThumbnail->setAlignment(Qt::AlignCenter);
+    ui_.previewThumbnail->setFixedSize(180, 143);
+    ui_.previewThumbnail->setScaledContents(false);
+    ui_.previewThumbnail->hide();
     ui_.previewSummaryValue = createValueLabel();
     previewLayout->addWidget(ui_.previewVisual, 0);
+    previewLayout->addWidget(ui_.previewThumbnail, 0, Qt::AlignHCenter);
     previewLayout->addWidget(createSectionLabel(QStringLiteral("Preview"), zh(u"预览")));
     previewLayout->addWidget(ui_.previewSummaryValue, 0);
     overviewTopLayout->addWidget(previewCard, 0);
@@ -493,15 +518,25 @@ QTextEdit *ClipboardItemDetailsDialog::createReadOnlyEditor(bool noWrap) const {
 
 void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) {
     QPixmap previewPixmap;
+    QPixmap thumbnailPixmap;
     QString summary;
 
     switch (item.getContentType()) {
         case ClipboardItem::Image: {
             previewPixmap = item.getImage();
+            if (item.hasThumbnail()) {
+                thumbnailPixmap = item.thumbnail();
+            }
             if (!previewPixmap.isNull()) {
                 summary = QStringLiteral("%1 × %2 px")
                               .arg(previewPixmap.width())
                               .arg(previewPixmap.height());
+                if (!thumbnailPixmap.isNull()) {
+                    summary += QStringLiteral(" | %1: %2 × %3 px")
+                                   .arg(uiText(QStringLiteral("Thumbnail"), zh(u"缩略图")))
+                                   .arg(thumbnailPixmap.width())
+                                   .arg(thumbnailPixmap.height());
+                }
             }
             break;
         }
@@ -532,17 +567,31 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
     }
 
     if (!previewPixmap.isNull()) {
-        ui_.previewVisual->setPixmap(previewPixmap.scaled(ui_.previewVisual->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        ui_.previewVisual->setPixmap(scalePixmapForLabel(previewPixmap,
+                                                        ui_.previewVisual->size(),
+                                                        ui_.previewVisual->devicePixelRatioF()));
         ui_.previewVisual->setText(QString());
     } else {
         ui_.previewVisual->setPixmap(QPixmap());
         ui_.previewVisual->setText(uiText(QStringLiteral("No visual preview available"), zh(u"暂无可视预览")));
     }
 
+    if (!thumbnailPixmap.isNull()) {
+        ui_.previewThumbnail->setPixmap(scalePixmapForLabel(thumbnailPixmap,
+                                                           ui_.previewThumbnail->size(),
+                                                           ui_.previewThumbnail->devicePixelRatioF()));
+        ui_.previewThumbnail->show();
+    } else {
+        ui_.previewThumbnail->setPixmap(QPixmap());
+        ui_.previewThumbnail->hide();
+    }
+
     ui_.previewSummaryValue->setText(summary.isEmpty() ? dashText() : summary);
 }
 
 void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item) {
+    // Ensure full MIME data is loaded before showing details
+    const_cast<ClipboardItem&>(item).ensureMimeDataLoaded();
     const QMimeData *mimeData = item.getMimeData();
     const QString title = item.getTitle().trimmed();
     const QString url = item.getUrl().trimmed();

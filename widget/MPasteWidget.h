@@ -50,6 +50,7 @@ signals:
     void shortcutChanged(const QString &newShortcut);
 
 private slots:
+    void clipboardActivityObserved(int wId);
     void clipboardUpdated(ClipboardItem item, int wId);
     void updateItemCount(int itemCount);
     void hideAndPaste();
@@ -68,6 +69,7 @@ private:
     void setupConnections();
     void syncSoundOutputDevice();
     void rebuildSoundPlaybackChain(const QAudioDevice &device);
+    void playCopySoundIfNeeded(int wId, const QByteArray &fingerprint = QByteArray());
 
     bool setClipboard(const ClipboardItem &item, bool plainText = false);
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;

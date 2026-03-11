@@ -1,5 +1,5 @@
 // input: Depends on ClipboardItem data, file-system paths, and LocalSaver persistence rules.
-// output: Exposes `.mpaste` save/load and migration entry points.
+// output: Exposes current `.mpaste` save/load entry points and lazy MIME reload hooks.
 // pos: Data-layer persistence interface for clipboard item files.
 // update: If I change, update this header block and my folder README.md.
 //
@@ -20,8 +20,9 @@ public:
     bool removeItem(const QString &filePath);
     ClipboardItem loadFromFile(const QString &filePath);
     ClipboardItem loadFromRawData(const QByteArray &rawData);
-    bool migrateFileToCurrentVersion(const QString &filePath);
-    void migrateDirectory(const QString &dirPath);
+    ClipboardItem loadFromFileLight(const QString &filePath);
+    static bool loadMimeSection(const QString &filePath, quint64 offset, ClipboardItem &item);
+    static bool isCurrentFormatFile(const QString &filePath);
 };
 
 

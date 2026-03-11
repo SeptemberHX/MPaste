@@ -128,10 +128,10 @@ set MPASTE_OPENGL_BACKEND=software
 MPaste.exe
 ```
 
-### History file compatibility
+### History file format
 
-- New history files now use `.mpaste v3`, a structured versioned format with explicit metadata and MIME entry counts.
-- Older `.mpaste` files are still loaded automatically and are migrated to v3 when their board is loaded.
+- History files now use `.mpaste v4`, with explicit metadata, embedded thumbnails, and MIME offsets for light loading.
+- Only the current `.mpaste v4` format is loaded.
 - Invalid / corrupted history files are skipped instead of breaking the whole load process.
 
 * [KDSingleApplication](https://github.com/KDAB/KDSingleApplication)

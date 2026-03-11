@@ -21,7 +21,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemDetailsDialog.*`：条目详情与检查器弹窗。
 - `ClipboardItemInnerWidget.*`：条目卡片内部主体内容渲染。
 - `ClipboardItemWidget.*`：条目卡片外层包装与卡片级交互。
-- `FileThumbWidget.*`：文件条目的缩略图展示。
+- `FileThumbWidget.*`：文件条目的文件图标预览。
 - `MPasteSettingsWidget.*`：设置窗口。
 - `MPasteWidget.*`：主窗口与主要交互入口。
 - `MTextBrowser.*`：用于卡片正文展示的轻量文本浏览控件。
@@ -37,12 +37,16 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## Recent Notes
 
+- `MPasteWidget` currently prints clipboard-update and sound-play diagnostics so repeated copy prompts can be traced from app-level updates to actual sound playback decisions.
+- `MPasteWidget` 现在会在监控器首次观察到有效复制动作时立即播放提示音，不再等待后续 WPS settle / 抓图完成。
 - `ClipboardItemWidget` 现在支持上下文菜单中的“纯文本粘贴”动作。
 - `ScrollItemsWidget` 会把纯文本粘贴请求继续转发给主窗口。
 - `ClipboardItemDetailsDialog` 现在提供更完整的条目检查视图，可查看归一化结果与原始 MIME 数据。
 - `ClipboardItemDetailsDialog` 现在锁定了检查器宽度，并让概览页长链接/长标题优先在窗口内换行，避免详情窗口被内容横向撑开。
 - `ClipboardItemDetailsDialog` 现在移除了外层卡片阴影，让详情窗口里的组件视觉更干净。
 - `ClipboardItemDetailsDialog` 现在整体调大了标题、字段值、标签页和编辑器字号，提升可读性。
+- `ClipboardItemDetailsDialog` 现在会在主预览图下方额外显示横向缩略图，并在摘要里标出缩略图尺寸。
+- `ClipboardItemDetailsDialog` 现在会按标签的 device pixel ratio 先缩放主预览和缩略图，减少高分屏下的发糊。
 - `ClipboardItemInnerWidget` 现在支持通过提取 HTML 中的 `<img src>` 来加载 WPS / 金山图片预览。
 - `MPasteWidget` 现在会在短时间内抑制重复提示音，减少一次复制触发多次响声的问题。
 - `MPasteWidget` 现在会在每次播放提示音前按当前默认输出设备重建播放链路，减少运行中切换耳机后提示音仍走旧设备的问题，同时避免设备变化回调触发的重复重建。
@@ -56,5 +60,8 @@ update: 修改本目录文件时，同步更新本 README。
 - `FileThumbWidget` 现在移除了默认布局边距，并让图标展示区垂直扩展，减少文件卡片正文与底部之间的空白。
 - `ClipboardItemInnerWidget` 现在统一让正文区子控件按可用空间扩展，减少文本、富文本、图片、文件和链接卡片正文与底部信息区之间的空白。
 - `ClipboardItemInnerWidget` 现在会收紧 `QTextBrowser` 的上下内边距，并把富文本默认段落外边距归零，减轻正文与底部信息区之间的额外留白。
-- 链接预览图、图片卡片和图片文件缩略图现在都优先占满可用高度，只在宽度超出时做左右居中裁剪。
+- `ClipboardItemInnerWidget` 现在会在轻加载图片卡片中单独探测原图尺寸，避免把缩略图分辨率显示成条目分辨率。
+- `ScrollItemsWidget` 现在会在新增图片条目时按 `275x218` 逻辑尺寸和较高 device pixel ratio 生成横向居中缩略图，减少首个图片条目发糊。
+- 链接预览图和图片卡片现在都优先占满可用高度，只在宽度超出时做左右居中裁剪。
+- `FileThumbWidget` 现在统一使用文件图标预览文件条目，不再对本地图片文件做整图解码预览。
 - `WebLinkThumbWidget` 在抓不到网页预览图时，现在会生成一个基于域名配色与字母徽标的兜底封面，不再只是默认图标。

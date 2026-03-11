@@ -10,6 +10,7 @@
 #define MPASTE_CLIPBOARDMONITOR_H
 
 #include <QObject>
+#include <QByteArray>
 #include <QTimer>
 #include <QPointer>
 #include "data/ClipboardItem.h"
@@ -27,18 +28,23 @@ public:
 
     void disconnectMonitor();
     void connectMonitor();
+    void primeCurrentClipboard();
 
 signals:
+    void clipboardActivityObserved(int wId);
     void clipboardUpdated(ClipboardItem item, int wId);
 
 public slots:
     void clipboardChanged();
 
 private:
+    void beginClipboardCapture(bool emitActivitySignal);
     void checkAndCapture();
     void captureClipboard();
     void cancelPendingImageFetch();
-    void emitCapturedItem(const QMimeData *mimeData, int wId);
+    void emitCapturedItem(const ClipboardItem &item, int wId);
+    bool isDuplicateRecentCapture(const ClipboardItem &item, int wId) const;
+    void rememberCapturedItem(const ClipboardItem &item, int wId);
     void fetchWpsImageAndEmit(const QMimeData *mimeData, const QUrl &url, int wId, quint64 captureToken);
 
     static bool hasMeaningfulContent(const QMimeData *mimeData);
@@ -55,10 +61,14 @@ private:
     bool wpsSettlePending_ = false;
     QNetworkAccessManager *imageFetchManager_ = nullptr;
     QPointer<QNetworkReply> pendingImageFetchReply_;
+    QByteArray lastCaptureKey_;
+    qint64 lastCaptureAtMs_ = 0;
+    int lastCaptureWindowId_ = 0;
 
     static const int STABILIZE_INTERVAL = 200;
     static const int MAX_RETRIES = 10;
     static const int WPS_SETTLE_INTERVAL = 700;  // WPS staged clipboard settle window in ms
+    static const int DUPLICATE_CAPTURE_WINDOW_MS = 900;
 };
 
 

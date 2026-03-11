@@ -55,6 +55,25 @@ QString menuText(const char *source, const QString &zhFallback) {
     }
     return translated;
 }
+
+QString elideClipboardLogText(QString text, int maxLen = 48) {
+    text.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    text.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    if (text.size() > maxLen) {
+        text.truncate(maxLen);
+        text.append(QStringLiteral("..."));
+    }
+    return text;
+}
+
+QString widgetItemSummary(const ClipboardItem &item) {
+    return QStringLiteral("type=%1 fp=%2 text=\"%3\" htmlLen=%4 urlCount=%5")
+        .arg(item.getContentType())
+        .arg(QString::fromLatin1(item.fingerprint().toHex().left(12)))
+        .arg(elideClipboardLogText(item.getNormalizedText()))
+        .arg(item.getHtml().size())
+        .arg(item.getNormalizedUrls().size());
+}
 }
 
 #ifdef Q_OS_WIN
@@ -187,7 +206,7 @@ void MPasteWidget::initializeWidget() {
     initSound();
     setupConnections();
     loadFromSaveDir();
-    clipboard_.monitor->clipboardChanged();
+    clipboard_.monitor->primeCurrentClipboard();
 
     setFocusOnSearch(false);
     misc_.pendingNumKey = 0;
@@ -425,6 +444,8 @@ void MPasteWidget::initMenu() {
 
 
 void MPasteWidget::setupConnections() {
+    connect(clipboard_.monitor, &ClipboardMonitor::clipboardActivityObserved,
+            this, &MPasteWidget::clipboardActivityObserved);
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardUpdated,
             this, &MPasteWidget::clipboardUpdated);
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
@@ -515,24 +536,52 @@ void MPasteWidget::setupConnections() {
         });
 }
 
+void MPasteWidget::playCopySoundIfNeeded(int wId, const QByteArray &fingerprint) {
+    if (!MPasteSettings::getInst()->isPlaySound()) {
+        qInfo() << "[clipboard-widget] play sound disabled";
+        return;
+    }
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - misc_.lastSoundPlayAtMs < SOUND_BURST_WINDOW_MS) {
+        qInfo().noquote() << QStringLiteral("[clipboard-widget] suppress sound by burst window wId=%1 fp=%2 deltaMs=%3")
+            .arg(wId)
+            .arg(fingerprint.isEmpty() ? QStringLiteral("-") : QString::fromLatin1(fingerprint.toHex().left(12)))
+            .arg(now - misc_.lastSoundPlayAtMs);
+        return;
+    }
+
+    syncSoundOutputDevice();
+    if (misc_.player->mediaStatus() == QMediaPlayer::EndOfMedia) {
+        misc_.player->setPosition(0);
+    }
+    if (misc_.player->playbackState() == QMediaPlayer::PlayingState) {
+        misc_.player->stop();
+    }
+    misc_.player->play();
+    misc_.lastSoundPlayAtMs = now;
+    qInfo().noquote() << QStringLiteral("[clipboard-widget] play copy sound wId=%1 fp=%2")
+        .arg(wId)
+        .arg(fingerprint.isEmpty() ? QStringLiteral("-") : QString::fromLatin1(fingerprint.toHex().left(12)));
+}
+
+void MPasteWidget::clipboardActivityObserved(int wId) {
+    if (clipboard_.isPasting) {
+        return;
+    }
+    playCopySoundIfNeeded(wId);
+}
+
 void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
     if (!clipboard_.isPasting) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
         const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
-
-        if (MPasteSettings::getInst()->isPlaySound()) {
-            const qint64 now = QDateTime::currentMSecsSinceEpoch();
-            if (now - misc_.lastSoundPlayAtMs >= SOUND_BURST_WINDOW_MS) {
-                syncSoundOutputDevice();
-                if (misc_.player->mediaStatus() == QMediaPlayer::EndOfMedia) {
-                    misc_.player->setPosition(0);
-                }
-                if (misc_.player->playbackState() == QMediaPlayer::PlayingState) {
-                    misc_.player->stop();
-                }
-                misc_.player->play();
-                misc_.lastSoundPlayAtMs = now;
-            }
-        }
+        qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated wId=%1 isPasting=%2 added=%3 sinceLastSoundMs=%4 %5")
+            .arg(wId)
+            .arg(clipboard_.isPasting)
+            .arg(added)
+            .arg(now - misc_.lastSoundPlayAtMs)
+            .arg(widgetItemSummary(nItem));
 
         if (added) {
             clipboard_.copiedWhenHide = true;
@@ -585,10 +634,14 @@ QMimeData *MPasteWidget::createPlainTextMimeData(const ClipboardItem &item) cons
 }
 
 bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
+    qInfo().noquote() << QStringLiteral("[clipboard-widget] setClipboard begin plainText=%1 %2")
+        .arg(plainText)
+        .arg(widgetItemSummary(item));
     clipboard_.monitor->disconnectMonitor();
 
     QMimeData *mimeData = plainText ? createPlainTextMimeData(item) : item.createMimeData();
     if (!mimeData) {
+        qInfo() << "[clipboard-widget] setClipboard aborted: no mimeData";
         clipboard_.monitor->connectMonitor();
         return false;
     }
@@ -598,7 +651,9 @@ bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
     }
 
     QGuiApplication::clipboard()->setMimeData(mimeData);
+    qInfo() << "[clipboard-widget] setClipboard wrote system clipboard";
     QTimer::singleShot(200, this, [this]() {
+        qInfo() << "[clipboard-widget] reconnect monitor after self clipboard write";
         clipboard_.monitor->connectMonitor();
     });
     return true;

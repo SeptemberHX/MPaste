@@ -58,7 +58,7 @@ private:
     QUrl extractHtmlImageUrl(const QString &html) const;
     void loadHtmlImagePreview(const QUrl &url);
     void cancelHtmlImagePreview();
-    void showImage(const QPixmap &pixmap);
+    void showImage(const QPixmap &pixmap, const QSize &sourceSize = QSize(), bool allowPixmapSizeFallback = true);
     void showText(const QString &text, const ClipboardItem &item);
     void showColor(const QColor &color, const QString &rawStr);
     void showUrls(const QList<QUrl> &urls, const ClipboardItem &item);
