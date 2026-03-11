@@ -13,6 +13,7 @@
 class QLabel;
 class QToolButton;
 class QMenu;
+class QAction;
 class QHBoxLayout;
 
 class ClipboardItemWidget : public QWidget {
@@ -66,6 +67,7 @@ private:
     [[nodiscard]] QToolButton* createActionButton(const QString& iconPath, const QString& tooltip) const;
     void showContextMenu(const QPoint& pos);
     void updateFavoriteButton();
+    void updateFileContextActionVisibility();
 
     // Action handlers
     void handleFavoriteAction();
@@ -74,6 +76,7 @@ private:
     void handleDetailsAction();
     void handleSaveAction();
     void handleStarAction();
+    void handleOpenContainingFolderAction();
 
     // UI Components
     struct {
@@ -89,6 +92,7 @@ private:
         } actions;
 
         QMenu* contextMenu{nullptr};
+        QAction* openContainingFolderAction{nullptr};
         QLabel* favoriteIndicator{nullptr};
     } ui;
 

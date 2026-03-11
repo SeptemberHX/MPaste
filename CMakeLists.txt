@@ -116,6 +116,8 @@ if(WIN32)
             ${PLATFORM_SPECIFIC_LIBS}
             ${CUSTOM_LIBRARIES}
             dwmapi
+            shell32
+            ole32
     )
 else()
     target_link_libraries(${BIN_NAME} PRIVATE

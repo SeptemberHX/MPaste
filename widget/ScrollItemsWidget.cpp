@@ -12,6 +12,7 @@
 #include <QPointer>
 #include <QPainter>
 #include <QPropertyAnimation>
+#include <QRegularExpression>
 #include <QScrollBar>
 #include <QScreen>
 #include <QScroller>
@@ -21,6 +22,7 @@
 #include <QTextDocument>
 #include <QThread>
 #include <QWheelEvent>
+#include <QImage>
 
 #include <utils/MPasteSettings.h>
 
@@ -31,6 +33,25 @@
 namespace {
 qreal htmlPreviewZoom(qreal devicePixelRatio) {
     return qMax<qreal>(1.0, devicePixelRatio);
+}
+
+QString firstHtmlImageSource(const QString &html) {
+    static const QRegularExpression srcRegex(
+        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = srcRegex.match(html);
+    return match.hasMatch() ? match.captured(1).trimmed() : QString();
+}
+
+qreal maxScreenDevicePixelRatio() {
+    qreal dpr = 1.0;
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    for (QScreen *screen : screens) {
+        if (screen) {
+            dpr = qMax(dpr, screen->devicePixelRatio());
+        }
+    }
+    return dpr;
 }
 
 class EdgeFadeOverlay final : public QWidget {
@@ -163,6 +184,14 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     QTextDocument document;
     document.setDocumentMargin(0);
     document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
+    const QString imageSource = firstHtmlImageSource(html);
+    const QByteArray imageBytes = item.imagePayloadBytesFast();
+    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
+        QImage image;
+        if (image.loadFromData(imageBytes)) {
+            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
+        }
+    }
     document.setHtml(html);
     document.setPageSize(layoutSize);
     document.setTextWidth(layoutSize.width());
@@ -182,6 +211,106 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     snapshot.setDevicePixelRatio(thumbnailDpr);
     return snapshot;
 }
+
+QImage buildCardThumbnailImage(const QImage &sourceImage, qreal targetDpr) {
+    if (sourceImage.isNull()) {
+        return QImage();
+    }
+
+    constexpr int cardW = 275;
+    constexpr int cardH = 218;
+    const QSize pixelTargetSize = QSize(cardW, cardH) * targetDpr;
+    if (!pixelTargetSize.isValid()) {
+        return sourceImage;
+    }
+
+    QImage scaled = sourceImage.scaled(pixelTargetSize,
+        Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    if (scaled.isNull()) {
+        return QImage();
+    }
+
+    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
+    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
+    return scaled.copy(x, y,
+                       qMin(scaled.width(), pixelTargetSize.width()),
+                       qMin(scaled.height(), pixelTargetSize.height()));
+}
+
+QImage decodeImagePayload(const ClipboardItem &item) {
+    const QByteArray imageBytes = item.imagePayloadBytesFast();
+    if (imageBytes.isEmpty()) {
+        return QImage();
+    }
+
+    QImage image;
+    image.loadFromData(imageBytes);
+    return image;
+}
+
+QImage buildRichTextThumbnailImage(const ClipboardItem &item) {
+    const QMimeData *mimeData = item.getMimeData();
+    if (!mimeData || !mimeData->hasHtml()) {
+        return QImage();
+    }
+
+    const QString html = mimeData->html();
+    if (html.isEmpty()) {
+        return QImage();
+    }
+
+    constexpr int cardW = 275;
+    constexpr int cardH = 218;
+    qreal thumbnailDpr = 1.0;
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    for (QScreen *screen : screens) {
+        if (screen) {
+            thumbnailDpr = qMax(thumbnailDpr, screen->devicePixelRatio());
+        }
+    }
+
+    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
+    if (!pixelTargetSize.isValid()) {
+        return QImage();
+    }
+
+    const qreal previewZoom = htmlPreviewZoom(thumbnailDpr);
+    const int leftPadding = qRound(10 * thumbnailDpr);
+    const int rightPadding = qRound(10 * thumbnailDpr);
+    const int topPadding = qRound(6 * thumbnailDpr);
+    const int bottomPadding = qRound(2 * thumbnailDpr);
+    const QSize contentSize(
+        qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
+        qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
+    const QSizeF layoutSize(
+        qMax(1.0, contentSize.width() / previewZoom),
+        qMax(1.0, contentSize.height() / previewZoom));
+
+    QTextDocument document;
+    document.setDocumentMargin(0);
+    document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
+    document.setHtml(html);
+    document.setPageSize(layoutSize);
+    document.setTextWidth(layoutSize.width());
+
+    QImage snapshot(pixelTargetSize, QImage::Format_ARGB32_Premultiplied);
+    snapshot.fill(Qt::transparent);
+
+    QPainter painter(&snapshot);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.translate(leftPadding, topPadding);
+    painter.scale(previewZoom, previewZoom);
+    painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
+    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
+    painter.end();
+
+    return snapshot;
+}
+
+struct PendingItemProcessingResult {
+    QImage thumbnailImage;
+};
 
 ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {
     ClipboardItem item(source);
@@ -288,6 +417,20 @@ ClipboardItemWidget *ScrollItemsWidget::findMatchingWidget(const ClipboardItem &
     return nullptr;
 }
 
+ClipboardItemWidget *ScrollItemsWidget::findWidgetByName(const QString &name) const {
+    if (name.isEmpty()) {
+        return nullptr;
+    }
+
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (widget && widget->getItem().getName() == name) {
+            return widget;
+        }
+    }
+    return nullptr;
+}
+
 void ScrollItemsWidget::registerWidgetFingerprint(ClipboardItemWidget *widget) {
     if (!widget) {
         return;
@@ -297,6 +440,16 @@ void ScrollItemsWidget::registerWidgetFingerprint(ClipboardItemWidget *widget) {
     if (!bucket.contains(widget)) {
         bucket.append(widget);
     }
+}
+
+void ScrollItemsWidget::updateWidgetItem(ClipboardItemWidget *widget, const ClipboardItem &item) {
+    if (!widget) {
+        return;
+    }
+
+    unregisterWidgetFingerprint(widget);
+    widget->showItem(item);
+    registerWidgetFingerprint(widget);
 }
 
 void ScrollItemsWidget::unregisterWidgetFingerprint(ClipboardItemWidget *widget) {
@@ -381,9 +534,7 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
             && nItem.getMimeData()->hasHtml() && widget->getItem().getMimeData()->hasHtml()
             && nItem.getMimeData()->html().length() > widget->getItem().getMimeData()->html().length()) {
             this->saver->removeItem(this->getItemFilePath(widget->getItem()));
-            this->unregisterWidgetFingerprint(widget);
-            widget->showItem(nItem);
-            this->registerWidgetFingerprint(widget);
+            this->updateWidgetItem(widget, nItem);
             if (!nItem.isMimeDataLoaded() && nItem.sourceFilePath().isEmpty()) {
                 processPendingItemAsync(nItem, widget);
             } else {
@@ -454,7 +605,7 @@ void ScrollItemsWidget::moveItemToFirst(ClipboardItemWidget *widget) {
     this->layout->removeWidget(widget);
     this->layout->insertWidget(0, widget);
     this->setSelectedItem(widget);
-    widget->showItem(item);
+    this->updateWidgetItem(widget, item);
 }
 
 void ScrollItemsWidget::saveItem(const ClipboardItem &item) {
@@ -554,34 +705,46 @@ void ScrollItemsWidget::processPendingItemAsync(const ClipboardItem &item, Clipb
     QThread *thread = QThread::create([guard, widgetGuard, item, filePath, expectedName]() mutable {
         QElapsedTimer timer;
         timer.start();
-        ClipboardItem preparedItem = prepareItemForDisplayAndSave(item);
-        LocalSaver saver;
-        saver.saveToFile(preparedItem, filePath);
+        PendingItemProcessingResult result;
+        if (item.getContentType() == ClipboardItem::Image) {
+            result.thumbnailImage = buildCardThumbnailImage(decodeImagePayload(item), maxScreenDevicePixelRatio());
+        } else if (item.getContentType() == ClipboardItem::RichText) {
+            result.thumbnailImage = buildRichTextThumbnailImage(item);
+        }
         qInfo().noquote() << QStringLiteral("[scroll-items] async process finished name=%1 type=%2 hasThumb=%3 elapsedMs=%4 path=%5")
             .arg(expectedName)
-            .arg(preparedItem.getContentType())
-            .arg(preparedItem.hasThumbnail())
+            .arg(item.getContentType())
+            .arg(!result.thumbnailImage.isNull())
             .arg(timer.elapsed())
             .arg(filePath);
 
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, widgetGuard, filePath, expectedName]() {
+            QMetaObject::invokeMethod(guard.data(), [guard, widgetGuard, filePath, expectedName, item, result]() mutable {
                 if (!guard) {
                     return;
                 }
+
+                ClipboardItem preparedItem = item;
+                if (!result.thumbnailImage.isNull()) {
+                    QPixmap thumbnail = QPixmap::fromImage(result.thumbnailImage);
+                    thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, qApp->devicePixelRatio()));
+                    preparedItem.setThumbnail(thumbnail);
+                }
+                guard->saveItem(preparedItem);
 
                 ClipboardItem reloadedItem = guard->saver->loadFromFileLight(filePath);
                 if (reloadedItem.getName().isEmpty() || reloadedItem.getName() != expectedName) {
                     return;
                 }
 
+                ClipboardItemWidget *widget = nullptr;
                 if (widgetGuard && widgetGuard->getItem().getName() == expectedName) {
-                    widgetGuard->showItem(reloadedItem);
-                    return;
+                    widget = widgetGuard;
+                } else {
+                    widget = guard->findWidgetByName(expectedName);
                 }
-
-                if (ClipboardItemWidget *widget = guard->findMatchingWidget(reloadedItem)) {
-                    widget->showItem(reloadedItem);
+                if (widget) {
+                    guard->updateWidgetItem(widget, reloadedItem);
                 }
             }, Qt::QueuedConnection);
         }

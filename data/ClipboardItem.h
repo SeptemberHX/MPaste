@@ -647,6 +647,67 @@ private:
         return {};
     }
 
+    static QByteArray extractFastImagePayloadBytes(const QMimeData *mimeData) {
+        if (!mimeData) {
+            return {};
+        }
+
+        static const QStringList preferredFormats = {
+            QStringLiteral("application/x-qt-image"),
+            QStringLiteral("image/png"),
+            QStringLiteral("image/jpeg"),
+            QStringLiteral("image/jpg"),
+            QStringLiteral("image/webp"),
+            QStringLiteral("image/gif"),
+            QStringLiteral("image/bmp")
+        };
+
+        for (const QString &format : preferredFormats) {
+            if (mimeData->hasFormat(format)) {
+                const QByteArray data = mimeData->data(format);
+                if (!data.isEmpty()) {
+                    return data;
+                }
+            }
+        }
+
+        const QStringList formats = mimeData->formats();
+        for (const QString &format : formats) {
+            const QString lower = format.toLower();
+            const bool imageMime = lower.startsWith(QStringLiteral("image/"));
+            const bool imageWindowsMime = lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))
+                && (lower.contains(QStringLiteral("png"))
+                    || lower.contains(QStringLiteral("jpeg"))
+                    || lower.contains(QStringLiteral("jpg"))
+                    || lower.contains(QStringLiteral("bmp"))
+                    || lower.contains(QStringLiteral("dib"))
+                    || lower.contains(QStringLiteral("gif"))
+                    || lower.contains(QStringLiteral("webp")));
+            if (imageMime || imageWindowsMime) {
+                const QByteArray data = mimeData->data(format);
+                if (!data.isEmpty()) {
+                    return data;
+                }
+            }
+        }
+
+        return {};
+    }
+
+    static bool shouldCopyLightMimeFormat(const QString &format) {
+        const QString lower = format.toLower();
+        return lower.startsWith(QStringLiteral("text/"))
+            || lower.contains(QStringLiteral("html"))
+            || lower.contains(QStringLiteral("plain"))
+            || lower.contains(QStringLiteral("xml"))
+            || lower.contains(QStringLiteral("json"))
+            || lower.contains(QStringLiteral("url"))
+            || lower.contains(QStringLiteral("uri"))
+            || lower.contains(QStringLiteral("descriptor"))
+            || lower.contains(QStringLiteral("ksdocclipboard"))
+            || lower.contains(QStringLiteral("rich text"));
+    }
+
     bool shouldSkipImageDecodeFormat(const QString &format) const {
         const QString lower = format.toLower();
         return lower.startsWith(QStringLiteral("text/"))
@@ -714,7 +775,6 @@ private:
         if (!mimeData_) return Text;
 
         if (mimeData_->hasColor()) return Color;
-        if (hasFastImagePayload()) return Image;
 
         const QList<QUrl> urls = buildNormalizedUrls();
         if (!urls.isEmpty() && !mimeData_->hasHtml()) {
@@ -728,11 +788,10 @@ private:
             return Text;
         }
 
-        if (shouldTreatHtmlPayloadAsImageFast()) {
-            return Image;
-        }
-
         if (mimeData_->hasHtml()) {
+            if (shouldTreatHtmlPayloadAsImageFast()) {
+                return Image;
+            }
             QString text = buildNormalizedText().trimmed();
             if (!mimeData_->formats().contains(QStringLiteral("Rich Text Format"))
                 && !text.contains(QLatin1Char('\n'))
@@ -742,6 +801,7 @@ private:
             return RichText;
         }
 
+        if (hasFastImagePayload()) return Image;
         return Text;
     }
 
@@ -923,8 +983,33 @@ public:
         item.icon_ = icon;
         if (mimeData) {
             item.mimeData_.reset(new QMimeData);
+            if (mimeData->hasText()) {
+                item.mimeData_->setText(mimeData->text());
+            }
+            if (mimeData->hasHtml()) {
+                item.mimeData_->setHtml(mimeData->html());
+            }
+            if (mimeData->hasUrls()) {
+                item.mimeData_->setUrls(mimeData->urls());
+            }
+            if (mimeData->hasColor()) {
+                item.mimeData_->setColorData(mimeData->colorData());
+            }
+
             for (const QString &format : mimeData->formats()) {
-                item.mimeData_->setData(format, mimeData->data(format));
+                if (!shouldCopyLightMimeFormat(format)) {
+                    continue;
+                }
+
+                const QByteArray data = mimeData->data(format);
+                if (!data.isEmpty()) {
+                    item.mimeData_->setData(format, data);
+                }
+            }
+
+            const QByteArray imageBytes = extractFastImagePayloadBytes(mimeData);
+            if (!imageBytes.isEmpty()) {
+                item.mimeData_->setData(QStringLiteral("application/x-qt-image"), imageBytes);
             }
         }
         item.time_ = QDateTime::currentDateTime();
@@ -1313,10 +1398,6 @@ public:
 
         if (mimeData_->hasColor()) return Color;
 
-        if (hasMaterializedImagePayload()) {
-            return Image;
-        }
-
         QList<QUrl> urls = getNormalizedUrls();
         if (!urls.isEmpty() && !mimeData_->hasHtml()) {
             bool allValid = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
@@ -1329,15 +1410,10 @@ public:
             return Text;
         }
 
-        if (shouldTreatHtmlPayloadAsImage()) {
-            return Image;
-        }
-
-        if (hasDecodableImage() && !mimeData_->hasHtml()) {
-            return Image;
-        }
-
         if (mimeData_->hasHtml()) {
+            if (shouldTreatHtmlPayloadAsImage()) {
+                return Image;
+            }
             QString text = buildNormalizedText().trimmed();
             if (!mimeData_->formats().contains("Rich Text Format")
                 && !text.contains("\n")
@@ -1345,6 +1421,10 @@ public:
                 return Link;
             }
             return RichText;
+        }
+
+        if (hasMaterializedImagePayload()) {
+            return Image;
         }
 
         if (hasDecodableImage()) return Image;

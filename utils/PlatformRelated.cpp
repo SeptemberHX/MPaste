@@ -8,6 +8,10 @@
 
 #include "PlatformRelated.h"
 #include <iostream>
+#include <QDesktopServices>
+#include <QFileInfo>
+#include <QHash>
+#include <QUrl>
 
 #if defined(__linux__)
 #include <QImage>
@@ -174,9 +178,31 @@ WId PlatformRelated::previousActiveWindow() {
     return PlatformRelated::currActiveWindow();
 }
 
+bool PlatformRelated::revealInFileManager(const QList<QUrl> &urls) {
+    bool handled = false;
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile()) {
+            continue;
+        }
+
+        const QString localPath = url.toLocalFile();
+        const QFileInfo info(localPath);
+        const QString targetPath = info.exists() ? info.absoluteFilePath() : localPath;
+        const QString folderPath = QFileInfo(targetPath).absolutePath();
+        if (folderPath.isEmpty()) {
+            continue;
+        }
+
+        handled = QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath)) || handled;
+    }
+    return handled;
+}
+
 #elif defined(_WIN32)
 
 #include <windows.h>
+#include <shlobj.h>
+#include <objbase.h>
 #include <QPixmap>
 #include <QWindow>
 #include <QGuiApplication>
@@ -184,6 +210,79 @@ WId PlatformRelated::previousActiveWindow() {
 
 static HWND s_previousWindow = nullptr;
 static HWINEVENTHOOK s_winEventHook = nullptr;
+
+namespace {
+QString canonicalLocalPath(const QUrl &url) {
+    if (!url.isLocalFile()) {
+        return {};
+    }
+
+    const QString localPath = url.toLocalFile();
+    if (localPath.isEmpty()) {
+        return {};
+    }
+
+    const QFileInfo info(localPath);
+    return info.exists() ? info.absoluteFilePath() : QFileInfo(localPath).absoluteFilePath();
+}
+
+bool openFolderFallback(const QString &folderPath) {
+    return !folderPath.isEmpty() && QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
+}
+
+bool revealGroupedPathsInExplorer(const QStringList &groupPaths) {
+    if (groupPaths.isEmpty()) {
+        return false;
+    }
+
+    const QString folderPath = QFileInfo(groupPaths.first()).absolutePath();
+    if (folderPath.isEmpty()) {
+        return false;
+    }
+
+    PIDLIST_ABSOLUTE folderPidl = nullptr;
+    const HRESULT folderHr = SHParseDisplayName(reinterpret_cast<LPCWSTR>(folderPath.utf16()),
+                                                nullptr, &folderPidl, 0, nullptr);
+    if (FAILED(folderHr) || !folderPidl) {
+        return openFolderFallback(folderPath);
+    }
+
+    QList<PIDLIST_ABSOLUTE> fullPidls;
+    QVector<PCUITEMID_CHILD> childPidls;
+    fullPidls.reserve(groupPaths.size());
+    childPidls.reserve(groupPaths.size());
+
+    for (const QString &path : groupPaths) {
+        PIDLIST_ABSOLUTE itemPidl = nullptr;
+        const HRESULT itemHr = SHParseDisplayName(reinterpret_cast<LPCWSTR>(path.utf16()),
+                                                  nullptr, &itemPidl, 0, nullptr);
+        if (FAILED(itemHr) || !itemPidl) {
+            continue;
+        }
+
+        fullPidls.push_back(itemPidl);
+        childPidls.push_back(ILFindLastID(itemPidl));
+    }
+
+    bool handled = false;
+    if (!childPidls.isEmpty()) {
+        handled = SUCCEEDED(SHOpenFolderAndSelectItems(folderPidl,
+                                                       static_cast<UINT>(childPidls.size()),
+                                                       childPidls.data(),
+                                                       0));
+    }
+
+    if (!handled) {
+        handled = openFolderFallback(folderPath);
+    }
+
+    for (PIDLIST_ABSOLUTE pidl : fullPidls) {
+        CoTaskMemFree(pidl);
+    }
+    CoTaskMemFree(folderPidl);
+    return handled;
+}
+}
 
 void CALLBACK WinUtils::winEventProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd,
                                      LONG idObject, LONG idChild, DWORD eventThread, DWORD eventTime) {
@@ -217,6 +316,48 @@ void WinUtils::startWindowTracking() {
 
 HWND WinUtils::getPreviousWindow() {
     return s_previousWindow;
+}
+
+bool WinUtils::revealInExplorer(const QList<QUrl> &urls) {
+    QStringList orderedFolders;
+    QHash<QString, QStringList> groupedPaths;
+
+    for (const QUrl &url : urls) {
+        const QString path = canonicalLocalPath(url);
+        if (path.isEmpty()) {
+            continue;
+        }
+
+        const QString folderPath = QFileInfo(path).absolutePath();
+        if (folderPath.isEmpty()) {
+            continue;
+        }
+
+        QStringList &paths = groupedPaths[folderPath];
+        if (paths.isEmpty()) {
+            orderedFolders.push_back(folderPath);
+        }
+        if (!paths.contains(path, Qt::CaseInsensitive)) {
+            paths.push_back(path);
+        }
+    }
+
+    if (groupedPaths.isEmpty()) {
+        return false;
+    }
+
+    const HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    const bool shouldUninitialize = SUCCEEDED(initHr);
+
+    bool handled = false;
+    for (const QString &folderPath : orderedFolders) {
+        handled = revealGroupedPathsInExplorer(groupedPaths.value(folderPath)) || handled;
+    }
+
+    if (shouldUninitialize) {
+        CoUninitialize();
+    }
+    return handled;
 }
 
 void WinUtils::activeWindowWin32(HWND hwnd) {
@@ -441,6 +582,10 @@ void PlatformRelated::startWindowTracking() {
 
 WId PlatformRelated::previousActiveWindow() {
     return (WId)WinUtils::getPreviousWindow();
+}
+
+bool PlatformRelated::revealInFileManager(const QList<QUrl> &urls) {
+    return WinUtils::revealInExplorer(urls);
 }
 
 #endif

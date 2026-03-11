@@ -12,6 +12,7 @@
 // must included, otherwise there is compile error on ubuntu 21.04
 #include <QtCore>
 #include <QPixmap>
+#include <QUrl>
 #include "MPasteSettings.h"
 
 class PlatformRelated {
@@ -23,6 +24,7 @@ public:
     static void triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode = MPasteSettings::AutoPasteShortcut);
     static void startWindowTracking();
     static WId previousActiveWindow();
+    static bool revealInFileManager(const QList<QUrl> &urls);
 };
 
 #if defined(__linux__)
@@ -63,6 +65,7 @@ public:
     static QPixmap getWindowIconWin32(HWND hwnd);
     static void startWindowTracking();
     static HWND getPreviousWindow();
+    static bool revealInExplorer(const QList<QUrl> &urls);
 
 private:
     static void simulateKeyPress(WORD key, bool ctrl = false, bool shift = false, bool alt = false);

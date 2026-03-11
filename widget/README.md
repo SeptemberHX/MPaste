@@ -21,7 +21,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemDetailsDialog.*`：条目详情与检查器弹窗。
 - `ClipboardItemInnerWidget.*`：条目卡片内部主体内容渲染。
 - `ClipboardItemWidget.*`：条目卡片外层包装与卡片级交互。
-- `FileThumbWidget.*`：文件条目的文件图标预览。
+- `FileThumbWidget.*`：文件条目的预览控件，图片文件走缩放预览，其余文件走系统图标。
 - `MPasteSettingsWidget.*`：设置窗口。
 - `MPasteWidget.*`：主窗口与主要交互入口。
 - `MTextBrowser.*`：用于卡片正文展示的轻量文本浏览控件。
@@ -73,5 +73,8 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemInnerWidget` 现在会在轻加载图片卡片中单独探测原图尺寸，避免把缩略图分辨率显示成条目分辨率。
 - `ScrollItemsWidget` 现在会在新增图片条目时按 `275x218` 逻辑尺寸和较高 device pixel ratio 生成横向居中缩略图，减少首个图片条目发糊。
 - 链接预览图和图片卡片现在都优先占满可用高度，只在宽度超出时做左右居中裁剪。
-- `FileThumbWidget` 现在统一使用文件图标预览文件条目，不再对本地图片文件做整图解码预览。
+- `FileThumbWidget` 现在会对本地图片文件做缩放预览解码，其余文件继续使用系统图标，避免把图片文件也退化成普通文件图标。
+- `FileThumbWidget` 现在会在保留底部路径栏的前提下，让单个图片文件只在 `iconLabel` 区域里按高度填满并只做横向裁切。
+- `FileThumbWidget` 现在会把文件路径限制为最多两行显示，并在末尾省略超长内容，同时为左右文本留出一点内边距。
+- `ClipboardItemWidget` 现在会在本地文件条目的右键菜单里显示“打开所在文件夹”动作，并在 Windows 下尽量直接打开资源管理器并选中对应的一个或多个文件。
 - `WebLinkThumbWidget` 在抓不到网页预览图时，现在会生成一个基于域名配色与字母徽标的兜底封面，不再只是默认图标。

@@ -14,6 +14,9 @@
 #include <QLocale>
 #include <QMouseEvent>
 
+#include <algorithm>
+
+#include "utils/PlatformRelated.h"
 #include "utils/MPasteSettings.h"
 
 namespace {
@@ -57,6 +60,18 @@ QString detailsLabel() {
             return QString::fromUtf16(u"\u8BE6\u60C5");
         }
         return QStringLiteral("Details");
+    }
+    return label;
+}
+
+QString openContainingFolderLabel() {
+    QString label = QObject::tr("Open Containing Folder");
+    const QLocale locale = QLocale::system();
+    if (label == QLatin1String("Open Containing Folder") || looksBrokenTranslation(label)) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
+            return QString::fromUtf16(u"\u6253\u5f00\u6240\u5728\u6587\u4ef6\u5939");
+        }
+        return QStringLiteral("Open Containing Folder");
     }
     return label;
 }
@@ -182,6 +197,7 @@ void ClipboardItemWidget::setupContextMenu() {
     addAction(":/resources/resources/text_plain.svg", plainTextPasteLabel(), &ClipboardItemWidget::handlePastePlainTextAction);
     addAction(":/resources/resources/details.svg", detailsLabel(), &ClipboardItemWidget::handleDetailsAction);
     addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
+    ui.openContainingFolderAction = addAction(":/resources/resources/files.svg", openContainingFolderLabel(), &ClipboardItemWidget::handleOpenContainingFolderAction);
 
     ui.contextMenu->addSeparator();
 
@@ -269,6 +285,19 @@ void ClipboardItemWidget::handleStarAction() {
     emit itemStared(currentItem);
 }
 
+void ClipboardItemWidget::handleOpenContainingFolderAction() {
+    if (currentItem.getContentType() != ClipboardItem::File) {
+        return;
+    }
+
+    const QList<QUrl> urls = currentItem.getNormalizedUrls();
+    if (urls.isEmpty()) {
+        return;
+    }
+
+    PlatformRelated::revealInFileManager(urls);
+}
+
 void ClipboardItemWidget::updateFavoriteButton() {
     ui.actions.favoriteBtn->setIcon(QIcon(isFavorite ?
         ":/resources/resources/star_filled.svg" :
@@ -291,7 +320,22 @@ void ClipboardItemWidget::updateFavoriteButton() {
 
 void ClipboardItemWidget::showItem(const ClipboardItem& item) {
     currentItem = item;
+    updateFileContextActionVisibility();
     ui.innerWidget->showItem(currentItem);
+}
+
+void ClipboardItemWidget::updateFileContextActionVisibility() {
+    if (!ui.openContainingFolderAction) {
+        return;
+    }
+
+    const QList<QUrl> urls = currentItem.getNormalizedUrls();
+    const bool visible = currentItem.getContentType() == ClipboardItem::File
+        && !urls.isEmpty()
+        && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) {
+            return url.isLocalFile();
+        });
+    ui.openContainingFolderAction->setVisible(visible);
 }
 
 void ClipboardItemWidget::setSelected(bool selected) {

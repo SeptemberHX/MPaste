@@ -19,6 +19,7 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QLinearGradient>
+#include <QImage>
 #include <QRegularExpression>
 #include <QTextDocument>
 
@@ -109,6 +110,14 @@ qreal htmlPreviewZoom(qreal devicePixelRatio) {
     return qMax<qreal>(1.0, devicePixelRatio);
 }
 
+QString firstHtmlImageSource(const QString &html) {
+    static const QRegularExpression srcRegex(
+        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = srcRegex.match(html);
+    return match.hasMatch() ? match.captured(1).trimmed() : QString();
+}
+
 QCache<QString, QPixmap> &htmlPreviewSnapshotCache() {
     static QCache<QString, QPixmap> cache(64 * 1024);
     return cache;
@@ -129,7 +138,8 @@ QString htmlPreviewSnapshotCacheKey(const QByteArray &snapshotKey,
         .arg(qRound(devicePixelRatio * 100.0));
 }
 
-QPixmap renderHtmlPreviewSnapshot(const QString &html, const QSize &targetSize, qreal devicePixelRatio) {
+QPixmap renderHtmlPreviewSnapshot(const QString &html, const QSize &targetSize, qreal devicePixelRatio,
+                                  const QByteArray &imageBytes = QByteArray()) {
     if (html.isEmpty() || !targetSize.isValid()) {
         return QPixmap();
     }
@@ -154,6 +164,13 @@ QPixmap renderHtmlPreviewSnapshot(const QString &html, const QSize &targetSize, 
     QTextDocument document;
     document.setDocumentMargin(0);
     document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
+    const QString imageSource = firstHtmlImageSource(html);
+    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
+        QImage image;
+        if (image.loadFromData(imageBytes)) {
+            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
+        }
+    }
     document.setHtml(html);
     document.setPageSize(layoutSize);
     document.setTextWidth(layoutSize.width());
@@ -435,6 +452,42 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
     // Access mimeData only when fully loaded
     const QMimeData* mimeData = lightLoaded ? nullptr : item.getMimeData();
 
+    if (mimeData && mimeData->hasHtml()) {
+        const QString html = mimeData->html();
+
+        if (contentType == ClipboardItem::Image) {
+            if (!itemImage.isNull()) {
+                this->showImage(itemImage, itemImagePixelSize, !usingThumbnailPreview);
+            } else {
+                this->showHtmlImagePayload(html);
+            }
+            ui->timeLabel->setText(QLocale::system().toString(item.getTime(), QLocale::ShortFormat));
+            return;
+        }
+
+        const QString text = normalizedText.trimmed();
+        if (contentType == ClipboardItem::Link
+            && !mimeData->formats().contains(QStringLiteral("Rich Text Format"))
+            && !text.contains(QLatin1Char('\n'))
+            && (text.startsWith(QStringLiteral("http://")) || text.startsWith(QStringLiteral("https://")))) {
+            if (this->checkWebLink(text)) {
+                this->showWebLink(text, item);
+            } else {
+                this->showHtml(html, item.fingerprint());
+            }
+            ui->timeLabel->setText(QLocale::system().toString(item.getTime(), QLocale::ShortFormat));
+            return;
+        }
+
+        if (item.hasThumbnail()) {
+            this->showHtmlSnapshot(item.thumbnail(), normalizedText.length());
+        } else {
+            this->showHtml(html, item.fingerprint());
+        }
+        ui->timeLabel->setText(QLocale::system().toString(item.getTime(), QLocale::ShortFormat));
+        return;
+    }
+
     if (contentType == ClipboardItem::Color) {
         this->showColor(item.getColor(), normalizedText);
     }
@@ -468,30 +521,12 @@ void ClipboardItemInnerWidget::showItem(const ClipboardItem& item) {
         }
         ui->typeLabel->setText(tr("Image"));
     }
-    else if (contentType == ClipboardItem::Image && mimeData && mimeData->hasHtml()) {
-        this->showHtmlImagePayload(mimeData->html());
-    }
     else if (contentType == ClipboardItem::RichText && item.hasThumbnail()) {
         this->showHtmlSnapshot(item.thumbnail(), normalizedText.length());
     }
     else if (contentType == ClipboardItem::RichText && lightLoaded) {
         this->showText(normalizedText, item);
         ui->typeLabel->setText(tr("Rich Text"));
-    }
-    else if (mimeData && mimeData->hasHtml()) {
-        QString text = normalizedText.trimmed();
-        if (contentType == ClipboardItem::Link
-            && !mimeData->formats().contains("Rich Text Format")
-            && !text.contains("\n")
-            && (text.startsWith("http://") || text.startsWith("https://"))) {
-            if (this->checkWebLink(text)) {
-                this->showWebLink(text, item);
-            } else {
-                this->showHtml(mimeData->html(), item.fingerprint());
-            }
-        } else {
-            this->showHtml(mimeData->html(), item.fingerprint());
-        }
     }
     else if (!itemImage.isNull()) {
         this->showImage(itemImage, itemImagePixelSize, !usingThumbnailPreview);
@@ -686,7 +721,7 @@ void ClipboardItemInnerWidget::showHtml(const QString &html, const QByteArray &s
         this->textBrowser->show();
         this->textBrowser->setHtml(html);
 
-        snapshot = renderHtmlPreviewSnapshot(html, targetSize, devicePixelRatio);
+        snapshot = renderHtmlPreviewSnapshot(html, targetSize, devicePixelRatio, currentItem_.imagePayloadBytesFast());
         if (!snapshot.isNull()) {
             const int cacheCost = qMax(1, (snapshot.width() * snapshot.height() * 4) / 1024);
             htmlPreviewSnapshotCache().insert(cacheKey, new QPixmap(snapshot), cacheCost);

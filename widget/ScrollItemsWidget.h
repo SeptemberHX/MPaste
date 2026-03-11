@@ -81,8 +81,10 @@ private slots:
 private:
     ClipboardItemWidget *createItemWidget(const ClipboardItem &item);
     ClipboardItemWidget *findMatchingWidget(const ClipboardItem &item) const;
+    ClipboardItemWidget *findWidgetByName(const QString &name) const;
     void registerWidgetFingerprint(ClipboardItemWidget *widget);
     void unregisterWidgetFingerprint(ClipboardItemWidget *widget);
+    void updateWidgetItem(ClipboardItemWidget *widget, const ClipboardItem &item);
     void setSelectedItem(ClipboardItemWidget *item);
     QString getItemFilePath(const ClipboardItem &item);
     void setFirstVisibleItemSelected();

@@ -33,6 +33,7 @@ update: 修改本目录文件时，同步更新本 README。
 ## Recent Notes
 
 - `ClipboardMonitor` currently prints detailed clipboard capture diagnostics (`dataChanged`, settle retries, MIME snapshot, duplicate suppression, and app-event emission) to help trace repeated copy handling.
+- `PlatformRelated` now also exposes file-manager reveal helpers; on Windows it opens Explorer and selects one or more local files when the item context menu requests "Open Containing Folder".
 - `ClipboardMonitor` now reconnects `QClipboard::dataChanged` with `Qt::UniqueConnection`, and suppresses short-window duplicate captures with the same normalized content so one logical copy does not fan out into repeated app-level updates.
 - `ClipboardMonitor` 现在会在需要时额外等待 WPS / 金山的分阶段剪贴板写入，减少一次复制产生两条记录的问题。
 - `ClipboardMonitor` 现在能在捕获阶段下载并落地 WPS 单图 HTML 载荷，方便后续统一保存为标准图片数据。

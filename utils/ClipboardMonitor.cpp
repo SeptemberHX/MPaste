@@ -397,8 +397,38 @@ QMimeData *ClipboardMonitor::cloneMimeData(const QMimeData *mimeData) {
     }
 
     auto *copy = new QMimeData;
+    if (mimeData->hasText()) {
+        copy->setText(mimeData->text());
+    }
+    if (mimeData->hasHtml()) {
+        copy->setHtml(mimeData->html());
+    }
+    if (mimeData->hasUrls()) {
+        copy->setUrls(mimeData->urls());
+    }
+    if (mimeData->hasColor()) {
+        copy->setColorData(mimeData->colorData());
+    }
+
     for (const QString &format : mimeData->formats()) {
-        copy->setData(format, mimeData->data(format));
+        const QString lower = format.toLower();
+        if (!(lower.startsWith(QStringLiteral("text/"))
+              || lower.contains(QStringLiteral("html"))
+              || lower.contains(QStringLiteral("plain"))
+              || lower.contains(QStringLiteral("xml"))
+              || lower.contains(QStringLiteral("json"))
+              || lower.contains(QStringLiteral("url"))
+              || lower.contains(QStringLiteral("uri"))
+              || lower.contains(QStringLiteral("descriptor"))
+              || lower.contains(QStringLiteral("ksdocclipboard"))
+              || lower.contains(QStringLiteral("rich text")))) {
+            continue;
+        }
+
+        const QByteArray data = mimeData->data(format);
+        if (!data.isEmpty()) {
+            copy->setData(format, data);
+        }
     }
     return copy;
 }
