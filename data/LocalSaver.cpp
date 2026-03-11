@@ -107,18 +107,17 @@ QPixmap buildCardThumbnailPixmap(const QPixmap &fullImage) {
         return fullImage;
     }
 
-    QPixmap scaled = fullImage.scaledToHeight(pixelTargetSize.height(), Qt::SmoothTransformation);
+    QPixmap scaled = fullImage.scaled(pixelTargetSize,
+        Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
     if (scaled.isNull()) {
         return QPixmap();
     }
 
-    QPixmap thumbnail = scaled;
-    if (scaled.width() > pixelTargetSize.width()) {
-        const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-        thumbnail = scaled.copy(x, 0,
-                                qMin(scaled.width(), pixelTargetSize.width()),
-                                scaled.height());
-    }
+    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
+    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
+    QPixmap thumbnail = scaled.copy(x, y,
+                                    qMin(scaled.width(), pixelTargetSize.width()),
+                                    qMin(scaled.height(), pixelTargetSize.height()));
     thumbnail.setDevicePixelRatio(thumbnailDpr);
     return thumbnail;
 }
