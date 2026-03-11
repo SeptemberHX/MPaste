@@ -288,6 +288,7 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
     previewLayout->addWidget(ui_.previewSummaryValue, 0);
     overviewTopLayout->addWidget(previewCard, 0);
 
+    ui_.sequenceValue = createValueLabel();
     ui_.typeValue = createValueLabel();
     ui_.timeValue = createValueLabel();
     ui_.nameValue = createValueLabel();
@@ -316,23 +317,25 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
     metaGrid->addWidget(ui_.timeValue, row, 1);
     ++row;
 
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Record Name"), zh(u"记录名")), row, 0);
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Formats"), zh(u"格式数")), row, 1);
+    metaGrid->addWidget(createSectionLabel(QStringLiteral("Sequence"), zh(u"序号")), row, 0);
+    metaGrid->addWidget(createSectionLabel(QStringLiteral("Record Name"), zh(u"记录名")), row, 1);
     ++row;
-    metaGrid->addWidget(ui_.nameValue, row, 0);
-    metaGrid->addWidget(ui_.formatCountValue, row, 1);
-    ++row;
-
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("MIME Bytes"), zh(u"MIME 大小")), row, 0);
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("URL Count"), zh(u"链接数量")), row, 1);
-    ++row;
-    metaGrid->addWidget(ui_.mimeBytesValue, row, 0);
-    metaGrid->addWidget(ui_.urlCountValue, row, 1);
+    metaGrid->addWidget(ui_.sequenceValue, row, 0);
+    metaGrid->addWidget(ui_.nameValue, row, 1);
     ++row;
 
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Text Length"), zh(u"文本长度")), row, 0, 1, 2);
+    metaGrid->addWidget(createSectionLabel(QStringLiteral("Formats"), zh(u"格式数")), row, 0);
+    metaGrid->addWidget(createSectionLabel(QStringLiteral("MIME Bytes"), zh(u"MIME 大小")), row, 1);
     ++row;
-    metaGrid->addWidget(ui_.textLengthValue, row, 0, 1, 2);
+    metaGrid->addWidget(ui_.formatCountValue, row, 0);
+    metaGrid->addWidget(ui_.mimeBytesValue, row, 1);
+    ++row;
+
+    metaGrid->addWidget(createSectionLabel(QStringLiteral("URL Count"), zh(u"链接数量")), row, 0);
+    metaGrid->addWidget(createSectionLabel(QStringLiteral("Text Length"), zh(u"文本长度")), row, 1);
+    ++row;
+    metaGrid->addWidget(ui_.urlCountValue, row, 0);
+    metaGrid->addWidget(ui_.textLengthValue, row, 1);
     ++row;
 
     metaGrid->addWidget(createSectionLabel(QStringLiteral("Title"), zh(u"标题")), row, 0, 1, 2);
@@ -589,7 +592,7 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
     ui_.previewSummaryValue->setText(summary.isEmpty() ? dashText() : summary);
 }
 
-void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item) {
+void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item, int sequence, int totalCount) {
     // Ensure full MIME data is loaded before showing details
     const_cast<ClipboardItem&>(item).ensureMimeDataLoaded();
     const QMimeData *mimeData = item.getMimeData();
@@ -604,6 +607,13 @@ void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item) {
     const QByteArray fingerprint = item.fingerprint();
 
     ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Item Details"), zh(u"剪贴板条目详情")));
+    if (sequence > 0) {
+        ui_.sequenceValue->setText(totalCount > 0
+            ? QStringLiteral("%1 / %2").arg(sequence).arg(totalCount)
+            : QString::number(sequence));
+    } else {
+        ui_.sequenceValue->setText(dashText());
+    }
     ui_.typeValue->setText(contentTypeLabel(item.getContentType()));
     ui_.timeValue->setText(QLocale::system().toString(item.getTime(), QLocale::LongFormat));
     ui_.nameValue->setText(item.getName().isEmpty() ? dashText() : item.getName());

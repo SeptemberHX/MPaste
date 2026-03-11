@@ -45,6 +45,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemDetailsDialog` 现在锁定了检查器宽度，并让概览页长链接/长标题优先在窗口内换行，避免详情窗口被内容横向撑开。
 - `ClipboardItemDetailsDialog` 现在移除了外层卡片阴影，让详情窗口里的组件视觉更干净。
 - `ClipboardItemDetailsDialog` 现在整体调大了标题、字段值、标签页和编辑器字号，提升可读性。
+- `ClipboardItemDetailsDialog` 现在会显示当前条目在当前列表里的序号，方便确认它是第几个条目。
 - `ClipboardItemDetailsDialog` 现在会在主预览图下方额外显示横向缩略图，并在摘要里标出缩略图尺寸。
 - `ClipboardItemDetailsDialog` 现在会按标签的 device pixel ratio 先缩放主预览和缩略图，减少高分屏下的发糊。
 - `ClipboardItemInnerWidget` 现在支持通过提取 HTML 中的 `<img src>` 来加载 WPS / 金山图片预览。

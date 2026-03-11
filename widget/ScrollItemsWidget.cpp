@@ -285,7 +285,8 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
     });
     connect(itemWidget, &ClipboardItemWidget::detailsRequested, this, [this, itemWidget](const ClipboardItem &) {
         this->setSelectedItem(itemWidget);
-        emit detailsRequested(itemWidget->getItem());
+        const QPair<int, int> sequenceInfo = displaySequenceForWidget(itemWidget);
+        emit detailsRequested(itemWidget->getItem(), sequenceInfo.first, sequenceInfo.second);
     });
 
     itemWidget->installEventFilter(this);
@@ -511,6 +512,38 @@ bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const Clipboar
     this->layout->insertWidget(this->layout->count() - 1, itemWidget);
     this->registerWidgetFingerprint(itemWidget);
     return true;
+}
+
+QPair<int, int> ScrollItemsWidget::displaySequenceForWidget(const ClipboardItemWidget *widget) const {
+    if (!widget) {
+        return qMakePair(-1, itemCountForDisplay());
+    }
+
+    int visibleIndex = 0;
+    int visibleTotal = 0;
+    int absoluteIndex = 0;
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto *candidate = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (!candidate) {
+            continue;
+        }
+
+        ++absoluteIndex;
+        if (candidate->isVisible()) {
+            ++visibleTotal;
+            if (candidate == widget) {
+                visibleIndex = visibleTotal;
+            }
+        } else if (candidate == widget) {
+            visibleIndex = absoluteIndex;
+        }
+    }
+
+    if (visibleIndex <= 0) {
+        return qMakePair(-1, visibleTotal > 0 ? visibleTotal : absoluteIndex);
+    }
+
+    return qMakePair(visibleIndex, visibleTotal > 0 ? visibleTotal : absoluteIndex);
 }
 
 QScrollBar* ScrollItemsWidget::horizontalScrollbar() {

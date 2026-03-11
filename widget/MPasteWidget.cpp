@@ -464,8 +464,8 @@ void MPasteWidget::setupConnections() {
         });
 
         connect(boardWidget, &ScrollItemsWidget::detailsRequested,
-        this, [this](const ClipboardItem &item) {
-            ui_.detailsDialog->showItem(item);
+        this, [this](const ClipboardItem &item, int sequence, int totalCount) {
+            ui_.detailsDialog->showItem(item, sequence, totalCount);
         });
 
         connect(boardWidget, &ScrollItemsWidget::itemCountChanged, this, [this, boardWidget](int itemCount) {

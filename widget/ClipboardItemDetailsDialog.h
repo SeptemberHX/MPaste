@@ -23,7 +23,7 @@ class ClipboardItemDetailsDialog : public QDialog {
 
 public:
     explicit ClipboardItemDetailsDialog(QWidget *parent = nullptr);
-    void showItem(const ClipboardItem &item);
+    void showItem(const ClipboardItem &item, int sequence = -1, int totalCount = -1);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -49,6 +49,7 @@ private:
         QLabel *previewVisual = nullptr;
         QLabel *previewThumbnail = nullptr;
         QLabel *previewSummaryValue = nullptr;
+        QLabel *sequenceValue = nullptr;
         QLabel *typeValue = nullptr;
         QLabel *timeValue = nullptr;
         QLabel *nameValue = nullptr;
