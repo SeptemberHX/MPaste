@@ -29,6 +29,8 @@
 #include "ClipboardItemWidget.h"
 
 namespace {
+constexpr qreal kHtmlPreviewZoom = 1.65;
+
 class EdgeFadeOverlay final : public QWidget {
 public:
     enum Side {
@@ -152,13 +154,16 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     const QSize contentSize(
         qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
         qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
+    const QSizeF layoutSize(
+        qMax(1.0, contentSize.width() / kHtmlPreviewZoom),
+        qMax(1.0, contentSize.height() / kHtmlPreviewZoom));
 
     QTextDocument document;
     document.setDocumentMargin(0);
     document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
     document.setHtml(html);
-    document.setPageSize(QSizeF(contentSize));
-    document.setTextWidth(contentSize.width());
+    document.setPageSize(layoutSize);
+    document.setTextWidth(layoutSize.width());
 
     QPixmap snapshot(pixelTargetSize);
     snapshot.fill(Qt::transparent);
@@ -167,8 +172,9 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.translate(leftPadding, topPadding);
-    painter.setClipRect(QRectF(0, 0, contentSize.width(), contentSize.height()));
-    document.drawContents(&painter, QRectF(0, 0, contentSize.width(), contentSize.height()));
+    painter.scale(kHtmlPreviewZoom, kHtmlPreviewZoom);
+    painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
+    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
     painter.end();
 
     snapshot.setDevicePixelRatio(thumbnailDpr);

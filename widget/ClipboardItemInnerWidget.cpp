@@ -71,6 +71,8 @@ QPixmap scalePixmapForLabel(const QPixmap &pixmap, const QSize &targetSize, qrea
     return scaled;
 }
 
+constexpr qreal kHtmlPreviewZoom = 1.65;
+
 QCache<QString, QPixmap> &htmlPreviewSnapshotCache() {
     static QCache<QString, QPixmap> cache(64 * 1024);
     return cache;
@@ -88,7 +90,7 @@ QString htmlPreviewSnapshotCacheKey(const QByteArray &snapshotKey,
         .arg(QString::fromLatin1(keyBytes.toHex()))
         .arg(targetSize.width())
         .arg(targetSize.height())
-        .arg(qRound(devicePixelRatio * 100.0));
+        .arg(qRound(devicePixelRatio * 100.0 + kHtmlPreviewZoom * 1000.0));
 }
 
 QPixmap renderHtmlPreviewSnapshot(const QString &html, const QSize &targetSize, qreal devicePixelRatio) {
@@ -108,13 +110,16 @@ QPixmap renderHtmlPreviewSnapshot(const QString &html, const QSize &targetSize, 
     const QSize contentSize(
         qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
         qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
+    const QSizeF layoutSize(
+        qMax(1.0, contentSize.width() / kHtmlPreviewZoom),
+        qMax(1.0, contentSize.height() / kHtmlPreviewZoom));
 
     QTextDocument document;
     document.setDocumentMargin(0);
     document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
     document.setHtml(html);
-    document.setPageSize(QSizeF(contentSize));
-    document.setTextWidth(contentSize.width());
+    document.setPageSize(layoutSize);
+    document.setTextWidth(layoutSize.width());
 
     QPixmap snapshot(pixelTargetSize);
     snapshot.fill(Qt::transparent);
@@ -123,8 +128,9 @@ QPixmap renderHtmlPreviewSnapshot(const QString &html, const QSize &targetSize, 
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.translate(leftPadding, topPadding);
-    painter.setClipRect(QRectF(0, 0, contentSize.width(), contentSize.height()));
-    document.drawContents(&painter, QRectF(0, 0, contentSize.width(), contentSize.height()));
+    painter.scale(kHtmlPreviewZoom, kHtmlPreviewZoom);
+    painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
+    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
     painter.end();
 
     snapshot.setDevicePixelRatio(devicePixelRatio);
