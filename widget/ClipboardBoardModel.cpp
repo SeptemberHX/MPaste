@@ -21,7 +21,7 @@ QVariant ClipboardBoardModel::data(const QModelIndex &index, int role) const {
         case Qt::DisplayRole:
             return entry.item.getNormalizedText();
         case Qt::ToolTipRole:
-            return entry.item.getNormalizedText();
+            return {};
         case ItemRole:
             return QVariant::fromValue(entry.item);
         case FavoriteRole:

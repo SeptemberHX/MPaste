@@ -1,7 +1,7 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
-// update: If I change, update this header block and my folder README.md.
+// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved multi-file preview + footer path tweaks).
 #include "ClipboardCardDelegate.h"
 
 #include <cmath>
@@ -12,12 +12,15 @@
 #include <QFontMetrics>
 #include <QIcon>
 #include <QImage>
+#include <QImageReader>
 #include <QLinearGradient>
 #include <QLocale>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
 #include <QRegularExpression>
+#include <QSet>
+#include <QTextLayout>
 #include <QUrl>
 
 #include "ClipboardBoardModel.h"
@@ -207,9 +210,14 @@ QString countLabelForCard(const CardData &card) {
         case ClipboardItem::Link:
             return QStringLiteral("%1 %2").arg(card.normalizedText.size()).arg(QObject::tr("Characters"));
         case ClipboardItem::File:
-            return card.normalizedUrls.size() > 1
-                ? QStringLiteral("%1 %2").arg(card.normalizedUrls.size()).arg(QObject::tr("Files"))
-                : QString();
+            if (card.normalizedUrls.size() > 1) {
+                return QStringLiteral("%1 %2").arg(card.normalizedUrls.size()).arg(QObject::tr("Files"));
+            }
+            if (card.normalizedUrls.size() == 1) {
+                const QUrl url = card.normalizedUrls.front();
+                return url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyDecoded);
+            }
+            return QString();
         case ClipboardItem::Color:
         case ClipboardItem::All:
             break;
@@ -399,7 +407,8 @@ void drawShadow(QPainter *painter, const QRectF &cardRect, qreal radius) {
 }
 
 void drawElidedText(QPainter *painter, const QRect &rect, const QString &text,
-                    const QFont &font, const QColor &color, Qt::Alignment alignment) {
+                    const QFont &font, const QColor &color, Qt::Alignment alignment,
+                    Qt::TextElideMode elideMode = Qt::ElideRight) {
     if (text.isEmpty() || rect.isEmpty()) {
         return;
     }
@@ -408,7 +417,7 @@ void drawElidedText(QPainter *painter, const QRect &rect, const QString &text,
     painter->setFont(font);
     painter->setPen(color);
     const QFontMetrics metrics(font);
-    painter->drawText(rect, alignment, metrics.elidedText(text, Qt::ElideRight, rect.width()));
+    painter->drawText(rect, alignment, metrics.elidedText(text, elideMode, rect.width()));
     painter->restore();
 }
 
@@ -620,6 +629,145 @@ QPixmap filePixmap(const QSize &size) {
     return QIcon(QStringLiteral(":/resources/resources/files.svg")).pixmap(size);
 }
 
+QString joinFileNames(const QList<QUrl> &urls) {
+    QStringList names;
+    names.reserve(urls.size());
+    for (const QUrl &url : urls) {
+        QString name;
+        if (url.isLocalFile()) {
+            const QFileInfo info(url.toLocalFile());
+            name = info.fileName();
+        } else {
+            name = url.fileName();
+        }
+        if (name.isEmpty()) {
+            name = url.toString(QUrl::FullyDecoded);
+        }
+        if (!name.isEmpty()) {
+            names.append(name);
+        }
+    }
+    return names.join(QStringLiteral(", "));
+}
+
+QString formatTwoLineEndElidedText(const QString &text, const QFont &font, const QFontMetrics &fontMetrics, int lineWidth) {
+    if (text.isEmpty() || lineWidth <= 0) {
+        return text;
+    }
+
+    QTextLayout layout(text, font);
+    layout.beginLayout();
+
+    QStringList lines;
+    QString consumed;
+    int textPosition = 0;
+    for (int lineIndex = 0; lineIndex < 2; ++lineIndex) {
+        QTextLine line = layout.createLine();
+        if (!line.isValid()) {
+            break;
+        }
+        line.setLineWidth(lineWidth);
+        const int start = line.textStart();
+        const int length = line.textLength();
+        QString lineText = text.mid(start, length).trimmed();
+        if (lineText.isEmpty()) {
+            continue;
+        }
+        lines << lineText;
+        textPosition = start + length;
+        consumed = text.left(textPosition);
+    }
+    layout.endLayout();
+
+    if (lines.isEmpty()) {
+        return fontMetrics.elidedText(text, Qt::ElideRight, lineWidth);
+    }
+
+    if (textPosition >= text.size()) {
+        return lines.join(QLatin1Char('\n'));
+    }
+
+    if (lines.size() == 1) {
+        return fontMetrics.elidedText(text, Qt::ElideRight, lineWidth);
+    }
+
+    const QString remaining = text.mid(consumed.size()).trimmed();
+    lines[1] = fontMetrics.elidedText(lines[1] + remaining, Qt::ElideRight, lineWidth);
+    return lines.join(QLatin1Char('\n'));
+}
+
+bool isLikelyImageFile(const QString &filePath) {
+    if (filePath.isEmpty()) {
+        return false;
+    }
+
+    const QFileInfo info(filePath);
+    if (!info.exists() || !info.isFile()) {
+        return false;
+    }
+
+    const QString suffix = info.suffix().toLower();
+    if (suffix.isEmpty()) {
+        return false;
+    }
+
+    static QSet<QString> supportedSuffixes;
+    static bool initialized = false;
+    if (!initialized) {
+        const QList<QByteArray> formats = QImageReader::supportedImageFormats();
+        for (const QByteArray &format : formats) {
+            supportedSuffixes.insert(QString::fromLatin1(format).toLower());
+        }
+        initialized = true;
+    }
+
+    return supportedSuffixes.contains(suffix);
+}
+
+QPixmap loadLocalImageThumbnail(const QString &filePath, const QSize &targetLogicalSize, qreal targetDpr) {
+    if (!isLikelyImageFile(filePath) || !targetLogicalSize.isValid()) {
+        return {};
+    }
+
+    const QFileInfo info(filePath);
+    const QSize pixelTargetSize = targetLogicalSize * qMax<qreal>(1.0, targetDpr);
+    if (!pixelTargetSize.isValid()) {
+        return {};
+    }
+
+    static QCache<QString, QPixmap> cache(128 * 1024);
+    const QString cacheKey = QStringLiteral("%1:%2:%3x%4@%5")
+        .arg(filePath)
+        .arg(info.lastModified().toMSecsSinceEpoch())
+        .arg(pixelTargetSize.width())
+        .arg(pixelTargetSize.height())
+        .arg(qRound(targetDpr * 100.0));
+    if (QPixmap *cached = cache.object(cacheKey)) {
+        return *cached;
+    }
+
+    QImageReader reader(filePath);
+    reader.setAutoTransform(true);
+    const QSize sourceSize = reader.size();
+    if (sourceSize.isValid()) {
+        const QSize scaledSize = sourceSize.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding);
+        if (scaledSize.isValid()) {
+            reader.setScaledSize(scaledSize);
+        }
+    }
+
+    const QImage image = reader.read();
+    if (image.isNull()) {
+        return {};
+    }
+
+    QPixmap pixmap = QPixmap::fromImage(image);
+    pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
+    const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
+    cache.insert(cacheKey, new QPixmap(pixmap), cacheCost);
+    return pixmap;
+}
+
 void drawLinkLabel(QPainter *painter, const QRect &rect, const QString &text, const QFont &font,
                    const QColor &color, int horizontalInset) {
     if (!painter || rect.isEmpty() || text.isEmpty()) {
@@ -754,12 +902,12 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     painter->drawPixmap(iconPixmapRect.topLeft(), headerIcon);
 
     QFont typeFont = painter->font();
-    typeFont.setPointSize(qMax(9, 12 * scale / 100));
+    typeFont.setPointSize(qMax(9, 11 * scale / 100));
     typeFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
     typeFont.setBold(true);
     typeFont.setWeight(QFont::ExtraBold);
     QFont timeFont = painter->font();
-    timeFont.setPointSize(qMax(8, 10 * scale / 100));
+    timeFont.setPointSize(qMax(8, 9 * scale / 100));
     timeFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
 
     const int textRightPadding = iconLabelSize + topRightMargin + 12 * scale / 100;
@@ -790,7 +938,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                 drawCoverPixmap(painter, imagePreviewRect, card.thumbnail, card.name, card.imageSize);
             } else {
                 QFont previewFont = painter->font();
-                previewFont.setPointSize(qMax(9, 11 * scale / 100));
+                previewFont.setPointSize(qMax(9, 10 * scale / 100));
                 drawWrappedText(painter, imagePreviewRect.adjusted(10 * scale / 100, 8 * scale / 100, -10 * scale / 100, -6 * scale / 100),
                                 previewTextForCard(card), previewFont, QColor(QStringLiteral("#30343B")));
             }
@@ -800,7 +948,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                 drawCoverPixmap(painter, previewRect, card.thumbnail, card.name, card.imageSize);
             } else {
                 QFont previewFont = painter->font();
-                previewFont.setPointSize(qMax(9, 11 * scale / 100));
+                previewFont.setPointSize(qMax(9, 10 * scale / 100));
                 drawWrappedText(painter, previewRect, previewTextForCard(card), previewFont, QColor(QStringLiteral("#30343B")));
             }
             break;
@@ -810,7 +958,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             painter->setBrush(color);
             painter->drawRoundedRect(previewRect, 10.0, 10.0);
             QFont previewFont = painter->font();
-            previewFont.setPointSize(qMax(10, 13 * scale / 100));
+            previewFont.setPointSize(qMax(10, 12 * scale / 100));
             previewFont.setBold(true);
             const QColor fontColor(255 - color.red(), 255 - color.green(), 255 - color.blue());
             drawElidedText(painter, previewRect, previewTextForCard(card), previewFont, fontColor, Qt::AlignCenter);
@@ -845,10 +993,10 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             }
 
             QFont linkTitleFont = painter->font();
-            linkTitleFont.setPointSize(qMax(9, 10 * scale / 100));
+            linkTitleFont.setPointSize(qMax(9, 9 * scale / 100));
             linkTitleFont.setBold(true);
             QFont linkUrlFont = painter->font();
-            linkUrlFont.setPointSize(qMax(8, 10 * scale / 100));
+            linkUrlFont.setPointSize(qMax(8, 9 * scale / 100));
             linkUrlFont.setUnderline(true);
             drawLinkLabel(painter,
                           titleRect,
@@ -865,11 +1013,49 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             break;
         }
         case ClipboardItem::File: {
+            if (card.normalizedUrls.size() == 1 && card.normalizedUrls.first().isLocalFile()) {
+                const QString filePath = card.normalizedUrls.first().toLocalFile();
+                const QPixmap thumb = loadLocalImageThumbnail(filePath, imagePreviewRect.size(), paintDpr);
+                if (!thumb.isNull()) {
+                    drawCoverPixmap(painter, imagePreviewRect, thumb, card.name, QSize());
+                    break;
+                }
+            }
+
+            if (card.normalizedUrls.size() > 1) {
+                QFont previewFont = painter->font();
+                previewFont.setPointSize(qMax(9, 10 * scale / 100));
+                const QFontMetrics metrics(previewFont);
+                const int textHeight = qMax(metrics.height() * 2 + 4, 28 * scale / 100);
+                const int textSidePadding = qMax(8, 10 * scale / 100);
+                const QRect textRect(previewRect.left() + textSidePadding,
+                                     previewRect.bottom() - textHeight,
+                                     previewRect.width() - textSidePadding * 2,
+                                     textHeight);
+                const int iconSidePadding = qMax(10, 12 * scale / 100);
+                const int iconMaxSize = qMin(previewRect.width() - iconSidePadding * 2,
+                                             qMax(24, previewRect.height() - textHeight - 8 * scale / 100));
+                const QRect iconRect(previewRect.left() + (previewRect.width() - iconMaxSize) / 2,
+                                     previewRect.top() + qMax(2, 4 * scale / 100),
+                                     iconMaxSize,
+                                     iconMaxSize);
+                painter->drawPixmap(iconRect, filePixmap(iconRect.size()));
+
+                const QString fileNames = joinFileNames(card.normalizedUrls);
+                const QString formatted = formatTwoLineEndElidedText(fileNames, previewFont, metrics, textRect.width());
+                painter->save();
+                painter->setFont(previewFont);
+                painter->setPen(QColor(QStringLiteral("#30343B")));
+                painter->drawText(textRect, Qt::AlignLeft | Qt::AlignTop, formatted);
+                painter->restore();
+                break;
+            }
+
             const int glyphSize = qMin(previewRect.width() / 4, previewRect.height() / 3);
             const QRect glyphRect(previewRect.left() + 4 * scale / 100, previewRect.top(), glyphSize, glyphSize);
             painter->drawPixmap(glyphRect, filePixmap(glyphRect.size()));
             QFont previewFont = painter->font();
-            previewFont.setPointSize(qMax(9, 11 * scale / 100));
+            previewFont.setPointSize(qMax(9, 10 * scale / 100));
             drawWrappedText(painter, previewRect.adjusted(glyphSize + 12 * scale / 100, 2 * scale / 100, -4 * scale / 100, -2 * scale / 100),
                             previewTextForCard(card), previewFont, QColor(QStringLiteral("#30343B")));
             break;
@@ -877,7 +1063,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
         case ClipboardItem::Text:
         case ClipboardItem::All: {
             QFont previewFont = painter->font();
-            previewFont.setPointSize(qMax(9, 11 * scale / 100));
+            previewFont.setPointSize(qMax(9, 10 * scale / 100));
             drawWrappedText(painter, previewRect, previewTextForCard(card), previewFont, QColor(QStringLiteral("#30343B")));
             break;
         }
@@ -885,13 +1071,36 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
 
     if (!hideFooter) {
         QFont footerFont = painter->font();
-        footerFont.setPointSize(qMax(8, 9 * scale / 100));
-        const QRect countRect = footerRect.adjusted(8 * scale / 100, 0, -90 * scale / 100, 0);
-        const QRect shortcutRect = footerRect.adjusted(footerRect.width() - 84 * scale / 100, 0, -8 * scale / 100, 0);
+        footerFont.setPointSize(qMax(8, 8 * scale / 100));
+        const int footerPadding = qMax(6, 8 * scale / 100);
+        const QFontMetrics footerMetrics(footerFont);
+        const QString shortcutText = card.shortcutText;
+        const int shortcutPadding = qMax(6, 8 * scale / 100);
+        const int shortcutTextWidth = shortcutText.isEmpty()
+            ? 0
+            : footerMetrics.horizontalAdvance(shortcutText) + shortcutPadding;
+        const int shortcutMinWidth = qMax(48, 56 * scale / 100);
+        const int shortcutWidth = shortcutText.isEmpty()
+            ? 0
+            : qMax(shortcutMinWidth, shortcutTextWidth);
+        const QRect shortcutRect(
+            footerRect.right() - footerPadding - shortcutWidth + 1,
+            footerRect.top(),
+            shortcutWidth,
+            footerRect.height());
+        const QRect countRect(
+            footerRect.left() + footerPadding,
+            footerRect.top(),
+            footerRect.width() - footerPadding * 2 - shortcutWidth,
+            footerRect.height());
+        const bool isSingleFilePath = card.contentType == ClipboardItem::File && card.normalizedUrls.size() == 1;
         drawElidedText(painter, countRect, countLabelForCard(card), footerFont, QColor(QStringLiteral("#556270")),
-                       Qt::AlignLeft | Qt::AlignVCenter);
-        drawElidedText(painter, shortcutRect, card.shortcutText, footerFont, QColor(QStringLiteral("#556270")),
-                       Qt::AlignRight | Qt::AlignVCenter);
+                       Qt::AlignLeft | Qt::AlignVCenter,
+                       isSingleFilePath ? Qt::ElideMiddle : Qt::ElideRight);
+        if (!shortcutText.isEmpty()) {
+            drawElidedText(painter, shortcutRect, shortcutText, footerFont, QColor(QStringLiteral("#556270")),
+                           Qt::AlignRight | Qt::AlignVCenter);
+        }
     }
 
     if (card.favorite) {

@@ -320,7 +320,7 @@ void MPasteWidget::initUI() {
     ui_.boardWidgetMap.insert(ui_.staredWidget->getCategory(), ui_.staredWidget);
 
     ui_.layout = new QHBoxLayout(ui_.ui->itemsWidget);
-    ui_.layout->setContentsMargins(0, 0, 0, 0);
+    ui_.layout->setContentsMargins(0, 10, 0, 0);
     ui_.layout->setSpacing(0);
     ui_.layout->addWidget(ui_.clipboardWidget);
     ui_.layout->addWidget(ui_.staredWidget);

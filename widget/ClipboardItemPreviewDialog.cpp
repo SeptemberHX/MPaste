@@ -1,7 +1,7 @@
 ﻿// input: Depends on ClipboardItemPreviewDialog.h, Qt widgets/layout, and ClipboardItem payload accessors.
 // output: Implements a centered read-only preview dialog with selection/copy support for rich text, text, images, and files.
 // pos: Widget-layer preview dialog implementation for larger clipboard inspection.
-// update: If I change, update this header block and my folder README.md.
+// update: If I change, update this header block and my folder README.md (tuned preview font size + hidden caret/focus).
 #include "ClipboardItemPreviewDialog.h"
 
 #include <QCursor>
@@ -28,6 +28,7 @@
 namespace {
 constexpr int kPreviewDialogWidth = 980;
 constexpr int kPreviewDialogHeight = 760;
+constexpr int kPreviewBodyFontSize = 16;
 
 bool looksBrokenTranslation(const QString &text) {
     if (text.isEmpty()) {
@@ -199,14 +200,21 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     cardLayout->addLayout(headerLayout);
 
     ui_.browser = new QTextBrowser(card);
+    QFont previewFont = ui_.browser->font();
+    previewFont.setPointSize(kPreviewBodyFontSize);
+    ui_.browser->setFont(previewFont);
+    ui_.browser->document()->setDefaultFont(previewFont);
+    ui_.browser->setCursorWidth(0);
+    ui_.browser->setFocusPolicy(Qt::NoFocus);
     ui_.browser->setOpenLinks(false);
     ui_.browser->setOpenExternalLinks(false);
     ui_.browser->setReadOnly(true);
     ui_.browser->setUndoRedoEnabled(false);
-    ui_.browser->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    ui_.browser->setTextInteractionFlags(Qt::TextSelectableByMouse);
     ui_.browser->setContextMenuPolicy(Qt::DefaultContextMenu);
     ui_.browser->installEventFilter(this);
     ui_.browser->viewport()->installEventFilter(this);
+    ui_.browser->viewport()->setCursor(Qt::ArrowCursor);
     cardLayout->addWidget(ui_.browser, 1);
 }
 
@@ -248,7 +256,6 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     show();
     raise();
     activateWindow();
-    ui_.browser->setFocus();
 }
 
 void ClipboardItemPreviewDialog::reject() {
@@ -406,6 +413,7 @@ void ClipboardItemPreviewDialog::releasePreviewContent() {
     auto *oldDocument = ui_.browser->document();
     auto *newDocument = new QTextDocument(ui_.browser);
     ui_.browser->setDocument(newDocument);
+    ui_.browser->document()->setDefaultFont(ui_.browser->font());
     if (oldDocument && oldDocument->parent() == ui_.browser) {
         oldDocument->deleteLater();
     }

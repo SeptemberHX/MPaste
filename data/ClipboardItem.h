@@ -9,6 +9,7 @@
 #include <QColor>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QImage>
 #include <QMimeData>

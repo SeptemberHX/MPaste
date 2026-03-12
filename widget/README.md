@@ -38,6 +38,14 @@ update: 修改本目录文件时，同步更新本 README。
 ## Recent Notes
 
 - `ClipboardItemPreviewDialog` now provides a larger centered preview window for rich text, plain text, images, and files; it is read-only but still allows selection and copy, can be opened from the item preview menu action or the Space key on the current supported selection, and pressing Space again closes it.
+- `ClipboardItemPreviewDialog` now uses a tuned body font size and hides the text caret by disabling focus, while keeping mouse selection/copy behavior.
+- Clipboard card typography has been reduced slightly to make list items feel lighter.
+- File-type cards now show image thumbnails when they contain a single local image file.
+- File-type cards now show the single file path in the footer info line.
+- Single-file paths in the footer now use middle elide to keep filenames visible.
+- Footer spacing now adapts to shortcut text width to keep the path closer.
+- Multi-file cards now use a file-icon + two-line filename summary preview aligned with the legacy file thumbnail style.
+- Arrow-key navigation now keeps the selected card at the edge until it needs to scroll.
 - Favorites are now treated as a separate preserved board: deleting an item from Clipboard no longer affects Favorites, deleting from Favorites behaves like un-starring, and time-based history cleanup skips the Favorites board entirely.
 - `MPasteWidget` currently prints clipboard-update and sound-play diagnostics so repeated copy prompts can be traced from app-level updates to actual sound playback decisions.
 - `MPasteWidget` 和 `ScrollItemsWidget` 现在会输出启动、窗口 show、延迟历史加载和后台条目补全的阶段耗时日志，方便定位卡顿发生在哪一步。

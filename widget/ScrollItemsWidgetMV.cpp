@@ -1,7 +1,7 @@
 // input: Depends on ScrollItemsWidget.h, LocalSaver, Qt model/view APIs, and delegate-based card painting.
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
-// update: If I change, update this header block and my folder README.md.
+// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center).
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
@@ -1418,7 +1418,7 @@ void ScrollItemsWidget::focusMoveLeft() {
 
     const QModelIndex nextIndex = proxyModel_->index(qMax(0, current.row() - 1), 0);
     setCurrentProxyIndex(nextIndex);
-    listView_->scrollTo(nextIndex, QAbstractItemView::PositionAtCenter);
+    listView_->scrollTo(nextIndex, QAbstractItemView::EnsureVisible);
 }
 
 void ScrollItemsWidget::focusMoveRight() {
@@ -1434,7 +1434,7 @@ void ScrollItemsWidget::focusMoveRight() {
 
     const QModelIndex nextIndex = proxyModel_->index(qMin(proxyModel_->rowCount() - 1, current.row() + 1), 0);
     setCurrentProxyIndex(nextIndex);
-    listView_->scrollTo(nextIndex, QAbstractItemView::PositionAtCenter);
+    listView_->scrollTo(nextIndex, QAbstractItemView::EnsureVisible);
 }
 
 int ScrollItemsWidget::getItemCount() {
