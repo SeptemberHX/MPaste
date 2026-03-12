@@ -129,13 +129,13 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
         }
         QLabel#previewTitle {
             color: #1E2936;
-            font-size: 19px;
+            font-size: 22px;
             font-weight: 700;
             background: transparent;
         }
         QLabel#previewSubtitle {
             color: #5E7084;
-            font-size: 12px;
+            font-size: 14px;
             background: transparent;
         }
         QTextBrowser {
@@ -144,6 +144,7 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
             border-radius: 14px;
             padding: 12px;
             color: #1E2936;
+            font-size: 16px;
             selection-background-color: rgba(74, 144, 226, 76);
         }
         QTextBrowser:focus {
@@ -224,6 +225,7 @@ bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {
 }
 
 void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
+    releasePreviewContent();
     updatePreviewContent(item);
 
     QScreen *targetScreen = nullptr;
@@ -250,7 +252,6 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
 }
 
 void ClipboardItemPreviewDialog::reject() {
-    releasePreviewContent();
     QDialog::reject();
 }
 

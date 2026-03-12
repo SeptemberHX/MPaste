@@ -5,23 +5,28 @@
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
 
-#include <QWidget>
-#include <QByteArray>
-#include <QHBoxLayout>
-#include <QHash>
 #include <QList>
 #include <QPair>
 #include <QSet>
+#include <QWidget>
+
 #include <data/LocalSaver.h>
+
 #include "data/ClipboardItem.h"
-#include "ClipboardItemWidget.h"
 
 class QPropertyAnimation;
+class QModelIndex;
 class QResizeEvent;
+class QScrollBar;
 class QTimer;
 class QThread;
 class QWheelEvent;
 class QShowEvent;
+class QListView;
+
+class ClipboardBoardModel;
+class ClipboardBoardProxyModel;
+class ClipboardCardDelegate;
 
 namespace Ui {
 class ScrollItemsWidget;
@@ -43,7 +48,7 @@ public:
     void cleanShortCutInfo();
     void loadFromSaveDir();
     void loadFromSaveDirDeferred();
-    QScrollBar* horizontalScrollbar();
+    QScrollBar* horizontalScrollbar() const;
     void setAllItemVisible();
     const ClipboardItem* currentSelectedItem() const;
     const ClipboardItem* selectedByShortcut(int visibleOrder);
@@ -76,23 +81,20 @@ signals:
     void itemUnstared(const ClipboardItem &item);
 
 private slots:
-    void itemClicked();
-    void itemDoubleClicked();
+    void handleCurrentIndexChanged(const QModelIndex &current, const QModelIndex &previous);
+    void handleActivatedIndex(const QModelIndex &index);
+    void showContextMenu(const QPoint &pos);
 
 private:
-    ClipboardItemWidget *createItemWidget(const ClipboardItem &item);
-    ClipboardItemWidget *findMatchingWidget(const ClipboardItem &item) const;
-    ClipboardItemWidget *findWidgetByName(const QString &name) const;
-    void registerWidgetFingerprint(ClipboardItemWidget *widget);
-    void unregisterWidgetFingerprint(ClipboardItemWidget *widget);
-    void updateWidgetItem(ClipboardItemWidget *widget, const ClipboardItem &item);
-    void setSelectedItem(ClipboardItemWidget *item);
+    QModelIndex currentProxyIndex() const;
+    QModelIndex proxyIndexForSourceRow(int sourceRow) const;
+    void setCurrentProxyIndex(const QModelIndex &index);
     QString getItemFilePath(const ClipboardItem &item);
     void setFirstVisibleItemSelected();
     void applyFilters();
     void saveItem(const ClipboardItem &item);
     void checkSaveDir();
-    void moveItemToFirst(ClipboardItemWidget *widget);
+    void moveItemToFirst(int sourceRow);
     QString saveDir();
     void animateScrollTo(int targetValue);
     int wheelStepPixels() const;
@@ -111,18 +113,22 @@ private:
     void handleDeferredBatchRead(const QStringList &batchPaths);
     void processDeferredLoadedItems();
     void waitForDeferredRead();
-    void processPendingItemAsync(const ClipboardItem &item, ClipboardItemWidget *targetWidget = nullptr);
+    void processPendingItemAsync(const ClipboardItem &item, const QString &targetName = QString());
     void startAsyncKeywordSearch();
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
-    QPair<int, int> displaySequenceForWidget(const ClipboardItemWidget *widget) const;
+    QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
+    int selectedSourceRow() const;
+    const ClipboardItem *cacheSelectedItem(int sourceRow) const;
 
     Ui::ScrollItemsWidget *ui;
-    QHBoxLayout *layout;
     QString category;
     QString borderColor;
 
-    ClipboardItemWidget *currItemWidget;
     LocalSaver *saver;
+    QListView *listView_ = nullptr;
+    ClipboardBoardModel *boardModel_ = nullptr;
+    ClipboardBoardProxyModel *proxyModel_ = nullptr;
+    ClipboardCardDelegate *cardDelegate_ = nullptr;
     QPropertyAnimation *scrollAnimation;
     QTimer *deferredLoadTimer_ = nullptr;
     QThread *deferredLoadThread_ = nullptr;
@@ -130,7 +136,6 @@ private:
     QList<QThread*> processingThreads_;
     QWidget *leftEdgeFadeOverlay_ = nullptr;
     QWidget *rightEdgeFadeOverlay_ = nullptr;
-    QHash<QByteArray, QList<ClipboardItemWidget*>> fingerprintBuckets_;
     QSet<QByteArray> favoriteFingerprints_;
     QStringList deferredLoadedItems_;
     QStringList pendingLoadFilePaths_;
@@ -140,6 +145,7 @@ private:
     bool deferredLoadActive_ = false;
     quint64 keywordSearchToken_ = 0;
     QSet<QString> asyncKeywordMatchedNames_;
+    mutable ClipboardItem selectedItemCache_;
 
     QString currentKeyword_;
     ClipboardItem::ContentType currentTypeFilter_ = ClipboardItem::All;

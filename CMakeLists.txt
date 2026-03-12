@@ -37,6 +37,7 @@ file(GLOB SRCS
         "data/*.h" "data/*.cpp"
         "utils/*.h" "utils/*.cpp"
 )
+list(REMOVE_ITEM SRCS "${CMAKE_CURRENT_SOURCE_DIR}/widget/ScrollItemsWidget.cpp")
 
 find_package(Qt6 COMPONENTS
         Widgets
@@ -52,7 +53,7 @@ set(TS_FILES
 )
 set_source_files_properties(${TS_FILES} PROPERTIES
         OUTPUT_LOCATION ${CMAKE_BINARY_DIR}/translations)
-qt6_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} utils ${TS_FILES})
+qt6_create_translation(QM_FILES ${SRCS} ${TS_FILES})
 qt6_add_translation(QM_FILES ${TS_FILES})
 
 if(UNIX)

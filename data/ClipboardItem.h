@@ -56,6 +56,42 @@ private:
     mutable QString cachedNormalizedText_;
     mutable QList<QUrl> cachedNormalizedUrls_;
 
+    static QString windowsDrivePathFromUrl(const QUrl &url) {
+        if (!url.isValid() || url.isLocalFile()) {
+            return {};
+        }
+
+        const QString scheme = url.scheme();
+        const QString path = url.path();
+        if (scheme.size() == 1 && !path.isEmpty() && path.startsWith(QLatin1Char('/'))) {
+            return QDir::fromNativeSeparators(scheme.toUpper() + QStringLiteral(":") + path);
+        }
+
+        const QString asText = url.toString(QUrl::FullyDecoded);
+        if (asText.size() > 2
+            && asText[1] == QLatin1Char(':')
+            && (asText[2] == QLatin1Char('/') || asText[2] == QLatin1Char('\\'))) {
+            return QDir::fromNativeSeparators(asText);
+        }
+
+        return {};
+    }
+
+    static QUrl normalizePotentialLocalFileUrl(const QUrl &url) {
+        if (!url.isValid()) {
+            return {};
+        }
+        if (url.isLocalFile()) {
+            return url;
+        }
+
+        const QString localPath = windowsDrivePathFromUrl(url);
+        if (!localPath.isEmpty()) {
+            return QUrl::fromLocalFile(localPath);
+        }
+        return url;
+    }
+
     static QList<QUrl> parseUrlsFromLines(const QStringList &lines, bool strictMode) {
         QList<QUrl> result;
         for (const QString &line : lines) {
@@ -64,17 +100,17 @@ private:
                 continue;
             }
 
-            QUrl url(trimmed);
-            if (url.isValid() && !url.isRelative() && !trimmed.contains(QLatin1Char(' '))) {
-                result << url;
-                continue;
-            }
-
             if ((trimmed.startsWith(QLatin1String("/"))
                  || (trimmed.size() > 2 && trimmed[1] == QLatin1Char(':')
                      && (trimmed[2] == QLatin1Char('/') || trimmed[2] == QLatin1Char('\\'))))
                 && QFileInfo::exists(trimmed)) {
-                result << QUrl::fromLocalFile(trimmed);
+                result << QUrl::fromLocalFile(QDir::fromNativeSeparators(trimmed));
+                continue;
+            }
+
+            QUrl url(trimmed);
+            if (url.isValid() && !url.isRelative() && !trimmed.contains(QLatin1Char(' '))) {
+                result << normalizePotentialLocalFileUrl(url);
                 continue;
             }
 
@@ -231,6 +267,10 @@ private:
 
         QList<QUrl> urls = mimeData_->urls();
         if (!urls.isEmpty()) {
+            for (QUrl &url : urls) {
+                url = normalizePotentialLocalFileUrl(url);
+            }
+
             const bool allLocalFiles = std::all_of(urls.begin(), urls.end(),
                 [](const QUrl &url) { return url.isLocalFile(); });
             if (allLocalFiles) {
@@ -777,15 +817,22 @@ private:
         if (mimeData_->hasColor()) return Color;
 
         const QList<QUrl> urls = buildNormalizedUrls();
-        if (!urls.isEmpty() && !mimeData_->hasHtml()) {
+        if (!urls.isEmpty()) {
             bool allValid = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
                 [](const QUrl &url) { return url.isValid() && !url.isRelative(); });
             if (allValid) {
                 bool allFiles = std::all_of(urls.begin(), urls.end(),
                     [](const QUrl &url) { return url.isLocalFile(); });
-                return allFiles ? File : Link;
+                if (allFiles) {
+                    return File;
+                }
+                if (!mimeData_->hasHtml()) {
+                    return Link;
+                }
             }
-            return Text;
+            if (!mimeData_->hasHtml()) {
+                return Text;
+            }
         }
 
         if (mimeData_->hasHtml()) {
@@ -1402,15 +1449,22 @@ public:
         if (mimeData_->hasColor()) return Color;
 
         QList<QUrl> urls = getNormalizedUrls();
-        if (!urls.isEmpty() && !mimeData_->hasHtml()) {
+        if (!urls.isEmpty()) {
             bool allValid = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
                 [](const QUrl &url) { return url.isValid() && !url.isRelative(); });
             if (allValid) {
                 bool allFiles = std::all_of(urls.begin(), urls.end(),
                     [](const QUrl &url) { return url.isLocalFile(); });
-                return allFiles ? File : Link;
+                if (allFiles) {
+                    return File;
+                }
+                if (!mimeData_->hasHtml()) {
+                    return Link;
+                }
             }
-            return Text;
+            if (!mimeData_->hasHtml()) {
+                return Text;
+            }
         }
 
         if (mimeData_->hasHtml()) {
@@ -1434,5 +1488,7 @@ public:
         return Text;
     }
 };
+
+Q_DECLARE_METATYPE(ClipboardItem)
 
 #endif // MPASTE_CLIPBOARDITEM_H
