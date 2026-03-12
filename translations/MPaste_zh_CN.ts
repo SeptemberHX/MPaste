@@ -51,77 +51,77 @@
 <context>
     <name>ClipboardItemInnerWidget</name>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="662"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="706"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="882"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="918"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="933"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="697"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="741"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="917"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="953"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="968"/>
         <source>Characters</source>
         <translation>字符</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="479"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="663"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="707"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="529"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="698"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="742"/>
         <source>Rich Text</source>
         <translation>富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="758"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="793"/>
         <source>Preview unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="465"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="764"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="812"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="832"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="860"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="518"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="799"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="847"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="867"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="895"/>
         <source>Pixels</source>
         <translation>像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="469"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="768"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="816"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="836"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="864"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="522"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="803"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="851"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="871"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="899"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="462"/>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="823"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="515"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="858"/>
         <source>Loading preview...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="884"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="919"/>
         <source>Plain Text</source>
         <translation>纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="901"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="936"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="932"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="967"/>
         <source>Links</source>
         <translation>链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="941"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="976"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="950"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="985"/>
         <source>Files</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="1028"/>
+        <location filename="../widget/ClipboardItemInnerWidget.cpp" line="1063"/>
         <source>Link</source>
         <translation>链接</translation>
     </message>
@@ -137,13 +137,13 @@
         <translation type="vanished">??????</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="156"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="193"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="172"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="210"/>
         <source>Delete</source>
         <translation>删除</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="181"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="197"/>
         <source>Save</source>
         <translation>保存</translation>
     </message>
@@ -156,28 +156,28 @@
         <translation type="vanished">添加至</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="184"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="200"/>
         <source>Preview</source>
         <translation>预览</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="189"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="206"/>
         <source>Save to Star</source>
         <translation>另存到收藏夹</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="191"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="208"/>
         <source>Save to</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="277"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="307"/>
         <source>Remove from favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="152"/>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="278"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="168"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="308"/>
         <source>Add to favorites</source>
         <translation type="unfinished"></translation>
     </message>
@@ -185,7 +185,7 @@
 <context>
     <name>MPasteSettings</name>
     <message>
-        <location filename="../utils/MPasteSettings.cpp" line="49"/>
+        <location filename="../utils/MPasteSettings.cpp" line="51"/>
         <source>Terminal</source>
         <translatorcomment>已 top-panel 显示为准</translatorcomment>
         <translation type="unfinished">终端</translation>
@@ -273,7 +273,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.cpp" line="246"/>
+        <location filename="../widget/MPasteSettingsWidget.cpp" line="302"/>
         <source>Auto-start is currently only supported on Windows.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -382,14 +382,19 @@
         <translation type="vanished">?? MIME ??</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="41"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="45"/>
         <source>Paste as Plain Text</source>
         <translation type="unfinished">??????</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardItemWidget.cpp" line="53"/>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="57"/>
         <source>Details</source>
         <translation type="unfinished">??</translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardItemWidget.cpp" line="69"/>
+        <source>Open Containing Folder</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

@@ -297,6 +297,10 @@ void MPasteWidget::initUI() {
     ui_.detailsDialog->setWindowFlag(Qt::Tool);
     ui_.detailsDialog->hide();
 
+    ui_.previewDialog = new ClipboardItemPreviewDialog(this);
+    ui_.previewDialog->setWindowFlag(Qt::Tool);
+    ui_.previewDialog->hide();
+
     ui_.settingsWidget = new MPasteSettingsWidget(this);
     connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
             this, &MPasteWidget::shortcutChanged);
@@ -500,6 +504,12 @@ void MPasteWidget::setupConnections() {
         connect(boardWidget, &ScrollItemsWidget::detailsRequested,
         this, [this](const ClipboardItem &item, int sequence, int totalCount) {
             ui_.detailsDialog->showItem(item, sequence, totalCount);
+        });
+        connect(boardWidget, &ScrollItemsWidget::previewRequested,
+        this, [this](const ClipboardItem &item) {
+            if (ClipboardItemPreviewDialog::supportsPreview(item)) {
+                ui_.previewDialog->showItem(item);
+            }
         });
 
         connect(boardWidget, &ScrollItemsWidget::itemCountChanged, this, [this, boardWidget](int itemCount) {
@@ -739,6 +749,9 @@ void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
         case Qt::Key_Enter:
             handleEnterKey(event->modifiers().testFlag(Qt::ControlModifier));
             break;
+        case Qt::Key_Space:
+            handlePreviewKey();
+            break;
         case Qt::Key_Left:
         case Qt::Key_Right:
             handleNavigationKeys(event);
@@ -778,6 +791,20 @@ void MPasteWidget::handleEnterKey(bool plainText) {
     if (selectedItem && setClipboard(*selectedItem, plainText)) {
         hideAndPaste();
     }
+}
+
+void MPasteWidget::handlePreviewKey() {
+    if (ui_.previewDialog && ui_.previewDialog->isVisible()) {
+        ui_.previewDialog->reject();
+        return;
+    }
+
+    const ClipboardItem *selectedItem = currItemsWidget()->currentSelectedItem();
+    if (!selectedItem || !ClipboardItemPreviewDialog::supportsPreview(*selectedItem)) {
+        return;
+    }
+
+    ui_.previewDialog->showItem(*selectedItem);
 }
 
 bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {

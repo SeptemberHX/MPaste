@@ -68,6 +68,7 @@ private:
     void showContextMenu(const QPoint& pos);
     void updateFavoriteButton();
     void updateFileContextActionVisibility();
+    void updatePreviewActionVisibility();
 
     // Action handlers
     void handleFavoriteAction();
@@ -92,6 +93,7 @@ private:
         } actions;
 
         QMenu* contextMenu{nullptr};
+        QAction* previewAction{nullptr};
         QAction* openContainingFolderAction{nullptr};
         QLabel* favoriteIndicator{nullptr};
     } ui;

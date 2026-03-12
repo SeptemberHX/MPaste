@@ -541,6 +541,10 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
         const QPair<int, int> sequenceInfo = displaySequenceForWidget(itemWidget);
         emit detailsRequested(itemWidget->getItem(), sequenceInfo.first, sequenceInfo.second);
     });
+    connect(itemWidget, &ClipboardItemWidget::previewRequested, this, [this, itemWidget]() {
+        this->setSelectedItem(itemWidget);
+        emit previewRequested(itemWidget->getItem());
+    });
 
     itemWidget->installEventFilter(this);
     itemWidget->showItem(item);

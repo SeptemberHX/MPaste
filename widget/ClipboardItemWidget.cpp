@@ -18,6 +18,7 @@
 
 #include "utils/PlatformRelated.h"
 #include "utils/MPasteSettings.h"
+#include "ClipboardItemPreviewDialog.h"
 
 namespace {
 constexpr int kCardBaseWidth = 275;
@@ -196,7 +197,7 @@ void ClipboardItemWidget::setupContextMenu() {
     addAction(":/resources/resources/save_black.svg", tr("Save"), &ClipboardItemWidget::handleSaveAction);
     addAction(":/resources/resources/text_plain.svg", plainTextPasteLabel(), &ClipboardItemWidget::handlePastePlainTextAction);
     addAction(":/resources/resources/details.svg", detailsLabel(), &ClipboardItemWidget::handleDetailsAction);
-    addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
+    ui.previewAction = addAction(":/resources/resources/preview.svg", tr("Preview"), &ClipboardItemWidget::previewRequested);
     ui.openContainingFolderAction = addAction(":/resources/resources/files.svg", openContainingFolderLabel(), &ClipboardItemWidget::handleOpenContainingFolderAction);
 
     ui.contextMenu->addSeparator();
@@ -321,6 +322,7 @@ void ClipboardItemWidget::updateFavoriteButton() {
 void ClipboardItemWidget::showItem(const ClipboardItem& item) {
     currentItem = item;
     updateFileContextActionVisibility();
+    updatePreviewActionVisibility();
     ui.innerWidget->showItem(currentItem);
 }
 
@@ -336,6 +338,14 @@ void ClipboardItemWidget::updateFileContextActionVisibility() {
             return url.isLocalFile();
         });
     ui.openContainingFolderAction->setVisible(visible);
+}
+
+void ClipboardItemWidget::updatePreviewActionVisibility() {
+    if (!ui.previewAction) {
+        return;
+    }
+
+    ui.previewAction->setVisible(ClipboardItemPreviewDialog::supportsPreview(currentItem));
 }
 
 void ClipboardItemWidget::setSelected(bool selected) {

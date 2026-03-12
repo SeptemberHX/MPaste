@@ -23,6 +23,7 @@
 #include "data/LocalSaver.h"
 #include "AboutWidget.h"
 #include "ClipboardItemDetailsDialog.h"
+#include "ClipboardItemPreviewDialog.h"
 #include "MPasteSettingsWidget.h"
 #include "ScrollItemsWidget.h"
 
@@ -84,6 +85,7 @@ private:
     void handleKeyboardEvent(QKeyEvent *event);
     void handleEscapeKey();
     void handleEnterKey(bool plainText = false);
+    void handlePreviewKey();
     void handleNavigationKeys(QKeyEvent *event);
     void handleHomeEndKeys(QKeyEvent *event);
     void handleTabKey();
@@ -97,6 +99,7 @@ private:
         QHBoxLayout *layout;
         AboutWidget *aboutWidget;
         ClipboardItemDetailsDialog *detailsDialog;
+        ClipboardItemPreviewDialog *previewDialog;
         MPasteSettingsWidget *settingsWidget;
 
         QMap<QString, ScrollItemsWidget*> boardWidgetMap;
