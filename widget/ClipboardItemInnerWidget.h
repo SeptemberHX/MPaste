@@ -71,6 +71,7 @@ private:
     void showFiles(const QList<QUrl> &fileUrls);
 
     void initTextBrowser();
+    void initPlainTextLabel();
     void initImageLabel();
     void initFileThumbWidget();
     void initWebLinkThumbWidget();
@@ -82,6 +83,7 @@ private:
     QColor topBgColor;
 
     MTextBrowser *textBrowser;
+    QLabel *plainTextLabel;
     QLabel *imageLabel;
     QHBoxLayout *mLayout;
     int borderWidth;

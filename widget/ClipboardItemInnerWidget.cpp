@@ -110,6 +110,18 @@ qreal htmlPreviewZoom(qreal devicePixelRatio) {
     return qMax<qreal>(1.0, devicePixelRatio);
 }
 
+constexpr int kPlainTextPreviewLimit = 700;
+
+QString truncatedPlainTextPreview(const QString &text) {
+    if (text.size() <= kPlainTextPreviewLimit) {
+        return text;
+    }
+
+    QString preview = text.left(kPlainTextPreviewLimit);
+    preview += QStringLiteral("\n…");
+    return preview;
+}
+
 QString firstHtmlImageSource(const QString &html) {
     static const QRegularExpression srcRegex(
         QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
@@ -294,6 +306,7 @@ ClipboardItemInnerWidget::ClipboardItemInnerWidget(QColor borderColor, QWidget *
     borderColor(borderColor)
 {
     this->textBrowser = nullptr;
+    this->plainTextLabel = nullptr;
     this->imageLabel = nullptr;
     this->fileThumbWidget = nullptr;
     this->webLinkThumbWidget = nullptr;
@@ -663,6 +676,10 @@ void ClipboardItemInnerWidget::hideContentWidgets() {
     if (this->textBrowser) {
         this->textBrowser->hide();
     }
+    if (this->plainTextLabel) {
+        this->plainTextLabel->hide();
+        this->plainTextLabel->clear();
+    }
     if (this->imageLabel) {
         this->imageLabel->hide();
         this->imageLabel->setPixmap(QPixmap());
@@ -910,10 +927,9 @@ void ClipboardItemInnerWidget::showText(const QString &text, const ClipboardItem
     } else if (url.isValid() && (trimStr.startsWith("http://") || trimStr.startsWith("https://"))) {
         this->showWebLink(url, item);
     } else {
-        this->initTextBrowser();
-        prepareTextBrowserDocument();
-        this->textBrowser->show();
-        this->textBrowser->setPlainText(text);
+        this->initPlainTextLabel();
+        this->plainTextLabel->setText(truncatedPlainTextPreview(text));
+        this->plainTextLabel->show();
         ui->countLabel->setText(QString("%1 ").arg(text.size()) + tr("Characters"));
     }
     ui->typeLabel->setText(tr("Plain Text"));
@@ -1016,6 +1032,24 @@ void ClipboardItemInnerWidget::initTextBrowser() {
     this->textBrowser->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     this->mLayout->addWidget(this->textBrowser);
     this->textBrowser->hide();
+}
+
+void ClipboardItemInnerWidget::initPlainTextLabel() {
+    if (this->plainTextLabel != nullptr) {
+        return;
+    }
+
+    this->plainTextLabel = new QLabel(ui->bodyWidget);
+    this->plainTextLabel->setStyleSheet(
+        "QLabel { border-radius: 0px; padding: 6px 10px 2px 10px; background: transparent; }");
+    this->plainTextLabel->setWordWrap(true);
+    this->plainTextLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    this->plainTextLabel->setTextFormat(Qt::PlainText);
+    this->plainTextLabel->setMargin(0);
+    this->plainTextLabel->setContentsMargins(0, 0, 0, 0);
+    this->plainTextLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    this->mLayout->addWidget(this->plainTextLabel);
+    this->plainTextLabel->hide();
 }
 
 void ClipboardItemInnerWidget::initImageLabel() {

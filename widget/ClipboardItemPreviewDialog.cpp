@@ -1,10 +1,9 @@
-// input: Depends on ClipboardItemPreviewDialog.h, Qt widgets/layout, and ClipboardItem HTML payload accessors.
-// output: Implements a centered read-only rich-text preview dialog with text selection and copy support.
+﻿// input: Depends on ClipboardItemPreviewDialog.h, Qt widgets/layout, and ClipboardItem payload accessors.
+// output: Implements a centered read-only preview dialog with selection/copy support for rich text, text, images, and files.
 // pos: Widget-layer preview dialog implementation for larger clipboard inspection.
 // update: If I change, update this header block and my folder README.md.
 #include "ClipboardItemPreviewDialog.h"
 
-#include <QApplication>
 #include <QCursor>
 #include <QFileInfo>
 #include <QFrame>
@@ -15,16 +14,13 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLocale>
-#include <QMouseEvent>
 #include <QMimeDatabase>
+#include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QRegularExpression>
-#include <QScrollArea>
-#include <QScreen>
-#include <QStackedLayout>
-#include <QTextDocument>
 #include <QTextBrowser>
+#include <QTextDocument>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWindow>
@@ -53,8 +49,12 @@ bool preferChineseFallback() {
            || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive);
 }
 
-QString zh(const char16_t *text) {
-    return QString::fromUtf16(text);
+QString joinUrls(const QList<QUrl> &urls) {
+    QStringList lines;
+    for (const QUrl &url : urls) {
+        lines << (url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyEncoded));
+    }
+    return lines.join(QStringLiteral("\n"));
 }
 
 QString firstHtmlImageSource(const QString &html) {
@@ -63,14 +63,6 @@ QString firstHtmlImageSource(const QString &html) {
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch match = srcRegex.match(html);
     return match.hasMatch() ? match.captured(1).trimmed() : QString();
-}
-
-QString joinUrls(const QList<QUrl> &urls) {
-    QStringList lines;
-    for (const QUrl &url : urls) {
-        lines << (url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyEncoded));
-    }
-    return lines.join(QStringLiteral("\n"));
 }
 
 bool isLocalImageFile(const QString &filePath) {
@@ -85,13 +77,13 @@ bool isLocalImageFile(const QString &filePath) {
 
 QPixmap loadPreviewImageFile(const QString &filePath, const QSize &targetSize, qreal devicePixelRatio) {
     if (!targetSize.isValid()) {
-        return QPixmap();
+        return {};
     }
 
     QImageReader reader(filePath);
     const QSize sourceSize = reader.size();
     if (!sourceSize.isValid()) {
-        return QPixmap();
+        return {};
     }
 
     const QSize pixelTargetSize = targetSize * devicePixelRatio;
@@ -104,12 +96,16 @@ QPixmap loadPreviewImageFile(const QString &filePath, const QSize &targetSize, q
 
     const QImage image = reader.read();
     if (image.isNull()) {
-        return QPixmap();
+        return {};
     }
 
     QPixmap pixmap = QPixmap::fromImage(image);
     pixmap.setDevicePixelRatio(devicePixelRatio);
     return pixmap;
+}
+
+QString unavailableText() {
+    return QStringLiteral("该条目暂无可用预览");
 }
 }
 
@@ -184,7 +180,6 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
 
     ui_.titleLabel = new QLabel(card);
     ui_.titleLabel->setObjectName(QStringLiteral("previewTitle"));
-    ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Preview"), zh(u"剪贴板预览")));
     titleLayout->addWidget(ui_.titleLabel);
 
     ui_.subtitleLabel = new QLabel(card);
@@ -197,8 +192,6 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     ui_.closeButton->setText(QStringLiteral("×"));
     ui_.closeButton->setCursor(Qt::PointingHandCursor);
     connect(ui_.closeButton, &QToolButton::clicked, this, &ClipboardItemPreviewDialog::reject);
-    ui_.closeButton->setText(QStringLiteral("×"));
-    ui_.closeButton->setText(QStringLiteral("×"));
 
     headerLayout->addLayout(titleLayout, 1);
     headerLayout->addWidget(ui_.closeButton, 0, Qt::AlignTop);
@@ -341,13 +334,6 @@ void ClipboardItemPreviewDialog::updatePreviewContent(const ClipboardItem &item)
     const QString normalizedText = item.getNormalizedText();
     const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
 
-    ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Preview"), zh(u"剪贴板预览")));
-    ui_.subtitleLabel->setText(item.getName().isEmpty()
-        ? uiText(QStringLiteral("Read-only preview"), zh(u"只读预览"))
-        : QStringLiteral("%1 | %2")
-              .arg(uiText(QStringLiteral("Read-only preview"), zh(u"只读预览")))
-              .arg(item.getName()));
-
     ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Preview"), QStringLiteral("剪贴板预览")));
     ui_.subtitleLabel->setText(item.getName().isEmpty()
         ? uiText(QStringLiteral("Read-only preview"), QStringLiteral("只读预览"))
@@ -357,18 +343,16 @@ void ClipboardItemPreviewDialog::updatePreviewContent(const ClipboardItem &item)
 
     ui_.browser->clear();
     ui_.browser->document()->clear();
+
     if (item.getContentType() == ClipboardItem::Text || item.getContentType() == ClipboardItem::Link) {
-        const QString plainText = normalizedText.isEmpty()
-            ? uiText(QStringLiteral("Preview unavailable for this item"), QStringLiteral("预览不可用"))
-            : normalizedText;
-        ui_.browser->setPlainText(plainText);
+        ui_.browser->setPlainText(normalizedText.isEmpty() ? unavailableText() : normalizedText);
         return;
     }
 
     if (item.getContentType() == ClipboardItem::Image) {
         const QPixmap pixmap = item.getImage();
         if (!pixmap.isNull()) {
-            const QString imageUrl = QStringLiteral("preview-image://item");
+            const QString imageUrl = QStringLiteral("preview-image://clipboard-item");
             ui_.browser->document()->addResource(QTextDocument::ImageResource, QUrl(imageUrl), pixmap.toImage());
             ui_.browser->setHtml(QStringLiteral("<div style=\"text-align:center;\"><img src=\"%1\"></div>").arg(imageUrl));
             return;
@@ -379,11 +363,12 @@ void ClipboardItemPreviewDialog::updatePreviewContent(const ClipboardItem &item)
         if (normalizedUrls.size() == 1 && normalizedUrls.first().isLocalFile()) {
             const QString filePath = normalizedUrls.first().toLocalFile();
             if (isLocalImageFile(filePath)) {
-                const qreal dpr = devicePixelRatioF();
-                const QSize targetSize(kPreviewDialogWidth - 120, kPreviewDialogHeight - 180);
-                const QPixmap pixmap = loadPreviewImageFile(filePath, targetSize, dpr);
+                const QPixmap pixmap = loadPreviewImageFile(
+                    filePath,
+                    QSize(kPreviewDialogWidth - 120, kPreviewDialogHeight - 180),
+                    devicePixelRatioF());
                 if (!pixmap.isNull()) {
-                    const QString imageUrl = QUrl::fromLocalFile(filePath).toString(QUrl::FullyEncoded);
+                    const QString imageUrl = QStringLiteral("preview-image://local-file");
                     ui_.browser->document()->addResource(QTextDocument::ImageResource, QUrl(imageUrl), pixmap.toImage());
                     ui_.browser->setHtml(QStringLiteral("<div style=\"text-align:center;\"><img src=\"%1\"></div>").arg(imageUrl));
                     return;
@@ -392,9 +377,7 @@ void ClipboardItemPreviewDialog::updatePreviewContent(const ClipboardItem &item)
         }
 
         const QString pathsText = joinUrls(normalizedUrls);
-        ui_.browser->setPlainText(pathsText.isEmpty()
-            ? uiText(QStringLiteral("Preview unavailable for this item"), QStringLiteral("预览不可用"))
-            : pathsText);
+        ui_.browser->setPlainText(pathsText.isEmpty() ? unavailableText() : pathsText);
         return;
     }
 
@@ -408,9 +391,10 @@ void ClipboardItemPreviewDialog::updatePreviewContent(const ClipboardItem &item)
             }
         }
         ui_.browser->setHtml(html);
-    } else {
-        ui_.browser->setPlainText(uiText(QStringLiteral("Preview unavailable for this item"), zh(u"该条目暂无可用预览")));
+        return;
     }
+
+    ui_.browser->setPlainText(unavailableText());
 }
 
 void ClipboardItemPreviewDialog::releasePreviewContent() {
