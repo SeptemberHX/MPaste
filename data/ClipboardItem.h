@@ -1097,8 +1097,9 @@ public:
             return false;
         }
 
+        const QString lower = keyword.toLower();
+
         if (!mimeDataLoaded_) {
-            const QString lower = keyword.toLower();
             return cachedNormalizedText_.toLower().contains(lower)
                 || title_.toLower().contains(lower)
                 || url_.toLower().contains(lower);
@@ -1113,8 +1114,10 @@ public:
             searchableTextCacheInitialized_ = true;
         }
 
-        return searchableTextCache_.contains(keyword.toLower());
+        return searchableTextCache_.contains(lower);
     }
+
+    bool containsDeep(const QString &keyword) const;
 
     static QStringView htmlFragment(const QString &html) {
         static const QString startMarker = QStringLiteral("<!--StartFragment-->");

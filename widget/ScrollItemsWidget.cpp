@@ -411,6 +411,9 @@ ScrollItemsWidget::~ScrollItemsWidget()
     if (deferredLoadThread_) {
         deferredLoadThread_->wait();
     }
+    if (keywordSearchThread_) {
+        keywordSearchThread_->wait();
+    }
     for (QThread *thread : processingThreads_) {
         if (thread) {
             thread->wait();
@@ -499,6 +502,11 @@ ClipboardItemWidget *ScrollItemsWidget::createItemWidget(const ClipboardItem &it
     connect(itemWidget, &ClipboardItemWidget::deleteRequested, this, [this] () {
         auto *itemWidget = dynamic_cast<ClipboardItemWidget*>(sender());
         if (!itemWidget) {
+            return;
+        }
+
+        if (this->category == MPasteSettings::STAR_CATEGORY_NAME) {
+            emit itemUnstared(itemWidget->getItem());
             return;
         }
 
@@ -654,7 +662,10 @@ void ScrollItemsWidget::itemDoubleClicked() {
 
 void ScrollItemsWidget::filterByKeyword(const QString &keyword) {
     currentKeyword_ = keyword;
+    ++keywordSearchToken_;
+    asyncKeywordMatchedNames_.clear();
     applyFilters();
+    startAsyncKeywordSearch();
 }
 
 void ScrollItemsWidget::filterByType(ClipboardItem::ContentType type) {
@@ -675,7 +686,9 @@ void ScrollItemsWidget::applyFilters() {
         }
 
         const ClipboardItem &item = widget->getItem();
-        bool matchKeyword = currentKeyword_.isEmpty() || item.contains(currentKeyword_);
+        bool matchKeyword = currentKeyword_.isEmpty()
+            || item.contains(currentKeyword_)
+            || asyncKeywordMatchedNames_.contains(item.getName());
         bool matchType = (currentTypeFilter_ == ClipboardItem::All) || (item.getContentType() == currentTypeFilter_);
         widget->setVisible(matchKeyword && matchType);
         if (widget->isVisible()) {
@@ -686,6 +699,72 @@ void ScrollItemsWidget::applyFilters() {
     this->refreshContentWidthHint();
 
     emit itemCountChanged(visibleCount);
+}
+
+void ScrollItemsWidget::startAsyncKeywordSearch() {
+    if (currentKeyword_.isEmpty()) {
+        return;
+    }
+
+    QList<ClipboardItem> candidates;
+    candidates.reserve(qMax(0, this->layout->count() - 1));
+    for (int i = 0; i < this->layout->count() - 1; ++i) {
+        auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+        if (!widget) {
+            continue;
+        }
+
+        const ClipboardItem &item = widget->getItem();
+        if (item.isMimeDataLoaded() || item.sourceFilePath().isEmpty() || item.contains(currentKeyword_)) {
+            continue;
+        }
+
+        const ClipboardItem::ContentType type = item.getContentType();
+        if (type != ClipboardItem::Text && type != ClipboardItem::RichText) {
+            continue;
+        }
+
+        candidates.append(item);
+    }
+
+    if (candidates.isEmpty()) {
+        return;
+    }
+
+    const quint64 token = keywordSearchToken_;
+    const QString keyword = currentKeyword_;
+    QPointer<ScrollItemsWidget> guard(this);
+
+    QThread *thread = QThread::create([guard, candidates, keyword, token]() {
+        QSet<QString> matchedNames;
+        for (const ClipboardItem &item : candidates) {
+            if (item.containsDeep(keyword)) {
+                matchedNames.insert(item.getName());
+            }
+        }
+
+        if (guard) {
+            QMetaObject::invokeMethod(guard.data(), [guard, matchedNames, token]() {
+                if (!guard || guard->keywordSearchToken_ != token) {
+                    return;
+                }
+
+                guard->asyncKeywordMatchedNames_ = matchedNames;
+                guard->applyFilters();
+            }, Qt::QueuedConnection);
+        }
+    });
+
+    connect(thread, &QThread::finished, this, [this, thread]() {
+        if (keywordSearchThread_ == thread) {
+            keywordSearchThread_ = nullptr;
+        }
+        processingThreads_.removeAll(thread);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    keywordSearchThread_ = thread;
+    processingThreads_.append(thread);
+    thread->start();
 }
 
 void ScrollItemsWidget::setShortcutInfo() {
@@ -1186,6 +1265,7 @@ void ScrollItemsWidget::continueDeferredLoad() {
 
     if (deferredLoadedItems_.isEmpty() && !deferredLoadThread_ && pendingLoadFilePaths_.isEmpty()) {
         deferredLoadActive_ = false;
+        refreshContentWidthHint();
     }
 }
 
@@ -1349,9 +1429,18 @@ void ScrollItemsWidget::refreshContentWidthHint() {
 
 void ScrollItemsWidget::updateContentWidthHint() {
     int itemWidth = 0;
+    int loadedItemCount = 0;
     if (this->layout->count() > 1) {
-        if (auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(0)->widget())) {
-            itemWidth = widget->width();
+        for (int i = 0; i < this->layout->count() - 1; ++i) {
+            auto *widget = dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(i)->widget());
+            if (!widget) {
+                continue;
+            }
+
+            ++loadedItemCount;
+            if (itemWidth <= 0) {
+                itemWidth = widget->width();
+            }
         }
     }
 
@@ -1360,8 +1449,12 @@ void ScrollItemsWidget::updateContentWidthHint() {
         itemWidth = ClipboardItemWidget::scaledOuterSize(scale).width();
     }
 
+    const bool hasPendingLoadPlaceholders = deferredLoadActive_
+        || deferredLoadThread_
+        || !deferredLoadedItems_.isEmpty()
+        || !pendingLoadFilePaths_.isEmpty();
     const int itemCount = (currentKeyword_.isEmpty() && currentTypeFilter_ == ClipboardItem::All)
-        ? qMax(totalItemCount_, this->layout->count() - 1)
+        ? (hasPendingLoadPlaceholders ? qMax(totalItemCount_, loadedItemCount) : loadedItemCount)
         : itemCountForDisplay();
     const int spacing = this->layout->spacing();
     const QMargins contentMargins = this->layout->contentsMargins();
@@ -1410,6 +1503,10 @@ int ScrollItemsWidget::itemCountForDisplay() const {
 }
 
 void ScrollItemsWidget::trimExpiredItems() {
+    if (this->category == MPasteSettings::STAR_CATEGORY_NAME) {
+        return;
+    }
+
     const QDateTime cutoff = MPasteSettings::getInst()->historyRetentionCutoff();
     while (!pendingLoadFilePaths_.isEmpty()) {
         const QFileInfo info(pendingLoadFilePaths_.last());

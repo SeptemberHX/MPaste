@@ -272,6 +272,101 @@ QSize probeImageSizeFromMimeSection(const QString &filePath, quint64 offset) {
     return {};
 }
 
+bool formatMayContainSearchText(const QString &format) {
+    const QString lower = format.toLower();
+    return lower.startsWith(QStringLiteral("text/"))
+        || lower.contains(QStringLiteral("html"))
+        || lower.contains(QStringLiteral("plain"))
+        || lower.contains(QStringLiteral("xml"))
+        || lower.contains(QStringLiteral("json"))
+        || lower.contains(QStringLiteral("url"))
+        || lower.contains(QStringLiteral("uri"))
+        || lower.contains(QStringLiteral("descriptor"))
+        || lower.contains(QStringLiteral("ksdocclipboard"))
+        || lower.contains(QStringLiteral("rich text"));
+}
+
+bool payloadContainsKeyword(const QByteArray &data, const QString &lowerKeyword) {
+    if (data.isEmpty() || lowerKeyword.isEmpty()) {
+        return false;
+    }
+
+    const QByteArray keywordUtf8 = lowerKeyword.toUtf8();
+    if (!keywordUtf8.isEmpty() && data.toLower().contains(keywordUtf8)) {
+        return true;
+    }
+
+    const QString utf8Text = QString::fromUtf8(data);
+    if (!utf8Text.isEmpty() && utf8Text.toLower().contains(lowerKeyword)) {
+        return true;
+    }
+
+    if (data.size() % 2 == 0) {
+        const QString utf16Text = QString::fromUtf16(
+            reinterpret_cast<const char16_t *>(data.constData()), data.size() / 2);
+        if (!utf16Text.isEmpty() && utf16Text.toLower().contains(lowerKeyword)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const QString &keyword) {
+    if (filePath.isEmpty() || keyword.isEmpty()) {
+        return false;
+    }
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    if (!file.seek(static_cast<qint64>(offset))) {
+        file.close();
+        return false;
+    }
+
+    const QString lowerKeyword = keyword.toLower();
+    QDataStream in(&file);
+    quint32 formatCount = 0;
+    in >> formatCount;
+    if (in.status() != QDataStream::Ok) {
+        file.close();
+        return false;
+    }
+
+    QList<QByteArray> uniqueBlobs;
+    for (quint32 i = 0; i < formatCount; ++i) {
+        QString format;
+        quint32 dataIndex = 0;
+        QByteArray data;
+        in >> format >> dataIndex >> data;
+        if (in.status() != QDataStream::Ok) {
+            file.close();
+            return false;
+        }
+
+        QByteArray payload = data;
+        if (!data.isEmpty()) {
+            while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
+                uniqueBlobs.append(QByteArray());
+            }
+            uniqueBlobs[dataIndex] = data;
+        } else if (static_cast<int>(dataIndex) < uniqueBlobs.size()) {
+            payload = uniqueBlobs[dataIndex];
+        }
+
+        if (formatMayContainSearchText(format) && payloadContainsKeyword(payload, lowerKeyword)) {
+            file.close();
+            return true;
+        }
+    }
+
+    file.close();
+    return false;
+}
+
 ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     if (rawData.isEmpty()) {
         return ClipboardItem();
@@ -649,4 +744,20 @@ void ClipboardItem::ensureMimeDataLoaded() {
     imageSizeCacheInitialized_ = false;
     searchableTextCacheInitialized_ = false;
     normalizedUrlsCacheInitialized_ = false;
+}
+
+bool ClipboardItem::containsDeep(const QString &keyword) const {
+    if (keyword.isEmpty()) {
+        return false;
+    }
+
+    if (contains(keyword)) {
+        return true;
+    }
+
+    if (mimeDataLoaded_ || sourceFilePath_.isEmpty()) {
+        return false;
+    }
+
+    return mimeSectionContainsKeyword(sourceFilePath_, mimeDataFileOffset_, keyword);
 }

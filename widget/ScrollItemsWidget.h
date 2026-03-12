@@ -111,6 +111,7 @@ private:
     void processDeferredLoadedItems();
     void waitForDeferredRead();
     void processPendingItemAsync(const ClipboardItem &item, ClipboardItemWidget *targetWidget = nullptr);
+    void startAsyncKeywordSearch();
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
     QPair<int, int> displaySequenceForWidget(const ClipboardItemWidget *widget) const;
 
@@ -124,6 +125,7 @@ private:
     QPropertyAnimation *scrollAnimation;
     QTimer *deferredLoadTimer_ = nullptr;
     QThread *deferredLoadThread_ = nullptr;
+    QThread *keywordSearchThread_ = nullptr;
     QList<QThread*> processingThreads_;
     QWidget *leftEdgeFadeOverlay_ = nullptr;
     QWidget *rightEdgeFadeOverlay_ = nullptr;
@@ -135,6 +137,8 @@ private:
     int edgeFadeWidth_ = 0;
     int totalItemCount_ = 0;
     bool deferredLoadActive_ = false;
+    quint64 keywordSearchToken_ = 0;
+    QSet<QString> asyncKeywordMatchedNames_;
 
     QString currentKeyword_;
     ClipboardItem::ContentType currentTypeFilter_ = ClipboardItem::All;
