@@ -3,6 +3,7 @@
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
 // update: If I change, update this header block and my folder README.md.
 #include <QDir>
+#include <QFileInfo>
 #include <QElapsedTimer>
 #include <QDebug>
 #include <QCoreApplication>
@@ -33,6 +34,22 @@
 namespace {
 qreal htmlPreviewZoom(qreal devicePixelRatio) {
     return qMax<qreal>(1.0, devicePixelRatio);
+}
+
+QDateTime itemTimestampForFile(const QFileInfo &info) {
+    bool ok = false;
+    const qint64 epochMs = info.completeBaseName().toLongLong(&ok);
+    if (ok && epochMs > 0) {
+        const QDateTime parsed = QDateTime::fromMSecsSinceEpoch(epochMs);
+        if (parsed.isValid()) {
+            return parsed;
+        }
+    }
+    return info.lastModified();
+}
+
+bool isExpiredForCutoff(const QFileInfo &info, const QDateTime &cutoff) {
+    return cutoff.isValid() && itemTimestampForFile(info) < cutoff;
 }
 
 QString firstHtmlImageSource(const QString &html) {
@@ -554,7 +571,7 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     this->setSelectedItem(itemWidget);
 
     ++this->totalItemCount_;
-    this->trimToMaxSize();
+    this->trimExpiredItems();
     if (!this->currItemWidget) {
         this->setFirstVisibleItemSelected();
     }
@@ -1143,7 +1160,7 @@ void ScrollItemsWidget::prepareLoadFromSaveDir() {
     }
 
     totalItemCount_ = pendingLoadFilePaths_.size();
-    trimToMaxSize();
+    trimExpiredItems();
     updateContentWidthHint();
     qInfo().noquote() << QStringLiteral("[scroll-items] prepareLoadFromSaveDir category=%1 files=%2 accepted=%3 skipped=%4")
         .arg(category)
@@ -1392,18 +1409,28 @@ int ScrollItemsWidget::itemCountForDisplay() const {
     return visibleCount;
 }
 
-void ScrollItemsWidget::trimToMaxSize() {
-    const int maxSize = MPasteSettings::getInst()->getMaxSize();
-    while (this->totalItemCount_ > maxSize) {
-        if (!pendingLoadFilePaths_.isEmpty()) {
-            this->saver->removeItem(pendingLoadFilePaths_.takeLast());
-            --this->totalItemCount_;
-            continue;
+void ScrollItemsWidget::trimExpiredItems() {
+    const QDateTime cutoff = MPasteSettings::getInst()->historyRetentionCutoff();
+    while (!pendingLoadFilePaths_.isEmpty()) {
+        const QFileInfo info(pendingLoadFilePaths_.last());
+        if (!isExpiredForCutoff(info, cutoff)) {
+            break;
         }
 
+        this->saver->removeItem(pendingLoadFilePaths_.takeLast());
+        if (this->totalItemCount_ > 0) {
+            --this->totalItemCount_;
+        }
+    }
+
+    while (true) {
         const int lastIndex = this->layout->count() - 2;
         auto *widget = lastIndex >= 0 ? dynamic_cast<ClipboardItemWidget*>(this->layout->itemAt(lastIndex)->widget()) : nullptr;
         if (!widget) {
+            break;
+        }
+
+        if (widget->getItem().getTime() >= cutoff) {
             break;
         }
 
@@ -1414,7 +1441,9 @@ void ScrollItemsWidget::trimToMaxSize() {
             this->currItemWidget = nullptr;
         }
         widget->deleteLater();
-        --this->totalItemCount_;
+        if (this->totalItemCount_ > 0) {
+            --this->totalItemCount_;
+        }
     }
 
     if (!this->currItemWidget) {

@@ -34,6 +34,8 @@ const QString &MPasteSettings::getSaveDir() const {
 MPasteSettings::MPasteSettings()
     : saveDir(QDir::homePath() + QDir::separator() +  ".MPaste")
     , maxSize(500)
+    , historyRetentionValue(30)
+    , historyRetentionUnit(RetentionDays)
     , proxyType(QNetworkProxy::NoProxy)
 {
     this->proxyType = QNetworkProxy::HttpProxy;
@@ -58,6 +60,27 @@ int MPasteSettings::getMaxSize() const {
     return maxSize;
 }
 
+int MPasteSettings::getHistoryRetentionValue() const {
+    return historyRetentionValue;
+}
+
+MPasteSettings::HistoryRetentionUnit MPasteSettings::getHistoryRetentionUnit() const {
+    return historyRetentionUnit;
+}
+
+QDateTime MPasteSettings::historyRetentionCutoff(const QDateTime &reference) const {
+    const int value = qMax(1, historyRetentionValue);
+    switch (historyRetentionUnit) {
+        case RetentionWeeks:
+            return reference.addDays(-(value * 7));
+        case RetentionMonths:
+            return reference.addMonths(-value);
+        case RetentionDays:
+        default:
+            return reference.addDays(-value);
+    }
+}
+
 QNetworkProxy::ProxyType MPasteSettings::getProxyType() const {
     return proxyType;
 }
@@ -74,6 +97,9 @@ void MPasteSettings::loadSettings() {
     QSettings settings("MPaste", "MPaste");
 
     this->maxSize = settings.value("main/historySize", this->maxSize).toInt();
+    this->historyRetentionValue = settings.value("main/historyRetentionValue", this->historyRetentionValue).toInt();
+    this->historyRetentionUnit = static_cast<HistoryRetentionUnit>(
+        settings.value("main/historyRetentionUnit", static_cast<int>(this->historyRetentionUnit)).toInt());
     this->saveDir = settings.value("main/saveDir", this->saveDir).toString();
     this->autoPaste = settings.value("main/autoPaste", this->autoPaste).toBool();
     this->pasteShortcutMode = static_cast<PasteShortcutMode>(settings.value("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode)).toInt());
@@ -86,6 +112,8 @@ void MPasteSettings::saveSettings() {
     QSettings settings("MPaste", "MPaste");
 
     settings.setValue("main/historySize", this->maxSize);
+    settings.setValue("main/historyRetentionValue", this->historyRetentionValue);
+    settings.setValue("main/historyRetentionUnit", static_cast<int>(this->historyRetentionUnit));
     settings.setValue("main/saveDir", this->saveDir);
     settings.setValue("main/autoPaste", this->autoPaste);
     settings.setValue("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode));
@@ -136,6 +164,14 @@ void MPasteSettings::setShortcutStr(const QString &shortcutStr) {
 
 void MPasteSettings::setMaxSize(int maxSize) {
     MPasteSettings::maxSize = maxSize;
+}
+
+void MPasteSettings::setHistoryRetentionValue(int value) {
+    historyRetentionValue = value;
+}
+
+void MPasteSettings::setHistoryRetentionUnit(MPasteSettings::HistoryRetentionUnit unit) {
+    historyRetentionUnit = unit;
 }
 
 int MPasteSettings::getItemScale() const {

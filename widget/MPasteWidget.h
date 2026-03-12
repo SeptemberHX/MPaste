@@ -76,6 +76,7 @@ private:
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
     void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
+    void reloadHistoryBoards();
 
     void setFocusOnSearch(bool flag);
     void handleSearchInput(QKeyEvent *event);

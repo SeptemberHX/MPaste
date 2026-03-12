@@ -9,6 +9,7 @@
 #ifndef MPASTE_MPASTESETTINGS_H
 #define MPASTE_MPASTESETTINGS_H
 
+#include <QDateTime>
 #include <QString>
 #include <QNetworkProxy>
 
@@ -17,6 +18,7 @@ class MPasteSettings : public QObject {
 
 public:
     enum PasteShortcutMode { AutoPasteShortcut = 0, CtrlVShortcut, ShiftInsertShortcut, CtrlShiftVShortcut, AltInsertShortcut };
+    enum HistoryRetentionUnit { RetentionDays = 0, RetentionWeeks, RetentionMonths };
 
     static MPasteSettings* getInst();
 
@@ -28,6 +30,9 @@ public:
     const QString &getSaveDir() const;
 
     int getMaxSize() const;
+    int getHistoryRetentionValue() const;
+    HistoryRetentionUnit getHistoryRetentionUnit() const;
+    QDateTime historyRetentionCutoff(const QDateTime &reference = QDateTime::currentDateTime()) const;
 
     QNetworkProxy::ProxyType getProxyType() const;
 
@@ -48,6 +53,8 @@ public:
     void setShortcutStr(const QString &shortcutStr);
 
     void setMaxSize(int maxSize);
+    void setHistoryRetentionValue(int value);
+    void setHistoryRetentionUnit(HistoryRetentionUnit unit);
 
     int getItemScale() const;
     void setItemScale(int itemScale);
@@ -71,6 +78,8 @@ private:
 
     QString saveDir;
     int maxSize;
+    int historyRetentionValue;
+    HistoryRetentionUnit historyRetentionUnit;
 
     QNetworkProxy::ProxyType proxyType;
     QString proxyHost;

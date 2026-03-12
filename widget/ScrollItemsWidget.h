@@ -99,7 +99,7 @@ private:
     void ensureAllItemsLoaded();
     void maybeLoadMoreItems();
     int itemCountForDisplay() const;
-    void trimToMaxSize();
+    void trimExpiredItems();
     void prepareLoadFromSaveDir();
     void continueDeferredLoad();
     bool shouldKeepDeferredLoading() const;

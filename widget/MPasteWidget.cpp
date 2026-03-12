@@ -300,6 +300,8 @@ void MPasteWidget::initUI() {
     ui_.settingsWidget = new MPasteSettingsWidget(this);
     connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
             this, &MPasteWidget::shortcutChanged);
+    connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
+            this, &MPasteWidget::reloadHistoryBoards);
 
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
@@ -975,6 +977,21 @@ void MPasteWidget::loadFromSaveDir() {
         ui_.clipboardWidget->setItemFavorite(item, true);
     }
     ui_.clipboardWidget->loadFromSaveDirDeferred();
+}
+
+void MPasteWidget::reloadHistoryBoards() {
+    const QString keyword = ui_.ui->searchEdit->text();
+    const auto type = static_cast<ClipboardItem::ContentType>(
+        ui_.typeButtonGroup->checkedButton()
+            ? ui_.typeButtonGroup->checkedButton()->property("contentType").toInt()
+            : static_cast<int>(ClipboardItem::All));
+
+    loadFromSaveDir();
+    ui_.clipboardWidget->filterByType(type);
+    ui_.clipboardWidget->filterByKeyword(keyword);
+    ui_.staredWidget->filterByType(type);
+    ui_.staredWidget->filterByKeyword(keyword);
+    updateItemCount(currItemsWidget()->getItemCount());
 }
 
 void MPasteWidget::setFocusOnSearch(bool flag) {

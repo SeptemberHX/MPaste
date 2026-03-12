@@ -26,6 +26,7 @@ public:
 
 signals:
     void shortcutChanged(const QString &newShortcut);
+    void historyRetentionChanged();
 
 public slots:
     void accept() override;
@@ -44,6 +45,7 @@ private:
     ToggleSwitch *autoStartSwitch_;
     QLabel *pasteShortcutLabel_ = nullptr;
     QComboBox *pasteShortcutCombo_ = nullptr;
+    QComboBox *retentionUnitCombo_ = nullptr;
     QPoint dragPos_;
 };
 

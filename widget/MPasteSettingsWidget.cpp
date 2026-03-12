@@ -119,6 +119,43 @@ static QString settingsStyleSheet() {
             width: 10px; height: 6px;
         }
 
+        QComboBox {
+            background-color: #F5F5F5;
+            border: 1px solid #E0E0E0;
+            border-radius: 6px;
+            padding: 2px 28px 2px 8px;
+            font-size: 13px;
+            color: #1A1A1A;
+            min-height: 28px;
+        }
+        QComboBox:hover {
+            background-color: #EBEBEB;
+            border-color: #D0D0D0;
+        }
+        QComboBox:focus {
+            background-color: #FFFFFF;
+            border: 2px solid #0078D4;
+            padding: 1px 27px 1px 7px;
+        }
+        QComboBox::drop-down {
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 22px;
+            border: none;
+            background: transparent;
+        }
+        QComboBox::down-arrow {
+            image: url(:/resources/resources/spin_down.svg);
+            width: 10px;
+            height: 6px;
+        }
+        QComboBox QAbstractItemView {
+            background: #FFFFFF;
+            border: 1px solid #D0D0D0;
+            selection-background-color: #0078D4;
+            selection-color: #FFFFFF;
+        }
+
         QKeySequenceEdit {
             background-color: #F5F5F5;
             border: 1px solid #E0E0E0;
@@ -208,8 +245,10 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
     setWindowTitle(uiText("Settings", QStringLiteral("设置")));
     ui->titleLabel->setText(uiText("Settings", QStringLiteral("设置")));
-    ui->label->setText(uiText("Max number of items", QStringLiteral("最大条目数")));
-    ui->label_2->setText(uiText("Maximum retention days", QStringLiteral("最大保留天数")));
+    ui->label->hide();
+    ui->numSpinBox->hide();
+    ui->sep1->hide();
+    ui->label_2->setText(uiText("Retention period", QStringLiteral("保留时长")));
     ui->label_autostart->setText(uiText("Launch at startup", QStringLiteral("开机自启动")));
     ui->label_3->setText(uiText("Play copy sound", QStringLiteral("播放复制提示音")));
     ui->label_4->setText(uiText("Activation shortcut", QStringLiteral("唤起快捷键")));
@@ -240,6 +279,23 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         pasteShortcutCombo_->addItem(QStringLiteral("Alt+Insert"), static_cast<int>(MPasteSettings::AltInsertShortcut));
         grid->addWidget(pasteShortcutLabel_, 11, 0);
         grid->addWidget(pasteShortcutCombo_, 11, 1, Qt::AlignRight | Qt::AlignVCenter);
+
+        auto *retentionWidget = new QWidget(this);
+        auto *retentionLayout = new QHBoxLayout(retentionWidget);
+        retentionLayout->setContentsMargins(0, 0, 0, 0);
+        retentionLayout->setSpacing(8);
+        grid->removeWidget(ui->daySpinBox);
+        ui->daySpinBox->setMinimumSize(QSize(72, 32));
+        ui->daySpinBox->setMaximumSize(QSize(72, 32));
+        retentionLayout->addWidget(ui->daySpinBox);
+        retentionUnitCombo_ = new QComboBox(this);
+        retentionUnitCombo_->setMinimumSize(QSize(92, 32));
+        retentionUnitCombo_->setMaximumHeight(32);
+        retentionUnitCombo_->addItem(uiText("Days", QStringLiteral("天")), static_cast<int>(MPasteSettings::RetentionDays));
+        retentionUnitCombo_->addItem(uiText("Weeks", QStringLiteral("周")), static_cast<int>(MPasteSettings::RetentionWeeks));
+        retentionUnitCombo_->addItem(uiText("Months", QStringLiteral("月")), static_cast<int>(MPasteSettings::RetentionMonths));
+        retentionLayout->addWidget(retentionUnitCombo_);
+        grid->addWidget(retentionWidget, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
     }
 
 #ifndef Q_OS_WIN
@@ -318,7 +374,11 @@ void MPasteSettingsWidget::showEvent(QShowEvent *event)
 void MPasteSettingsWidget::loadSettings()
 {
     auto *settings = MPasteSettings::getInst();
-    ui->numSpinBox->setValue(settings->getMaxSize());
+    ui->daySpinBox->setValue(settings->getHistoryRetentionValue());
+    if (retentionUnitCombo_) {
+        const int index = retentionUnitCombo_->findData(static_cast<int>(settings->getHistoryRetentionUnit()));
+        retentionUnitCombo_->setCurrentIndex(index >= 0 ? index : 0);
+    }
     ui->shortcutEdit->setKeySequence(QKeySequence(settings->getShortcutStr()));
     if (pasteShortcutCombo_) {
         const int index = pasteShortcutCombo_->findData(static_cast<int>(settings->getPasteShortcutMode()));
@@ -340,8 +400,14 @@ void MPasteSettingsWidget::loadSettings()
 void MPasteSettingsWidget::accept()
 {
     auto *settings = MPasteSettings::getInst();
-
-    settings->setMaxSize(ui->numSpinBox->value());
+    const int oldRetentionValue = settings->getHistoryRetentionValue();
+    const auto oldRetentionUnit = settings->getHistoryRetentionUnit();
+    const int newRetentionValue = ui->daySpinBox->value();
+    const auto newRetentionUnit = retentionUnitCombo_
+        ? static_cast<MPasteSettings::HistoryRetentionUnit>(retentionUnitCombo_->currentData().toInt())
+        : MPasteSettings::RetentionDays;
+    settings->setHistoryRetentionValue(newRetentionValue);
+    settings->setHistoryRetentionUnit(newRetentionUnit);
 
     QString newShortcut = ui->shortcutEdit->keySequence().toString();
     if (!newShortcut.isEmpty() && newShortcut != settings->getShortcutStr()) {
@@ -366,5 +432,8 @@ void MPasteSettingsWidget::accept()
 #endif
 
     settings->saveSettings();
+    if (oldRetentionValue != newRetentionValue || oldRetentionUnit != newRetentionUnit) {
+        emit historyRetentionChanged();
+    }
     QDialog::accept();
 }
