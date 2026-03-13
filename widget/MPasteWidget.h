@@ -18,7 +18,6 @@
 #include <QElapsedTimer>
 
 #include "utils/ClipboardMonitor.h"
-#include "ClipboardItemWidget.h"
 #include "data/ClipboardItem.h"
 #include "data/LocalSaver.h"
 #include "AboutWidget.h"

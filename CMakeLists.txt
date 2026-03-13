@@ -37,7 +37,6 @@ file(GLOB SRCS
         "data/*.h" "data/*.cpp"
         "utils/*.h" "utils/*.cpp"
 )
-list(REMOVE_ITEM SRCS "${CMAKE_CURRENT_SOURCE_DIR}/widget/ScrollItemsWidget.cpp")
 
 find_package(Qt6 COMPONENTS
         Widgets

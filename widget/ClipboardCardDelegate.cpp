@@ -25,12 +25,10 @@
 #include <QUrl>
 
 #include "ClipboardBoardModel.h"
-#include "ClipboardItemWidget.h"
+#include "CardMetrics.h"
 #include "utils/MPasteSettings.h"
 
 namespace {
-constexpr int kCardBaseWidth = 275;
-constexpr int kCardBaseHeight = 300;
 constexpr float kPi = 3.14159265358979323846f;
 
 bool isVeryTallImage(const QSize &size) {
@@ -99,28 +97,6 @@ QColor blendColor(const QColor &from, const QColor &to, qreal factor) {
         qRound(from.alpha() + (to.alpha() - from.alpha()) * t));
 }
 
-QString typeLabelForItem(const ClipboardItem &item) {
-    switch (item.getContentType()) {
-        case ClipboardItem::Text:
-            return QObject::tr("Plain Text");
-        case ClipboardItem::Link:
-            return QObject::tr("Link");
-        case ClipboardItem::Image:
-            return QObject::tr("Image");
-        case ClipboardItem::RichText:
-            return QObject::tr("Rich Text");
-        case ClipboardItem::File:
-            return item.getNormalizedUrls().size() > 1
-                ? QStringLiteral("%1 %2").arg(item.getNormalizedUrls().size()).arg(QObject::tr("Files"))
-                : QStringLiteral("1 %1").arg(QObject::tr("File"));
-        case ClipboardItem::Color:
-            return QObject::tr("Color");
-        case ClipboardItem::All:
-            break;
-    }
-    return QObject::tr("Item");
-}
-
 QString typeLabelForCard(const CardData &card) {
     switch (card.contentType) {
         case ClipboardItem::Text:
@@ -141,63 +117,6 @@ QString typeLabelForCard(const CardData &card) {
             break;
     }
     return QObject::tr("Item");
-}
-
-QString countLabelForItem(const ClipboardItem &item) {
-    const QList<QUrl> urls = item.getNormalizedUrls();
-    switch (item.getContentType()) {
-        case ClipboardItem::Image: {
-            const QSize imageSize = item.getImagePixelSize();
-            return imageSize.isValid()
-                ? QStringLiteral("%1 x %2 %3").arg(imageSize.width()).arg(imageSize.height()).arg(QObject::tr("Pixels"))
-                : QString();
-        }
-        case ClipboardItem::RichText:
-        case ClipboardItem::Text:
-        case ClipboardItem::Link:
-            return QStringLiteral("%1 %2").arg(item.getNormalizedText().size()).arg(QObject::tr("Characters"));
-        case ClipboardItem::File:
-            return urls.size() > 1
-                ? QStringLiteral("%1 %2").arg(urls.size()).arg(QObject::tr("Files"))
-                : QString();
-        case ClipboardItem::Color:
-        case ClipboardItem::All:
-            break;
-    }
-    return QString();
-}
-
-QString previewTextForItem(const ClipboardItem &item) {
-    const QList<QUrl> urls = item.getNormalizedUrls();
-    switch (item.getContentType()) {
-        case ClipboardItem::File: {
-            QStringList lines;
-            for (const QUrl &url : urls) {
-                const QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
-                const QFileInfo info(path);
-                lines << (info.fileName().isEmpty() ? path : info.fileName());
-            }
-            return lines.join(QLatin1Char('\n'));
-        }
-        case ClipboardItem::Link:
-            if (!item.getTitle().trimmed().isEmpty()) {
-                return item.getTitle().trimmed() + QLatin1Char('\n')
-                    + (item.getUrl().isEmpty() ? item.getNormalizedText().trimmed() : item.getUrl());
-            }
-            return item.getNormalizedText().trimmed();
-        case ClipboardItem::Color:
-            return item.getColor().name(QColor::HexRgb);
-        case ClipboardItem::RichText: {
-            const QString text = item.getNormalizedText().trimmed();
-            return text.isEmpty() ? QObject::tr("Rich text preview") : text;
-        }
-        case ClipboardItem::Image:
-            return QObject::tr("Image preview");
-        case ClipboardItem::Text:
-        case ClipboardItem::All:
-            break;
-    }
-    return item.getNormalizedText().trimmed();
 }
 
 QString countLabelForCard(const CardData &card) {
@@ -308,15 +227,6 @@ QString fallbackHeadline(const QString &title, const QUrl &url) {
         return trimmedTitle;
     }
     return compactHostLabel(url);
-}
-
-QString fallbackCaption(const QUrl &url) {
-    QString host = compactHostLabel(url);
-    const QString path = url.path().trimmed();
-    if (!path.isEmpty() && path != QStringLiteral("/")) {
-        host += QStringLiteral("  ") + path;
-    }
-    return host;
 }
 
 QColor dominantHeaderColor(const QPixmap &iconPixmap) {
@@ -921,7 +831,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     }
 
     const int scale = MPasteSettings::getInst()->getItemScale();
-    const QSize outerSize = ClipboardItemWidget::scaledOuterSize(scale);
+    const QSize outerSize = cardOuterSizeForScale(scale);
     const QSize innerSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
     const int topHeight = 64 * scale / 100;
     const int footerHeight = 30 * scale / 100;
@@ -1166,7 +1076,15 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                 if (iconPixmap.isNull()) {
                     iconPixmap = filePixmap(iconRect.size());
                 }
-                painter->drawPixmap(iconRect.topLeft(), iconPixmap);
+                QPoint iconPos = iconRect.topLeft();
+                const qreal iconDpr = qMax<qreal>(1.0, iconPixmap.devicePixelRatio());
+                const QSize iconLogicalSize(qRound(iconPixmap.width() / iconDpr),
+                                            qRound(iconPixmap.height() / iconDpr));
+                if (iconLogicalSize.isValid() && iconLogicalSize != iconRect.size()) {
+                    iconPos.setX(iconRect.left() + (iconRect.width() - iconLogicalSize.width()) / 2);
+                    iconPos.setY(iconRect.top() + (iconRect.height() - iconLogicalSize.height()) / 2);
+                }
+                painter->drawPixmap(iconPos, iconPixmap);
                 break;
             }
 
@@ -1271,5 +1189,5 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
 QSize ClipboardCardDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const {
     Q_UNUSED(option)
     Q_UNUSED(index)
-    return ClipboardItemWidget::scaledOuterSize(MPasteSettings::getInst()->getItemScale());
+    return cardOuterSizeForScale(MPasteSettings::getInst()->getItemScale());
 }

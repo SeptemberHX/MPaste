@@ -1,4 +1,4 @@
-<!--
+﻿<!--
 input: 依赖 widget 目录的实际结构、界面职责与近期实现变化。
 output: 提供 widget 目录的中文说明与文件清单。
 pos: 界面层目录说明文档。
@@ -19,15 +19,11 @@ update: 修改本目录文件时，同步更新本 README。
 
 - `AboutWidget.*`：关于窗口。
 - `ClipboardItemDetailsDialog.*`：条目详情与检查器弹窗。
-- `ClipboardItemInnerWidget.*`：条目卡片内部主体内容渲染。
-- `ClipboardItemWidget.*`：条目卡片外层包装与卡片级交互。
-- `FileThumbWidget.*`：文件条目的预览控件，图片文件走缩放预览，其余文件走系统图标。
 - `MPasteSettingsWidget.*`：设置窗口。
 - `MPasteWidget.*`：主窗口与主要交互入口。
 - `MTextBrowser.*`：用于卡片正文展示的轻量文本浏览控件。
 - `ScrollItemsWidget.*`：横向滚动的条目列表容器。
 - `ToggleSwitch.*`：设置界面中使用的开关控件。
-- `WebLinkThumbWidget.*`：链接预览卡片。
 
 ## 维护约定
 
@@ -46,7 +42,7 @@ update: 修改本目录文件时，同步更新本 README。
 - Footer spacing now adapts to shortcut text width to keep the path closer.
 - Link card URL rows now reserve space for shortcut text.
 - Multi-file cards now use a file-icon + two-line filename summary preview aligned with the legacy file thumbnail style.
-- Single-file cards now show a centered file icon when not displaying an image thumbnail.
+- Single-file cards now keep the file icon centered even when the system icon renders smaller than the slot.
 - Link preview fallback images no longer render the small caption line inside the generated preview block.
 - Link previews now use OpenGraph/first-image thumbnails when available; favicon-only fallbacks render a larger badge.
 - Link cards now trigger OpenGraph fetches on selection to populate missing thumbnails in delegate mode.
@@ -60,7 +56,6 @@ update: 修改本目录文件时，同步更新本 README。
 - `MPasteWidget` currently prints clipboard-update and sound-play diagnostics so repeated copy prompts can be traced from app-level updates to actual sound playback decisions.
 - `MPasteWidget` 和 `ScrollItemsWidget` 现在会输出启动、窗口 show、延迟历史加载和后台条目补全的阶段耗时日志，方便定位卡顿发生在哪一步。
 - `MPasteWidget` 现在会在监控器首次观察到有效复制动作时立即播放提示音，不再等待后续 WPS settle / 抓图完成。
-- `ClipboardItemWidget` 现在支持上下文菜单中的“纯文本粘贴”动作。
 - `ScrollItemsWidget` 会把纯文本粘贴请求继续转发给主窗口。
 - `ScrollItemsWidget` 现在会先快速插入轻量条目，再在后台线程补做缩略图和保存落盘，减少复制大图时卡住界面。
 - `ClipboardItemDetailsDialog` 现在提供更完整的条目检查视图，可查看归一化结果与原始 MIME 数据。
@@ -71,30 +66,13 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemDetailsDialog` 现在会在主预览图下方额外显示横向缩略图，并在摘要里标出缩略图尺寸。
 - `ClipboardItemDetailsDialog` 现在会按标签的 device pixel ratio 先缩放主预览和缩略图，减少高分屏下的发糊。
 - `ClipboardItemDetailsDialog` 现在会对带缩略图的富文本条目直接显示其快照缩略图，而不是退回默认图标。
-- `ClipboardItemInnerWidget` 现在会把 HTML 预览首次渲染为缓存快照，后续列表里直接显示快照图，减少滚动时反复做 HTML 文档布局。
-- `ClipboardItemInnerWidget` 现在会按卡片正文区尺寸和 label 的 device pixel ratio 重采样富文本快照，避免只显示左上角或高分屏发糊。
-- `ClipboardItemInnerWidget` 和 `ScrollItemsWidget` 现在会把富文本快照预览放大系数跟随当前 device pixel ratio，提升列表里小字号 HTML 的可读性。
 - 图片与富文本缩略图现在统一按目标卡片框做 `KeepAspectRatioByExpanding` 的居中 cover 裁切，避免长条图生成过窄的缩略图。
-- `ClipboardItemInnerWidget` 现在会把复杂 HTML 的首帧快照裁成卡片缩略图并回写保存，让这类条目后续也有稳定缩略图。
-- `ClipboardItemInnerWidget` 现在还会对当前可见、缺少缩略图的轻加载富文本条目补载 MIME 并回写快照缩略图，让旧历史项也能逐步补齐预览。
-- `ClipboardItemInnerWidget` 现在支持通过提取 HTML 中的 `<img src>` 来加载 WPS / 金山图片预览。
 - `MPasteWidget` 现在会在短时间内抑制重复提示音，减少一次复制触发多次响声的问题。
 - `MPasteWidget` 现在会在每次播放提示音前按当前默认输出设备重建播放链路，减少运行中切换耳机后提示音仍走旧设备的问题，同时避免设备变化回调触发的重复重建。
 - `MPasteWidget` 现在会把提示音播放器指针初始化为 `nullptr`，避免重建播放链路时因未初始化指针导致的启动崩溃。
 - `MPasteSettingsWidget` 现在会在快捷键输入框里主动记录 `Win`/`Meta` 组合键，避免 `QKeySequenceEdit` 在 Windows 下录不进 `Win+...`。
 - `MPasteWidget` 现在会在设置窗口打开期间临时停用全局唤起热键，避免编辑快捷键时被当前热键立即抢走。
-- `WebLinkThumbWidget` 和图片卡片现在使用更饱满的 fill-and-crop 预览方式。
-- `ClipboardItemWidget` 现在会为右下阴影预留外层占位，`ScrollItemsWidget` 也会按卡片外框高度计算滚动区，减少卡片底边被截断的视觉问题。
 - `ScrollItemsWidget` 现在会在列表左右预留呼吸边距，并在视口边缘绘制接近主窗口淡灰玻璃底色的轻雾渐变遮罩，让横向滚动时更接近贴边淡出的效果。
 - 文件类卡片现在也会像链接卡片一样隐藏底部 `infoWidget`，让缩略图区域更完整。
-- `FileThumbWidget` 现在移除了默认布局边距，并让图标展示区垂直扩展，减少文件卡片正文与底部之间的空白。
-- `ClipboardItemInnerWidget` 现在统一让正文区子控件按可用空间扩展，减少文本、富文本、图片、文件和链接卡片正文与底部信息区之间的空白。
-- `ClipboardItemInnerWidget` 现在会收紧 `QTextBrowser` 的上下内边距，并把富文本默认段落外边距归零，减轻正文与底部信息区之间的额外留白。
-- `ClipboardItemInnerWidget` 现在会在轻加载图片卡片中单独探测原图尺寸，避免把缩略图分辨率显示成条目分辨率。
 - `ScrollItemsWidget` 现在会在新增图片条目时按 `275x218` 逻辑尺寸和较高 device pixel ratio 生成横向居中缩略图，减少首个图片条目发糊。
 - 链接预览图和图片卡片现在都优先占满可用高度，只在宽度超出时做左右居中裁剪。
-- `FileThumbWidget` 现在会对本地图片文件做缩放预览解码，其余文件继续使用系统图标，避免把图片文件也退化成普通文件图标。
-- `FileThumbWidget` 现在会在保留底部路径栏的前提下，让单个图片文件只在 `iconLabel` 区域里按高度填满并只做横向裁切。
-- `FileThumbWidget` 现在会把文件路径限制为最多两行显示，并在末尾省略超长内容，同时为左右文本留出一点内边距。
-- `ClipboardItemWidget` 现在会在本地文件条目的右键菜单里显示“打开所在文件夹”动作，并在 Windows 下尽量直接打开资源管理器并选中对应的一个或多个文件。
-- `WebLinkThumbWidget` 在抓不到网页预览图时，现在会生成一个基于域名配色与字母徽标的兜底封面，不再只是默认图标。

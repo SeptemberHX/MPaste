@@ -26,7 +26,6 @@
 #include "utils/MPasteSettings.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
-#include "ClipboardItemWidget.h"
 #include "utils/PlatformRelated.h"
 
 namespace {
