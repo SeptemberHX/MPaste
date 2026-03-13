@@ -32,7 +32,7 @@ protected:
 
 private:
     QString uiText(const QString &source, const QString &zhFallback) const;
-    void updatePreviewContent(const ClipboardItem &item);
+    void startAsyncPreview(const ClipboardItem &item, ClipboardItem::ContentType contentType);
     void releasePreviewContent();
 
     struct {
@@ -46,6 +46,7 @@ private:
     } ui_;
 
     QPoint dragOffset_;
+    quint64 previewToken_ = 0;
 };
 
 #endif // MPASTE_CLIPBOARDITEMPREVIEWDIALOG_H
