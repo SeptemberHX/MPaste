@@ -44,8 +44,17 @@ update: 修改本目录文件时，同步更新本 README。
 - File-type cards now show the single file path in the footer info line.
 - Single-file paths in the footer now use middle elide to keep filenames visible.
 - Footer spacing now adapts to shortcut text width to keep the path closer.
+- Link card URL rows now reserve space for shortcut text.
 - Multi-file cards now use a file-icon + two-line filename summary preview aligned with the legacy file thumbnail style.
 - Single-file cards now show a centered file icon when not displaying an image thumbnail.
+- Link preview fallback images no longer render the small caption line inside the generated preview block.
+- Link previews now use OpenGraph/first-image thumbnails when available; favicon-only fallbacks render a larger badge.
+- Link cards now trigger OpenGraph fetches on selection to populate missing thumbnails in delegate mode.
+- New link items now start OpenGraph fetches immediately so thumbnails arrive without needing extra navigation.
+- Delegate mode now uses a single reusable hover action bar to show card tools without per-item widgets.
+- Hover action bar now uses a frosted acrylic-style background (native blur on Windows, translucent fallback elsewhere).
+- Card headers now use YaHei UI with a larger gap between type and time, and a slightly larger type label.
+- Clipboard board model now refreshes rows when link preview metadata (thumbnail/favicon/title) changes.
 - Arrow-key navigation now keeps the selected card at the edge until it needs to scroll.
 - Favorites are now treated as a separate preserved board: deleting an item from Clipboard no longer affects Favorites, deleting from Favorites behaves like un-starring, and time-based history cleanup skips the Favorites board entirely.
 - `MPasteWidget` currently prints clipboard-update and sound-play diagnostics so repeated copy prompts can be traced from app-level updates to actual sound playback decisions.

@@ -1,7 +1,7 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
-// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks).
+// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks + link preview caption trimmed + header spacing + link url shortcut spacing).
 #include "ClipboardCardDelegate.h"
 
 #include <cmath>
@@ -484,7 +484,8 @@ void drawCoverPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &
     painter->drawPixmap(targetRect.topLeft(), cropped);
 }
 
-QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QSize &targetSize, qreal devicePixelRatio) {
+QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QSize &targetSize, qreal devicePixelRatio,
+                                 const QPixmap &favicon = QPixmap()) {
     if (!targetSize.isValid()) {
         return {};
     }
@@ -497,7 +498,6 @@ QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QS
     const QString hostLabel = compactHostLabel(url);
     const QString monogram = placeholderMonogram(url, title);
     const QString headline = fallbackHeadline(title, url);
-    const QString caption = fallbackCaption(url);
     const auto palette = placeholderPalette(hostLabel + title);
 
     QPainter painter(&canvas);
@@ -567,7 +567,9 @@ QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QS
     heroGlow.setColorAt(1.0, QColor(255, 255, 255, 0));
     painter.fillRect(heroRect, heroGlow);
 
-    const qreal badgeSize = qMin(heroRect.width(), heroRect.height()) * 0.38;
+    const bool hasFavicon = !favicon.isNull();
+    const qreal badgeScale = hasFavicon ? 0.46 : 0.38;
+    const qreal badgeSize = qMin(heroRect.width(), heroRect.height()) * badgeScale;
     const QRectF badgeRect(heroRect.center().x() - badgeSize / 2.0,
                            heroRect.top() + heroRect.height() * 0.10,
                            badgeSize, badgeSize);
@@ -580,13 +582,31 @@ QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QS
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(badgeRect.adjusted(-4.0, -4.0, 4.0, 4.0));
 
-    QFont monoFont = painter.font();
-    monoFont.setBold(true);
-    monoFont.setPointSizeF(qMax(18.0, badgeSize * 0.26));
-    monoFont.setLetterSpacing(QFont::PercentageSpacing, 105);
-    painter.setFont(monoFont);
-    painter.setPen(QColor(58, 72, 86));
-    painter.drawText(badgeRect, Qt::AlignCenter, monogram);
+    if (hasFavicon) {
+        const qreal iconScale = 0.60;
+        const QSize iconLogicalSize(qMax(8, qRound(badgeSize * iconScale)),
+                                    qMax(8, qRound(badgeSize * iconScale)));
+        QPixmap iconPixmap = favicon;
+        if (!iconLogicalSize.isEmpty()) {
+            iconPixmap = iconPixmap.scaled(iconLogicalSize * devicePixelRatio,
+                                           Qt::KeepAspectRatio,
+                                           Qt::SmoothTransformation);
+            iconPixmap.setDevicePixelRatio(devicePixelRatio);
+        }
+        const QRectF iconRect(badgeRect.center().x() - iconLogicalSize.width() / 2.0,
+                              badgeRect.center().y() - iconLogicalSize.height() / 2.0,
+                              iconLogicalSize.width(),
+                              iconLogicalSize.height());
+        painter.drawPixmap(iconRect, iconPixmap, QRectF());
+    } else {
+        QFont monoFont = painter.font();
+        monoFont.setBold(true);
+        monoFont.setPointSizeF(qMax(18.0, badgeSize * 0.26));
+        monoFont.setLetterSpacing(QFont::PercentageSpacing, 105);
+        painter.setFont(monoFont);
+        painter.setPen(QColor(58, 72, 86));
+        painter.drawText(badgeRect, Qt::AlignCenter, monogram);
+    }
 
     const QRectF headlineRect(heroRect.left(), badgeRect.bottom() + 16.0, heroRect.width(), 34.0);
     QFont headlineFont = painter.font();
@@ -600,14 +620,6 @@ QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QS
 
     const QRectF captionRect(heroRect.left() + 16.0, headlineRect.bottom() + 6.0,
                              heroRect.width() - 32.0, 22.0);
-    QFont captionFont = painter.font();
-    captionFont.setBold(false);
-    captionFont.setPointSizeF(qMax(8.5, bounds.height() * 0.05));
-    painter.setFont(captionFont);
-    painter.setPen(QColor(255, 255, 255, 190));
-    const QFontMetricsF captionMetrics(captionFont);
-    painter.drawText(captionRect, Qt::AlignCenter,
-                     captionMetrics.elidedText(caption, Qt::ElideMiddle, captionRect.width()));
 
     painter.setBrush(QColor(255, 255, 255, 48));
     painter.setPen(Qt::NoPen);
@@ -628,6 +640,37 @@ QPixmap starPixmap(const QSize &size) {
 
 QPixmap filePixmap(const QSize &size) {
     return QIcon(QStringLiteral(":/resources/resources/files.svg")).pixmap(size);
+}
+
+bool isLikelyLinkPreviewImage(const QPixmap &pixmap) {
+    if (pixmap.isNull()) {
+        return false;
+    }
+
+    const qreal dpr = qMax<qreal>(1.0, pixmap.devicePixelRatio());
+    const QSize logicalSize(qRound(pixmap.width() / dpr), qRound(pixmap.height() / dpr));
+    if (!logicalSize.isValid()) {
+        return false;
+    }
+
+    const int maxDim = qMax(logicalSize.width(), logicalSize.height());
+    if (maxDim < 96) {
+        return false;
+    }
+
+    const qreal aspect = logicalSize.width() / qMax(1.0, static_cast<qreal>(logicalSize.height()));
+    const bool squareish = aspect >= 0.85 && aspect <= 1.18;
+    if (!squareish) {
+        return true;
+    }
+
+    static const QSet<int> kCommonIconSizes = {
+        16, 24, 32, 48, 64, 96, 128, 192, 256, 512
+    };
+    if (kCommonIconSizes.contains(maxDim)) {
+        return false;
+    }
+    return maxDim >= 320;
 }
 
 QPixmap loadLocalFileIcon(const QString &filePath, const QSize &targetLogicalSize, qreal targetDpr) {
@@ -941,20 +984,24 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     painter->drawPixmap(iconPixmapRect.topLeft(), headerIcon);
 
     QFont typeFont = painter->font();
-    typeFont.setPointSize(qMax(9, 11 * scale / 100));
-    typeFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
+    typeFont.setPointSize(qMax(10, 12 * scale / 100));
+    typeFont.setFamilies({QStringLiteral("Microsoft YaHei UI"),
+                           QStringLiteral("Microsoft YaHei"),
+                           QStringLiteral("Segoe UI")});
     typeFont.setBold(true);
     typeFont.setWeight(QFont::ExtraBold);
     QFont timeFont = painter->font();
     timeFont.setPointSize(qMax(8, 9 * scale / 100));
-    timeFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
+    timeFont.setFamilies({QStringLiteral("Microsoft YaHei UI"),
+                           QStringLiteral("Microsoft YaHei"),
+                           QStringLiteral("Segoe UI")});
 
     const int textRightPadding = iconLabelSize + topRightMargin + 12 * scale / 100;
     const QFontMetrics typeMetrics(typeFont);
     const QFontMetrics timeMetrics(timeFont);
     const int typeHeight = qMax(18, typeMetrics.height());
     const int timeHeight = qMax(14, timeMetrics.height());
-    const int textGap = qMax(0, scale / 100);
+    const int textGap = qMax(2, 4 * scale / 100);
     const int textBlockHeight = typeHeight + textGap + timeHeight;
     const int textBlockTop = topRect.top() + qMax(0, (topRect.height() - textBlockHeight) / 2);
     const QRect typeRect(topRect.left() + textLeftMargin,
@@ -1021,11 +1068,18 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                                 urlHeight);
             const QString linkText = card.url.isEmpty() ? card.normalizedText.trimmed() : card.url;
             const QUrl currentUrl(linkText);
-            if (!card.favicon.isNull()) {
-                drawCoverPixmap(painter, imageRect, card.favicon);
+            QPixmap linkPreviewImage;
+            if (!card.thumbnail.isNull()) {
+                linkPreviewImage = card.thumbnail;
+            } else if (!card.favicon.isNull() && isLikelyLinkPreviewImage(card.favicon)) {
+                linkPreviewImage = card.favicon;
+            }
+
+            if (!linkPreviewImage.isNull()) {
+                drawCoverPixmap(painter, imageRect, linkPreviewImage, card.name, card.imageSize);
             } else {
                 const qreal paintDpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
-                const QPixmap fallbackPreview = buildLinkFallbackPreview(currentUrl, card.title, imageRect.size(), paintDpr);
+                const QPixmap fallbackPreview = buildLinkFallbackPreview(currentUrl, card.title, imageRect.size(), paintDpr, card.favicon);
                 if (!fallbackPreview.isNull()) {
                     painter->drawPixmap(imageRect.topLeft(), fallbackPreview);
                 }
@@ -1037,18 +1091,52 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             QFont linkUrlFont = painter->font();
             linkUrlFont.setPointSize(qMax(8, 9 * scale / 100));
             linkUrlFont.setUnderline(true);
+            const int linkPadding = qMax(6, 8 * scale / 100);
+            QRect adjustedUrlRect = urlRect;
+            QRect shortcutRect;
+            QFont shortcutFont;
+            const QString shortcutText = card.shortcutText;
+            bool drawShortcut = false;
+            if (!shortcutText.isEmpty()) {
+                shortcutFont = painter->font();
+                shortcutFont.setPointSize(qMax(8, 8 * scale / 100));
+                const QFontMetrics shortcutMetrics(shortcutFont);
+                const int shortcutPadding = qMax(6, 8 * scale / 100);
+                const int shortcutTextWidth = shortcutMetrics.horizontalAdvance(shortcutText) + shortcutPadding;
+                const int shortcutMinWidth = qMax(48, 56 * scale / 100);
+                int shortcutWidth = qMax(shortcutMinWidth, shortcutTextWidth);
+                const int maxShortcutWidth = qMax(0, urlRect.width() - linkPadding * 2);
+                shortcutWidth = qMin(shortcutWidth, maxShortcutWidth);
+                if (shortcutWidth > 0) {
+                    adjustedUrlRect = urlRect.adjusted(0, 0, -(shortcutWidth + linkPadding), 0);
+                    shortcutRect = QRect(
+                        urlRect.right() - linkPadding - shortcutWidth + 1,
+                        urlRect.top(),
+                        shortcutWidth,
+                        urlRect.height());
+                    drawShortcut = true;
+                }
+            }
             drawLinkLabel(painter,
                           titleRect,
                           card.title.isEmpty() ? fallbackHeadline(QString(), currentUrl) : card.title,
                           linkTitleFont,
                           QColor(QStringLiteral("#555555")),
-                          qMax(6, 8 * scale / 100));
+                          linkPadding);
             drawLinkLabel(painter,
-                          urlRect,
+                          adjustedUrlRect,
                           linkText,
                           linkUrlFont,
                           QColor(QStringLiteral("#555555")),
-                          qMax(6, 8 * scale / 100));
+                          linkPadding);
+            if (drawShortcut) {
+                drawElidedText(painter,
+                               shortcutRect,
+                               shortcutText,
+                               shortcutFont,
+                               QColor(QStringLiteral("#556270")),
+                               Qt::AlignRight | Qt::AlignVCenter);
+            }
             break;
         }
         case ClipboardItem::File: {
