@@ -1,7 +1,7 @@
 // input: Depends on ClipboardBoardModel.h and ClipboardItem metatype support.
 // output: Implements the in-memory clipboard board row model for delegate-based views.
 // pos: Widget-layer model implementation used by ScrollItemsWidget.
-// update: If I change, update this header block and my folder README.md.
+// update: If I change, update this header block and my folder README.md (metadata updates for link previews).
 #include "ClipboardBoardModel.h"
 
 ClipboardBoardModel::ClipboardBoardModel(QObject *parent)
@@ -138,7 +138,15 @@ bool ClipboardBoardModel::updateItem(int row, const ClipboardItem &item) {
         return false;
     }
 
-    if (entries_[row].item == item) {
+    const ClipboardItem &existing = entries_[row].item;
+    const bool metaChanged =
+        existing.getTitle() != item.getTitle()
+        || existing.getUrl() != item.getUrl()
+        || existing.getName() != item.getName()
+        || existing.getFavicon().cacheKey() != item.getFavicon().cacheKey()
+        || existing.thumbnail().cacheKey() != item.thumbnail().cacheKey();
+
+    if (existing == item && !metaChanged) {
         return false;
     }
 

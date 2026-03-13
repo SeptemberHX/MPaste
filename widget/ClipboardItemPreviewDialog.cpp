@@ -24,6 +24,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWindow>
+#include <QPointer>
 
 namespace {
 constexpr int kPreviewDialogWidth = 980;
@@ -410,7 +411,7 @@ void ClipboardItemPreviewDialog::releasePreviewContent() {
         return;
     }
 
-    auto *oldDocument = ui_.browser->document();
+    QPointer<QTextDocument> oldDocument = ui_.browser->document();
     auto *newDocument = new QTextDocument(ui_.browser);
     ui_.browser->setDocument(newDocument);
     ui_.browser->document()->setDefaultFont(ui_.browser->font());

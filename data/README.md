@@ -29,6 +29,7 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## Recent Notes
 
+- `OpenGraphItem` now tracks whether the fetched image is a preview or favicon, so link cards can render the correct thumbnail style.
 - `ClipboardItem` 现在会缓存可搜索纯文本，减少重复关键字扫描开销。
 - `ClipboardItem` 现在提供轻量级内容指纹，用于更快地定位去重候选项。
 - `ClipboardItem` 现在会把协议文本和原始 MIME 数据统一归一化为 URLs / 文本，供共享的类型识别逻辑使用。

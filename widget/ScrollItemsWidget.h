@@ -6,6 +6,7 @@
 #define SCROLLITEMSWIDGET_H
 
 #include <QList>
+#include <QModelIndex>
 #include <QPair>
 #include <QSet>
 #include <QWidget>
@@ -23,6 +24,8 @@ class QThread;
 class QWheelEvent;
 class QShowEvent;
 class QListView;
+class QGraphicsOpacityEffect;
+class QToolButton;
 
 class ClipboardBoardModel;
 class ClipboardBoardProxyModel;
@@ -109,6 +112,12 @@ private:
     void refreshContentWidthHint();
     void updateContentWidthHint();
     void updateEdgeFadeOverlays();
+    void ensureLinkPreviewForIndex(const QModelIndex &proxyIndex);
+    void createHoverActionBar();
+    void updateHoverActionBar(const QModelIndex &proxyIndex);
+    void updateHoverActionBarPosition();
+    void hideHoverActionBar(bool animated = true);
+    void updateHoverFavoriteButton(bool favorite);
     void scheduleDeferredLoadBatch();
     void handleDeferredBatchRead(const QStringList &batchPaths);
     void processDeferredLoadedItems();
@@ -136,7 +145,15 @@ private:
     QList<QThread*> processingThreads_;
     QWidget *leftEdgeFadeOverlay_ = nullptr;
     QWidget *rightEdgeFadeOverlay_ = nullptr;
+    QWidget *hoverActionBar_ = nullptr;
+    QToolButton *hoverDetailsBtn_ = nullptr;
+    QToolButton *hoverFavoriteBtn_ = nullptr;
+    QToolButton *hoverDeleteBtn_ = nullptr;
+    QGraphicsOpacityEffect *hoverOpacity_ = nullptr;
+    QModelIndex hoverProxyIndex_;
+    QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;
+    QSet<QString> pendingLinkPreviewUrls_;
     QStringList deferredLoadedItems_;
     QStringList pendingLoadFilePaths_;
     int edgeContentPadding_ = 0;

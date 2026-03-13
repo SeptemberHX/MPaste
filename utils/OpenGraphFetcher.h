@@ -1,4 +1,5 @@
-// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
+﻿// input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
+// note: image kind
 // output: 对外提供 OpenGraphFetcher 的声明接口。
 // pos: utils 层中的 OpenGraphFetcher 接口定义。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
@@ -37,7 +38,14 @@ private:
         };
     }
 
-    QStringList pendingImageUrls;
+    struct PendingImage {
+        QString url;
+        OpenGraphItem::ImageKind kind = OpenGraphItem::ImageUnknown;
+    };
+
+    QList<PendingImage> pendingImages;
+    OpenGraphItem::ImageKind currentImageKind = OpenGraphItem::ImageUnknown;
+    void appendPendingImage(const QString &url, OpenGraphItem::ImageKind kind);
     void tryNextImage();
 
     QString findMetaContent(const QDomDocument &doc, const QString &property);

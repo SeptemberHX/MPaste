@@ -32,6 +32,7 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## Recent Notes
 
+- `OpenGraphFetcher` now tracks whether a fetched image is a preview or favicon to preserve link preview thumbnails.
 - `ClipboardMonitor` currently prints detailed clipboard capture diagnostics (`dataChanged`, settle retries, MIME snapshot, duplicate suppression, and app-event emission) to help trace repeated copy handling.
 - `PlatformRelated` now also exposes file-manager reveal helpers; on Windows it opens Explorer and selects one or more local files when the item context menu requests "Open Containing Folder".
 - `MPasteSettings` 现在提供按“数值 + 单位（天 / 周 / 月）”定义的历史保留策略，供列表层按时间自动清理过期条目。
