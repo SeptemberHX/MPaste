@@ -341,76 +341,76 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="104"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="126"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="105"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="127"/>
         <source>Plain Text</source>
         <translation type="unfinished">纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="106"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="128"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="107"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="129"/>
         <source>Link</source>
         <translation type="unfinished">链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="108"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="130"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="109"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="131"/>
         <source>Image</source>
         <translation type="unfinished">图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="110"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="132"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="111"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="133"/>
         <source>Rich Text</source>
         <translation type="unfinished">富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="113"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="135"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="160"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="214"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="114"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="136"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="161"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="215"/>
         <source>Files</source>
         <translation type="unfinished">文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="114"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="136"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="115"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="137"/>
         <source>File</source>
         <translation type="unfinished">文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="116"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="138"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="117"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="139"/>
         <source>Color</source>
         <translation type="unfinished">颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="120"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="142"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="121"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="143"/>
         <source>Item</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="151"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="206"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="152"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="207"/>
         <source>Pixels</source>
         <translation type="unfinished">像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="157"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="211"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="158"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="212"/>
         <source>Characters</source>
         <translation type="unfinished">字符</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="191"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="248"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="192"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="249"/>
         <source>Rich text preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="194"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="250"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="195"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="251"/>
         <source>Image preview</source>
         <translation type="unfinished"></translation>
     </message>

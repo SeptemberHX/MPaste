@@ -1,7 +1,7 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
-// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved multi-file preview + footer path tweaks).
+// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks).
 #include "ClipboardCardDelegate.h"
 
 #include <cmath>
@@ -9,6 +9,7 @@
 #include <QCache>
 #include <QDebug>
 #include <QFileInfo>
+#include <QFileIconProvider>
 #include <QFontMetrics>
 #include <QIcon>
 #include <QImage>
@@ -629,6 +630,44 @@ QPixmap filePixmap(const QSize &size) {
     return QIcon(QStringLiteral(":/resources/resources/files.svg")).pixmap(size);
 }
 
+QPixmap loadLocalFileIcon(const QString &filePath, const QSize &targetLogicalSize, qreal targetDpr) {
+    if (filePath.isEmpty() || !targetLogicalSize.isValid()) {
+        return {};
+    }
+
+    const QFileInfo info(filePath);
+    if (!info.exists()) {
+        return {};
+    }
+
+    const QSize pixelTargetSize = targetLogicalSize * qMax<qreal>(1.0, targetDpr);
+    if (!pixelTargetSize.isValid()) {
+        return {};
+    }
+
+    static QCache<QString, QPixmap> cache(64 * 1024);
+    const QString cacheKey = QStringLiteral("%1:%2:%3x%4@%5")
+        .arg(filePath)
+        .arg(info.lastModified().toMSecsSinceEpoch())
+        .arg(pixelTargetSize.width())
+        .arg(pixelTargetSize.height())
+        .arg(qRound(targetDpr * 100.0));
+    if (QPixmap *cached = cache.object(cacheKey)) {
+        return *cached;
+    }
+
+    QFileIconProvider provider;
+    QIcon icon = provider.icon(info);
+    QPixmap pixmap = icon.pixmap(pixelTargetSize);
+    if (pixmap.isNull()) {
+        return {};
+    }
+    pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
+    const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
+    cache.insert(cacheKey, new QPixmap(pixmap), cacheCost);
+    return pixmap;
+}
+
 QString joinFileNames(const QList<QUrl> &urls) {
     QStringList names;
     names.reserve(urls.size());
@@ -1020,6 +1059,27 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                     drawCoverPixmap(painter, imagePreviewRect, thumb, card.name, QSize());
                     break;
                 }
+            }
+
+            if (card.normalizedUrls.size() == 1) {
+                const QString filePath = card.normalizedUrls.first().isLocalFile()
+                    ? card.normalizedUrls.first().toLocalFile()
+                    : QString();
+                const int iconPadding = qMax(10, 12 * scale / 100);
+                const int iconSize = qMax(24, qMin(previewRect.width() - iconPadding * 2,
+                                                   previewRect.height() - iconPadding * 2));
+                const QRect iconRect(previewRect.left() + (previewRect.width() - iconSize) / 2,
+                                     previewRect.top() + (previewRect.height() - iconSize) / 2,
+                                     iconSize,
+                                     iconSize);
+                QPixmap iconPixmap = filePath.isEmpty()
+                    ? QPixmap()
+                    : loadLocalFileIcon(filePath, iconRect.size(), paintDpr);
+                if (iconPixmap.isNull()) {
+                    iconPixmap = filePixmap(iconRect.size());
+                }
+                painter->drawPixmap(iconRect.topLeft(), iconPixmap);
+                break;
             }
 
             if (card.normalizedUrls.size() > 1) {

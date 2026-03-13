@@ -45,6 +45,7 @@ update: 修改本目录文件时，同步更新本 README。
 - Single-file paths in the footer now use middle elide to keep filenames visible.
 - Footer spacing now adapts to shortcut text width to keep the path closer.
 - Multi-file cards now use a file-icon + two-line filename summary preview aligned with the legacy file thumbnail style.
+- Single-file cards now show a centered file icon when not displaying an image thumbnail.
 - Arrow-key navigation now keeps the selected card at the edge until it needs to scroll.
 - Favorites are now treated as a separate preserved board: deleting an item from Clipboard no longer affects Favorites, deleting from Favorites behaves like un-starring, and time-based history cleanup skips the Favorites board entirely.
 - `MPasteWidget` currently prints clipboard-update and sound-play diagnostics so repeated copy prompts can be traced from app-level updates to actual sound playback decisions.
