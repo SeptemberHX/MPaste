@@ -402,32 +402,6 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     return snapshot;
 }
 
-QImage buildCardThumbnailImage(const QImage &sourceImage, qreal targetDpr) {
-    if (sourceImage.isNull()) {
-        return QImage();
-    }
-
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    const QSize pixelTargetSize = QSize(cardW, cardH) * targetDpr;
-    if (!pixelTargetSize.isValid()) {
-        return sourceImage;
-    }
-
-    QImage scaled = sourceImage.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    if (scaled.isNull()) {
-        return QImage();
-    }
-
-    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
-    QImage thumbnail = scaled.copy(x, y,
-                                   qMin(scaled.width(), pixelTargetSize.width()),
-                                   qMin(scaled.height(), pixelTargetSize.height()));
-    thumbnail.setDevicePixelRatio(targetDpr);
-    return thumbnail;
-}
-
 QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targetDpr) {
     if (imageBytes.isEmpty()) {
         return QImage();
@@ -885,6 +859,11 @@ void ScrollItemsWidget::updateHoverActionBar(const QModelIndex &proxyIndex) {
 
 void ScrollItemsWidget::updateHoverActionBarPosition() {
     if (!hoverActionBar_ || !listView_ || !hoverProxyIndex_.isValid()) {
+        return;
+    }
+
+    if (!listView_->model() || hoverProxyIndex_.model() != listView_->model()) {
+        hideHoverActionBar(false);
         return;
     }
 
@@ -1479,19 +1458,41 @@ void ScrollItemsWidget::waitForDeferredRead() {
 void ScrollItemsWidget::processPendingItemAsync(const ClipboardItem &item, const QString &targetName) {
     const QString expectedName = targetName.isEmpty() ? item.getName() : targetName;
     const ClipboardItem::ContentType contentType = item.getContentType();
-    const bool mimeLoaded = item.isMimeDataLoaded();
-    const QByteArray imageBytes = (mimeLoaded && (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText))
+    const QByteArray imageBytes = (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)
         ? item.imagePayloadBytesFast()
         : QByteArray();
-    const QString richHtml = (mimeLoaded && contentType == ClipboardItem::RichText) ? item.getHtml() : QString();
-    const QSize imageSize = (mimeLoaded && contentType == ClipboardItem::Image) ? item.getImagePixelSize() : QSize();
+    const QString richHtml = contentType == ClipboardItem::RichText ? item.getHtml() : QString();
+    const QSize imageSize = item.isMimeDataLoaded() && contentType == ClipboardItem::Image
+        ? item.getImagePixelSize()
+        : QSize();
+    const QString sourceFilePath = item.sourceFilePath();
+    const quint64 mimeOffset = item.mimeDataFileOffset();
     const qreal thumbnailDpr = maxScreenDevicePixelRatio();
     QPointer<ScrollItemsWidget> guard(this);
 
-    QThread *thread = QThread::create([guard, expectedName, contentType, imageBytes, richHtml, imageSize, thumbnailDpr]() mutable {
+    QThread *thread = QThread::create([guard, expectedName, contentType, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr]() mutable {
         PendingItemProcessingResult result;
-        if (contentType == ClipboardItem::Image && !imageBytes.isEmpty()) {
-            result.thumbnailImage = buildCardThumbnailImageFromBytes(imageBytes, thumbnailDpr);
+        QByteArray resolvedImageBytes = imageBytes;
+        QString resolvedHtml = richHtml;
+        if ((resolvedImageBytes.isEmpty() || resolvedHtml.isEmpty())
+            && !sourceFilePath.isEmpty()
+            && (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)) {
+            QString htmlPayload;
+            QByteArray imagePayload;
+            LocalSaver::loadMimePayloads(sourceFilePath,
+                                         mimeOffset,
+                                         contentType == ClipboardItem::RichText ? &htmlPayload : nullptr,
+                                         (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText) ? &imagePayload : nullptr);
+            if (resolvedHtml.isEmpty()) {
+                resolvedHtml = htmlPayload;
+            }
+            if (resolvedImageBytes.isEmpty()) {
+                resolvedImageBytes = imagePayload;
+            }
+        }
+
+        if (contentType == ClipboardItem::Image && !resolvedImageBytes.isEmpty()) {
+            result.thumbnailImage = buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr);
             if (isVeryTallImage(imageSize)) {
                 qInfo().noquote() << QStringLiteral("[thumb-build] stage=worker name=%1 image=%2x%3 thumbPx=%4x%5 thumbDpr=%6")
                     .arg(expectedName)
@@ -1501,8 +1502,8 @@ void ScrollItemsWidget::processPendingItemAsync(const ClipboardItem &item, const
                     .arg(result.thumbnailImage.height())
                     .arg(result.thumbnailImage.devicePixelRatio(), 0, 'f', 2);
             }
-        } else if (contentType == ClipboardItem::RichText && !richHtml.isEmpty()) {
-            result.thumbnailImage = buildRichTextThumbnailImageFromHtml(richHtml, imageBytes, thumbnailDpr);
+        } else if (contentType == ClipboardItem::RichText && !resolvedHtml.isEmpty()) {
+            result.thumbnailImage = buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr);
         }
 
         if (guard) {
@@ -1562,7 +1563,7 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
         return;
     }
 
-    QList<ClipboardItem> candidates;
+    QList<QPair<QString, quint64>> candidates;
     const QList<ClipboardItem> items = boardModel_->items();
     for (const ClipboardItem &item : items) {
         if (item.isMimeDataLoaded() || item.sourceFilePath().isEmpty() || item.contains(currentKeyword_)) {
@@ -1574,7 +1575,7 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
             continue;
         }
 
-        candidates.append(item);
+        candidates.append(qMakePair(item.sourceFilePath(), item.mimeDataFileOffset()));
     }
 
     if (candidates.isEmpty()) {
@@ -1587,9 +1588,13 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
 
     QThread *thread = QThread::create([guard, candidates, keyword, token]() {
         QSet<QString> matchedNames;
-        for (const ClipboardItem &item : candidates) {
-            if (item.containsDeep(keyword)) {
-                matchedNames.insert(item.getName());
+        for (const auto &candidate : candidates) {
+            if (candidate.first.isEmpty()) {
+                continue;
+            }
+            if (LocalSaver::mimeSectionContainsKeyword(candidate.first, candidate.second, keyword)) {
+                const QFileInfo info(candidate.first);
+                matchedNames.insert(info.completeBaseName());
             }
         }
 
@@ -1964,6 +1969,10 @@ void ScrollItemsWidget::resizeEvent(QResizeEvent *event) {
 }
 
 bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
+    if (!listView_) {
+        return QWidget::eventFilter(watched, event);
+    }
+
     if (event->type() == QEvent::Wheel && (watched == listView_ || watched == listView_->viewport())) {
         const bool handled = handleWheelScroll(static_cast<QWheelEvent *>(event));
         if (handled) {

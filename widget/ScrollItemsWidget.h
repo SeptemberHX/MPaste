@@ -9,6 +9,7 @@
 #include <QList>
 #include <QModelIndex>
 #include <QPair>
+#include <QPersistentModelIndex>
 #include <QSet>
 #include <QWidget>
 
@@ -151,7 +152,7 @@ private:
     QToolButton *hoverFavoriteBtn_ = nullptr;
     QToolButton *hoverDeleteBtn_ = nullptr;
     QGraphicsOpacityEffect *hoverOpacity_ = nullptr;
-    QModelIndex hoverProxyIndex_;
+    QPersistentModelIndex hoverProxyIndex_;
     QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;
     QSet<QString> pendingLinkPreviewUrls_;

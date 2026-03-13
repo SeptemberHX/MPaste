@@ -23,6 +23,11 @@ public:
     ClipboardItem loadFromRawDataLight(const QByteArray &rawData, const QString &sourceFilePath);
     ClipboardItem loadFromFileLight(const QString &filePath);
     static bool loadMimeSection(const QString &filePath, quint64 offset, ClipboardItem &item);
+    static bool loadMimePayloads(const QString &filePath,
+                                 quint64 offset,
+                                 QString *htmlOut,
+                                 QByteArray *imageOut);
+    static bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const QString &keyword);
     static bool isCurrentFormatFile(const QString &filePath);
 };
 

@@ -312,7 +312,80 @@ bool payloadContainsKeyword(const QByteArray &data, const QString &lowerKeyword)
     return false;
 }
 
-bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const QString &keyword) {
+bool skipBytes(QIODevice *device, qint64 bytes) {
+    if (!device || bytes <= 0) {
+        return true;
+    }
+
+    if (!device->isSequential()) {
+        return device->seek(device->pos() + bytes);
+    }
+
+    constexpr qint64 kChunkSize = 64 * 1024;
+    QByteArray buffer;
+    buffer.resize(static_cast<int>(kChunkSize));
+    qint64 remaining = bytes;
+    while (remaining > 0) {
+        const qint64 toRead = qMin(remaining, kChunkSize);
+        const qint64 read = device->read(buffer.data(), toRead);
+        if (read <= 0) {
+            return false;
+        }
+        remaining -= read;
+    }
+    return true;
+}
+
+bool readByteArrayWithLimit(QDataStream &in, quint32 maxBytes, QByteArray *out) {
+    quint32 size = 0;
+    in >> size;
+    if (in.status() != QDataStream::Ok) {
+        return false;
+    }
+
+    QIODevice *device = in.device();
+    if (!device) {
+        in.setStatus(QDataStream::ReadCorruptData);
+        return false;
+    }
+
+    if (size == 0) {
+        if (out) {
+            out->clear();
+        }
+        return true;
+    }
+
+    if (!out || maxBytes == 0) {
+        if (!skipBytes(device, size)) {
+            in.setStatus(QDataStream::ReadCorruptData);
+            return false;
+        }
+        return true;
+    }
+
+    if (maxBytes > 0 && size > maxBytes) {
+        if (out) {
+            out->clear();
+        }
+        if (!skipBytes(device, size)) {
+            in.setStatus(QDataStream::ReadCorruptData);
+            return false;
+        }
+        return true;
+    }
+
+    out->resize(static_cast<int>(size));
+    if (in.readRawData(out->data(), static_cast<int>(size)) != static_cast<int>(size)) {
+        in.setStatus(QDataStream::ReadCorruptData);
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+bool LocalSaver::mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const QString &keyword) {
     if (filePath.isEmpty() || keyword.isEmpty()) {
         return false;
     }
@@ -336,28 +409,38 @@ bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const Q
         return false;
     }
 
+    constexpr quint32 kMaxSearchBytes = 2 * 1024 * 1024;
     QList<QByteArray> uniqueBlobs;
     for (quint32 i = 0; i < formatCount; ++i) {
         QString format;
         quint32 dataIndex = 0;
-        QByteArray data;
-        in >> format >> dataIndex >> data;
+        in >> format >> dataIndex;
         if (in.status() != QDataStream::Ok) {
             file.close();
             return false;
         }
 
-        QByteArray payload = data;
+        while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
+            uniqueBlobs.append(QByteArray());
+        }
+
+        const bool shouldInspect = formatMayContainSearchText(format);
+        QByteArray data;
+        if (!readByteArrayWithLimit(in, shouldInspect ? kMaxSearchBytes : 0, &data)) {
+            file.close();
+            return false;
+        }
+
         if (!data.isEmpty()) {
-            while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
-                uniqueBlobs.append(QByteArray());
-            }
             uniqueBlobs[dataIndex] = data;
-        } else if (static_cast<int>(dataIndex) < uniqueBlobs.size()) {
+        }
+
+        QByteArray payload = data;
+        if (payload.isEmpty() && static_cast<int>(dataIndex) < uniqueBlobs.size()) {
             payload = uniqueBlobs[dataIndex];
         }
 
-        if (formatMayContainSearchText(format) && payloadContainsKeyword(payload, lowerKeyword)) {
+        if (shouldInspect && payloadContainsKeyword(payload, lowerKeyword)) {
             file.close();
             return true;
         }
@@ -366,6 +449,8 @@ bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const Q
     file.close();
     return false;
 }
+
+namespace {
 
 ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     if (rawData.isEmpty()) {
@@ -701,6 +786,106 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     return true;
 }
 
+bool LocalSaver::loadMimePayloads(const QString &filePath,
+                                  quint64 offset,
+                                  QString *htmlOut,
+                                  QByteArray *imageOut) {
+    if (filePath.isEmpty() || (!htmlOut && !imageOut)) {
+        return false;
+    }
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    if (!file.seek(static_cast<qint64>(offset))) {
+        file.close();
+        return false;
+    }
+
+    QDataStream in(&file);
+    quint32 formatCount = 0;
+    in >> formatCount;
+    if (in.status() != QDataStream::Ok) {
+        file.close();
+        return false;
+    }
+
+    constexpr quint32 kMaxPreviewHtmlBytes = 2 * 1024 * 1024;
+    constexpr quint32 kMaxPreviewImageBytes = 12 * 1024 * 1024;
+    static const QStringList preferredImageFormats = {
+        QStringLiteral("application/x-qt-image"),
+        QStringLiteral("image/png"),
+        QStringLiteral("image/jpeg"),
+        QStringLiteral("image/jpg"),
+        QStringLiteral("image/webp"),
+        QStringLiteral("image/gif"),
+        QStringLiteral("image/bmp")
+    };
+
+    QList<QByteArray> uniqueBlobs;
+    QByteArray htmlBytes;
+    QByteArray imageBytes;
+
+    for (quint32 i = 0; i < formatCount; ++i) {
+        QString format;
+        quint32 dataIndex = 0;
+        in >> format >> dataIndex;
+        if (in.status() != QDataStream::Ok) {
+            file.close();
+            return false;
+        }
+
+        while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
+            uniqueBlobs.append(QByteArray());
+        }
+
+        const bool wantsHtml = htmlOut && htmlBytes.isEmpty() && format == QStringLiteral("text/html");
+        const bool wantsImage = imageOut && imageBytes.isEmpty()
+            && (preferredImageFormats.contains(format) || format.startsWith(QStringLiteral("image/")));
+        const bool shouldRead = wantsHtml || wantsImage;
+
+        QByteArray data;
+        const quint32 maxBytes = wantsHtml ? kMaxPreviewHtmlBytes
+            : (wantsImage ? kMaxPreviewImageBytes : 0);
+        if (!readByteArrayWithLimit(in, shouldRead ? maxBytes : 0, &data)) {
+            file.close();
+            return false;
+        }
+
+        if (!data.isEmpty()) {
+            uniqueBlobs[dataIndex] = data;
+        }
+
+        QByteArray payload = data;
+        if (payload.isEmpty() && static_cast<int>(dataIndex) < uniqueBlobs.size()) {
+            payload = uniqueBlobs[dataIndex];
+        }
+
+        if (wantsHtml && htmlBytes.isEmpty()) {
+            htmlBytes = payload;
+        }
+        if (wantsImage && imageBytes.isEmpty()) {
+            imageBytes = payload;
+        }
+
+        if ((!htmlOut || !htmlBytes.isEmpty()) && (!imageOut || !imageBytes.isEmpty())) {
+            // Collected everything we need.
+            break;
+        }
+    }
+    file.close();
+
+    if (htmlOut) {
+        *htmlOut = htmlBytes.isEmpty() ? QString() : QString::fromUtf8(htmlBytes);
+    }
+    if (imageOut) {
+        *imageOut = imageBytes;
+    }
+    return true;
+}
+
 bool LocalSaver::isCurrentFormatFile(const QString &filePath) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -780,5 +965,5 @@ bool ClipboardItem::containsDeep(const QString &keyword) const {
         return false;
     }
 
-    return mimeSectionContainsKeyword(sourceFilePath_, mimeDataFileOffset_, keyword);
+    return LocalSaver::mimeSectionContainsKeyword(sourceFilePath_, mimeDataFileOffset_, keyword);
 }

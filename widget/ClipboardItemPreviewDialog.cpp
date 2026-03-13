@@ -28,6 +28,7 @@
 #include <QWindow>
 #include <QPointer>
 
+#include "data/LocalSaver.h"
 namespace {
 constexpr int kPreviewDialogWidth = 980;
 constexpr int kPreviewDialogHeight = 760;
@@ -353,12 +354,7 @@ bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {
 void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     releasePreviewContent();
 
-    ClipboardItem::ContentType contentType = item.getContentType();
-    if (!item.isMimeDataLoaded()
-        && (contentType == ClipboardItem::RichText || contentType == ClipboardItem::Image)) {
-        const_cast<ClipboardItem &>(item).ensureMimeDataLoaded();
-        contentType = item.getContentType();
-    }
+    const ClipboardItem::ContentType contentType = item.getContentType();
 
     ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Preview"), QStringLiteral("剪贴板预览")));
     ui_.subtitleLabel->setText(item.getName().isEmpty()
@@ -381,17 +377,38 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     if (contentType == ClipboardItem::File && normalizedUrls.size() == 1 && normalizedUrls.first().isLocalFile()) {
         filePath = normalizedUrls.first().toLocalFile();
     }
+    const QString sourceFilePath = item.sourceFilePath();
+    const quint64 mimeOffset = item.mimeDataFileOffset();
     const QSize targetSize(kPreviewDialogWidth - 120, kPreviewDialogHeight - 180);
     const qreal dpr = devicePixelRatioF();
     const quint64 token = ++previewToken_;
 
     QPointer<ClipboardItemPreviewDialog> guard(this);
-    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, filePath, targetSize, dpr, token]() mutable {
+    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, filePath, sourceFilePath, mimeOffset, targetSize, dpr, token]() mutable {
+        QString resolvedHtml = html;
+        QByteArray resolvedImageBytes = imageBytes;
+        if ((resolvedHtml.isEmpty() || resolvedImageBytes.isEmpty())
+            && !sourceFilePath.isEmpty()
+            && (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)) {
+            QString htmlPayload;
+            QByteArray imagePayload;
+            LocalSaver::loadMimePayloads(sourceFilePath,
+                                         mimeOffset,
+                                         contentType == ClipboardItem::RichText ? &htmlPayload : nullptr,
+                                         (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText) ? &imagePayload : nullptr);
+            if (resolvedHtml.isEmpty()) {
+                resolvedHtml = htmlPayload;
+            }
+            if (resolvedImageBytes.isEmpty()) {
+                resolvedImageBytes = imagePayload;
+            }
+        }
+
         PreviewPayload payload = buildPreviewPayload(contentType,
                                                      normalizedText,
                                                      normalizedUrls,
-                                                     html,
-                                                     imageBytes,
+                                                     resolvedHtml,
+                                                     resolvedImageBytes,
                                                      filePath,
                                                      targetSize,
                                                      dpr);

@@ -32,7 +32,6 @@ protected:
 
 private:
     QString uiText(const QString &source, const QString &zhFallback) const;
-    void startAsyncPreview(const ClipboardItem &item, ClipboardItem::ContentType contentType);
     void releasePreviewContent();
 
     struct {
