@@ -481,27 +481,13 @@ QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targ
     return thumbnail;
 }
 
-QImage buildRichTextThumbnailImage(const ClipboardItem &item) {
-    const QMimeData *mimeData = item.getMimeData();
-    if (!mimeData || !mimeData->hasHtml()) {
-        return QImage();
-    }
-
-    const QString html = mimeData->html();
+QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray &imageBytes, qreal thumbnailDpr) {
     if (html.isEmpty()) {
         return QImage();
     }
 
     constexpr int cardW = 275;
     constexpr int cardH = 218;
-    qreal thumbnailDpr = 1.0;
-    const QList<QScreen *> screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen) {
-            thumbnailDpr = qMax(thumbnailDpr, screen->devicePixelRatio());
-        }
-    }
-
     const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
     if (!pixelTargetSize.isValid()) {
         return QImage();
@@ -522,6 +508,13 @@ QImage buildRichTextThumbnailImage(const ClipboardItem &item) {
     QTextDocument document;
     document.setDocumentMargin(0);
     document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
+    const QString imageSource = firstHtmlImageSource(html);
+    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
+        QImage image;
+        if (image.loadFromData(imageBytes)) {
+            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
+        }
+    }
     document.setHtml(html);
     document.setPageSize(layoutSize);
     document.setTextWidth(layoutSize.width());
@@ -1485,14 +1478,20 @@ void ScrollItemsWidget::waitForDeferredRead() {
 
 void ScrollItemsWidget::processPendingItemAsync(const ClipboardItem &item, const QString &targetName) {
     const QString expectedName = targetName.isEmpty() ? item.getName() : targetName;
+    const ClipboardItem::ContentType contentType = item.getContentType();
+    const bool mimeLoaded = item.isMimeDataLoaded();
+    const QByteArray imageBytes = (mimeLoaded && (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText))
+        ? item.imagePayloadBytesFast()
+        : QByteArray();
+    const QString richHtml = (mimeLoaded && contentType == ClipboardItem::RichText) ? item.getHtml() : QString();
+    const QSize imageSize = (mimeLoaded && contentType == ClipboardItem::Image) ? item.getImagePixelSize() : QSize();
+    const qreal thumbnailDpr = maxScreenDevicePixelRatio();
     QPointer<ScrollItemsWidget> guard(this);
 
-    QThread *thread = QThread::create([guard, item, expectedName]() mutable {
+    QThread *thread = QThread::create([guard, expectedName, contentType, imageBytes, richHtml, imageSize, thumbnailDpr]() mutable {
         PendingItemProcessingResult result;
-        qreal thumbnailDpr = maxScreenDevicePixelRatio();
-        if (item.getContentType() == ClipboardItem::Image) {
-            result.thumbnailImage = buildCardThumbnailImageFromBytes(item.imagePayloadBytesFast(), thumbnailDpr);
-            const QSize imageSize = item.getImagePixelSize();
+        if (contentType == ClipboardItem::Image && !imageBytes.isEmpty()) {
+            result.thumbnailImage = buildCardThumbnailImageFromBytes(imageBytes, thumbnailDpr);
             if (isVeryTallImage(imageSize)) {
                 qInfo().noquote() << QStringLiteral("[thumb-build] stage=worker name=%1 image=%2x%3 thumbPx=%4x%5 thumbDpr=%6")
                     .arg(expectedName)
@@ -1502,18 +1501,22 @@ void ScrollItemsWidget::processPendingItemAsync(const ClipboardItem &item, const
                     .arg(result.thumbnailImage.height())
                     .arg(result.thumbnailImage.devicePixelRatio(), 0, 'f', 2);
             }
-        } else if (item.getContentType() == ClipboardItem::RichText) {
-            result.thumbnailImage = buildRichTextThumbnailImage(item);
-            thumbnailDpr = qMax<qreal>(1.0, result.thumbnailImage.devicePixelRatio());
+        } else if (contentType == ClipboardItem::RichText && !richHtml.isEmpty()) {
+            result.thumbnailImage = buildRichTextThumbnailImageFromHtml(richHtml, imageBytes, thumbnailDpr);
         }
 
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, item, result, thumbnailDpr]() mutable {
+            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, result, thumbnailDpr]() mutable {
                 if (!guard) {
                     return;
                 }
 
-                ClipboardItem preparedItem = item;
+                const int sourceRow = guard->boardModel_ ? guard->boardModel_->rowForName(expectedName) : -1;
+                if (sourceRow < 0) {
+                    return;
+                }
+
+                ClipboardItem preparedItem = guard->boardModel_->itemAt(sourceRow);
                 if (!result.thumbnailImage.isNull()) {
                     QPixmap thumbnail = QPixmap::fromImage(result.thumbnailImage);
                     thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));

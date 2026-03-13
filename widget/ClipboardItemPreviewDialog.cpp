@@ -156,20 +156,15 @@ struct PreviewPayload {
     QString imageUrl;
 };
 
-PreviewPayload buildPreviewPayload(ClipboardItem item,
-                                   ClipboardItem::ContentType contentType,
+PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
+                                   const QString &normalizedText,
+                                   const QList<QUrl> &normalizedUrls,
+                                   const QString &html,
+                                   const QByteArray &imageBytes,
+                                   const QString &filePath,
                                    const QSize &targetSize,
                                    qreal devicePixelRatio) {
     PreviewPayload payload;
-
-    const bool needsMimeLoad = contentType == ClipboardItem::RichText
-        || contentType == ClipboardItem::Image;
-    if (needsMimeLoad) {
-        item.ensureMimeDataLoaded();
-    }
-
-    const QString normalizedText = item.getNormalizedText();
-    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
 
     switch (contentType) {
         case ClipboardItem::Text:
@@ -179,7 +174,6 @@ PreviewPayload buildPreviewPayload(ClipboardItem item,
             break;
         }
         case ClipboardItem::Image: {
-            const QByteArray imageBytes = item.imagePayloadBytesFast();
             QImage image = loadPreviewImageFromBytes(imageBytes, targetSize, devicePixelRatio);
             if (!image.isNull()) {
                 payload.kind = PreviewKind::Image;
@@ -192,16 +186,13 @@ PreviewPayload buildPreviewPayload(ClipboardItem item,
             break;
         }
         case ClipboardItem::File: {
-            if (normalizedUrls.size() == 1 && normalizedUrls.first().isLocalFile()) {
-                const QString filePath = normalizedUrls.first().toLocalFile();
-                if (isLocalImageFile(filePath)) {
-                    QImage image = loadPreviewImageFileBytes(filePath, targetSize, devicePixelRatio);
-                    if (!image.isNull()) {
-                        payload.kind = PreviewKind::Image;
-                        payload.image = image;
-                        payload.imageUrl = QStringLiteral("preview-image://local-file");
-                        break;
-                    }
+            if (!filePath.isEmpty() && isLocalImageFile(filePath)) {
+                QImage image = loadPreviewImageFileBytes(filePath, targetSize, devicePixelRatio);
+                if (!image.isNull()) {
+                    payload.kind = PreviewKind::Image;
+                    payload.image = image;
+                    payload.imageUrl = QStringLiteral("preview-image://local-file");
+                    break;
                 }
             }
             payload.kind = PreviewKind::PlainText;
@@ -209,13 +200,10 @@ PreviewPayload buildPreviewPayload(ClipboardItem item,
             break;
         }
         case ClipboardItem::RichText: {
-            item.ensureMimeDataLoaded();
-            const QString html = item.getHtml();
             if (!html.isEmpty()) {
                 payload.kind = PreviewKind::Html;
                 payload.html = html;
                 const QString imageSource = firstHtmlImageSource(html);
-                const QByteArray imageBytes = item.imagePayloadBytesFast();
                 if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
                     QImage image = loadPreviewImageFromBytes(imageBytes, targetSize, devicePixelRatio);
                     if (!image.isNull()) {
@@ -365,6 +353,13 @@ bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {
 void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     releasePreviewContent();
 
+    ClipboardItem::ContentType contentType = item.getContentType();
+    if (!item.isMimeDataLoaded()
+        && (contentType == ClipboardItem::RichText || contentType == ClipboardItem::Image)) {
+        const_cast<ClipboardItem &>(item).ensureMimeDataLoaded();
+        contentType = item.getContentType();
+    }
+
     ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Preview"), QStringLiteral("剪贴板预览")));
     ui_.subtitleLabel->setText(item.getName().isEmpty()
         ? uiText(QStringLiteral("Read-only preview"), QStringLiteral("只读预览"))
@@ -376,14 +371,30 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     ui_.browser->document()->clear();
     ui_.browser->setPlainText(uiText(QStringLiteral("Loading preview..."), QStringLiteral("正在加载预览...")));
 
-    const ClipboardItem::ContentType contentType = item.getContentType();
+    const QString normalizedText = item.getNormalizedText();
+    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
+    const QString html = contentType == ClipboardItem::RichText ? item.getHtml() : QString();
+    const QByteArray imageBytes = (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)
+        ? item.imagePayloadBytesFast()
+        : QByteArray();
+    QString filePath;
+    if (contentType == ClipboardItem::File && normalizedUrls.size() == 1 && normalizedUrls.first().isLocalFile()) {
+        filePath = normalizedUrls.first().toLocalFile();
+    }
     const QSize targetSize(kPreviewDialogWidth - 120, kPreviewDialogHeight - 180);
     const qreal dpr = devicePixelRatioF();
     const quint64 token = ++previewToken_;
 
     QPointer<ClipboardItemPreviewDialog> guard(this);
-    QThread *thread = QThread::create([guard, item, contentType, targetSize, dpr, token]() mutable {
-        PreviewPayload payload = buildPreviewPayload(item, contentType, targetSize, dpr);
+    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, filePath, targetSize, dpr, token]() mutable {
+        PreviewPayload payload = buildPreviewPayload(contentType,
+                                                     normalizedText,
+                                                     normalizedUrls,
+                                                     html,
+                                                     imageBytes,
+                                                     filePath,
+                                                     targetSize,
+                                                     dpr);
         if (guard) {
             QMetaObject::invokeMethod(guard.data(), [guard, payload, token]() {
                 if (!guard || guard->previewToken_ != token) {
