@@ -5,6 +5,7 @@
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
 
+#include <QByteArray>
 #include <QList>
 #include <QModelIndex>
 #include <QPair>
@@ -119,7 +120,7 @@ private:
     void hideHoverActionBar(bool animated = true);
     void updateHoverFavoriteButton(bool favorite);
     void scheduleDeferredLoadBatch();
-    void handleDeferredBatchRead(const QStringList &batchPaths);
+    void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchPayloads);
     void processDeferredLoadedItems();
     void waitForDeferredRead();
     void processPendingItemAsync(const ClipboardItem &item, const QString &targetName = QString());
@@ -154,7 +155,7 @@ private:
     QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;
     QSet<QString> pendingLinkPreviewUrls_;
-    QStringList deferredLoadedItems_;
+    QList<QPair<QString, QByteArray>> deferredLoadedItems_;
     QStringList pendingLoadFilePaths_;
     int edgeContentPadding_ = 0;
     int edgeFadeWidth_ = 0;

@@ -20,6 +20,7 @@ public:
     bool removeItem(const QString &filePath);
     ClipboardItem loadFromFile(const QString &filePath);
     ClipboardItem loadFromRawData(const QByteArray &rawData);
+    ClipboardItem loadFromRawDataLight(const QByteArray &rawData, const QString &sourceFilePath);
     ClipboardItem loadFromFileLight(const QString &filePath);
     static bool loadMimeSection(const QString &filePath, quint64 offset, ClipboardItem &item);
     static bool isCurrentFormatFile(const QString &filePath);

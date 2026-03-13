@@ -1397,10 +1397,21 @@ void ScrollItemsWidget::scheduleDeferredLoadBatch() {
 
     QPointer<ScrollItemsWidget> guard(this);
     deferredLoadThread_ = QThread::create([guard, batchPaths]() {
+        QList<QPair<QString, QByteArray>> batchPayloads;
+        batchPayloads.reserve(batchPaths.size());
+        for (const QString &filePath : batchPaths) {
+            QByteArray rawData;
+            QFile file(filePath);
+            if (file.open(QIODevice::ReadOnly)) {
+                rawData = file.readAll();
+                file.close();
+            }
+            batchPayloads.append(qMakePair(filePath, rawData));
+        }
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, batchPaths]() {
+            QMetaObject::invokeMethod(guard.data(), [guard, batchPayloads]() {
                 if (guard) {
-                    guard->handleDeferredBatchRead(batchPaths);
+                    guard->handleDeferredBatchRead(batchPayloads);
                 }
             }, Qt::QueuedConnection);
         }
@@ -1413,8 +1424,10 @@ void ScrollItemsWidget::scheduleDeferredLoadBatch() {
     deferredLoadThread_->start();
 }
 
-void ScrollItemsWidget::handleDeferredBatchRead(const QStringList &batchPaths) {
-    deferredLoadedItems_.append(batchPaths);
+void ScrollItemsWidget::handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchPayloads) {
+    if (!batchPayloads.isEmpty()) {
+        deferredLoadedItems_.append(batchPayloads);
+    }
 
     if (!deferredLoadTimer_->isActive()) {
         const bool widgetVisible = isVisible() && window() && window()->isVisible();
@@ -1439,8 +1452,10 @@ void ScrollItemsWidget::processDeferredLoadedItems() {
     int processedCount = 0;
 
     while (!deferredLoadedItems_.isEmpty() && processedCount < maxItemsPerTick && parseTimer.elapsed() < maxParseMs) {
-        const QString filePath = deferredLoadedItems_.takeFirst();
-        ClipboardItem item = saver->loadFromFileLight(filePath);
+        const auto payload = deferredLoadedItems_.takeFirst();
+        const QString filePath = payload.first;
+        const QByteArray rawData = payload.second;
+        ClipboardItem item = rawData.isEmpty() ? ClipboardItem() : saver->loadFromRawDataLight(rawData, filePath);
         if (item.getName().isEmpty()) {
             saver->removeItem(filePath);
             if (totalItemCount_ > 0) {

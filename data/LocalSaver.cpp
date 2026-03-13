@@ -539,16 +539,10 @@ ClipboardItem LocalSaver::loadFromRawData(const QByteArray &rawData) {
     return loadCurrentFormat(rawData);
 }
 
-ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath) {
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return ClipboardItem();
-    }
-
-    QDataStream in(&file);
+namespace {
+ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath) {
     quint32 flags = 0;
     if (!readCurrentFormatPrefix(in, flags)) {
-        file.close();
         return ClipboardItem();
     }
     Q_UNUSED(flags);
@@ -575,7 +569,6 @@ ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath) {
         normalizedUrls << QUrl(urlStr);
     }
     in >> fingerprint >> thumbnail >> mimeDataOffset;
-    file.close();
 
     if (in.status() != QDataStream::Ok || name.isEmpty()) {
         return ClipboardItem();
@@ -605,6 +598,34 @@ ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath) {
         normalizedText,
         normalizedUrls);
 
+    return item;
+}
+}
+
+ClipboardItem LocalSaver::loadFromRawDataLight(const QByteArray &rawData, const QString &sourceFilePath) {
+    if (rawData.isEmpty()) {
+        return ClipboardItem();
+    }
+
+    QBuffer buffer;
+    buffer.setData(rawData);
+    if (!buffer.open(QIODevice::ReadOnly)) {
+        return ClipboardItem();
+    }
+
+    QDataStream in(&buffer);
+    return loadFromStreamLight(in, sourceFilePath);
+}
+
+ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return ClipboardItem();
+    }
+
+    QDataStream in(&file);
+    ClipboardItem item = loadFromStreamLight(in, filePath);
+    file.close();
     return item;
 }
 
