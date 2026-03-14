@@ -30,7 +30,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DQT_DEBUG")
 
 set(BIN_NAME MPaste)
 
-file(GLOB SRCS
+file(GLOB SRCS CONFIGURE_DEPENDS
         "*.h" "*.cpp"
         "widget/*.ui" "widget/*.h" "widget/*.cpp"
         "resources.qrc"

@@ -202,7 +202,11 @@ MPasteSettings::ThemeMode MPasteSettings::getThemeMode() const {
 }
 
 void MPasteSettings::setThemeMode(MPasteSettings::ThemeMode mode) {
+    if (themeMode == mode) {
+        return;
+    }
     themeMode = mode;
+    emit themeModeChanged(themeMode);
 }
 
 bool MPasteSettings::isDarkTheme() const {

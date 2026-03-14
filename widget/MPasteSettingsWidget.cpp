@@ -6,6 +6,7 @@
 #include "MPasteSettingsWidget.h"
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"
+#include "utils/ThemeManager.h"
 #include "ToggleSwitch.h"
 #include <QShowEvent>
 #include <QMouseEvent>
@@ -423,7 +424,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
 
-    applyTheme(MPasteSettings::getInst()->isDarkTheme());
+    applyTheme(ThemeManager::instance()->isDark());
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &MPasteSettingsWidget::applyTheme);
 
     setWindowTitle(uiText("Settings", QStringLiteral("设置")));
     ui->titleLabel->setText(uiText("Settings", QStringLiteral("设置")));
@@ -597,7 +599,7 @@ void MPasteSettingsWidget::loadSettings()
         const int index = themeCombo_->findData(static_cast<int>(settings->getThemeMode()));
         themeCombo_->setCurrentIndex(index >= 0 ? index : 0);
     }
-    applyTheme(settings->isDarkTheme());
+    applyTheme(ThemeManager::instance()->isDark());
 
 #ifdef Q_OS_WIN
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",

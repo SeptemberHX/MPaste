@@ -179,7 +179,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.cpp" line="508"/>
+        <location filename="../widget/MPasteSettingsWidget.cpp" line="510"/>
         <source>Auto-start is currently only supported on Windows.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -267,78 +267,78 @@
         <translation type="vanished">?? MIME ??</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="258"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="255"/>
         <source>Paste as Plain Text</source>
         <translation type="unfinished">??????</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="270"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="267"/>
         <source>Details</source>
         <translation type="unfinished">??</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="282"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="279"/>
         <source>Open Containing Folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="104"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="105"/>
         <source>Plain Text</source>
         <translation type="unfinished">纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="106"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="107"/>
         <source>Link</source>
         <translation type="unfinished">链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="108"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="109"/>
         <source>Image</source>
         <translation type="unfinished">图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="110"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="111"/>
         <source>Rich Text</source>
         <translation type="unfinished">富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="113"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="135"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="114"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="136"/>
         <source>Files</source>
         <translation type="unfinished">文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="114"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="115"/>
         <source>File</source>
         <translation type="unfinished">文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="116"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="117"/>
         <source>Color</source>
         <translation type="unfinished">颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="120"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="121"/>
         <source>Item</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="127"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="128"/>
         <source>Pixels</source>
         <translation type="unfinished">像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="132"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="133"/>
         <source>Characters</source>
         <translation type="unfinished">字符</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="169"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="170"/>
         <source>Rich text preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="171"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="172"/>
         <source>Image preview</source>
         <translation type="unfinished"></translation>
     </message>
@@ -346,26 +346,26 @@
 <context>
     <name>ScrollItemsWidget</name>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1154"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1151"/>
         <source>Preview</source>
         <translation type="unfinished">预览</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="939"/>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1171"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="936"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1168"/>
         <source>Remove from favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="866"/>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="940"/>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1171"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="864"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="937"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1168"/>
         <source>Add to favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="867"/>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1181"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="865"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1178"/>
         <source>Delete</source>
         <translation type="unfinished">删除</translation>
     </message>

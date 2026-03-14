@@ -117,6 +117,7 @@ private:
         QPropertyAnimation *searchHideAnim = nullptr;
         QSystemTrayIcon *trayIcon = nullptr;
         QMenu *menu = nullptr;
+        QMenu *trayMenu = nullptr;
         QAction *aboutAction = nullptr;
         QAction *settingsAction = nullptr;
         QAction *quitAction = nullptr;

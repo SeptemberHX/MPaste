@@ -34,36 +34,36 @@ QScrollArea {
 }
 
 #firstButton:hover, #lastButton:hover,
-#firstButton:selected, #lastButton:hover,
+#firstButton:selected, #lastButton:selected,
 #searchButton:selected, #searchButton:hover,
 #menuButton:selected, #menuButton:hover {
-    background-color: #CCCCCC;
+    background-color: {{top_hover_bg}};
 }
 
 
 /* 输入框样式 */
 QLineEdit {
     border-style: solid;
-    border-color: #FFA07A;  /* 浅橙色 */
+    border-color: {{line_edit_border}};  /* 浅橙色 */
     border-width: 2px;
     border-radius: 10px;
     padding: 4px 12px;
-    background-color: rgba(255, 255, 255, 0.95);
-    color: #2C3E50;
+    background-color: {{line_edit_bg}};
+    color: {{text_primary}};
 }
 
 QLineEdit:focus {
-    border-color: #FF8C69;  /* 聚焦时边框颜色加深 */
+    border-color: {{line_edit_border_focus}};  /* 聚焦时边框颜色加深 */
 }
 
 /* 圆形计数器样式 */
 QToolButton#countArea {
-    background-color: rgba(255, 255, 255, 0.22);
-    color: rgba(32, 48, 64, 0.92);
+    background-color: {{badge_bg}};
+    color: {{badge_text}};
     min-width: 30px;
     min-height: 24px;
     max-height: 24px;
-    border: 1px solid rgba(74, 144, 226, 0.14);
+    border: 1px solid {{badge_border}};
     border-radius: 12px;
     padding: 0 7px;
     font-size: 11px;
@@ -75,7 +75,7 @@ QToolButton#countArea {
 QWidget#clipboardBtnWidget QToolButton
 {
     padding: 4px 12px;
-    color: #2C3E50;
+    color: {{tab_text}};
     font-weight: 600;
     font-size: 13px;
     text-transform: none;
@@ -85,8 +85,8 @@ QWidget#clipboardBtnWidget QToolButton#clipboardButton:hover,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:pressed,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:checked,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
-    background-color: rgba(255, 255, 255, 0.95);
-    border: 2px solid #4A90E2;
+    background-color: {{tab_checked_bg}};
+    border: 2px solid {{accent_blue}};
     outline: none;
 }
 
@@ -94,8 +94,8 @@ QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
 QWidget#clipboardBtnWidget QToolButton#staredButton:pressed,
 QWidget#clipboardBtnWidget QToolButton#staredButton:checked,
 QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
-    background-color: rgba(255, 255, 255, 0.95);
-    border: 2px solid #fc9867;
+    background-color: {{tab_checked_bg}};
+    border: 2px solid {{accent_orange}};
     outline: none;
 }
 
@@ -107,7 +107,7 @@ QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
 
 QWidget#typeBtnWidget QToolButton {
     padding: 4px 10px;
-    color: #2C3E50;
+    color: {{tab_text}};
     font-weight: 600;
     font-size: 12px;
     border-radius: 14px;
@@ -116,14 +116,14 @@ QWidget#typeBtnWidget QToolButton {
 QWidget#typeBtnWidget QToolButton:hover,
 QWidget#typeBtnWidget QToolButton:pressed,
 QWidget#typeBtnWidget QToolButton:checked {
-    background-color: rgba(255, 255, 255, 0.95);
-    border: 2px solid #4A90E2;
+    background-color: {{type_checked_bg}};
+    border: 2px solid {{accent_blue}};
     outline: none;
 }
 
 QToolButton#countArea:hover {
-    background-color: rgba(255, 255, 255, 0.30);
-    border-color: rgba(74, 144, 226, 0.22);
+    background-color: {{badge_bg_hover}};
+    border-color: {{badge_border_hover}};
 }
 
 QToolButton#countArea {
@@ -132,4 +132,31 @@ QToolButton#countArea {
 
 QToolButton#countArea:focus {
     outline: none;
+}
+
+/* Menu and tooltip */
+QMenu {
+    background-color: {{menu_bg}};
+    border: 1px solid {{menu_border}};
+    padding: 6px 6px;
+    color: {{menu_text}};
+}
+QMenu::item {
+    padding: 6px 26px 6px 24px;
+    border-radius: 6px;
+}
+QMenu::item:selected {
+    background-color: {{menu_selected_bg}};
+    color: {{menu_selected_text}};
+}
+QMenu::separator {
+    height: 1px;
+    background-color: {{menu_border}};
+    margin: 4px 8px;
+}
+
+QToolTip {
+    color: {{text_primary}};
+    background-color: {{tooltip_bg}};
+    border: 1px solid {{tooltip_border}};
 }

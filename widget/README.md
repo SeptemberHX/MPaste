@@ -32,6 +32,7 @@ update: 修改本目录文件时，同步更新本 README。
 - 若本目录结构或职责发生变化，请同步更新本 README。
 
 ## Recent Notes
+- UI components now listen to ThemeManager for theme updates instead of coordinating via the main window.
 - ???????????/??/?????????????????????
 
 - `ClipboardItemPreviewDialog` now provides a larger centered preview window for rich text, plain text, images, and files; it is read-only but still allows selection and copy, can be opened from the item preview menu action or the Space key on the current supported selection, and pressing Space again closes it.

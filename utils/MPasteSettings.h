@@ -75,6 +75,9 @@ public:
 
     void saveSettings();
 
+signals:
+    void themeModeChanged(MPasteSettings::ThemeMode mode);
+
 private:
     MPasteSettings();
     void loadSettings();

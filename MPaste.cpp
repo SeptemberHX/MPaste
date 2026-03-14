@@ -14,6 +14,7 @@
 #include "utils/SingleApplication.h"
 #include "utils/PlatformRelated.h"
 #include "utils/HotKeyManager.h"
+#include "utils/ThemeManager.h"
 
 QScreen* getScreenForWindow(WId windowId) {
     if (windowId) {
@@ -121,6 +122,8 @@ int main(int argc, char* argv[]) {
         } else {
             qWarning() << "Failed to load translation for" << locale;
         }
+
+        ThemeManager::instance()->initialize();
 
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");

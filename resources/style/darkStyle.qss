@@ -13,7 +13,7 @@ QWidget#pasteWidget,
 QWidget#pasteWidget QLabel,
 QWidget#pasteWidget QToolButton,
 QWidget#pasteWidget QPushButton {
-    color: #D6DEE8;
+    color: {{text_primary}};
 }
 
 QToolButton#clipboardButton,
@@ -24,57 +24,57 @@ QToolButton#linkTypeBtn,
 QToolButton#imageTypeBtn,
 QToolButton#richTextTypeBtn,
 QToolButton#fileTypeBtn {
-    color: #D6DEE8;
+    color: {{tab_text}};
 }
 
 #firstButton:hover, #lastButton:hover,
 #firstButton:selected, #lastButton:selected,
 #searchButton:selected, #searchButton:hover,
 #menuButton:selected, #menuButton:hover {
-    background-color: rgba(28, 34, 44, 0.92);
+    background-color: {{top_hover_bg}};
 }
 
 /* Input box */
 QLineEdit {
-    border-color: #3A4655;
-    background-color: rgba(24, 29, 36, 0.95);
-    color: #E6EDF5;
+    border-color: {{line_edit_border}};
+    background-color: {{line_edit_bg}};
+    color: {{text_primary}};
 }
 
 QLineEdit:focus {
-    border-color: #4A90E2;
+    border-color: {{line_edit_border_focus}};
 }
 
 QLineEdit::placeholder {
-    color: rgba(214, 222, 232, 0.55);
+    color: {{text_secondary}};
 }
 
 /* Count badge */
 QToolButton#countArea {
-    background-color: rgba(20, 26, 34, 0.55);
-    color: #F2F6FB;
-    border: 1px solid rgba(116, 154, 214, 0.25);
+    background-color: {{badge_bg}};
+    color: {{badge_text}};
+    border: 1px solid {{badge_border}};
 }
 
 QToolButton#countArea:hover {
-    background-color: rgba(30, 38, 48, 0.7);
-    border-color: rgba(116, 154, 214, 0.35);
+    background-color: {{badge_bg_hover}};
+    border-color: {{badge_border_hover}};
 }
 
 /* Clipboard tabs */
 QWidget#clipboardBtnWidget QToolButton {
-    color: #F2F6FB;
+    color: {{tab_text}};
 }
 QWidget#clipboardBtnWidget QToolButton:!checked {
-    color: #F2F6FB;
+    color: {{tab_text}};
 }
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:hover,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:pressed,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:checked,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
-    background-color: rgba(28, 34, 44, 0.92);
-    border: 2px solid #4A90E2;
-    color: #F2F6FB;
+    background-color: {{tab_checked_bg}};
+    border: 2px solid {{accent_blue}};
+    color: {{tab_text}};
     outline: none;
 }
 
@@ -82,54 +82,34 @@ QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
 QWidget#clipboardBtnWidget QToolButton#staredButton:pressed,
 QWidget#clipboardBtnWidget QToolButton#staredButton:checked,
 QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
-    background-color: rgba(28, 34, 44, 0.92);
-    border: 2px solid #fc9867;
-    color: #F2F6FB;
+    background-color: {{tab_checked_bg}};
+    border: 2px solid {{accent_orange}};
+    color: {{tab_text}};
     outline: none;
 }
 
 /* Type filter pills */
 QWidget#typeBtnWidget QToolButton {
-    color: #F2F6FB;
+    color: {{tab_text}};
 }
 QWidget#typeBtnWidget QToolButton:!checked {
-    color: #F2F6FB;
+    color: {{tab_text}};
 }
 
 QWidget#typeBtnWidget QToolButton:hover,
 QWidget#typeBtnWidget QToolButton:pressed,
 QWidget#typeBtnWidget QToolButton:checked {
-    background-color: rgba(28, 34, 44, 0.92);
-    border: 2px solid #4A90E2;
-    color: #F2F6FB;
+    background-color: {{type_checked_bg}};
+    border: 2px solid {{accent_blue}};
+    color: {{tab_text}};
     outline: none;
 }
 
 /* About window */
 QWidget#AboutWidget {
-    background-color: rgba(26, 31, 38, 0.96);
-    border: 1px solid #2C3440;
+    background-color: {{menu_bg}};
+    border: 1px solid {{menu_border}};
 }
 QWidget#AboutWidget QLabel {
-    color: #D6DEE8;
-}
-
-/* Menu and tooltip */
-QMenu {
-    background-color: #1E232B;
-    border: 1px solid #2C3440;
-    color: #D6DEE8;
-}
-QMenu::item:selected {
-    background-color: #2D7FD3;
-    color: #FFFFFF;
-}
-QMenu::separator {
-    background-color: #2A313C;
-}
-
-QToolTip {
-    color: #E6EDF5;
-    background-color: #1E232B;
-    border: 1px solid #2C3440;
+    color: {{text_primary}};
 }

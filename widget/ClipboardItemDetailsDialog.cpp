@@ -28,7 +28,7 @@
 #include <QVBoxLayout>
 #include <QWindow>
 
-#include "utils/MPasteSettings.h"
+#include "utils/ThemeManager.h"
 
 namespace {
 constexpr int kDetailsDialogWidth = 860;
@@ -306,7 +306,8 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
 
     ui_.card = new QFrame(this);
     ui_.card->setObjectName("detailsCard");
-    applyTheme(MPasteSettings::getInst()->isDarkTheme());
+    applyTheme(ThemeManager::instance()->isDark());
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &ClipboardItemDetailsDialog::applyTheme);
 
     rootLayout->addWidget(ui_.card);
 

@@ -20,6 +20,8 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardMonitor.h` / `ClipboardMonitor.cpp`：系统剪贴板监听与采集逻辑。
 - `HotKeyManager.h` / `HotKeyManager.cpp`：全局快捷键注册与管理。
 - `MPasteSettings.h` / `MPasteSettings.cpp`：运行配置、持久化设置与默认值管理。
+- `ThemeManager.h` / `ThemeManager.cpp`????????????????????
+- `IconResolver.h` / `IconResolver.cpp`???????/???????
 - `OpenGraphFetcher.h` / `OpenGraphFetcher.cpp`：抓取网页 Open Graph 元数据，供链接卡片预览使用。
 - `PlatformRelated.h` / `PlatformRelated.cpp`：平台相关辅助能力，例如粘贴注入、窗口行为和系统交互。
 - `SingleApplication.h` / `SingleApplication.cpp`：单实例启动控制。
@@ -31,6 +33,7 @@ update: 修改本目录文件时，同步更新本 README。
 - 若本目录结构或职责发生变化，请同步更新本 README。
 
 ## Recent Notes
+- ThemeManager now centralizes app-wide theme switching, palette updates, and QSS token resolution.
 
 - `OpenGraphFetcher` now tracks whether a fetched image is a preview or favicon to preserve link preview thumbnails.
 - `ClipboardMonitor` currently prints detailed clipboard capture diagnostics (`dataChanged`, settle retries, MIME snapshot, duplicate suppression, and app-event emission) to help trace repeated copy handling.

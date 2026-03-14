@@ -28,6 +28,7 @@
 #include "ClipboardBoardModel.h"
 #include "CardMetrics.h"
 #include "utils/MPasteSettings.h"
+#include "utils/ThemeManager.h"
 
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
@@ -847,7 +848,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     const QRect bodyRect(cardRect.left(), topRect.bottom(), cardRect.width(), cardRect.height() - topHeight - effectiveFooterHeight);
     const QRect footerRect(cardRect.left(), cardRect.bottom() - effectiveFooterHeight + 1, cardRect.width(), effectiveFooterHeight);
 
-    const bool darkTheme = MPasteSettings::getInst()->isDarkTheme();
+    const bool darkTheme = ThemeManager::instance()->isDark();
     const QColor baseSurface = darkTheme ? QColor(QStringLiteral("#1C232C")) : QColor(QStringLiteral("#FFFFFF"));
     const QColor bodyTextColor = darkTheme ? QColor(QStringLiteral("#D8E1EB")) : QColor(QStringLiteral("#30343B"));
     const QColor linkTitleColor = darkTheme ? QColor(QStringLiteral("#E6EDF5")) : QColor(QStringLiteral("#555555"));

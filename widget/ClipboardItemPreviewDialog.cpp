@@ -29,7 +29,7 @@
 #include <QPointer>
 
 #include "data/LocalSaver.h"
-#include "utils/MPasteSettings.h"
+#include "utils/ThemeManager.h"
 namespace {
 constexpr int kPreviewDialogWidth = 980;
 constexpr int kPreviewDialogHeight = 760;
@@ -431,7 +431,8 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     ui_.browser->viewport()->setCursor(Qt::ArrowCursor);
     cardLayout->addWidget(ui_.browser, 1);
 
-    applyTheme(MPasteSettings::getInst()->isDarkTheme());
+    applyTheme(ThemeManager::instance()->isDark());
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &ClipboardItemPreviewDialog::applyTheme);
 }
 
 bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {

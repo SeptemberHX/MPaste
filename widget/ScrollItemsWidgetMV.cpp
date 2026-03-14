@@ -29,6 +29,8 @@
 #include <QShowEvent>
 #include <QTextDocument>
 #include <QToolButton>
+#include <QStyle>
+#include <QStyleFactory>
 #include <QGraphicsOpacityEffect>
 #include <QThread>
 #include <QTimer>
@@ -46,16 +48,10 @@
 #include "ui_ScrollItemsWidget.h"
 #include "utils/OpenGraphFetcher.h"
 #include "utils/PlatformRelated.h"
+#include "utils/ThemeManager.h"
+#include "utils/IconResolver.h"
 
 namespace {
-
-QString themedIconPath(const char *name, bool dark) {
-    const QString base = QString::fromLatin1(name);
-    if (dark) {
-        return QStringLiteral(":/resources/resources/%1_light.svg").arg(base);
-    }
-    return QStringLiteral(":/resources/resources/%1.svg").arg(base);
-}
 
 QString hoverButtonStyle(bool dark, int borderRadius, int padding) {
     const QString hoverColor = dark ? QStringLiteral("rgba(255, 255, 255, 0.12)")
@@ -73,32 +69,33 @@ QString hoverButtonStyle(bool dark, int borderRadius, int padding) {
     )").arg(borderRadius).arg(padding).arg(hoverColor);
 }
 
-QString contextMenuStyleSheet(bool dark) {
-    if (!dark) {
-        return QString();
+void applyMenuTheme(QMenu *menu) {
+    if (!menu) {
+        return;
     }
-    return QStringLiteral(R"(
-        QMenu {
-            background-color: #1E232B;
-            border: 1px solid #2C3440;
-            padding: 6px 6px;
-            color: #D6DEE8;
-        }
-        QMenu::item {
-            padding: 6px 26px 6px 24px;
-            border-radius: 6px;
-        }
-        QMenu::item:selected {
-            background-color: #2D7FD3;
-            color: #FFFFFF;
-        }
-        QMenu::separator {
-            height: 1px;
-            background-color: #2A313C;
-            margin: 4px 8px;
-        }
-    )");
+    const bool dark = ThemeManager::instance()->isDark();
+    QPalette pal = menu->palette();
+    if (dark) {
+        pal.setColor(QPalette::Window, QColor("#1E232B"));
+        pal.setColor(QPalette::WindowText, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Base, QColor("#1E232B"));
+        pal.setColor(QPalette::AlternateBase, QColor("#1A1F27"));
+        pal.setColor(QPalette::Text, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Button, QColor("#1E232B"));
+        pal.setColor(QPalette::ButtonText, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Highlight, QColor("#2D7FD3"));
+        pal.setColor(QPalette::HighlightedText, QColor("#FFFFFF"));
+    } else {
+        pal = qApp->palette();
+    }
+    menu->setPalette(pal);
+    menu->setStyleSheet(qApp->styleSheet());
+    if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
+        fusion->setParent(menu);
+        menu->setStyle(fusion);
+    }
 }
+
 
 class HoverActionBar final : public QWidget {
 public:
@@ -705,7 +702,8 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
         updateHoverActionBarPosition();
     });
 
-    applyTheme(MPasteSettings::getInst()->isDarkTheme());
+    applyTheme(ThemeManager::instance()->isDark());
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &ScrollItemsWidget::applyTheme);
 }
 
 ScrollItemsWidget::~ScrollItemsWidget() {
@@ -739,7 +737,7 @@ void ScrollItemsWidget::applyTheme(bool dark) {
     }
 
     if (hoverDetailsBtn_) {
-        hoverDetailsBtn_->setIcon(QIcon(themedIconPath("details", darkTheme_)));
+        hoverDetailsBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("details"), darkTheme_));
         hoverDetailsBtn_->setStyleSheet(buttonStyle);
     }
     if (hoverFavoriteBtn_) {
@@ -818,7 +816,7 @@ void ScrollItemsWidget::createHoverActionBar() {
     const int borderRadius = qMax(6, 8 * scale / 100);
     const int margin = qMax(4, 6 * scale / 100);
     const int spacing = qMax(2, 4 * scale / 100);
-    const bool dark = MPasteSettings::getInst()->isDarkTheme();
+    const bool dark = ThemeManager::instance()->isDark();
 
     auto *hoverBar = new HoverActionBar(listView_->viewport());
     hoverActionBar_ = hoverBar;
@@ -862,8 +860,8 @@ void ScrollItemsWidget::createHoverActionBar() {
         return button;
     };
 
-    hoverDetailsBtn_ = createButton(themedIconPath("details", dark), detailsLabel());
-    hoverFavoriteBtn_ = createButton(themedIconPath("star_outline", dark), tr("Add to favorites"));
+    hoverDetailsBtn_ = createButton(IconResolver::themedPath(QStringLiteral("details"), dark), detailsLabel());
+    hoverFavoriteBtn_ = createButton(IconResolver::themedPath(QStringLiteral("star_outline"), dark), tr("Add to favorites"));
     hoverDeleteBtn_ = createButton(QStringLiteral(":/resources/resources/delete.svg"), tr("Delete"));
 
     layout->addWidget(hoverDetailsBtn_);
@@ -929,12 +927,11 @@ void ScrollItemsWidget::updateHoverFavoriteButton(bool favorite) {
     if (!hoverFavoriteBtn_) {
         return;
     }
-    const QString iconPath = favorite
-        ? QStringLiteral(":/resources/resources/star_filled.svg")
-        : (darkTheme_
-            ? QStringLiteral(":/resources/resources/star_outline_light.svg")
-            : QStringLiteral(":/resources/resources/star_outline.svg"));
-    hoverFavoriteBtn_->setIcon(QIcon(iconPath));
+    if (favorite) {
+        hoverFavoriteBtn_->setIcon(QIcon(QStringLiteral(":/resources/resources/star_filled.svg")));
+    } else {
+        hoverFavoriteBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("star_outline"), darkTheme_));
+    }
     hoverFavoriteBtn_->setToolTip(favorite
         ? tr("Remove from favorites")
         : tr("Add to favorites"));
@@ -1134,14 +1131,14 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) { return url.isLocalFile(); });
 
     QMenu menu(this);
-    menu.setStyleSheet(contextMenuStyleSheet(dark));
-    menu.addAction(QIcon(themedIconPath("text_plain", dark)), plainTextPasteLabel(), [this]() {
+    applyMenuTheme(&menu);
+    menu.addAction(IconResolver::themedIcon(QStringLiteral("text_plain"), dark), plainTextPasteLabel(), [this]() {
         const ClipboardItem *selectedItem = selectedByEnter();
         if (selectedItem) {
             emit plainTextPasteRequested(*selectedItem);
         }
     });
-    menu.addAction(QIcon(themedIconPath("details", dark)), detailsLabel(), [this, proxyIndex]() {
+    menu.addAction(IconResolver::themedIcon(QStringLiteral("details"), dark), detailsLabel(), [this, proxyIndex]() {
         setCurrentProxyIndex(proxyIndex);
         const ClipboardItem *selectedItem = currentSelectedItem();
         if (!selectedItem) {
@@ -1151,7 +1148,7 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         emit detailsRequested(*selectedItem, sequenceInfo.first, sequenceInfo.second);
     });
     if (ClipboardItemPreviewDialog::supportsPreview(item)) {
-        menu.addAction(QIcon(themedIconPath("preview", dark)), tr("Preview"), [this]() {
+        menu.addAction(IconResolver::themedIcon(QStringLiteral("preview"), dark), tr("Preview"), [this]() {
             const ClipboardItem *selectedItem = currentSelectedItem();
             if (selectedItem) {
                 emit previewRequested(*selectedItem);

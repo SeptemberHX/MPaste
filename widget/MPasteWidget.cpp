@@ -22,10 +22,13 @@
 #include <QTextDocument>
 #include <QWheelEvent>
 #include <QWindow>
-#include <QStyleHints>
 #include <QPainter>
 #include <QPainterPath>
+#include <QStyle>
+#include <QStyleFactory>
 #include "utils/MPasteSettings.h"
+#include "utils/ThemeManager.h"
+#include "utils/IconResolver.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
 #include "utils/PlatformRelated.h"
@@ -58,6 +61,33 @@ QString menuText(const char *source, const QString &zhFallback) {
     return translated;
 }
 
+void applyMenuTheme(QMenu *menu) {
+    if (!menu) {
+        return;
+    }
+    const bool dark = ThemeManager::instance()->isDark();
+    QPalette pal = menu->palette();
+    if (dark) {
+        pal.setColor(QPalette::Window, QColor("#1E232B"));
+        pal.setColor(QPalette::WindowText, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Base, QColor("#1E232B"));
+        pal.setColor(QPalette::AlternateBase, QColor("#1A1F27"));
+        pal.setColor(QPalette::Text, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Button, QColor("#1E232B"));
+        pal.setColor(QPalette::ButtonText, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Highlight, QColor("#2D7FD3"));
+        pal.setColor(QPalette::HighlightedText, QColor("#FFFFFF"));
+    } else {
+        pal = qApp->palette();
+    }
+    menu->setPalette(pal);
+    menu->setStyleSheet(qApp->styleSheet());
+    if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
+        fusion->setParent(menu);
+        menu->setStyle(fusion);
+    }
+}
+
 QString elideClipboardLogText(QString text, int maxLen = 48) {
     text.replace(QLatin1Char('\n'), QLatin1Char(' '));
     text.replace(QLatin1Char('\r'), QLatin1Char(' '));
@@ -77,40 +107,6 @@ QString widgetItemSummary(const ClipboardItem &item) {
         .arg(item.getNormalizedUrls().size());
 }
 
-QString themedIconPath(const char *name, bool dark) {
-    const QString base = QString::fromLatin1(name);
-    if (dark) {
-        return QStringLiteral(":/resources/resources/%1_light.svg").arg(base);
-    }
-    return QStringLiteral(":/resources/resources/%1.svg").arg(base);
-}
-
-QString menuStyleSheet(bool dark) {
-    if (!dark) {
-        return QString();
-    }
-    return QStringLiteral(R"(
-        QMenu {
-            background-color: #1E232B;
-            border: 1px solid #2C3440;
-            padding: 6px 6px;
-            color: #D6DEE8;
-        }
-        QMenu::item {
-            padding: 6px 26px 6px 24px;
-            border-radius: 6px;
-        }
-        QMenu::item:selected {
-            background-color: #2D7FD3;
-            color: #FFFFFF;
-        }
-        QMenu::separator {
-            height: 1px;
-            background-color: #2A313C;
-            margin: 4px 8px;
-        }
-    )");
-}
 }
 
 #ifdef Q_OS_WIN
@@ -317,15 +313,7 @@ void MPasteWidget::initStyle() {
     ui_.ui->itemsWidget->setAttribute(Qt::WA_NoSystemBackground, false);
 
     setObjectName("pasteWidget");
-    applyTheme(MPasteSettings::getInst()->isDarkTheme());
-
-    if (auto *hints = QGuiApplication::styleHints()) {
-        connect(hints, &QStyleHints::colorSchemeChanged, this, [this]() {
-            if (MPasteSettings::getInst()->getThemeMode() == MPasteSettings::ThemeSystem) {
-                applyTheme(MPasteSettings::getInst()->isDarkTheme());
-            }
-        });
-    }
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &MPasteWidget::applyTheme);
 }
 
 void MPasteWidget::initUI() {
@@ -349,8 +337,6 @@ void MPasteWidget::initUI() {
             this, &MPasteWidget::shortcutChanged);
     connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
             this, &MPasteWidget::reloadHistoryBoards);
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::themeChanged,
-            this, [this]() { applyTheme(MPasteSettings::getInst()->isDarkTheme()); });
 
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
@@ -381,8 +367,13 @@ void MPasteWidget::initUI() {
     ui_.ui->richTextTypeBtn->setText(menuText("Rich Text", QStringLiteral("富文本")));
     ui_.ui->fileTypeBtn->setText(menuText("File", QStringLiteral("文件")));
 
+    ui_.ui->searchButton->setText(QString());
+    ui_.ui->searchButton->setIcon(IconResolver::themedIcon(QStringLiteral("search"), ThemeManager::instance()->isDark()));
+    ui_.ui->searchButton->setIconSize(QSize(16, 16));
+    ui_.ui->searchButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+
     ui_.ui->menuButton->setText(QString());
-    ui_.ui->menuButton->setIcon(QIcon(QStringLiteral(":/resources/resources/settings.svg")));
+    ui_.ui->menuButton->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), ThemeManager::instance()->isDark()));
     ui_.ui->menuButton->setIconSize(QSize(20, 20));
     ui_.ui->menuButton->setFixedSize(QSize(32, 28));
     ui_.ui->menuButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -423,7 +414,8 @@ void MPasteWidget::initUI() {
     ui_.ui->clipboardBtnWidget->installEventFilter(this);
     ui_.ui->typeBtnWidget->installEventFilter(this);
 
-    applyTheme(MPasteSettings::getInst()->isDarkTheme());
+    applyTheme(ThemeManager::instance()->isDark());
+
 }
 
 void MPasteWidget::initSearchAnimations() {
@@ -486,15 +478,19 @@ void MPasteWidget::syncSoundOutputDevice() {
 void MPasteWidget::initSystemTray() {
     ui_.trayIcon = new QSystemTrayIcon(this);
     ui_.trayIcon->setIcon(QIcon(":/resources/resources/mpaste.svg"));
-    ui_.trayIcon->setContextMenu(ui_.menu);
+    ui_.trayIcon->setContextMenu(ui_.trayMenu ? ui_.trayMenu : ui_.menu);
     ui_.trayIcon->show();
 }
 
 void MPasteWidget::initMenu() {
     ui_.menu = new QMenu(this);
+    ui_.trayMenu = new QMenu(this);
 
-    ui_.aboutAction = ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/info.svg")),
-        menuText("About", QStringLiteral("关于")), [this]() {
+    ui_.aboutAction = new QAction(
+        IconResolver::themedIcon(QStringLiteral("info"), ThemeManager::instance()->isDark()),
+        menuText("About", QString::fromUtf16(u"\u5173\u4E8E")),
+        this);
+    connect(ui_.aboutAction, &QAction::triggered, this, [this]() {
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
@@ -508,8 +504,11 @@ void MPasteWidget::initMenu() {
         ui_.aboutWidget->show();
     });
 
-    ui_.settingsAction = ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/settings.svg")),
-        menuText("Settings", QStringLiteral("设置")), [this]() {
+    ui_.settingsAction = new QAction(
+        IconResolver::themedIcon(QStringLiteral("settings"), ThemeManager::instance()->isDark()),
+        menuText("Settings", QString::fromUtf16(u"\u8BBE\u7F6E")),
+        this);
+    connect(ui_.settingsAction, &QAction::triggered, this, [this]() {
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
@@ -523,51 +522,30 @@ void MPasteWidget::initMenu() {
         ui_.settingsWidget->show();
     });
 
-    ui_.menu->addSeparator();
-    ui_.quitAction = ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/quit.svg")),
-        menuText("Quit", QStringLiteral("退出")), [this]() { qApp->exit(0); });
+    ui_.quitAction = new QAction(
+        QIcon(QStringLiteral(":/resources/resources/quit.svg")),
+        menuText("Quit", QString::fromUtf16(u"\u9000\u51FA")),
+        this);
+    connect(ui_.quitAction, &QAction::triggered, this, []() { qApp->exit(0); });
+
+    const auto addActions = [this](QMenu *menu) {
+        if (!menu) {
+            return;
+        }
+        menu->addAction(ui_.aboutAction);
+        menu->addAction(ui_.settingsAction);
+        menu->addSeparator();
+        menu->addAction(ui_.quitAction);
+    };
+    addActions(ui_.menu);
+    addActions(ui_.trayMenu);
+
+    applyMenuTheme(ui_.menu);
 }
 
 
 void MPasteWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
-    auto loadStyle = [](const QString &stylePath) -> QString {
-        QFile styleFile(stylePath);
-        if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
-            const QString style = QLatin1String(styleFile.readAll());
-            styleFile.close();
-            return style;
-        }
-        qWarning() << "Failed to load style sheet:" << styleFile.errorString();
-        return {};
-    };
-    const QString baseStyle = loadStyle(QStringLiteral(":/resources/resources/style/defaultStyle.qss"));
-    QString style = baseStyle;
-    if (darkTheme_) {
-        const QString darkStyle = loadStyle(QStringLiteral(":/resources/resources/style/darkStyle.qss"));
-        if (!darkStyle.isEmpty()) {
-            style.append(QStringLiteral("\n"));
-            style.append(darkStyle);
-        }
-        // Ensure tab text overrides defaultStyle.qss colors.
-        style.append(QStringLiteral(R"(
-QWidget#clipboardBtnWidget QToolButton,
-QWidget#clipboardBtnWidget QToolButton:!checked,
-QWidget#clipboardBtnWidget QToolButton:checked,
-QWidget#clipboardBtnWidget QToolButton:pressed,
-QWidget#clipboardBtnWidget QToolButton:hover,
-QWidget#typeBtnWidget QToolButton,
-QWidget#typeBtnWidget QToolButton:!checked,
-QWidget#typeBtnWidget QToolButton:checked,
-QWidget#typeBtnWidget QToolButton:pressed,
-QWidget#typeBtnWidget QToolButton:hover {
-    color: #FFFFFF;
-}
-)"));
-    }
-    if (!style.isEmpty()) {
-        setStyleSheet(style);
-    }
 
 #ifdef Q_OS_WIN
     const QColor tint = darkTheme_ ? QColor(12, 18, 26, 48) : QColor(231, 241, 244, 20);
@@ -575,188 +553,27 @@ QWidget#typeBtnWidget QToolButton:hover {
 #endif
 
     if (ui_.ui) {
-        ui_.ui->menuButton->setIcon(QIcon(themedIconPath("settings", darkTheme_)));
-        ui_.ui->searchButton->setIcon(QIcon(themedIconPath("search", darkTheme_)));
-        ui_.ui->firstButton->setIcon(QIcon(themedIconPath("first", darkTheme_)));
-        ui_.ui->lastButton->setIcon(QIcon(themedIconPath("last", darkTheme_)));
-
-        const QColor tabText = darkTheme_ ? QColor("#D6DEE8") : QColor("#2C3E50");
-        auto applyTabPalette = [tabText](QAbstractButton *button) {
-            if (!button) {
-                return;
-            }
-            QPalette pal = button->palette();
-            pal.setColor(QPalette::ButtonText, tabText);
-            pal.setColor(QPalette::Text, tabText);
-            pal.setColor(QPalette::WindowText, tabText);
-            button->setPalette(pal);
-        };
-
-        auto applyTabStyle = [applyTabPalette](QAbstractButton *button, const QString &style) {
-            if (!button) {
-                return;
-            }
-            applyTabPalette(button);
-            button->setStyleSheet(style);
-        };
-
-        const QString clearStyle;
-        const QString clipboardStyle = darkTheme_
-            ? QStringLiteral(R"(
-                QToolButton {
-                    padding: 4px 12px;
-                    color: #F2F6FB;
-                    font-weight: 600;
-                    font-size: 13px;
-                    text-transform: none;
-                    border-radius: 14px;
-                    background: transparent;
-                    border: none;
-                }
-                QToolButton:checked {
-                    background-color: rgba(74, 144, 226, 0.44);
-                    border: 2px solid #4A90E2;
-                    color: #F2F6FB;
-                    outline: none;
-                }
-                QToolButton:hover:!checked {
-                    background-color: rgba(255, 255, 255, 0.12);
-                }
-                QToolButton:pressed {
-                    background-color: rgba(74, 144, 226, 0.52);
-                }
-            )")
-            : clearStyle;
-        const QString staredStyle = darkTheme_
-            ? QStringLiteral(R"(
-                QToolButton {
-                    padding: 4px 12px;
-                    color: #F2F6FB;
-                    font-weight: 600;
-                    font-size: 13px;
-                    text-transform: none;
-                    border-radius: 14px;
-                    background: transparent;
-                    border: none;
-                }
-                QToolButton:checked {
-                    background-color: rgba(252, 152, 103, 0.44);
-                    border: 2px solid #fc9867;
-                    color: #F2F6FB;
-                    outline: none;
-                }
-                QToolButton:hover:!checked {
-                    background-color: rgba(255, 255, 255, 0.12);
-                }
-                QToolButton:pressed {
-                    background-color: rgba(252, 152, 103, 0.52);
-                }
-            )")
-            : clearStyle;
-        const QString typeStyle = darkTheme_
-            ? QStringLiteral(R"(
-                QToolButton {
-                    padding: 4px 10px;
-                    color: #F2F6FB;
-                    font-weight: 600;
-                    font-size: 12px;
-                    border-radius: 14px;
-                    background: transparent;
-                    border: none;
-                }
-                QToolButton:checked {
-                    background-color: rgba(74, 144, 226, 0.34);
-                    border: 2px solid #4A90E2;
-                    color: #F2F6FB;
-                    outline: none;
-                }
-                QToolButton:hover:!checked {
-                    background-color: rgba(255, 255, 255, 0.10);
-                }
-                QToolButton:pressed {
-                    background-color: rgba(74, 144, 226, 0.50);
-                }
-            )")
-            : clearStyle;
-
-        applyTabStyle(ui_.ui->clipboardButton, clipboardStyle);
-        applyTabStyle(ui_.ui->staredButton, staredStyle);
-        applyTabStyle(ui_.ui->allTypeBtn, typeStyle);
-        applyTabStyle(ui_.ui->textTypeBtn, typeStyle);
-        applyTabStyle(ui_.ui->linkTypeBtn, typeStyle);
-        applyTabStyle(ui_.ui->imageTypeBtn, typeStyle);
-        applyTabStyle(ui_.ui->richTextTypeBtn, typeStyle);
-        applyTabStyle(ui_.ui->fileTypeBtn, typeStyle);
-
-        if (ui_.ui->countArea) {
-            ui_.ui->countArea->setStyleSheet(darkTheme_
-                ? QStringLiteral("color: #F2F6FB;")
-                : QString());
-        }
-
-        const QString hoverDarkBg = QStringLiteral("rgba(28, 34, 44, 0.92)");
-        if (ui_.ui->firstButton) {
-            ui_.ui->firstButton->setStyleSheet(darkTheme_
-                ? QStringLiteral(R"(
-                    QPushButton { background: transparent; border: none; border-radius: 10px; }
-                    QPushButton:hover, QPushButton:checked { background-color: %1; }
-                )").arg(hoverDarkBg)
-                : QString());
-        }
-        if (ui_.ui->lastButton) {
-            ui_.ui->lastButton->setStyleSheet(darkTheme_
-                ? QStringLiteral(R"(
-                    QPushButton { background: transparent; border: none; border-radius: 10px; }
-                    QPushButton:hover, QPushButton:checked { background-color: %1; }
-                )").arg(hoverDarkBg)
-                : QString());
-        }
-        if (ui_.ui->searchButton) {
-            ui_.ui->searchButton->setStyleSheet(darkTheme_
-                ? QStringLiteral(R"(
-                    QToolButton { background: transparent; border: none; border-radius: 10px; }
-                    QToolButton:hover, QToolButton:checked { background-color: %1; }
-                )").arg(hoverDarkBg)
-                : QString());
-        }
-        if (ui_.ui->menuButton) {
-            ui_.ui->menuButton->setStyleSheet(darkTheme_
-                ? QStringLiteral(R"(
-                    QToolButton { background: transparent; border: none; border-radius: 10px; }
-                    QToolButton:hover, QToolButton:checked { background-color: %1; }
-                )").arg(hoverDarkBg)
-                : QString());
-        }
+        ui_.ui->menuButton->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), darkTheme_));
+        ui_.ui->searchButton->setIcon(QIcon(darkTheme_
+            ? QStringLiteral(":/resources/resources/search_light.svg")
+            : QStringLiteral(":/resources/resources/search.svg")));
+        ui_.ui->searchButton->setIconSize(QSize(16, 16));
+        ui_.ui->searchButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        ui_.ui->searchButton->setText(QString());
+        ui_.ui->firstButton->setIcon(IconResolver::themedIcon(QStringLiteral("first"), darkTheme_));
+        ui_.ui->lastButton->setIcon(IconResolver::themedIcon(QStringLiteral("last"), darkTheme_));
     }
 
     if (ui_.aboutAction) {
-        ui_.aboutAction->setIcon(QIcon(themedIconPath("info", darkTheme_)));
+        ui_.aboutAction->setIcon(IconResolver::themedIcon(QStringLiteral("info"), darkTheme_));
     }
     if (ui_.settingsAction) {
-        ui_.settingsAction->setIcon(QIcon(themedIconPath("settings", darkTheme_)));
+        ui_.settingsAction->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), darkTheme_));
     }
     if (ui_.quitAction) {
         ui_.quitAction->setIcon(QIcon(QStringLiteral(":/resources/resources/quit.svg")));
     }
-    if (ui_.menu) {
-        ui_.menu->setStyleSheet(menuStyleSheet(darkTheme_));
-    }
-
-    if (ui_.settingsWidget) {
-        ui_.settingsWidget->applyTheme(darkTheme_);
-    }
-    if (ui_.previewDialog) {
-        ui_.previewDialog->applyTheme(darkTheme_);
-    }
-    if (ui_.detailsDialog) {
-        ui_.detailsDialog->applyTheme(darkTheme_);
-    }
-    for (auto *boardWidget : ui_.boardWidgetMap) {
-        if (boardWidget) {
-            boardWidget->applyTheme(darkTheme_);
-        }
-    }
-
+    applyMenuTheme(ui_.menu);
     update();
 }
 
