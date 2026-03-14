@@ -14,7 +14,7 @@
 #include <QSet>
 #include <QWidget>
 
-#include <data/LocalSaver.h>
+#include "utils/ClipboardBoardService.h"
 
 #include "data/ClipboardItem.h"
 
@@ -23,7 +23,7 @@ class QModelIndex;
 class QResizeEvent;
 class QScrollBar;
 class QTimer;
-class QThread;
+class QHideEvent;
 class QWheelEvent;
 class QShowEvent;
 class QListView;
@@ -77,6 +77,7 @@ public:
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
 
 signals:
     void doubleClicked(const ClipboardItem &item);
@@ -91,27 +92,26 @@ private slots:
     void handleCurrentIndexChanged(const QModelIndex &current, const QModelIndex &previous);
     void handleActivatedIndex(const QModelIndex &index);
     void showContextMenu(const QPoint &pos);
+    void handleLoadedItems(const QList<QPair<QString, ClipboardItem>> &items);
+    void handlePendingItemReady(const QString &expectedName, const ClipboardItem &item);
+    void handleKeywordMatched(const QSet<QString> &matchedNames, quint64 token);
+    void handleTotalItemCountChanged(int total);
+    void handleDeferredLoadCompleted();
 
 private:
     QModelIndex currentProxyIndex() const;
     QModelIndex proxyIndexForSourceRow(int sourceRow) const;
     void setCurrentProxyIndex(const QModelIndex &index);
-    QString getItemFilePath(const ClipboardItem &item);
     void setFirstVisibleItemSelected();
     void applyFilters();
-    void saveItem(const ClipboardItem &item);
-    void checkSaveDir();
     void moveItemToFirst(int sourceRow);
-    QString saveDir();
     void animateScrollTo(int targetValue);
     int wheelStepPixels() const;
-    void loadNextBatch(int batchSize);
     void ensureAllItemsLoaded();
     void maybeLoadMoreItems();
     int itemCountForDisplay() const;
     void trimExpiredItems();
     void prepareLoadFromSaveDir();
-    void continueDeferredLoad();
     bool shouldKeepDeferredLoading() const;
     void refreshContentWidthHint();
     void updateContentWidthHint();
@@ -122,11 +122,6 @@ private:
     void updateHoverActionBarPosition();
     void hideHoverActionBar(bool animated = true);
     void updateHoverFavoriteButton(bool favorite);
-    void scheduleDeferredLoadBatch();
-    void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchPayloads);
-    void processDeferredLoadedItems();
-    void waitForDeferredRead();
-    void processPendingItemAsync(const ClipboardItem &item, const QString &targetName = QString());
     void startAsyncKeywordSearch();
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
     QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
@@ -137,16 +132,12 @@ private:
     QString category;
     QString borderColor;
 
-    LocalSaver *saver;
+    ClipboardBoardService *boardService_ = nullptr;
     QListView *listView_ = nullptr;
     ClipboardBoardModel *boardModel_ = nullptr;
     ClipboardBoardProxyModel *proxyModel_ = nullptr;
     ClipboardCardDelegate *cardDelegate_ = nullptr;
     QPropertyAnimation *scrollAnimation;
-    QTimer *deferredLoadTimer_ = nullptr;
-    QThread *deferredLoadThread_ = nullptr;
-    QThread *keywordSearchThread_ = nullptr;
-    QList<QThread*> processingThreads_;
     QWidget *leftEdgeFadeOverlay_ = nullptr;
     QWidget *rightEdgeFadeOverlay_ = nullptr;
     QWidget *hoverActionBar_ = nullptr;
@@ -158,12 +149,8 @@ private:
     QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;
     QSet<QString> pendingLinkPreviewUrls_;
-    QList<QPair<QString, QByteArray>> deferredLoadedItems_;
-    QStringList pendingLoadFilePaths_;
     int edgeContentPadding_ = 0;
     int edgeFadeWidth_ = 0;
-    int totalItemCount_ = 0;
-    bool deferredLoadActive_ = false;
     quint64 keywordSearchToken_ = 0;
     QSet<QString> asyncKeywordMatchedNames_;
     mutable ClipboardItem selectedItemCache_;

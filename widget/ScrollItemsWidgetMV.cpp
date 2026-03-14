@@ -1,38 +1,23 @@
-// input: Depends on ScrollItemsWidget.h, LocalSaver, Qt model/view APIs, and delegate-based card painting.
+// input: Depends on ScrollItemsWidget.h, ClipboardBoardService, Qt model/view APIs, and delegate-based card painting.
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
 // update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar).
 // note: Added dark theme rendering hooks.
-#include <QCoreApplication>
-#include <QDir>
-#include <QElapsedTimer>
-#include <QEventLoop>
-#include <QFile>
-#include <QFileInfo>
 #include <QGuiApplication>
-#include <QBuffer>
-#include <QDebug>
-#include <QImage>
-#include <QImageReader>
 #include <QItemSelectionModel>
 #include <QListView>
 #include <QLocale>
 #include <QMenu>
 #include <QPainter>
-#include <QPointer>
 #include <QPropertyAnimation>
-#include <QRegularExpression>
 #include <QResizeEvent>
 #include <QScrollBar>
-#include <QScreen>
 #include <QScroller>
 #include <QShowEvent>
-#include <QTextDocument>
 #include <QToolButton>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QGraphicsOpacityEffect>
-#include <QThread>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -194,48 +179,6 @@ static void enableBlurBehindForWidget(HWND hwnd, const QColor &tintColor) {
     setWCA(hwnd, &data);
 }
 #endif
-qreal htmlPreviewZoom(qreal devicePixelRatio) {
-    return qMax<qreal>(1.0, devicePixelRatio);
-}
-
-QDateTime itemTimestampForFile(const QFileInfo &info) {
-    bool ok = false;
-    const qint64 epochMs = info.completeBaseName().toLongLong(&ok);
-    if (ok && epochMs > 0) {
-        const QDateTime parsed = QDateTime::fromMSecsSinceEpoch(epochMs);
-        if (parsed.isValid()) {
-            return parsed;
-        }
-    }
-    return info.lastModified();
-}
-
-bool isExpiredForCutoff(const QFileInfo &info, const QDateTime &cutoff) {
-    return cutoff.isValid() && itemTimestampForFile(info) < cutoff;
-}
-
-QString firstHtmlImageSource(const QString &html) {
-    static const QRegularExpression srcRegex(
-        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch match = srcRegex.match(html);
-    return match.hasMatch() ? match.captured(1).trimmed() : QString();
-}
-
-qreal maxScreenDevicePixelRatio() {
-    qreal dpr = 1.0;
-    const QList<QScreen *> screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen) {
-            dpr = qMax(dpr, screen->devicePixelRatio());
-        }
-    }
-    return dpr;
-}
-
-bool isVeryTallImage(const QSize &size) {
-    return size.isValid() && size.height() >= qMax(4000, size.width() * 4);
-}
 
 bool looksBrokenTranslation(const QString &text) {
     if (text.isEmpty()) {
@@ -366,239 +309,6 @@ public:
     }
 };
 
-QPixmap buildCardThumbnail(const ClipboardItem &item) {
-    if (item.hasThumbnail()) {
-        return item.thumbnail();
-    }
-
-    const QPixmap fullImage = item.getImage();
-    if (fullImage.isNull()) {
-        return QPixmap();
-    }
-
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    qreal thumbnailDpr = 1.0;
-    const QList<QScreen *> screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen) {
-            thumbnailDpr = qMax(thumbnailDpr, screen->devicePixelRatio());
-        }
-    }
-    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
-    if (!pixelTargetSize.isValid()) {
-        return fullImage;
-    }
-
-    QPixmap scaled = fullImage.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    if (scaled.isNull()) {
-        return QPixmap();
-    }
-
-    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
-    QPixmap thumbnail = scaled.copy(x, y,
-                                    qMin(scaled.width(), pixelTargetSize.width()),
-                                    qMin(scaled.height(), pixelTargetSize.height()));
-    thumbnail.setDevicePixelRatio(thumbnailDpr);
-    return thumbnail;
-}
-
-QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
-    const QMimeData *mimeData = item.getMimeData();
-    if (!mimeData || !mimeData->hasHtml()) {
-        return QPixmap();
-    }
-
-    const QString html = mimeData->html();
-    if (html.isEmpty()) {
-        return QPixmap();
-    }
-
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    qreal thumbnailDpr = 1.0;
-    const QList<QScreen *> screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen) {
-            thumbnailDpr = qMax(thumbnailDpr, screen->devicePixelRatio());
-        }
-    }
-
-    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
-    if (!pixelTargetSize.isValid()) {
-        return QPixmap();
-    }
-
-    const qreal previewZoom = htmlPreviewZoom(thumbnailDpr);
-    const int leftPadding = qRound(10 * thumbnailDpr);
-    const int rightPadding = qRound(10 * thumbnailDpr);
-    const int topPadding = qRound(6 * thumbnailDpr);
-    const int bottomPadding = qRound(2 * thumbnailDpr);
-    const QSize contentSize(
-        qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
-        qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
-    const QSizeF layoutSize(
-        qMax(1.0, contentSize.width() / previewZoom),
-        qMax(1.0, contentSize.height() / previewZoom));
-
-    QTextDocument document;
-    document.setDocumentMargin(0);
-    document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
-    const QString imageSource = firstHtmlImageSource(html);
-    const QByteArray imageBytes = item.imagePayloadBytesFast();
-    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
-        QImage image;
-        if (image.loadFromData(imageBytes)) {
-            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
-        }
-    }
-    document.setHtml(html);
-    document.setPageSize(layoutSize);
-    document.setTextWidth(layoutSize.width());
-
-    QPixmap snapshot(pixelTargetSize);
-    snapshot.fill(Qt::transparent);
-
-    QPainter painter(&snapshot);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.translate(leftPadding, topPadding);
-    painter.scale(previewZoom, previewZoom);
-    painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    painter.end();
-
-    snapshot.setDevicePixelRatio(thumbnailDpr);
-    return snapshot;
-}
-
-QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targetDpr) {
-    if (imageBytes.isEmpty()) {
-        return QImage();
-    }
-
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    const QSize pixelTargetSize = QSize(cardW, cardH) * targetDpr;
-    if (!pixelTargetSize.isValid()) {
-        return QImage();
-    }
-
-    QBuffer buffer;
-    buffer.setData(imageBytes);
-    if (!buffer.open(QIODevice::ReadOnly)) {
-        return QImage();
-    }
-
-    QImageReader reader(&buffer);
-    reader.setDecideFormatFromContent(true);
-
-    const QSize sourceSize = reader.size();
-    if (sourceSize.isValid()) {
-        const QSize scaledSize = sourceSize.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding);
-        if (scaledSize.isValid()) {
-            reader.setScaledSize(scaledSize);
-        }
-    }
-
-    QImage decoded = reader.read();
-    if (decoded.isNull()) {
-        decoded.loadFromData(imageBytes);
-    }
-    if (decoded.isNull()) {
-        return QImage();
-    }
-
-    if (decoded.size() != pixelTargetSize) {
-        decoded = decoded.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    }
-    if (decoded.isNull()) {
-        return QImage();
-    }
-
-    const int x = qMax(0, (decoded.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (decoded.height() - pixelTargetSize.height()) / 2);
-    QImage thumbnail = decoded.copy(x, y,
-                                    qMin(decoded.width(), pixelTargetSize.width()),
-                                    qMin(decoded.height(), pixelTargetSize.height()));
-    thumbnail.setDevicePixelRatio(targetDpr);
-    return thumbnail;
-}
-
-QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray &imageBytes, qreal thumbnailDpr) {
-    if (html.isEmpty()) {
-        return QImage();
-    }
-
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
-    if (!pixelTargetSize.isValid()) {
-        return QImage();
-    }
-
-    const qreal previewZoom = htmlPreviewZoom(thumbnailDpr);
-    const int leftPadding = qRound(10 * thumbnailDpr);
-    const int rightPadding = qRound(10 * thumbnailDpr);
-    const int topPadding = qRound(6 * thumbnailDpr);
-    const int bottomPadding = qRound(2 * thumbnailDpr);
-    const QSize contentSize(
-        qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
-        qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
-    const QSizeF layoutSize(
-        qMax(1.0, contentSize.width() / previewZoom),
-        qMax(1.0, contentSize.height() / previewZoom));
-
-    QTextDocument document;
-    document.setDocumentMargin(0);
-    document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
-    const QString imageSource = firstHtmlImageSource(html);
-    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
-        QImage image;
-        if (image.loadFromData(imageBytes)) {
-            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
-        }
-    }
-    document.setHtml(html);
-    document.setPageSize(layoutSize);
-    document.setTextWidth(layoutSize.width());
-
-    QImage snapshot(pixelTargetSize, QImage::Format_ARGB32_Premultiplied);
-    snapshot.fill(Qt::transparent);
-
-    QPainter painter(&snapshot);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.translate(leftPadding, topPadding);
-    painter.scale(previewZoom, previewZoom);
-    painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    painter.end();
-
-    snapshot.setDevicePixelRatio(thumbnailDpr);
-    return snapshot;
-}
-
-struct PendingItemProcessingResult {
-    QImage thumbnailImage;
-};
-
-ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {
-    ClipboardItem item(source);
-    if (!item.hasThumbnail() && item.getContentType() == ClipboardItem::Image) {
-        const QPixmap thumbnail = buildCardThumbnail(item);
-        if (!thumbnail.isNull()) {
-            item.setThumbnail(thumbnail);
-        }
-    } else if (!item.hasThumbnail() && item.getContentType() == ClipboardItem::RichText) {
-        const QPixmap thumbnail = buildRichTextThumbnail(item);
-        if (!thumbnail.isNull()) {
-            item.setThumbnail(thumbnail);
-        }
-    }
-    return item;
-}
 }
 
 ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &borderColor, QWidget *parent)
@@ -606,7 +316,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
       ui(new Ui::ScrollItemsWidget),
       category(category),
       borderColor(borderColor),
-      saver(new LocalSaver()),
+      boardService_(new ClipboardBoardService(category, this)),
       scrollAnimation(nullptr) {
     ui->setupUi(this);
 
@@ -674,9 +384,11 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     scrollAnimation->setEasingCurve(QEasingCurve::OutQuad);
     scrollAnimation->setDuration(70);
 
-    deferredLoadTimer_ = new QTimer(this);
-    deferredLoadTimer_->setSingleShot(true);
-    connect(deferredLoadTimer_, &QTimer::timeout, this, &ScrollItemsWidget::continueDeferredLoad);
+    connect(boardService_, &ClipboardBoardService::itemsLoaded, this, &ScrollItemsWidget::handleLoadedItems);
+    connect(boardService_, &ClipboardBoardService::pendingItemReady, this, &ScrollItemsWidget::handlePendingItemReady);
+    connect(boardService_, &ClipboardBoardService::keywordMatched, this, &ScrollItemsWidget::handleKeywordMatched);
+    connect(boardService_, &ClipboardBoardService::totalItemCountChanged, this, &ScrollItemsWidget::handleTotalItemCountChanged);
+    connect(boardService_, &ClipboardBoardService::deferredLoadCompleted, this, &ScrollItemsWidget::handleDeferredLoadCompleted);
 
     connect(listView_->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &ScrollItemsWidget::handleCurrentIndexChanged);
@@ -707,18 +419,6 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
 }
 
 ScrollItemsWidget::~ScrollItemsWidget() {
-    deferredLoadActive_ = false;
-    if (deferredLoadThread_) {
-        deferredLoadThread_->wait();
-    }
-    if (keywordSearchThread_) {
-        keywordSearchThread_->wait();
-    }
-    for (QThread *thread : processingThreads_) {
-        if (thread) {
-            thread->wait();
-        }
-    }
     delete ui;
 }
 
@@ -1087,8 +787,8 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
             }
         }
 
-        if (boardModel_->updateItem(row, updated)) {
-            saveItem(updated);
+        if (boardModel_->updateItem(row, updated) && boardService_) {
+            boardService_->saveItem(updated);
         }
     });
     fetcher->handle();
@@ -1186,8 +886,46 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
     menu.exec(listView_->viewport()->mapToGlobal(pos));
 }
 
-QString ScrollItemsWidget::getItemFilePath(const ClipboardItem &item) {
-    return QDir::cleanPath(saveDir() + QDir::separator() + item.getName() + ".mpaste");
+void ScrollItemsWidget::handleLoadedItems(const QList<QPair<QString, ClipboardItem>> &items) {
+    if (items.isEmpty() || !boardModel_) {
+        return;
+    }
+
+    for (const auto &payload : items) {
+        appendLoadedItem(payload.first, payload.second);
+    }
+
+    setFirstVisibleItemSelected();
+    emit itemCountChanged(itemCountForDisplay());
+    updateContentWidthHint();
+}
+
+void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, const ClipboardItem &item) {
+    if (!boardModel_ || expectedName.isEmpty()) {
+        return;
+    }
+
+    const int row = boardModel_->rowForName(expectedName);
+    if (row >= 0) {
+        boardModel_->updateItem(row, item);
+    }
+}
+
+void ScrollItemsWidget::handleKeywordMatched(const QSet<QString> &matchedNames, quint64 token) {
+    if (token != keywordSearchToken_) {
+        return;
+    }
+    asyncKeywordMatchedNames_ = matchedNames;
+    applyFilters();
+}
+
+void ScrollItemsWidget::handleTotalItemCountChanged(int total) {
+    Q_UNUSED(total);
+    emit itemCountChanged(itemCountForDisplay());
+}
+
+void ScrollItemsWidget::handleDeferredLoadCompleted() {
+    refreshContentWidthHint();
 }
 
 void ScrollItemsWidget::setFirstVisibleItemSelected() {
@@ -1208,7 +946,8 @@ void ScrollItemsWidget::setFirstVisibleItemSelected() {
 }
 
 void ScrollItemsWidget::applyFilters() {
-    if ((!currentKeyword_.isEmpty() || currentTypeFilter_ != ClipboardItem::All) && !pendingLoadFilePaths_.isEmpty()) {
+    if ((!currentKeyword_.isEmpty() || currentTypeFilter_ != ClipboardItem::All)
+        && boardService_ && boardService_->hasPendingItems()) {
         ensureAllItemsLoaded();
     }
 
@@ -1220,21 +959,8 @@ void ScrollItemsWidget::applyFilters() {
     emit itemCountChanged(itemCountForDisplay());
 }
 
-void ScrollItemsWidget::saveItem(const ClipboardItem &item) {
-    checkSaveDir();
-    saver->saveToFile(item, getItemFilePath(item));
-}
-
-void ScrollItemsWidget::checkSaveDir() {
-    QDir dir;
-    const QString path = QDir::cleanPath(saveDir());
-    if (!dir.exists(path)) {
-        dir.mkpath(path);
-    }
-}
-
 void ScrollItemsWidget::moveItemToFirst(int sourceRow) {
-    if (sourceRow < 0 || !boardModel_) {
+    if (sourceRow < 0 || !boardModel_ || !boardService_) {
         return;
     }
 
@@ -1244,16 +970,12 @@ void ScrollItemsWidget::moveItemToFirst(int sourceRow) {
     }
 
     item.getMimeData();
-    item = prepareItemForDisplayAndSave(item);
-    saver->removeItem(getItemFilePath(boardModel_->itemAt(sourceRow)));
-    saveItem(item);
+    item = boardService_->prepareItemForSave(item);
+    boardService_->removeItemFile(boardService_->filePathForItem(boardModel_->itemAt(sourceRow)));
+    boardService_->saveItem(item);
     boardModel_->updateItem(sourceRow, item);
     boardModel_->moveItemToFront(sourceRow);
     setCurrentProxyIndex(proxyIndexForSourceRow(0));
-}
-
-QString ScrollItemsWidget::saveDir() {
-    return QDir::cleanPath(MPasteSettings::getInst()->getSaveDir() + QDir::separator() + category);
 }
 
 void ScrollItemsWidget::animateScrollTo(int targetValue) {
@@ -1284,44 +1006,16 @@ int ScrollItemsWidget::wheelStepPixels() const {
     return qMax(scrollbarStep, qMax(viewportStep, itemStep));
 }
 
-void ScrollItemsWidget::loadNextBatch(int batchSize) {
-    if (batchSize <= 0 || pendingLoadFilePaths_.isEmpty()) {
+void ScrollItemsWidget::ensureAllItemsLoaded() {
+    if (!boardService_) {
         return;
     }
-
-    const int count = qMin(batchSize, pendingLoadFilePaths_.size());
-    for (int i = 0; i < count; ++i) {
-        const QString filePath = pendingLoadFilePaths_.takeFirst();
-        ClipboardItem item = saver->loadFromFileLight(filePath);
-        if (item.getName().isEmpty()) {
-            saver->removeItem(filePath);
-            if (totalItemCount_ > 0) {
-                --totalItemCount_;
-            }
-            continue;
-        }
-
-        appendLoadedItem(filePath, item);
-    }
-
-    setFirstVisibleItemSelected();
-    emit itemCountChanged(itemCountForDisplay());
-    updateContentWidthHint();
-}
-
-void ScrollItemsWidget::ensureAllItemsLoaded() {
-    deferredLoadActive_ = false;
-    deferredLoadTimer_->stop();
-    waitForDeferredRead();
-    processDeferredLoadedItems();
-    while (!pendingLoadFilePaths_.isEmpty()) {
-        loadNextBatch(LOAD_BATCH_SIZE);
-    }
+    boardService_->ensureAllItemsLoaded(LOAD_BATCH_SIZE);
 }
 
 void ScrollItemsWidget::maybeLoadMoreItems() {
-    if (deferredLoadActive_ || pendingLoadFilePaths_.isEmpty() || !currentKeyword_.isEmpty()
-        || currentTypeFilter_ != ClipboardItem::All) {
+    if (!boardService_ || boardService_->deferredLoadActive() || !boardService_->hasPendingItems()
+        || !currentKeyword_.isEmpty() || currentTypeFilter_ != ClipboardItem::All) {
         return;
     }
 
@@ -1330,15 +1024,15 @@ void ScrollItemsWidget::maybeLoadMoreItems() {
         return;
     }
 
-    while (!pendingLoadFilePaths_.isEmpty()) {
+    while (boardService_->hasPendingItems()) {
         const int remaining = scrollBar->maximum() - scrollBar->value();
         if (scrollBar->maximum() > 0 && remaining > LOAD_MORE_THRESHOLD_PX) {
             break;
         }
 
-        const int pendingBefore = pendingLoadFilePaths_.size();
-        loadNextBatch(LOAD_BATCH_SIZE);
-        if (pendingLoadFilePaths_.size() == pendingBefore || scrollBar->maximum() > 0) {
+        const int pendingBefore = boardService_->pendingCount();
+        boardService_->loadNextBatch(LOAD_BATCH_SIZE);
+        if (boardService_->pendingCount() == pendingBefore || scrollBar->maximum() > 0) {
             break;
         }
     }
@@ -1346,28 +1040,18 @@ void ScrollItemsWidget::maybeLoadMoreItems() {
 
 int ScrollItemsWidget::itemCountForDisplay() const {
     if (currentKeyword_.isEmpty() && currentTypeFilter_ == ClipboardItem::All) {
-        return totalItemCount_;
+        return boardService_ ? boardService_->totalItemCount() : 0;
     }
     return proxyModel_ ? proxyModel_->rowCount() : 0;
 }
 
 void ScrollItemsWidget::trimExpiredItems() {
-    if (category == MPasteSettings::STAR_CATEGORY_NAME) {
+    if (category == MPasteSettings::STAR_CATEGORY_NAME || !boardService_) {
         return;
     }
 
     const QDateTime cutoff = MPasteSettings::getInst()->historyRetentionCutoff();
-    while (!pendingLoadFilePaths_.isEmpty()) {
-        const QFileInfo info(pendingLoadFilePaths_.last());
-        if (!isExpiredForCutoff(info, cutoff)) {
-            break;
-        }
-
-        saver->removeItem(pendingLoadFilePaths_.takeLast());
-        if (totalItemCount_ > 0) {
-            --totalItemCount_;
-        }
-    }
+    boardService_->trimExpiredPendingItems(cutoff);
 
     while (boardModel_ && boardModel_->rowCount() > 0) {
         const ClipboardItem lastItem = boardModel_->itemAt(boardModel_->rowCount() - 1);
@@ -1375,54 +1059,28 @@ void ScrollItemsWidget::trimExpiredItems() {
             break;
         }
 
-        saver->removeItem(getItemFilePath(lastItem));
+        boardService_->deleteItemByPath(boardService_->filePathForItem(lastItem));
         boardModel_->removeItemAt(boardModel_->rowCount() - 1);
-        if (totalItemCount_ > 0) {
-            --totalItemCount_;
-        }
     }
 
     setFirstVisibleItemSelected();
 }
 
 void ScrollItemsWidget::prepareLoadFromSaveDir() {
-    checkSaveDir();
-    boardModel_->clear();
-    pendingLoadFilePaths_.clear();
-    totalItemCount_ = 0;
-    selectedItemCache_ = ClipboardItem();
-
-    QDir saveDir(this->saveDir());
-    const QFileInfoList fileInfos = saveDir.entryInfoList(QStringList() << "*.mpaste", QDir::Files, QDir::Name | QDir::Reversed);
-    for (const QFileInfo &info : fileInfos) {
-        if (LocalSaver::isCurrentFormatFile(info.filePath())) {
-            pendingLoadFilePaths_ << info.filePath();
-        }
-    }
-
-    totalItemCount_ = pendingLoadFilePaths_.size();
-    trimExpiredItems();
-    updateContentWidthHint();
-}
-
-void ScrollItemsWidget::continueDeferredLoad() {
-    if (!deferredLoadActive_) {
+    if (!boardModel_ || !boardService_) {
         return;
     }
 
-    processDeferredLoadedItems();
-    if (deferredLoadedItems_.isEmpty() && !deferredLoadThread_ && !pendingLoadFilePaths_.isEmpty()) {
-        scheduleDeferredLoadBatch();
-    }
-
-    if (deferredLoadedItems_.isEmpty() && !deferredLoadThread_ && pendingLoadFilePaths_.isEmpty()) {
-        deferredLoadActive_ = false;
-        refreshContentWidthHint();
-    }
+    boardModel_->clear();
+    selectedItemCache_ = ClipboardItem();
+    asyncKeywordMatchedNames_.clear();
+    boardService_->refreshIndex();
+    updateContentWidthHint();
 }
 
 bool ScrollItemsWidget::shouldKeepDeferredLoading() const {
-    if (pendingLoadFilePaths_.isEmpty() || !currentKeyword_.isEmpty() || currentTypeFilter_ != ClipboardItem::All) {
+    if (!boardService_ || !boardService_->hasPendingItems() || !currentKeyword_.isEmpty()
+        || currentTypeFilter_ != ClipboardItem::All) {
         return false;
     }
 
@@ -1498,211 +1156,8 @@ void ScrollItemsWidget::updateEdgeFadeOverlays() {
     rightEdgeFadeOverlay_->show();
 }
 
-void ScrollItemsWidget::scheduleDeferredLoadBatch() {
-    if (!deferredLoadActive_ || deferredLoadThread_ || pendingLoadFilePaths_.isEmpty()) {
-        return;
-    }
-
-    const int count = qMin(DEFERRED_LOAD_BATCH_SIZE, pendingLoadFilePaths_.size());
-    QStringList batchPaths;
-    batchPaths.reserve(count);
-    for (int i = 0; i < count; ++i) {
-        batchPaths << pendingLoadFilePaths_.takeFirst();
-    }
-
-    QPointer<ScrollItemsWidget> guard(this);
-    deferredLoadThread_ = QThread::create([guard, batchPaths]() {
-        QList<QPair<QString, QByteArray>> batchPayloads;
-        batchPayloads.reserve(batchPaths.size());
-        for (const QString &filePath : batchPaths) {
-            QByteArray rawData;
-            QFile file(filePath);
-            if (file.open(QIODevice::ReadOnly)) {
-                rawData = file.readAll();
-                file.close();
-            }
-            batchPayloads.append(qMakePair(filePath, rawData));
-        }
-        if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, batchPayloads]() {
-                if (guard) {
-                    guard->handleDeferredBatchRead(batchPayloads);
-                }
-            }, Qt::QueuedConnection);
-        }
-    });
-
-    connect(deferredLoadThread_, &QThread::finished, this, [this]() {
-        deferredLoadThread_ = nullptr;
-    });
-    connect(deferredLoadThread_, &QThread::finished, deferredLoadThread_, &QObject::deleteLater);
-    deferredLoadThread_->start();
-}
-
-void ScrollItemsWidget::handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchPayloads) {
-    if (!batchPayloads.isEmpty()) {
-        deferredLoadedItems_.append(batchPayloads);
-    }
-
-    if (!deferredLoadTimer_->isActive()) {
-        const bool widgetVisible = isVisible() && window() && window()->isVisible();
-        deferredLoadTimer_->start(widgetVisible ? 0 : 8);
-    }
-
-    if (deferredLoadActive_ && !pendingLoadFilePaths_.isEmpty()) {
-        scheduleDeferredLoadBatch();
-    }
-}
-
-void ScrollItemsWidget::processDeferredLoadedItems() {
-    if (deferredLoadedItems_.isEmpty()) {
-        return;
-    }
-
-    QElapsedTimer parseTimer;
-    parseTimer.start();
-    const bool widgetVisible = isVisible() && window() && window()->isVisible();
-    const int maxItemsPerTick = widgetVisible ? 2 : 1;
-    const int maxParseMs = widgetVisible ? 12 : 4;
-    int processedCount = 0;
-
-    while (!deferredLoadedItems_.isEmpty() && processedCount < maxItemsPerTick && parseTimer.elapsed() < maxParseMs) {
-        const auto payload = deferredLoadedItems_.takeFirst();
-        const QString filePath = payload.first;
-        const QByteArray rawData = payload.second;
-        ClipboardItem item = rawData.isEmpty() ? ClipboardItem() : saver->loadFromRawDataLight(rawData, filePath);
-        if (item.getName().isEmpty()) {
-            saver->removeItem(filePath);
-            if (totalItemCount_ > 0) {
-                --totalItemCount_;
-            }
-        } else {
-            appendLoadedItem(filePath, item);
-        }
-        ++processedCount;
-    }
-
-    if (!deferredLoadedItems_.isEmpty() && (widgetVisible || processedCount > 0)) {
-        deferredLoadTimer_->start(widgetVisible ? 0 : 8);
-    }
-
-    setFirstVisibleItemSelected();
-    emit itemCountChanged(itemCountForDisplay());
-    updateContentWidthHint();
-}
-
-void ScrollItemsWidget::waitForDeferredRead() {
-    if (deferredLoadThread_) {
-        deferredLoadThread_->wait();
-        QCoreApplication::processEvents(QEventLoop::AllEvents);
-    }
-}
-
-void ScrollItemsWidget::processPendingItemAsync(const ClipboardItem &item, const QString &targetName) {
-    const QString expectedName = targetName.isEmpty() ? item.getName() : targetName;
-    const ClipboardItem::ContentType contentType = item.getContentType();
-    const QByteArray imageBytes = (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)
-        ? item.imagePayloadBytesFast()
-        : QByteArray();
-    const QString richHtml = contentType == ClipboardItem::RichText ? item.getHtml() : QString();
-    const QSize imageSize = item.isMimeDataLoaded() && contentType == ClipboardItem::Image
-        ? item.getImagePixelSize()
-        : QSize();
-    const QString sourceFilePath = item.sourceFilePath();
-    const quint64 mimeOffset = item.mimeDataFileOffset();
-    const qreal thumbnailDpr = maxScreenDevicePixelRatio();
-    QPointer<ScrollItemsWidget> guard(this);
-
-    QThread *thread = QThread::create([guard, expectedName, contentType, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr]() mutable {
-        PendingItemProcessingResult result;
-        QByteArray resolvedImageBytes = imageBytes;
-        QString resolvedHtml = richHtml;
-        if ((resolvedImageBytes.isEmpty() || resolvedHtml.isEmpty())
-            && !sourceFilePath.isEmpty()
-            && (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)) {
-            QString htmlPayload;
-            QByteArray imagePayload;
-            LocalSaver::loadMimePayloads(sourceFilePath,
-                                         mimeOffset,
-                                         contentType == ClipboardItem::RichText ? &htmlPayload : nullptr,
-                                         (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText) ? &imagePayload : nullptr);
-            if (resolvedHtml.isEmpty()) {
-                resolvedHtml = htmlPayload;
-            }
-            if (resolvedImageBytes.isEmpty()) {
-                resolvedImageBytes = imagePayload;
-            }
-        }
-
-        if (contentType == ClipboardItem::Image && !resolvedImageBytes.isEmpty()) {
-            result.thumbnailImage = buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr);
-            if (isVeryTallImage(imageSize)) {
-                qInfo().noquote() << QStringLiteral("[thumb-build] stage=worker name=%1 image=%2x%3 thumbPx=%4x%5 thumbDpr=%6")
-                    .arg(expectedName)
-                    .arg(imageSize.width())
-                    .arg(imageSize.height())
-                    .arg(result.thumbnailImage.width())
-                    .arg(result.thumbnailImage.height())
-                    .arg(result.thumbnailImage.devicePixelRatio(), 0, 'f', 2);
-            }
-        } else if (contentType == ClipboardItem::RichText && !resolvedHtml.isEmpty()) {
-            result.thumbnailImage = buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr);
-        }
-
-        if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, result, thumbnailDpr]() mutable {
-                if (!guard) {
-                    return;
-                }
-
-                const int sourceRow = guard->boardModel_ ? guard->boardModel_->rowForName(expectedName) : -1;
-                if (sourceRow < 0) {
-                    return;
-                }
-
-                ClipboardItem preparedItem = guard->boardModel_->itemAt(sourceRow);
-                if (!result.thumbnailImage.isNull()) {
-                    QPixmap thumbnail = QPixmap::fromImage(result.thumbnailImage);
-                    thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
-                    preparedItem.setThumbnail(thumbnail);
-                    const QSize imageSize = preparedItem.getImagePixelSize();
-                    if (isVeryTallImage(imageSize)) {
-                        qInfo().noquote() << QStringLiteral("[thumb-build] stage=ui name=%1 image=%2x%3 thumbPx=%4x%5 thumbLogical=%6x%7 thumbDpr=%8")
-                            .arg(expectedName)
-                            .arg(imageSize.width())
-                            .arg(imageSize.height())
-                            .arg(thumbnail.width())
-                            .arg(thumbnail.height())
-                            .arg(qRound(thumbnail.width() / qMax<qreal>(1.0, thumbnail.devicePixelRatio())))
-                            .arg(qRound(thumbnail.height() / qMax<qreal>(1.0, thumbnail.devicePixelRatio())))
-                            .arg(thumbnail.devicePixelRatio(), 0, 'f', 2);
-                    }
-                }
-                guard->saveItem(preparedItem);
-
-                ClipboardItem reloadedItem = guard->saver->loadFromFileLight(guard->getItemFilePath(preparedItem));
-                if (reloadedItem.getName().isEmpty() || reloadedItem.getName() != expectedName) {
-                    return;
-                }
-
-                const int row = guard->boardModel_->rowForName(expectedName);
-                if (row >= 0) {
-                    guard->boardModel_->updateItem(row, reloadedItem);
-                }
-            }, Qt::QueuedConnection);
-        }
-    });
-
-    processingThreads_.append(thread);
-    connect(thread, &QThread::finished, this, [this, thread]() {
-        processingThreads_.removeAll(thread);
-    });
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    thread->start();
-}
-
 void ScrollItemsWidget::startAsyncKeywordSearch() {
-    if (currentKeyword_.isEmpty()) {
+    if (currentKeyword_.isEmpty() || !boardService_) {
         return;
     }
 
@@ -1726,43 +1181,7 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
     }
 
     const quint64 token = keywordSearchToken_;
-    const QString keyword = currentKeyword_;
-    QPointer<ScrollItemsWidget> guard(this);
-
-    QThread *thread = QThread::create([guard, candidates, keyword, token]() {
-        QSet<QString> matchedNames;
-        for (const auto &candidate : candidates) {
-            if (candidate.first.isEmpty()) {
-                continue;
-            }
-            if (LocalSaver::mimeSectionContainsKeyword(candidate.first, candidate.second, keyword)) {
-                const QFileInfo info(candidate.first);
-                matchedNames.insert(info.completeBaseName());
-            }
-        }
-
-        if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, matchedNames, token]() {
-                if (!guard || guard->keywordSearchToken_ != token) {
-                    return;
-                }
-
-                guard->asyncKeywordMatchedNames_ = matchedNames;
-                guard->applyFilters();
-            }, Qt::QueuedConnection);
-        }
-    });
-
-    connect(thread, &QThread::finished, this, [this, thread]() {
-        if (keywordSearchThread_ == thread) {
-            keywordSearchThread_ = nullptr;
-        }
-        processingThreads_.removeAll(thread);
-    });
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    keywordSearchThread_ = thread;
-    processingThreads_.append(thread);
-    thread->start();
+    boardService_->startAsyncKeywordSearch(candidates, currentKeyword_, token);
 }
 
 bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const ClipboardItem &item) {
@@ -1771,9 +1190,8 @@ bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const Clipboar
         existingRow = boardModel_->rowForFingerprint(item.fingerprint());
     }
     if (existingRow >= 0) {
-        saver->removeItem(filePath);
-        if (totalItemCount_ > 0) {
-            --totalItemCount_;
+        if (boardService_) {
+            boardService_->deleteItemByPath(filePath);
         }
         return false;
     }
@@ -1783,7 +1201,9 @@ bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const Clipboar
     boardModel_->appendItem(item, favorite);
     if (!item.hasThumbnail()
         && (item.getContentType() == ClipboardItem::RichText || item.getContentType() == ClipboardItem::Image)) {
-        processPendingItemAsync(item, item.getName());
+        if (boardService_) {
+            boardService_->processPendingItemAsync(item, item.getName());
+        }
     }
     return true;
 }
@@ -1825,12 +1245,18 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
         if (incomingMimeData && existingMimeData
             && incomingMimeData->hasHtml() && existingMimeData->hasHtml()
             && incomingMimeData->html().length() > existingMimeData->html().length()) {
-            saver->removeItem(getItemFilePath(existingItem));
+            if (boardService_) {
+                boardService_->removeItemFile(boardService_->filePathForItem(existingItem));
+            }
             boardModel_->updateItem(row, nItem);
             if (!nItem.isMimeDataLoaded() && nItem.sourceFilePath().isEmpty()) {
-                processPendingItemAsync(nItem, nItem.getName());
+                if (boardService_) {
+                    boardService_->processPendingItemAsync(nItem, nItem.getName());
+                }
             } else {
-                saveItem(nItem);
+                if (boardService_) {
+                    boardService_->saveItem(nItem);
+                }
             }
         }
         if (row > 0) {
@@ -1846,7 +1272,9 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     setCurrentProxyIndex(firstProxyIndex);
     ensureLinkPreviewForIndex(firstProxyIndex);
 
-    ++totalItemCount_;
+    if (boardService_) {
+        boardService_->notifyItemAdded();
+    }
     trimExpiredItems();
     refreshContentWidthHint();
     emit itemCountChanged(itemCountForDisplay());
@@ -1855,14 +1283,20 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
 
 bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
     const bool isPendingClipboardSnapshot = !nItem.isMimeDataLoaded() && nItem.sourceFilePath().isEmpty();
-    ClipboardItem preparedItem = isPendingClipboardSnapshot ? nItem : prepareItemForDisplayAndSave(nItem);
+    ClipboardItem preparedItem = isPendingClipboardSnapshot
+        ? nItem
+        : (boardService_ ? boardService_->prepareItemForSave(nItem) : nItem);
     const bool added = addOneItem(preparedItem);
     ensureLinkPreviewForIndex(proxyIndexForSourceRow(0));
     if (added) {
         if (isPendingClipboardSnapshot) {
-            processPendingItemAsync(preparedItem, preparedItem.getName());
+            if (boardService_) {
+                boardService_->processPendingItemAsync(preparedItem, preparedItem.getName());
+            }
         } else {
-            saveItem(preparedItem);
+            if (boardService_) {
+                boardService_->saveItem(preparedItem);
+            }
         }
     }
     return added;
@@ -1901,29 +1335,32 @@ void ScrollItemsWidget::cleanShortCutInfo() {
 }
 
 void ScrollItemsWidget::loadFromSaveDir() {
-    deferredLoadActive_ = false;
-    deferredLoadTimer_->stop();
+    if (boardService_) {
+        boardService_->stopDeferredLoad();
+    }
     prepareLoadFromSaveDir();
-    loadNextBatch(INITIAL_LOAD_BATCH_SIZE);
+    if (boardService_) {
+        boardService_->loadNextBatch(INITIAL_LOAD_BATCH_SIZE);
+    }
     maybeLoadMoreItems();
 }
 
 void ScrollItemsWidget::loadFromSaveDirDeferred() {
-    deferredLoadActive_ = true;
-    deferredLoadTimer_->stop();
+    if (boardService_) {
+        boardService_->stopDeferredLoad();
+    }
     prepareLoadFromSaveDir();
 
-    if (pendingLoadFilePaths_.isEmpty()) {
-        deferredLoadActive_ = false;
+    if (!boardService_ || !boardService_->hasPendingItems()) {
         emit itemCountChanged(itemCountForDisplay());
         return;
     }
 
-    loadNextBatch(qMin(DEFERRED_LOAD_BATCH_SIZE, INITIAL_LOAD_BATCH_SIZE));
+    boardService_->loadNextBatch(qMin(DEFERRED_LOAD_BATCH_SIZE, INITIAL_LOAD_BATCH_SIZE));
     if (shouldKeepDeferredLoading()) {
-        scheduleDeferredLoadBatch();
+        boardService_->startDeferredLoad(DEFERRED_LOAD_BATCH_SIZE);
     } else {
-        deferredLoadActive_ = false;
+        boardService_->stopDeferredLoad();
     }
 }
 
@@ -2028,11 +1465,10 @@ void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
         row = boardModel_->rowForFingerprint(item.fingerprint());
     }
     if (row >= 0) {
-        saver->removeItem(getItemFilePath(boardModel_->itemAt(row)));
-        boardModel_->removeItemAt(row);
-        if (totalItemCount_ > 0) {
-            --totalItemCount_;
+        if (boardService_) {
+            boardService_->deleteItemByPath(boardService_->filePathForItem(boardModel_->itemAt(row)));
         }
+        boardModel_->removeItemAt(row);
         setFirstVisibleItemSelected();
         maybeLoadMoreItems();
         refreshContentWidthHint();
@@ -2040,16 +1476,12 @@ void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
         return;
     }
 
-    const QString filePath = getItemFilePath(item);
-    const int pendingIndex = pendingLoadFilePaths_.indexOf(filePath);
-    if (pendingIndex >= 0) {
-        pendingLoadFilePaths_.removeAt(pendingIndex);
-        saver->removeItem(filePath);
-        if (totalItemCount_ > 0) {
-            --totalItemCount_;
+    if (boardService_) {
+        const QString filePath = boardService_->filePathForItem(item);
+        if (boardService_->deletePendingItemByPath(filePath)) {
+            refreshContentWidthHint();
+            emit itemCountChanged(itemCountForDisplay());
         }
-        refreshContentWidthHint();
-        emit itemCountChanged(itemCountForDisplay());
     }
 }
 
@@ -2073,7 +1505,7 @@ bool ScrollItemsWidget::handleWheelScroll(QWheelEvent *event) {
     }
 
     QScrollBar *scrollBar = horizontalScrollbar();
-    if (!scrollBar || (scrollBar->maximum() <= 0 && pendingLoadFilePaths_.isEmpty())) {
+    if (!scrollBar || (scrollBar->maximum() <= 0 && (!boardService_ || !boardService_->hasPendingItems()))) {
         return false;
     }
 
@@ -2101,8 +1533,15 @@ bool ScrollItemsWidget::handleWheelScroll(QWheelEvent *event) {
 void ScrollItemsWidget::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
     updateEdgeFadeOverlays();
-    if (!deferredLoadedItems_.isEmpty() && !deferredLoadTimer_->isActive()) {
-        deferredLoadTimer_->start(0);
+    if (boardService_) {
+        boardService_->setVisibleHint(isVisible() && window() && window()->isVisible());
+    }
+}
+
+void ScrollItemsWidget::hideEvent(QHideEvent *event) {
+    QWidget::hideEvent(event);
+    if (boardService_) {
+        boardService_->setVisibleHint(false);
     }
 }
 

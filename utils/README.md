@@ -46,3 +46,5 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardMonitor` 现在会优先发出跳过立即图片解码的轻量条目，配合界面层的后台完善流程，减少复制大图时卡死主线程。
 - `ClipboardMonitor` 现在会记录启动时的 prime capture 和后续捕获阶段日志，便于和界面层的 show/deferred-load 日志对照排查卡顿。
 - `PlatformRelated` 现在支持可配置的自动粘贴快捷键模式，可在多种粘贴方案之间切换。
+
+- ClipboardBoardService now owns board persistence I/O, deferred loading, and background item processing for widgets.
