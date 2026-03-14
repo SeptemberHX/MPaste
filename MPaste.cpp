@@ -2,12 +2,15 @@
 // output: 提供 MPaste 应用启动、单实例控制和主窗口装配逻辑。
 // pos: 项目入口层中的 MPaste 应用入口实现文件。
 // update: 修改本文件时，同步更新文件头注释与根目录 README.md。
+// note: Prefer QScreen::availableGeometry for sizing/positioning (Wayland scaling can differ from availableSize()).
+// note: Set `MPASTE_DEBUG_GEOMETRY=1` to print detailed screen/placement diagnostics.
 #include <QApplication>
 #include <iostream>
 #include <QScreen>
 #include <qsurfaceformat.h>
 #include <QTimer>
 #include <QShowEvent>
+#include <QWindow>
 
 #include "utils/MPasteSettings.h"
 #include "widget/MPasteWidget.h"
@@ -15,6 +18,69 @@
 #include "utils/PlatformRelated.h"
 #include "utils/HotKeyManager.h"
 #include "utils/ThemeManager.h"
+
+namespace {
+bool isWaylandPlatform() {
+    const QString platform = QGuiApplication::platformName().toLower();
+    return platform.contains(QStringLiteral("wayland"));
+}
+
+bool geometryDebugEnabled() {
+    static const bool enabled = !qEnvironmentVariableIsEmpty("MPASTE_DEBUG_GEOMETRY");
+    return enabled;
+}
+
+QRect availableGeometryForWidget(QScreen *screen) {
+    if (!screen) {
+        return {};
+    }
+
+    QRect available = screen->availableGeometry();
+    if (!available.isValid()) {
+        return available;
+    }
+
+    if (!isWaylandPlatform()) {
+        return available;
+    }
+
+    const qreal dpr = screen->devicePixelRatio();
+    if (dpr <= 1.0) {
+        return available;
+    }
+
+    return QRect(qRound(available.x() / dpr),
+                 qRound(available.y() / dpr),
+                 qRound(available.width() / dpr),
+                 qRound(available.height() / dpr));
+}
+
+void logScreenGeometry(const char *tag, QScreen *screen) {
+    if (!geometryDebugEnabled() || !screen) {
+        return;
+    }
+
+    const QRect g = screen->geometry();
+    const QRect avail = screen->availableGeometry();
+    const QRect norm = availableGeometryForWidget(screen);
+    const QSize size = screen->size();
+    qInfo().noquote() << QStringLiteral("[geometry] %1 platform=%2 screen=\"%3\" dpr=%4 geom=%5,%6 %7x%8 avail=%9,%10 %11x%12 normAvail=%13,%14 %15x%16")
+        .arg(QString::fromLatin1(tag))
+        .arg(QGuiApplication::platformName())
+        .arg(screen->name())
+        .arg(screen->devicePixelRatio(), 0, 'f', 2)
+        .arg(g.x()).arg(g.y()).arg(g.width()).arg(g.height())
+        .arg(avail.x()).arg(avail.y()).arg(avail.width()).arg(avail.height())
+        .arg(norm.x()).arg(norm.y()).arg(norm.width()).arg(norm.height());
+
+    qInfo().noquote() << QStringLiteral("[geometry] %1 size=%2x%3 logicalDpi=%4 physicalDpi=%5 refresh=%6")
+        .arg(QString::fromLatin1(tag))
+        .arg(size.width()).arg(size.height())
+        .arg(screen->logicalDotsPerInch(), 0, 'f', 2)
+        .arg(screen->physicalDotsPerInch(), 0, 'f', 2)
+        .arg(screen->refreshRate(), 0, 'f', 2);
+}
+}
 
 QScreen* getScreenForWindow(WId windowId) {
     if (windowId) {
@@ -27,7 +93,12 @@ QScreen* getScreenForWindow(WId windowId) {
         }
 #endif
     }
+#ifdef Q_OS_WIN
     return QGuiApplication::primaryScreen();
+#else
+    Q_UNUSED(windowId);
+    return QGuiApplication::screenAt(QCursor::pos());
+#endif
 }
 
 #ifdef Q_OS_WIN
@@ -125,9 +196,28 @@ int main(int argc, char* argv[]) {
 
         ThemeManager::instance()->initialize();
 
+        if (geometryDebugEnabled()) {
+            qInfo().noquote() << QStringLiteral("[geometry] platform=%1 screens=%2 primary=\"%3\" cursor=%4,%5")
+                .arg(QGuiApplication::platformName())
+                .arg(QGuiApplication::screens().size())
+                .arg(QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->name() : QStringLiteral("-"))
+                .arg(QCursor::pos().x())
+                .arg(QCursor::pos().y());
+            qInfo().noquote() << QStringLiteral("[geometry] env QT_QPA_PLATFORM=%1 QT_SCALE_FACTOR=%2 QT_SCREEN_SCALE_FACTORS=%3 QT_AUTO_SCREEN_SCALE_FACTOR=%4")
+                .arg(QString::fromLocal8Bit(qgetenv("QT_QPA_PLATFORM")))
+                .arg(QString::fromLocal8Bit(qgetenv("QT_SCALE_FACTOR")))
+                .arg(QString::fromLocal8Bit(qgetenv("QT_SCREEN_SCALE_FACTORS")))
+                .arg(QString::fromLocal8Bit(qgetenv("QT_AUTO_SCREEN_SCALE_FACTOR")));
+            for (QScreen *screen : QGuiApplication::screens()) {
+                logScreenGeometry("screen", screen);
+            }
+        }
+
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");
-        widget.setFixedWidth(QApplication::primaryScreen()->geometry().width());
+        if (QScreen *screen = QGuiApplication::primaryScreen()) {
+            widget.setFixedWidth(availableGeometryForWidget(screen).width());
+        }
 
         PlatformRelated::startWindowTracking();
 
@@ -163,19 +253,45 @@ int main(int argc, char* argv[]) {
                 currentScreen = QGuiApplication::primaryScreen();
             }
 
-            widget.setFixedWidth(currentScreen->availableSize().width());
+            logScreenGeometry("showWidget.screen", currentScreen);
+            const QRect available = availableGeometryForWidget(currentScreen);
+            const bool wayland = isWaylandPlatform();
+            if (wayland) {
+                widget.prepareWaylandDock(available);
+            } else {
+                widget.setFixedWidth(available.width());
+            }
 
             isShowingWidget = true;
 
             const int showDelayMs = immediateForAltHotkey ? 0 : 50;
-            QTimer::singleShot(showDelayMs, [&widget, currentScreen]() {
+            QTimer::singleShot(showDelayMs, [&widget, available, wayland]() {
                 widget.setVisibleWithAnnimation(true);
                 widget.raise();
                 widget.activateWindow();
-                widget.move(currentScreen->geometry().x(),
-                          currentScreen->geometry().y() +
-                          currentScreen->geometry().height() -
-                          widget.height());
+                if (!wayland && available.isValid()) {
+                    widget.move(available.x(),
+                              available.y() +
+                              available.height() -
+                              widget.height());
+                }
+
+                if (geometryDebugEnabled()) {
+                    qInfo().noquote() << QStringLiteral("[geometry] showWidget.move avail=%1,%2 %3x%4 widgetH=%5 pos=%6,%7 geom=%8,%9 %10x%11")
+                        .arg(available.x()).arg(available.y()).arg(available.width()).arg(available.height())
+                        .arg(widget.height())
+                        .arg(widget.pos().x()).arg(widget.pos().y())
+                        .arg(widget.geometry().x()).arg(widget.geometry().y())
+                        .arg(widget.geometry().width()).arg(widget.geometry().height());
+                    qInfo().noquote() << QStringLiteral("[geometry] widget dpr=%1")
+                        .arg(widget.devicePixelRatioF(), 0, 'f', 2);
+                    if (QWindow *handle = widget.windowHandle()) {
+                        const QRect winGeom = handle->geometry();
+                        qInfo().noquote() << QStringLiteral("[geometry] windowHandle geom=%1,%2 %3x%4 screen=\"%5\"")
+                            .arg(winGeom.x()).arg(winGeom.y()).arg(winGeom.width()).arg(winGeom.height())
+                            .arg(handle->screen() ? handle->screen()->name() : QStringLiteral("-"));
+                    }
+                }
 
                 PlatformRelated::activateWindow(widget.winId());
             });

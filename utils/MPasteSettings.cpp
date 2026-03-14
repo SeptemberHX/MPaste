@@ -2,6 +2,7 @@
 // output: 提供 MPasteSettings 的实现逻辑。
 // pos: utils 层中的 MPasteSettings 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
+// note: Qt < 6.5 does not expose QStyleHints::colorScheme; system theme detection falls back to palette heuristics.
 //
 // Created by ragdoll on 2021/5/24.
 //
@@ -220,9 +221,11 @@ bool MPasteSettings::isDarkTheme() const {
             break;
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     if (auto *hints = QGuiApplication::styleHints()) {
         return hints->colorScheme() == Qt::ColorScheme::Dark;
     }
+#endif
 
     const QColor windowColor = QGuiApplication::palette().color(QPalette::Window);
     return windowColor.lightness() < 128;

@@ -129,7 +129,7 @@
 <context>
     <name>MPasteSettings</name>
     <message>
-        <location filename="../utils/MPasteSettings.cpp" line="55"/>
+        <location filename="../utils/MPasteSettings.cpp" line="56"/>
         <source>Terminal</source>
         <translatorcomment>已 top-panel 显示为准</translatorcomment>
         <translation type="unfinished">终端</translation>

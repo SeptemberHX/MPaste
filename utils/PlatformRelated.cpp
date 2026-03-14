@@ -10,6 +10,7 @@
 #include <iostream>
 #include <QDesktopServices>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QHash>
 #include <QUrl>
 
@@ -20,6 +21,13 @@
 
 xdo_t *XUtils::m_xdo = nullptr;
 Display *XUtils::m_display = nullptr;
+
+namespace {
+bool isWaylandQtPlatform() {
+    const QString platform = QGuiApplication::platformName().toLower();
+    return platform.contains(QStringLiteral("wayland"));
+}
+}
 
 void XUtils::openXdo() {
     if (m_xdo == nullptr) {
@@ -155,26 +163,41 @@ QPixmap XUtils::convertFromNative(const void* data, int width, int height) {
 }
 
 void PlatformRelated::activateWindow(WId wId) {
+    if (isWaylandQtPlatform()) {
+        return;
+    }
     XUtils::activeWindowX11((Window)wId);
 }
 
 QPixmap PlatformRelated::getWindowIcon(WId wId) {
+    if (isWaylandQtPlatform()) {
+        return QPixmap(":/resources/resources/unknown.svg");
+    }
     return XUtils::getWindowIconX11((Window)wId);
 }
 
 WId PlatformRelated::currActiveWindow() {
+    if (isWaylandQtPlatform()) {
+        return 0;
+    }
     return (WId)XUtils::currentWinId();
 }
 
 void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode) {
+    if (isWaylandQtPlatform()) {
+        return;
+    }
     XUtils::triggerPasteShortcut(XUtils::currentWinId(), mode);
 }
 
 void PlatformRelated::startWindowTracking() {
-    // Linux: not implemented yet
+    // Linux: not implemented yet (and Wayland cannot support X11-style tracking)
 }
 
 WId PlatformRelated::previousActiveWindow() {
+    if (isWaylandQtPlatform()) {
+        return 0;
+    }
     return PlatformRelated::currActiveWindow();
 }
 

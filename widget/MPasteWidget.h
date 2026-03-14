@@ -2,7 +2,7 @@
 // output: 对外提供 MPasteWidget 的声明接口。
 // pos: widget 层中的 MPasteWidget 接口定义。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
-// note: Added theme application hooks for dark mode.
+// note: Added theme hooks, Linux/Wayland frosted-tint fallback, and non-GStreamer copy-sound backend on Linux.
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
 
@@ -11,12 +11,17 @@
 #include <QHBoxLayout>
 #include <QMimeData>
 #include <QMenu>
-#include <QAudioOutput>
+#include <QBuffer>
+#include <QAudioSink>
 #include <QMediaDevices>
-#include <QMediaPlayer>
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
 #include <QElapsedTimer>
+
+#ifdef Q_OS_WIN
+#include <QAudioOutput>
+#include <QMediaPlayer>
+#endif
 
 #include "utils/ClipboardMonitor.h"
 #include "data/ClipboardItem.h"
@@ -26,6 +31,8 @@
 #include "ClipboardItemPreviewDialog.h"
 #include "MPasteSettingsWidget.h"
 #include "ScrollItemsWidget.h"
+
+class QMouseEvent;
 
 namespace Ui {
 class MPasteWidget;
@@ -38,11 +45,13 @@ public:
     explicit MPasteWidget(QWidget *parent = nullptr);
     ~MPasteWidget();
     void setVisibleWithAnnimation(bool visible);
+    void prepareWaylandDock(const QRect &availableGeometry);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void showEvent(QShowEvent *event) override;
@@ -73,6 +82,8 @@ private:
     void syncSoundOutputDevice();
     void rebuildSoundPlaybackChain(const QAudioDevice &device);
     void playCopySoundIfNeeded(int wId, const QByteArray &fingerprint = QByteArray());
+    void updateWaylandDockMask();
+    QRect waylandDockRect() const;
 
     bool setClipboard(const ClipboardItem &item, bool plainText = false);
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
@@ -130,9 +141,16 @@ private:
     } clipboard_;
 
     struct {
+#ifdef Q_OS_WIN
         QMediaPlayer *player = nullptr;
         QAudioOutput *audioOutput = nullptr;
-        QMediaDevices *mediaDevices = nullptr;
+#else
+        QAudioSink *audioSink = nullptr;
+        QBuffer *audioBuffer = nullptr;
+        QByteArray audioPcm;
+        QAudioFormat audioFormat;
+        QAudioDevice audioDevice;
+#endif
         QList<int> numKeyList;
         int pendingNumKey = -1;
         bool pendingPlainTextNumKey = false;
@@ -144,6 +162,9 @@ private:
     static constexpr qint64 SOUND_BURST_WINDOW_MS = 500;
 
     bool darkTheme_ = false;
+    bool waylandDockEnabled_ = false;
+    bool waylandStretchInserted_ = false;
+    int waylandDockHeight_ = 0;
 };
 
 

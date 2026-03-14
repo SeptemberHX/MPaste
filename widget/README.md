@@ -34,6 +34,9 @@ update: 修改本目录文件时，同步更新本 README。
 ## Recent Notes
 - UI components now listen to ThemeManager for theme updates instead of coordinating via the main window.
 - ???????????/??/?????????????????????
+- `MPasteWidget` now paints a frosted-tint fallback background on Linux/Wayland so the main window is no longer fully transparent (Windows still uses native acrylic blur).
+- On Linux, copy sound playback now uses `QAudioSink` with a small generated PCM effect (avoids GStreamer plugin crashes on some Wayland setups).
+- On GNOME Wayland, the main window uses a “bottom dock” fallback (masking a screen-sized surface) because the compositor ignores client-side `move()` for toplevel windows.
 
 - `ClipboardItemPreviewDialog` now provides a larger centered preview window for rich text, plain text, images, and files; it is read-only but still allows selection and copy, can be opened from the item preview menu action or the Space key on the current supported selection, and pressing Space again closes it.
 - `ClipboardItemPreviewDialog` now uses a tuned body font size and hides the text caret by disabling focus, while keeping mouse selection/copy behavior.

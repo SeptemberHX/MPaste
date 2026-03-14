@@ -2,11 +2,12 @@
 // output: Implements the main window, item interaction flow, reliable quick-paste shortcuts, and plain-text paste behavior.
 // pos: Widget-layer main window implementation coordinating boards, shortcuts, and system integration.
 // update: If I change, update this header block and my folder README.md.
-// note: Added theme application and dark mode propagation.
+// note: Added theme application, dark mode propagation, and Linux frosted-tint fallback (Wayland cannot do true acrylic blur).
 #include <QScrollBar>
 #include <QClipboard>
 #include <QKeyEvent>
 #include <QResizeEvent>
+#include <QMouseEvent>
 #include <QAudioDevice>
 #include <QAudioOutput>
 #include <QDateTime>
@@ -21,11 +22,17 @@
 #include <QTimer>
 #include <QTextDocument>
 #include <QWheelEvent>
+#include <QCursor>
 #include <QWindow>
 #include <QPainter>
 #include <QPainterPath>
+#include <QImage>
+#include <QRandomGenerator>
 #include <QStyle>
 #include <QStyleFactory>
+#include <cmath>
+#include <algorithm>
+#include <limits>
 #include "utils/MPasteSettings.h"
 #include "utils/ThemeManager.h"
 #include "utils/IconResolver.h"
@@ -34,6 +41,36 @@
 #include "utils/PlatformRelated.h"
 
 namespace {
+bool isWaylandPlatform() {
+    const QString platform = QGuiApplication::platformName().toLower();
+    return platform.contains(QStringLiteral("wayland"));
+}
+
+QRect availableGeometryForWidget(QScreen *screen) {
+    if (!screen) {
+        return {};
+    }
+
+    QRect available = screen->availableGeometry();
+    if (!available.isValid()) {
+        return available;
+    }
+
+    if (!isWaylandPlatform()) {
+        return available;
+    }
+
+    const qreal dpr = screen->devicePixelRatio();
+    if (dpr <= 1.0) {
+        return available;
+    }
+
+    return QRect(qRound(available.x() / dpr),
+                 qRound(available.y() / dpr),
+                 qRound(available.width() / dpr),
+                 qRound(available.height() / dpr));
+}
+
 bool looksBrokenTranslation(const QString &text) {
     if (text.isEmpty()) {
         return true;
@@ -106,6 +143,128 @@ QString widgetItemSummary(const ClipboardItem &item) {
         .arg(item.getHtml().size())
         .arg(item.getNormalizedUrls().size());
 }
+
+#ifndef Q_OS_WIN
+QAudioFormat chooseCopySoundFormat(const QAudioDevice &device) {
+    QAudioFormat format;
+    format.setSampleRate(44100);
+    format.setChannelCount(1);
+    format.setSampleFormat(QAudioFormat::Int16);
+    if (!device.isNull() && device.isFormatSupported(format)) {
+        return format;
+    }
+
+    format.setChannelCount(2);
+    if (!device.isNull() && device.isFormatSupported(format)) {
+        return format;
+    }
+
+    format.setSampleRate(48000);
+    if (!device.isNull() && device.isFormatSupported(format)) {
+        return format;
+    }
+
+    if (!device.isNull()) {
+        QAudioFormat preferred = device.preferredFormat();
+        if (preferred.isValid()) {
+            if (device.isFormatSupported(preferred)) {
+                return preferred;
+            }
+            if (device.supportedSampleFormats().contains(QAudioFormat::Int16)) {
+                QAudioFormat candidate = preferred;
+                candidate.setSampleFormat(QAudioFormat::Int16);
+                if (device.isFormatSupported(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+    }
+
+    return format;
+}
+
+QByteArray buildCopySoundPcm(const QAudioFormat &format) {
+    if (!format.isValid()) {
+        return {};
+    }
+
+    constexpr int durationMs = 70;
+    constexpr double freqA = 880.0;
+    constexpr double freqB = 1320.0;
+    constexpr double amplitude = 0.28;
+
+    const int sampleRate = format.sampleRate();
+    const int channels = format.channelCount();
+    const int frames = qMax(1, sampleRate * durationMs / 1000);
+    const int bytesPerFrame = format.bytesPerFrame();
+    if (channels <= 0 || bytesPerFrame <= 0) {
+        return {};
+    }
+
+    QByteArray out(frames * bytesPerFrame, Qt::Uninitialized);
+
+    const double invFrames = frames > 1 ? 1.0 / static_cast<double>(frames - 1) : 1.0;
+    const double invSampleRate = 1.0 / static_cast<double>(sampleRate);
+    constexpr double pi = 3.14159265358979323846;
+    constexpr double twoPi = 2.0 * pi;
+
+    auto envelope = [&](int frameIndex) {
+        const double x = frameIndex * invFrames; // 0..1
+        const double hann = 0.5 * (1.0 - std::cos(twoPi * x));
+        const double t = frameIndex * invSampleRate;
+        const double decay = std::exp(-t * 18.0);
+        return hann * decay;
+    };
+
+    auto sampleAt = [&](int frameIndex) {
+        const double t = frameIndex * invSampleRate;
+        const double tone = std::sin(twoPi * freqA * t) * 0.68 + std::sin(twoPi * freqB * t) * 0.32;
+        double v = tone * envelope(frameIndex) * amplitude;
+        v = std::clamp(v, -1.0, 1.0);
+        return v;
+    };
+
+    const auto writeSample = [&](char *dst, double v) {
+        switch (format.sampleFormat()) {
+            case QAudioFormat::UInt8: {
+                const int value = qRound((v * 0.5 + 0.5) * 255.0);
+                *reinterpret_cast<quint8 *>(dst) = static_cast<quint8>(qBound(0, value, 255));
+                break;
+            }
+            case QAudioFormat::Int16: {
+                const int value = qRound(v * 32767.0);
+                *reinterpret_cast<qint16 *>(dst) = static_cast<qint16>(qBound(-32768, value, 32767));
+                break;
+            }
+            case QAudioFormat::Int32: {
+                const qint64 value = qRound64(v * 2147483647.0);
+                const qint64 clamped = std::clamp<qint64>(value, std::numeric_limits<qint32>::min(), std::numeric_limits<qint32>::max());
+                *reinterpret_cast<qint32 *>(dst) = static_cast<qint32>(clamped);
+                break;
+            }
+            case QAudioFormat::Float: {
+                *reinterpret_cast<float *>(dst) = static_cast<float>(v);
+                break;
+            }
+            case QAudioFormat::Unknown:
+            case QAudioFormat::NSampleFormats:
+            default:
+                break;
+        }
+    };
+
+    char *raw = out.data();
+    const int bytesPerSample = format.bytesPerSample();
+    for (int i = 0; i < frames; ++i) {
+        const double v = sampleAt(i);
+        for (int ch = 0; ch < channels; ++ch) {
+            writeSample(raw + (i * bytesPerFrame) + (ch * bytesPerSample), v);
+        }
+    }
+
+    return out;
+}
+#endif
 
 }
 
@@ -379,8 +538,13 @@ void MPasteWidget::initUI() {
     ui_.ui->menuButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     ui_.ui->menuButton->setToolTip(menuText("More", QStringLiteral("更多")));
 
+    ui_.ui->countArea->setToolButtonStyle(Qt::ToolButtonTextOnly);
+
     // Adjust window height to fit content (adapts to card scale)
     adjustSize();
+    if (waylandDockHeight_ <= 0) {
+        waylandDockHeight_ = height();
+    }
 
     ui_.buttonGroup = new QButtonGroup(this);
     ui_.buttonGroup->setExclusive(true);
@@ -446,6 +610,7 @@ void MPasteWidget::initSound() {
 }
 
 void MPasteWidget::rebuildSoundPlaybackChain(const QAudioDevice &device) {
+#ifdef Q_OS_WIN
     if (misc_.player) {
         misc_.player->stop();
         misc_.player->setAudioOutput(nullptr);
@@ -463,16 +628,50 @@ void MPasteWidget::rebuildSoundPlaybackChain(const QAudioDevice &device) {
     misc_.audioOutput->setDevice(device);
     misc_.player->setAudioOutput(misc_.audioOutput);
     misc_.player->setSource(QUrl(QStringLiteral("qrc:/resources/resources/sound.mp3")));
+#else
+    if (misc_.audioSink) {
+        misc_.audioSink->stop();
+        delete misc_.audioSink;
+        misc_.audioSink = nullptr;
+    }
+    if (misc_.audioBuffer) {
+        misc_.audioBuffer->close();
+        delete misc_.audioBuffer;
+        misc_.audioBuffer = nullptr;
+    }
+
+    misc_.audioDevice = device;
+    misc_.audioFormat = chooseCopySoundFormat(device);
+    misc_.audioPcm = buildCopySoundPcm(misc_.audioFormat);
+    if (misc_.audioPcm.isEmpty() || !misc_.audioFormat.isValid()) {
+        qWarning() << "[clipboard-widget] copy sound disabled: unsupported audio format" << misc_.audioFormat;
+        return;
+    }
+
+    misc_.audioBuffer = new QBuffer(this);
+    misc_.audioBuffer->setData(misc_.audioPcm);
+    misc_.audioBuffer->open(QIODevice::ReadOnly);
+
+    misc_.audioSink = new QAudioSink(device, misc_.audioFormat, this);
+    misc_.audioSink->setVolume(1.0);
+#endif
 }
 
 void MPasteWidget::syncSoundOutputDevice() {
     const QAudioDevice defaultDevice = QMediaDevices::defaultAudioOutput();
+#ifdef Q_OS_WIN
     if (misc_.player && misc_.audioOutput
         && misc_.audioOutput->device().id() == defaultDevice.id()) {
         return;
     }
-
     rebuildSoundPlaybackChain(defaultDevice);
+#else
+    if (misc_.audioSink && !misc_.audioDevice.isNull()
+        && misc_.audioDevice.id() == defaultDevice.id()) {
+        return;
+    }
+    rebuildSoundPlaybackChain(defaultDevice);
+#endif
 }
 
 void MPasteWidget::initSystemTray() {
@@ -692,13 +891,25 @@ void MPasteWidget::playCopySoundIfNeeded(int wId, const QByteArray &fingerprint)
     }
 
     syncSoundOutputDevice();
-    if (misc_.player->mediaStatus() == QMediaPlayer::EndOfMedia) {
-        misc_.player->setPosition(0);
+#ifdef Q_OS_WIN
+    if (misc_.player) {
+        if (misc_.player->mediaStatus() == QMediaPlayer::EndOfMedia) {
+            misc_.player->setPosition(0);
+        }
+        if (misc_.player->playbackState() == QMediaPlayer::PlayingState) {
+            misc_.player->stop();
+        }
+        misc_.player->play();
     }
-    if (misc_.player->playbackState() == QMediaPlayer::PlayingState) {
-        misc_.player->stop();
+#else
+    if (misc_.audioSink && misc_.audioBuffer) {
+        if (misc_.audioSink->state() == QAudio::ActiveState) {
+            misc_.audioSink->stop();
+        }
+        misc_.audioBuffer->seek(0);
+        misc_.audioSink->start(misc_.audioBuffer);
     }
-    misc_.player->play();
+#endif
     misc_.lastSoundPlayAtMs = now;
     qInfo().noquote() << QStringLiteral("[clipboard-widget] play copy sound wId=%1 fp=%2")
         .arg(wId)
@@ -1051,6 +1262,18 @@ void MPasteWidget::keyReleaseEvent(QKeyEvent *event) {
 
 void MPasteWidget::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
+    if (waylandDockEnabled_) {
+        updateWaylandDockMask();
+    }
+}
+
+void MPasteWidget::mousePressEvent(QMouseEvent *event) {
+    if (waylandDockEnabled_ && event && !waylandDockRect().contains(event->pos())) {
+        hide();
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
 }
 
 void MPasteWidget::paintEvent(QPaintEvent *) {
@@ -1059,10 +1282,83 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
 
     const qreal bw = 3.0;
     const qreal radius = 10.0;
-    QRectF r = QRectF(rect()).adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
+    const QRectF baseRect = waylandDockEnabled_ ? QRectF(waylandDockRect()) : QRectF(rect());
+    QRectF r = baseRect.adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
 
     QPainterPath path;
     path.addRoundedRect(r, radius, radius);
+
+    // Clear to transparent first so DWM glass/acrylic shows through
+    p.setCompositionMode(QPainter::CompositionMode_Clear);
+    p.fillRect(rect(), Qt::transparent);
+    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+#ifndef Q_OS_WIN
+    // Wayland does not allow sampling the screen behind the window, so we can't implement a true acrylic blur.
+    // Instead, paint a frosted-tint background that stays readable and visually similar to the Windows acrylic style.
+    {
+        p.save();
+        p.setClipPath(path);
+
+        QLinearGradient bgGrad(r.topLeft(), r.bottomRight());
+        if (darkTheme_) {
+            bgGrad.setColorAt(0.0, QColor(24, 29, 36, 230));
+            bgGrad.setColorAt(1.0, QColor(32, 40, 50, 210));
+        } else {
+            bgGrad.setColorAt(0.0, QColor(250, 252, 255, 235));
+            bgGrad.setColorAt(1.0, QColor(235, 242, 248, 220));
+        }
+        p.fillPath(path, bgGrad);
+
+        static QPixmap noiseLight;
+        static qreal noiseLightDpr = 0.0;
+        static QPixmap noiseDark;
+        static qreal noiseDarkDpr = 0.0;
+        const qreal dpr = devicePixelRatioF();
+        QPixmap &noisePixmap = darkTheme_ ? noiseDark : noiseLight;
+        qreal &noiseDpr = darkTheme_ ? noiseDarkDpr : noiseLightDpr;
+        if (noisePixmap.isNull() || !qFuzzyCompare(noiseDpr, dpr)) {
+            noiseDpr = dpr;
+            constexpr int logicalSize = 128;
+            const int pixelSize = qMax(16, qRound(logicalSize * qMax<qreal>(1.0, dpr)));
+            QImage img(pixelSize, pixelSize, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::transparent);
+
+            const quint32 seed = darkTheme_ ? 0xC0FFEEu : 0xBADC0DEu;
+            QRandomGenerator rng(seed);
+            for (int y = 0; y < img.height(); ++y) {
+                QRgb *line = reinterpret_cast<QRgb *>(img.scanLine(y));
+                for (int x = 0; x < img.width(); ++x) {
+                    const int alphaBase = darkTheme_ ? 16 : 12;
+                    const int alpha = alphaBase + rng.bounded(darkTheme_ ? 12 : 10);
+                    const int val = darkTheme_ ? (235 + rng.bounded(21)) : rng.bounded(26);
+                    line[x] = qRgba(val, val, val, alpha);
+                }
+            }
+
+            noisePixmap = QPixmap::fromImage(img);
+            noisePixmap.setDevicePixelRatio(qMax<qreal>(1.0, dpr));
+        }
+
+        p.setOpacity(darkTheme_ ? 0.08 : 0.06);
+        p.drawTiledPixmap(baseRect.toRect(), noisePixmap);
+        p.setOpacity(1.0);
+
+        // Top sheen (subtle highlight)
+        QLinearGradient sheen(r.topLeft(), r.bottomLeft());
+        if (darkTheme_) {
+            sheen.setColorAt(0.0, QColor(255, 255, 255, 18));
+            sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
+        } else {
+            sheen.setColorAt(0.0, QColor(255, 255, 255, 80));
+            sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
+        }
+        const QRectF sheenRect(r.left(), r.top(), r.width(), r.height() * 0.46);
+        p.fillRect(sheenRect, sheen);
+
+        p.restore();
+    }
+#endif
 
     // Gradient border
     QConicalGradient grad(r.center(), 135);
@@ -1073,13 +1369,6 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     grad.setColorAt(1.00, QColor("#4A90E2"));
 
     p.setPen(QPen(QBrush(grad), bw));
-
-    // Clear to transparent first so DWM glass/acrylic shows through
-    p.setCompositionMode(QPainter::CompositionMode_Clear);
-    p.fillRect(rect(), Qt::transparent);
-    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
-
-    // Light tint overlay on top of the acrylic blur
     p.setBrush(Qt::NoBrush);
     p.drawPath(path);
 }
@@ -1092,6 +1381,56 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     activateWindow();
     raise();
     setFocus();
+    if (waylandDockEnabled_) {
+        updateWaylandDockMask();
+    }
+}
+
+void MPasteWidget::prepareWaylandDock(const QRect &availableGeometry) {
+    if (!isWaylandPlatform() || !availableGeometry.isValid()) {
+        waylandDockEnabled_ = false;
+        clearMask();
+        return;
+    }
+
+    waylandDockEnabled_ = true;
+
+    if (waylandDockHeight_ <= 0) {
+        waylandDockHeight_ = qMax(1, sizeHint().height());
+    }
+
+    if (!waylandStretchInserted_ && ui_.ui && ui_.ui->verticalLayout) {
+        ui_.ui->verticalLayout->insertStretch(0, 1);
+        waylandStretchInserted_ = true;
+    }
+
+    // GNOME Wayland does not honor client-side move() for toplevels.
+    // Resize the surface to the available screen size, and keep the actual visible/input region
+    // as a bottom dock via mask + top stretch.
+    setFixedWidth(availableGeometry.width());
+    setFixedHeight(availableGeometry.height());
+    resize(availableGeometry.size());
+
+    updateWaylandDockMask();
+}
+
+QRect MPasteWidget::waylandDockRect() const {
+    if (!waylandDockEnabled_) {
+        return rect();
+    }
+
+    const int dockHeight = qBound(1, waylandDockHeight_, height());
+    return QRect(0, height() - dockHeight, width(), dockHeight);
+}
+
+void MPasteWidget::updateWaylandDockMask() {
+    if (!waylandDockEnabled_) {
+        clearMask();
+        return;
+    }
+
+    setMask(QRegion(waylandDockRect()));
+    update();
 }
 
 void MPasteWidget::loadFromSaveDir() {
@@ -1199,7 +1538,33 @@ void MPasteWidget::hideAndPaste() {
 void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == isVisible()) return;
 
+    const bool wayland = isWaylandPlatform();
+
     if (visible) {
+        if (wayland) {
+            QScreen *screen = nullptr;
+            if (QWindow *handle = windowHandle()) {
+                screen = handle->screen();
+            }
+            if (!screen) {
+                screen = QGuiApplication::screenAt(QCursor::pos());
+            }
+            if (!screen) {
+                screen = QGuiApplication::primaryScreen();
+            }
+            prepareWaylandDock(availableGeometryForWidget(screen));
+
+            show();
+            if (clipboard_.copiedWhenHide) {
+                ui_.clipboardWidget->scrollToFirst();
+                clipboard_.copiedWhenHide = false;
+            }
+            raise();
+            activateWindow();
+            setFocus();
+            return;
+        }
+
         setWindowOpacity(0);
         show();
         if (clipboard_.copiedWhenHide) {
@@ -1229,6 +1594,12 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
 
         animation->start(QAbstractAnimation::DeleteWhenStopped);
     } else {
+        if (wayland) {
+            hide();
+            currItemsWidget()->cleanShortCutInfo();
+            return;
+        }
+
         QPropertyAnimation* animation = new QPropertyAnimation(this, "windowOpacity", this);
         animation->setDuration(HIDE_ANIMATION_TIME);
         animation->setStartValue(1.0);

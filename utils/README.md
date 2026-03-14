@@ -18,10 +18,10 @@ update: 修改本目录文件时，同步更新本 README。
 ## 文件说明
 
 - `ClipboardMonitor.h` / `ClipboardMonitor.cpp`：系统剪贴板监听与采集逻辑。
-- `HotKeyManager.h` / `HotKeyManager.cpp`：全局快捷键注册与管理。
+- `HotKeyManager.h` / `HotKeyManager.cpp`：全局快捷键注册与管理（Linux 依赖 X11/XCB，被动 grab；Wayland 会降级为不可用，需要用系统快捷键启动 MPaste）。
 - `MPasteSettings.h` / `MPasteSettings.cpp`：运行配置、持久化设置与默认值管理。
-- `ThemeManager.h` / `ThemeManager.cpp`????????????????????
-- `IconResolver.h` / `IconResolver.cpp`???????/???????
+- `ThemeManager.h` / `ThemeManager.cpp`：主题管理（QSS 合并、调色板、响应系统主题变化；Qt < 6.5 时降级监听调色板变化）。
+- `IconResolver.h` / `IconResolver.cpp`：按主题解析图标资源路径与 QIcon（支持 `*_light.svg` 变体）。
 - `OpenGraphFetcher.h` / `OpenGraphFetcher.cpp`：抓取网页 Open Graph 元数据，供链接卡片预览使用。
 - `PlatformRelated.h` / `PlatformRelated.cpp`：平台相关辅助能力，例如粘贴注入、窗口行为和系统交互。
 - `SingleApplication.h` / `SingleApplication.cpp`：单实例启动控制。
@@ -34,10 +34,13 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## Recent Notes
 - ThemeManager now centralizes app-wide theme switching, palette updates, and QSS token resolution.
+- ThemeManager now uses `QStyleHints::colorSchemeChanged` when available (Qt >= 6.5), and falls back to listening for `QEvent::ApplicationPaletteChange` on older Qt builds.
+- ThemeManager now reads QSS as UTF-8 and strips BOM to avoid "Could not parse application stylesheet" warnings when darkStyle.qss contains a BOM.
 
 - `OpenGraphFetcher` now tracks whether a fetched image is a preview or favicon to preserve link preview thumbnails.
 - `ClipboardMonitor` currently prints detailed clipboard capture diagnostics (`dataChanged`, settle retries, MIME snapshot, duplicate suppression, and app-event emission) to help trace repeated copy handling.
 - `PlatformRelated` now also exposes file-manager reveal helpers; on Windows it opens Explorer and selects one or more local files when the item context menu requests "Open Containing Folder".
+- `PlatformRelated` now detects Qt Wayland platform at runtime and disables X11-only window tracking / paste injection / icon lookup on Wayland so the app can run natively under Wayland without X11 warnings.
 - `MPasteSettings` 现在提供按“数值 + 单位（天 / 周 / 月）”定义的历史保留策略，供列表层按时间自动清理过期条目。
 - `ClipboardMonitor` now reconnects `QClipboard::dataChanged` with `Qt::UniqueConnection`, and suppresses short-window duplicate captures with the same normalized content so one logical copy does not fan out into repeated app-level updates.
 - `ClipboardMonitor` 现在会在需要时额外等待 WPS / 金山的分阶段剪贴板写入，减少一次复制产生两条记录的问题。

@@ -2,12 +2,14 @@
 // output: Applies theme palette and merged QSS to the application.
 // pos: utils layer theme service implementation.
 // update: If I change, update this header block and utils/README.md.
+// note: Qt < 6.5 does not expose QStyleHints::colorScheme/colorSchemeChanged; fall back to palette change signals.
 #include "ThemeManager.h"
 
 #include <QFile>
 #include <QGuiApplication>
 #include <QStyleHints>
 #include <QApplication>
+#include <QEvent>
 
 #include "MPasteSettings.h"
 
@@ -30,14 +32,31 @@ void ThemeManager::initialize() {
     });
 
     if (auto *hints = QGuiApplication::styleHints()) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
         connect(hints, &QStyleHints::colorSchemeChanged, this, [this]() {
             if (MPasteSettings::getInst()->getThemeMode() == MPasteSettings::ThemeSystem) {
                 applyTheme();
             }
         });
+#else
+        Q_UNUSED(hints);
+        qApp->installEventFilter(this);
+#endif
     }
 
     applyTheme();
+}
+
+bool ThemeManager::eventFilter(QObject *watched, QEvent *event) {
+    if (watched == qApp && event && event->type() == QEvent::ApplicationPaletteChange) {
+        if (MPasteSettings::getInst()->getThemeMode() == MPasteSettings::ThemeSystem) {
+            const bool systemDark = MPasteSettings::getInst()->isDarkTheme();
+            if (systemDark != dark_) {
+                applyTheme();
+            }
+        }
+    }
+    return QObject::eventFilter(watched, event);
 }
 
 void ThemeManager::applyTheme() {
@@ -101,7 +120,11 @@ QString ThemeManager::loadStyleFile(const QString &path) const {
     if (!styleFile.open(QFile::ReadOnly | QFile::Text)) {
         return {};
     }
-    const QString content = QLatin1String(styleFile.readAll());
+    QByteArray bytes = styleFile.readAll();
+    if (bytes.startsWith(QByteArrayLiteral("\xEF\xBB\xBF"))) {
+        bytes.remove(0, 3);
+    }
+    const QString content = QString::fromUtf8(bytes);
     styleFile.close();
     return content;
 }

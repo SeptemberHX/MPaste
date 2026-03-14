@@ -37,6 +37,15 @@ extern "C" {
 #include <X11/Xatom.h>
 }
 
+// X11 headers define macros like `KeyPress`/`KeyRelease` that conflict with Qt enums
+// (e.g. `QEvent::KeyPress`). Undefine the known offenders to keep Qt code compiling.
+#ifdef KeyPress
+#undef KeyPress
+#endif
+#ifdef KeyRelease
+#undef KeyRelease
+#endif
+
 class XUtils {
 public:
     static void activeWindowX11(Window winId);

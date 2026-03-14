@@ -32,4 +32,5 @@ update: 修改本目录文件时，同步更新本 README。
 - ?? `darkStyle.qss`???????????????????
 
 - `defaultStyle.qss` 现在把 `countArea` 调整为更轻的半透明胶囊徽标。
+- `defaultStyle.qss` 修正了 `countArea` 的 `qproperty-toolButtonStyle` 写法，避免应用级样式表解析失败。
 - 默认样式现在为主窗口溢出菜单按钮与 `QMenu` 提供了更统一的玻璃化外观。

@@ -127,7 +127,7 @@ QToolButton#countArea:hover {
 }
 
 QToolButton#countArea {
-    qproperty-toolButtonStyle: Qt::ToolButtonTextOnly;
+    qproperty-toolButtonStyle: ToolButtonTextOnly;
 }
 
 QToolButton#countArea:focus {

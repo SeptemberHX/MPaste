@@ -129,6 +129,16 @@ set MPASTE_OPENGL_BACKEND=software
 MPaste.exe
 ```
 
+### Debugging geometry (Linux/Wayland)
+
+If the window appears at an unexpected position or size under Wayland/Xwayland, you can enable placement diagnostics:
+
+```shell
+MPASTE_DEBUG_GEOMETRY=1 QT_QPA_PLATFORM=wayland ./MPaste
+```
+
+This prints the detected Qt platform plugin, screen geometries, device pixel ratio, and the final `move()`/`setFixedWidth()` inputs.
+
 ### History file format
 
 - History files now use `.mpaste v4`, with explicit metadata, embedded thumbnails, and MIME offsets for light loading.

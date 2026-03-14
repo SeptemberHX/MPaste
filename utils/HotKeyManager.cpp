@@ -2,6 +2,7 @@
 // output: 提供 HotKeyManager 的实现逻辑。
 // pos: utils 层中的 HotKeyManager 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
+// note: Linux global hotkeys rely on X11 passive key grabs via Qt's XCB connection; Wayland sessions cannot be supported here.
 // HotKeyManager.cpp
 #include "HotKeyManager.h"
 #include <QApplication>
@@ -10,6 +11,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #elif defined(Q_OS_LINUX)
+#include <QtGui/qguiapplication_platform.h>
 #include <xcb/xcb.h>
 #include <xcb/xcb_keysyms.h>
 #endif
@@ -23,10 +25,19 @@ public:
 #ifdef Q_OS_WIN
         hotkeyId = 0;
 #elif defined(Q_OS_LINUX)
+        connection = nullptr;
+        root = 0;
+        keySymbols = nullptr;
+        keycode = 0;
+        modifiers = 0;
+
         // Initialize XCB connection
-        connection = xcb_connect(nullptr, nullptr);
-        if (xcb_connection_has_error(connection)) {
-            qWarning("Failed to connect to X server");
+        if (auto *x11App = qApp->nativeInterface<QNativeInterface::QX11Application>()) {
+            connection = x11App->connection();
+        }
+        if (!connection) {
+            qWarning("Global hotkey is unavailable: not running on X11 (Wayland session?). "
+                     "Consider configuring a system shortcut to launch MPaste instead.");
             return;
         }
 
@@ -47,9 +58,6 @@ public:
 #ifdef Q_OS_LINUX
         if (keySymbols) {
             xcb_key_symbols_free(keySymbols);
-        }
-        if (connection) {
-            xcb_disconnect(connection);
         }
 #endif
         qApp->removeNativeEventFilter(eventFilter);
@@ -93,10 +101,12 @@ public:
             modifiers |= XCB_MOD_MASK_CONTROL;
         if (qtMods & Qt::AltModifier)
             modifiers |= XCB_MOD_MASK_1;
+        if (qtMods & Qt::MetaModifier)
+            modifiers |= XCB_MOD_MASK_4;
 
         // Get keycode
         int key = keySequence[0] & ~Qt::KeyboardModifierMask;
-        xcb_keycode_t *keycodes = xcb_key_symbols_get_keycode(keySymbols, key);
+        xcb_keycode_t *keycodes = xcb_key_symbols_get_keycode(keySymbols, static_cast<xcb_keysym_t>(key));
         if (!keycodes) {
             return false;
         }
@@ -105,9 +115,30 @@ public:
         free(keycodes);
 
         // Register global hotkey
-        xcb_grab_key(connection, 1, root,
-                     modifiers, keycode,
-                     XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
+        // X11 passive grabs match modifiers exactly; include common lock masks (CapsLock/NumLock)
+        // so the hotkey works regardless of lock state.
+        const uint16_t baseModifiers = static_cast<uint16_t>(modifiers);
+        const uint16_t lockMasks[] = {
+            0,
+            static_cast<uint16_t>(XCB_MOD_MASK_LOCK),              // CapsLock
+            static_cast<uint16_t>(XCB_MOD_MASK_2),                 // NumLock (common)
+            static_cast<uint16_t>(XCB_MOD_MASK_5),                 // NumLock on some layouts
+            static_cast<uint16_t>(XCB_MOD_MASK_LOCK | XCB_MOD_MASK_2),
+            static_cast<uint16_t>(XCB_MOD_MASK_LOCK | XCB_MOD_MASK_5),
+            static_cast<uint16_t>(XCB_MOD_MASK_2 | XCB_MOD_MASK_5),
+            static_cast<uint16_t>(XCB_MOD_MASK_LOCK | XCB_MOD_MASK_2 | XCB_MOD_MASK_5),
+        };
+        for (uint16_t extra : lockMasks) {
+            xcb_void_cookie_t cookie = xcb_grab_key_checked(connection, 1, root,
+                                                            baseModifiers | extra, keycode,
+                                                            XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
+            if (xcb_generic_error_t *error = xcb_request_check(connection, cookie)) {
+                const uint8_t code = error->error_code;
+                free(error);
+                // BadAccess is the common case when the WM already owns the shortcut.
+                qWarning("Failed to grab global hotkey on X11 (error=%u). The shortcut may be in use.", code);
+            }
+        }
 
         xcb_flush(connection);
         return true;
@@ -124,7 +155,20 @@ public:
         }
 #elif defined(Q_OS_LINUX)
         if (connection && keycode != 0) {
-            xcb_ungrab_key(connection, keycode, root, modifiers);
+            const uint16_t baseModifiers = static_cast<uint16_t>(modifiers);
+            const uint16_t lockMasks[] = {
+                0,
+                static_cast<uint16_t>(XCB_MOD_MASK_LOCK),
+                static_cast<uint16_t>(XCB_MOD_MASK_2),
+                static_cast<uint16_t>(XCB_MOD_MASK_5),
+                static_cast<uint16_t>(XCB_MOD_MASK_LOCK | XCB_MOD_MASK_2),
+                static_cast<uint16_t>(XCB_MOD_MASK_LOCK | XCB_MOD_MASK_5),
+                static_cast<uint16_t>(XCB_MOD_MASK_2 | XCB_MOD_MASK_5),
+                static_cast<uint16_t>(XCB_MOD_MASK_LOCK | XCB_MOD_MASK_2 | XCB_MOD_MASK_5),
+            };
+            for (uint16_t extra : lockMasks) {
+                xcb_ungrab_key(connection, keycode, root, baseModifiers | extra);
+            }
             xcb_flush(connection);
             keycode = 0;
             modifiers = 0;

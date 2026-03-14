@@ -26,6 +26,9 @@ public:
 signals:
     void themeChanged(bool dark);
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
     ThemeManager();
 
