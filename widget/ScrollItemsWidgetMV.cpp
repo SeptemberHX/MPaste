@@ -504,6 +504,9 @@ void ScrollItemsWidget::handleCurrentIndexChanged(const QModelIndex &current, co
     Q_UNUSED(previous);
 
     ensureLinkPreviewForIndex(current);
+    if (hoverActionBar_ && hoverActionBar_->isVisible()) {
+        updateHoverActionBar(current);
+    }
 }
 
 void ScrollItemsWidget::createHoverActionBar() {
@@ -1400,6 +1403,11 @@ const ClipboardItem *ScrollItemsWidget::selectedByEnter() {
     return cacheSelectedItem(0);
 }
 
+void ScrollItemsWidget::hideHoverTools() {
+    hoverProxyIndex_ = QPersistentModelIndex();
+    hideHoverActionBar(false);
+}
+
 void ScrollItemsWidget::focusMoveLeft() {
     if (!proxyModel_ || proxyModel_->rowCount() <= 0) {
         return;
@@ -1540,6 +1548,7 @@ void ScrollItemsWidget::showEvent(QShowEvent *event) {
 
 void ScrollItemsWidget::hideEvent(QHideEvent *event) {
     QWidget::hideEvent(event);
+    hideHoverActionBar(false);
     if (boardService_) {
         boardService_->setVisibleHint(false);
     }

@@ -1094,6 +1094,15 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     setFocus();
 }
 
+void MPasteWidget::hideEvent(QHideEvent *event) {
+    QWidget::hideEvent(event);
+    for (auto it = ui_.boardWidgetMap.cbegin(); it != ui_.boardWidgetMap.cend(); ++it) {
+        if (auto *board = it.value()) {
+            board->hideHoverTools();
+        }
+    }
+}
+
 void MPasteWidget::loadFromSaveDir() {
     ui_.staredWidget->loadFromSaveDir();
     for (const ClipboardItem &item : ui_.staredWidget->allItems()) {

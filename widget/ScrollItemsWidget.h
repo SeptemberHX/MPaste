@@ -59,6 +59,7 @@ public:
     const ClipboardItem* currentSelectedItem() const;
     const ClipboardItem* selectedByShortcut(int visibleOrder);
     const ClipboardItem* selectedByEnter();
+    void hideHoverTools();
     void focusMoveLeft();
     void focusMoveRight();
     int getItemCount();

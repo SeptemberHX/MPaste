@@ -17,6 +17,7 @@
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
 #include <QElapsedTimer>
+#include <QHideEvent>
 
 #include "utils/ClipboardMonitor.h"
 #include "data/ClipboardItem.h"
@@ -46,6 +47,7 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
     bool focusNextPrevChild(bool next) override;
 
 signals:

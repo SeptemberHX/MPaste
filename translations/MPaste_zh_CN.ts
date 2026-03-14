@@ -346,26 +346,26 @@
 <context>
     <name>ScrollItemsWidget</name>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="851"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="854"/>
         <source>Preview</source>
         <translation type="unfinished">预览</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="636"/>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="868"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="639"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="871"/>
         <source>Remove from favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="564"/>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="637"/>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="868"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="567"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="640"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="871"/>
         <source>Add to favorites</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="565"/>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="878"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="568"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="881"/>
         <source>Delete</source>
         <translation type="unfinished">删除</translation>
     </message>
