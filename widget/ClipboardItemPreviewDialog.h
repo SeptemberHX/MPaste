@@ -22,6 +22,7 @@ public:
     void showItem(const ClipboardItem &item);
     static bool supportsPreview(const ClipboardItem &item);
     void reject() override;
+    void applyTheme(bool dark);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -46,6 +47,7 @@ private:
 
     QPoint dragOffset_;
     quint64 previewToken_ = 0;
+    bool darkTheme_ = false;
 };
 
 #endif // MPASTE_CLIPBOARDITEMPREVIEWDIALOG_H

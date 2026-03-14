@@ -19,6 +19,7 @@ class MPasteSettings : public QObject {
 public:
     enum PasteShortcutMode { AutoPasteShortcut = 0, CtrlVShortcut, ShiftInsertShortcut, CtrlShiftVShortcut, AltInsertShortcut };
     enum HistoryRetentionUnit { RetentionDays = 0, RetentionWeeks, RetentionMonths };
+    enum ThemeMode { ThemeSystem = 0, ThemeLight, ThemeDark };
 
     static MPasteSettings* getInst();
 
@@ -62,6 +63,10 @@ public:
     bool isPlaySound() const;
     void setPlaySound(bool playSound);
 
+    ThemeMode getThemeMode() const;
+    void setThemeMode(ThemeMode mode);
+    bool isDarkTheme() const;
+
     bool isTerminalTitle(const QString &title);
 
     int getCurrFocusWinId() const;
@@ -90,6 +95,7 @@ private:
     QString shortcutStr;
     int itemScale;
     bool playSound;
+    ThemeMode themeMode;
 
     int currFocusWinId;
 

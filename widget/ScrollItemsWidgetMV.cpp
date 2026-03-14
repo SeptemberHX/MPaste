@@ -2,6 +2,7 @@
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
 // update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar).
+// note: Added dark theme rendering hooks.
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
@@ -47,6 +48,57 @@
 #include "utils/PlatformRelated.h"
 
 namespace {
+
+QString themedIconPath(const char *name, bool dark) {
+    const QString base = QString::fromLatin1(name);
+    if (dark) {
+        return QStringLiteral(":/resources/resources/%1_light.svg").arg(base);
+    }
+    return QStringLiteral(":/resources/resources/%1.svg").arg(base);
+}
+
+QString hoverButtonStyle(bool dark, int borderRadius, int padding) {
+    const QString hoverColor = dark ? QStringLiteral("rgba(255, 255, 255, 0.12)")
+                                    : QStringLiteral("rgba(0, 0, 0, 0.08)");
+    return QString(R"(
+        QToolButton {
+            background: transparent;
+            border: none;
+            border-radius: %1px;
+            padding: %2px;
+        }
+        QToolButton:hover {
+            background: %3;
+        }
+    )").arg(borderRadius).arg(padding).arg(hoverColor);
+}
+
+QString contextMenuStyleSheet(bool dark) {
+    if (!dark) {
+        return QString();
+    }
+    return QStringLiteral(R"(
+        QMenu {
+            background-color: #1E232B;
+            border: 1px solid #2C3440;
+            padding: 6px 6px;
+            color: #D6DEE8;
+        }
+        QMenu::item {
+            padding: 6px 26px 6px 24px;
+            border-radius: 6px;
+        }
+        QMenu::item:selected {
+            background-color: #2D7FD3;
+            color: #FFFFFF;
+        }
+        QMenu::separator {
+            height: 1px;
+            background-color: #2A313C;
+            margin: 4px 8px;
+        }
+    )");
+}
 
 class HoverActionBar final : public QWidget {
 public:
@@ -109,7 +161,14 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
 
 typedef BOOL (WINAPI *pfnSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
-static void enableBlurBehindForWidget(HWND hwnd) {
+static DWORD accentColorFromArgb(const QColor &color) {
+    return (static_cast<DWORD>(color.alpha()) << 24)
+        | (static_cast<DWORD>(color.blue()) << 16)
+        | (static_cast<DWORD>(color.green()) << 8)
+        | static_cast<DWORD>(color.red());
+}
+
+static void enableBlurBehindForWidget(HWND hwnd, const QColor &tintColor) {
     if (!hwnd) {
         return;
     }
@@ -124,7 +183,7 @@ static void enableBlurBehindForWidget(HWND hwnd) {
         return;
     }
 
-    DWORD tint = (28u << 24) | (255u << 16) | (255u << 8) | 255u; // rgba(255,255,255,28)
+    DWORD tint = accentColorFromArgb(tintColor);
 
     ACCENT_POLICY accent{};
     accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
@@ -245,6 +304,16 @@ public:
         setAttribute(Qt::WA_TranslucentBackground);
     }
 
+    void setDark(bool dark) {
+        dark_ = dark;
+        update();
+    }
+
+    void setTransparentInset(int inset) {
+        transparentInset_ = qMax(0, inset);
+        update();
+    }
+
 protected:
     void paintEvent(QPaintEvent *event) override {
         Q_UNUSED(event);
@@ -256,29 +325,34 @@ protected:
         const QPoint endPoint = side_ == Left ? rect().topRight() : rect().topLeft();
         QLinearGradient gradient(startPoint, endPoint);
 
-        const QColor mistColor(232, 236, 239);
-        QColor solid = mistColor;
-        solid.setAlpha(236);
+        const QColor mistColor = dark_ ? QColor(22, 28, 36) : QColor(232, 236, 239);
+        const int denseAlpha = dark_ ? 72 : 192;
+        const int softAlpha = dark_ ? 40 : 104;
+        const int faintAlpha = dark_ ? 18 : 36;
         QColor dense = mistColor;
-        dense.setAlpha(192);
+        dense.setAlpha(denseAlpha);
         QColor soft = mistColor;
-        soft.setAlpha(104);
+        soft.setAlpha(softAlpha);
         QColor faint = mistColor;
-        faint.setAlpha(36);
+        faint.setAlpha(faintAlpha);
         QColor transparent = mistColor;
         transparent.setAlpha(0);
 
-        gradient.setColorAt(0.00, solid);
-        gradient.setColorAt(0.18, solid);
-        gradient.setColorAt(0.38, dense);
-        gradient.setColorAt(0.62, soft);
-        gradient.setColorAt(0.84, faint);
+        const qreal width = qMax<qreal>(1.0, rect().width());
+        const qreal insetRatio = qBound(0.0, transparentInset_ / width, 0.85);
+        const qreal span = 1.0 - insetRatio;
+        gradient.setColorAt(0.00, transparent);
+        gradient.setColorAt(insetRatio, dense);
+        gradient.setColorAt(insetRatio + span * 0.45, soft);
+        gradient.setColorAt(insetRatio + span * 0.78, faint);
         gradient.setColorAt(1.00, transparent);
         painter.fillRect(rect(), gradient);
     }
 
 private:
     Side side_;
+    bool dark_ = false;
+    int transparentInset_ = 0;
 };
 
 class ClipboardBoardView final : public QListView {
@@ -630,6 +704,8 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     connect(listView_->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
         updateHoverActionBarPosition();
     });
+
+    applyTheme(MPasteSettings::getInst()->isDarkTheme());
 }
 
 ScrollItemsWidget::~ScrollItemsWidget() {
@@ -646,6 +722,59 @@ ScrollItemsWidget::~ScrollItemsWidget() {
         }
     }
     delete ui;
+}
+
+void ScrollItemsWidget::applyTheme(bool dark) {
+    darkTheme_ = dark;
+
+    const int scale = MPasteSettings::getInst()->getItemScale();
+    const int borderRadius = qMax(4, 6 * scale / 100);
+    const int padding = qMax(2, 3 * scale / 100);
+    const QString buttonStyle = hoverButtonStyle(darkTheme_, borderRadius, padding);
+
+    if (hoverActionBar_) {
+        auto *hoverBar = static_cast<HoverActionBar *>(hoverActionBar_);
+        hoverBar->setColors(darkTheme_ ? QColor(26, 31, 38, 205) : QColor(255, 255, 255, 185),
+                            darkTheme_ ? QColor(255, 255, 255, 40) : QColor(255, 255, 255, 120));
+    }
+
+    if (hoverDetailsBtn_) {
+        hoverDetailsBtn_->setIcon(QIcon(themedIconPath("details", darkTheme_)));
+        hoverDetailsBtn_->setStyleSheet(buttonStyle);
+    }
+    if (hoverFavoriteBtn_) {
+        hoverFavoriteBtn_->setStyleSheet(buttonStyle);
+        bool favorite = false;
+        if (hoverProxyIndex_.isValid() && proxyModel_ && boardModel_) {
+            const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+            favorite = boardModel_->isFavorite(sourceRow);
+        }
+        updateHoverFavoriteButton(favorite);
+    }
+    if (hoverDeleteBtn_) {
+        hoverDeleteBtn_->setStyleSheet(buttonStyle);
+    }
+
+#ifdef Q_OS_WIN
+    if (hoverActionBar_) {
+        const QColor tint = darkTheme_ ? QColor(16, 22, 30, 72) : QColor(255, 255, 255, 28);
+        enableBlurBehindForWidget(reinterpret_cast<HWND>(hoverActionBar_->winId()), tint);
+    }
+#endif
+
+    if (leftEdgeFadeOverlay_) {
+        auto *overlay = static_cast<EdgeFadeOverlay *>(leftEdgeFadeOverlay_);
+        overlay->setDark(darkTheme_);
+    }
+    if (rightEdgeFadeOverlay_) {
+        auto *overlay = static_cast<EdgeFadeOverlay *>(rightEdgeFadeOverlay_);
+        overlay->setDark(darkTheme_);
+    }
+
+    updateEdgeFadeOverlays();
+    if (listView_) {
+        listView_->viewport()->update();
+    }
 }
 
 QModelIndex ScrollItemsWidget::currentProxyIndex() const {
@@ -689,6 +818,7 @@ void ScrollItemsWidget::createHoverActionBar() {
     const int borderRadius = qMax(6, 8 * scale / 100);
     const int margin = qMax(4, 6 * scale / 100);
     const int spacing = qMax(2, 4 * scale / 100);
+    const bool dark = MPasteSettings::getInst()->isDarkTheme();
 
     auto *hoverBar = new HoverActionBar(listView_->viewport());
     hoverActionBar_ = hoverBar;
@@ -698,11 +828,13 @@ void ScrollItemsWidget::createHoverActionBar() {
     hoverActionBar_->setAttribute(Qt::WA_TransparentForMouseEvents, false);
     hoverActionBar_->setAttribute(Qt::WA_TranslucentBackground);
     hoverBar->setCornerRadius(borderRadius);
-    hoverBar->setColors(QColor(255, 255, 255, 185), QColor(255, 255, 255, 120));
+    hoverBar->setColors(dark ? QColor(26, 31, 38, 205) : QColor(255, 255, 255, 185),
+                        dark ? QColor(255, 255, 255, 40) : QColor(255, 255, 255, 120));
 
 #ifdef Q_OS_WIN
     hoverActionBar_->setAttribute(Qt::WA_NativeWindow);
-    enableBlurBehindForWidget(reinterpret_cast<HWND>(hoverActionBar_->winId()));
+    const QColor tint = dark ? QColor(16, 22, 30, 72) : QColor(255, 255, 255, 28);
+    enableBlurBehindForWidget(reinterpret_cast<HWND>(hoverActionBar_->winId()), tint);
 #endif
 
     hoverOpacity_ = new QGraphicsOpacityEffect(hoverActionBar_);
@@ -713,7 +845,7 @@ void ScrollItemsWidget::createHoverActionBar() {
     layout->setContentsMargins(margin, 0, margin, 0);
     layout->setSpacing(spacing);
 
-    auto createButton = [scale](const QString &iconPath, const QString &tooltip) {
+    auto createButton = [scale, dark](const QString &iconPath, const QString &tooltip) {
         const int iconSz = qMax(12, 14 * scale / 100);
         const int btnSz = qMax(18, 22 * scale / 100);
         const int borderR = qMax(4, 6 * scale / 100);
@@ -723,25 +855,15 @@ void ScrollItemsWidget::createHoverActionBar() {
         button->setIcon(QIcon(iconPath));
         button->setIconSize(QSize(iconSz, iconSz));
         button->setFixedSize(btnSz, btnSz);
-        button->setStyleSheet(QString(R"(
-            QToolButton {
-                background: transparent;
-                border: none;
-                border-radius: %1px;
-                padding: %2px;
-            }
-            QToolButton:hover {
-                background: rgba(0, 0, 0, 0.08);
-            }
-        )").arg(borderR).arg(pad));
+        button->setStyleSheet(hoverButtonStyle(dark, borderR, pad));
         button->setCursor(Qt::PointingHandCursor);
         button->setToolTip(tooltip);
         button->setFocusPolicy(Qt::NoFocus);
         return button;
     };
 
-    hoverDetailsBtn_ = createButton(QStringLiteral(":/resources/resources/details.svg"), detailsLabel());
-    hoverFavoriteBtn_ = createButton(QStringLiteral(":/resources/resources/star_outline.svg"), tr("Add to favorites"));
+    hoverDetailsBtn_ = createButton(themedIconPath("details", dark), detailsLabel());
+    hoverFavoriteBtn_ = createButton(themedIconPath("star_outline", dark), tr("Add to favorites"));
     hoverDeleteBtn_ = createButton(QStringLiteral(":/resources/resources/delete.svg"), tr("Delete"));
 
     layout->addWidget(hoverDetailsBtn_);
@@ -807,9 +929,12 @@ void ScrollItemsWidget::updateHoverFavoriteButton(bool favorite) {
     if (!hoverFavoriteBtn_) {
         return;
     }
-    hoverFavoriteBtn_->setIcon(QIcon(favorite
+    const QString iconPath = favorite
         ? QStringLiteral(":/resources/resources/star_filled.svg")
-        : QStringLiteral(":/resources/resources/star_outline.svg")));
+        : (darkTheme_
+            ? QStringLiteral(":/resources/resources/star_outline_light.svg")
+            : QStringLiteral(":/resources/resources/star_outline.svg"));
+    hoverFavoriteBtn_->setIcon(QIcon(iconPath));
     hoverFavoriteBtn_->setToolTip(favorite
         ? tr("Remove from favorites")
         : tr("Add to favorites"));
@@ -1000,6 +1125,8 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         return;
     }
 
+    const bool dark = darkTheme_;
+
     const bool isFavorite = boardModel_->isFavorite(sourceRow);
     const QList<QUrl> urls = item.getNormalizedUrls();
     const bool canOpenFolder = item.getContentType() == ClipboardItem::File
@@ -1007,13 +1134,14 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) { return url.isLocalFile(); });
 
     QMenu menu(this);
-    menu.addAction(QIcon(QStringLiteral(":/resources/resources/text_plain.svg")), plainTextPasteLabel(), [this]() {
+    menu.setStyleSheet(contextMenuStyleSheet(dark));
+    menu.addAction(QIcon(themedIconPath("text_plain", dark)), plainTextPasteLabel(), [this]() {
         const ClipboardItem *selectedItem = selectedByEnter();
         if (selectedItem) {
             emit plainTextPasteRequested(*selectedItem);
         }
     });
-    menu.addAction(QIcon(QStringLiteral(":/resources/resources/details.svg")), detailsLabel(), [this, proxyIndex]() {
+    menu.addAction(QIcon(themedIconPath("details", dark)), detailsLabel(), [this, proxyIndex]() {
         setCurrentProxyIndex(proxyIndex);
         const ClipboardItem *selectedItem = currentSelectedItem();
         if (!selectedItem) {
@@ -1023,7 +1151,7 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         emit detailsRequested(*selectedItem, sequenceInfo.first, sequenceInfo.second);
     });
     if (ClipboardItemPreviewDialog::supportsPreview(item)) {
-        menu.addAction(QIcon(QStringLiteral(":/resources/resources/preview.svg")), tr("Preview"), [this]() {
+        menu.addAction(QIcon(themedIconPath("preview", dark)), tr("Preview"), [this]() {
             const ClipboardItem *selectedItem = currentSelectedItem();
             if (selectedItem) {
                 emit previewRequested(*selectedItem);
@@ -1344,11 +1472,29 @@ void ScrollItemsWidget::updateEdgeFadeOverlays() {
     }
 
     const QPoint viewportTopLeft = viewport->mapTo(overlayHost, QPoint(0, 0));
-    leftEdgeFadeOverlay_->setGeometry(viewportTopLeft.x(), viewportTopLeft.y(), fadeWidth, viewport->height());
-    rightEdgeFadeOverlay_->setGeometry(viewportTopLeft.x() + viewport->width() - fadeWidth,
-                                       viewportTopLeft.y(),
-                                       fadeWidth,
-                                       viewport->height());
+    const int hostWidth = overlayHost->width();
+    const int leftInset = qMax(0, viewportTopLeft.x());
+    const int rightInset = qMax(0, hostWidth - (viewportTopLeft.x() + viewport->width()));
+    const int leftWidth = qMin(hostWidth, fadeWidth + leftInset);
+    const int rightWidth = qMin(hostWidth, fadeWidth + rightInset);
+    const int overlayHeight = viewport->height();
+
+    if (leftEdgeFadeOverlay_) {
+        auto *overlay = static_cast<EdgeFadeOverlay *>(leftEdgeFadeOverlay_);
+        overlay->setTransparentInset(leftInset);
+        leftEdgeFadeOverlay_->setGeometry(0,
+                                          viewportTopLeft.y(),
+                                          leftWidth,
+                                          overlayHeight);
+    }
+    if (rightEdgeFadeOverlay_) {
+        auto *overlay = static_cast<EdgeFadeOverlay *>(rightEdgeFadeOverlay_);
+        overlay->setTransparentInset(rightInset);
+        rightEdgeFadeOverlay_->setGeometry(hostWidth - rightWidth,
+                                           viewportTopLeft.y(),
+                                           rightWidth,
+                                           overlayHeight);
+    }
     leftEdgeFadeOverlay_->raise();
     rightEdgeFadeOverlay_->raise();
     leftEdgeFadeOverlay_->show();

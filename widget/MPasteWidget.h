@@ -2,6 +2,7 @@
 // output: 对外提供 MPasteWidget 的声明接口。
 // pos: widget 层中的 MPasteWidget 接口定义。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
+// note: Added theme application hooks for dark mode.
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
 
@@ -68,6 +69,7 @@ private:
     void initSound();
     void initMenu();
     void setupConnections();
+    void applyTheme(bool dark);
     void syncSoundOutputDevice();
     void rebuildSoundPlaybackChain(const QAudioDevice &device);
     void playCopySoundIfNeeded(int wId, const QByteArray &fingerprint = QByteArray());
@@ -94,27 +96,30 @@ private:
 
 private:
     struct {
-        Ui::MPasteWidget *ui;
-        QHBoxLayout *layout;
-        AboutWidget *aboutWidget;
-        ClipboardItemDetailsDialog *detailsDialog;
-        ClipboardItemPreviewDialog *previewDialog;
-        MPasteSettingsWidget *settingsWidget;
+        Ui::MPasteWidget *ui = nullptr;
+        QHBoxLayout *layout = nullptr;
+        AboutWidget *aboutWidget = nullptr;
+        ClipboardItemDetailsDialog *detailsDialog = nullptr;
+        ClipboardItemPreviewDialog *previewDialog = nullptr;
+        MPasteSettingsWidget *settingsWidget = nullptr;
 
         QMap<QString, ScrollItemsWidget*> boardWidgetMap;
 
-        QButtonGroup *buttonGroup;
+        QButtonGroup *buttonGroup = nullptr;
 
-        QButtonGroup *typeButtonGroup;
+        QButtonGroup *typeButtonGroup = nullptr;
 
-        ScrollItemsWidget *clipboardWidget;
+        ScrollItemsWidget *clipboardWidget = nullptr;
 
-        ScrollItemsWidget *staredWidget;
+        ScrollItemsWidget *staredWidget = nullptr;
 
-        QPropertyAnimation *searchShowAnim;
-        QPropertyAnimation *searchHideAnim;
-        QSystemTrayIcon *trayIcon;
-        QMenu *menu;
+        QPropertyAnimation *searchShowAnim = nullptr;
+        QPropertyAnimation *searchHideAnim = nullptr;
+        QSystemTrayIcon *trayIcon = nullptr;
+        QMenu *menu = nullptr;
+        QAction *aboutAction = nullptr;
+        QAction *settingsAction = nullptr;
+        QAction *quitAction = nullptr;
     } ui_;
 
     struct {
@@ -136,6 +141,8 @@ private:
 
     static constexpr int HIDE_ANIMATION_TIME = 50;
     static constexpr qint64 SOUND_BURST_WINDOW_MS = 500;
+
+    bool darkTheme_ = false;
 };
 
 

@@ -43,6 +43,7 @@ A clipboard manager alternative to Paste for Linux & Windows.
 * auto paste
 * Paste selected item as plain text
 
+* Dark mode
 ## Shortcut
 
 * `Alt+[1-9, 0]`: quick select and paste item. Holding `Alt` can show the shortcut tips

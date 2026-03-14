@@ -2,6 +2,7 @@
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
 // update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks + link preview caption trimmed + header spacing + link url shortcut spacing).
+// note: Adjusted card palette for dark theme.
 #include "ClipboardCardDelegate.h"
 
 #include <cmath>
@@ -846,8 +847,15 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     const QRect bodyRect(cardRect.left(), topRect.bottom(), cardRect.width(), cardRect.height() - topHeight - effectiveFooterHeight);
     const QRect footerRect(cardRect.left(), cardRect.bottom() - effectiveFooterHeight + 1, cardRect.width(), effectiveFooterHeight);
 
+    const bool darkTheme = MPasteSettings::getInst()->isDarkTheme();
+    const QColor baseSurface = darkTheme ? QColor(QStringLiteral("#1C232C")) : QColor(QStringLiteral("#FFFFFF"));
+    const QColor bodyTextColor = darkTheme ? QColor(QStringLiteral("#D8E1EB")) : QColor(QStringLiteral("#30343B"));
+    const QColor linkTitleColor = darkTheme ? QColor(QStringLiteral("#E6EDF5")) : QColor(QStringLiteral("#555555"));
+    const QColor linkUrlColor = darkTheme ? QColor(QStringLiteral("#B7C3D4")) : QColor(QStringLiteral("#555555"));
+    const QColor footerTextColor = darkTheme ? QColor(QStringLiteral("#93A2B3")) : QColor(QStringLiteral("#556270"));
+    const QColor subtleBorderColor = darkTheme ? QColor(255, 255, 255, 24) : QColor(0, 0, 0, 18);
     const QColor topColor = dominantHeaderColor(card.icon);
-    const QColor bgColor = blendColor(topColor, QColor(QStringLiteral("#FFFFFF")), 0.975);
+    const QColor bgColor = blendColor(topColor, baseSurface, darkTheme ? 0.86 : 0.975);
     const bool selected = option.state.testFlag(QStyle::State_Selected);
 
     painter->save();
@@ -936,7 +944,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                 QFont previewFont = painter->font();
                 previewFont.setPointSize(qMax(9, 10 * scale / 100));
                 drawWrappedText(painter, imagePreviewRect.adjusted(10 * scale / 100, 8 * scale / 100, -10 * scale / 100, -6 * scale / 100),
-                                previewTextForCard(card), previewFont, QColor(QStringLiteral("#30343B")));
+                                previewTextForCard(card), previewFont, bodyTextColor);
             }
             break;
         case ClipboardItem::RichText:
@@ -945,7 +953,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             } else {
                 QFont previewFont = painter->font();
                 previewFont.setPointSize(qMax(9, 10 * scale / 100));
-                drawWrappedText(painter, previewRect, previewTextForCard(card), previewFont, QColor(QStringLiteral("#30343B")));
+                drawWrappedText(painter, previewRect, previewTextForCard(card), previewFont, bodyTextColor);
             }
             break;
         case ClipboardItem::Color: {
@@ -1031,20 +1039,20 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                           titleRect,
                           card.title.isEmpty() ? fallbackHeadline(QString(), currentUrl) : card.title,
                           linkTitleFont,
-                          QColor(QStringLiteral("#555555")),
+                          linkTitleColor,
                           linkPadding);
             drawLinkLabel(painter,
                           adjustedUrlRect,
                           linkText,
                           linkUrlFont,
-                          QColor(QStringLiteral("#555555")),
+                          linkUrlColor,
                           linkPadding);
             if (drawShortcut) {
                 drawElidedText(painter,
                                shortcutRect,
                                shortcutText,
                                shortcutFont,
-                               QColor(QStringLiteral("#556270")),
+                               footerTextColor,
                                Qt::AlignRight | Qt::AlignVCenter);
             }
             break;
@@ -1111,7 +1119,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                 const QString formatted = formatTwoLineEndElidedText(fileNames, previewFont, metrics, textRect.width());
                 painter->save();
                 painter->setFont(previewFont);
-                painter->setPen(QColor(QStringLiteral("#30343B")));
+                painter->setPen(bodyTextColor);
                 painter->drawText(textRect, Qt::AlignLeft | Qt::AlignTop, formatted);
                 painter->restore();
                 break;
@@ -1123,14 +1131,14 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             QFont previewFont = painter->font();
             previewFont.setPointSize(qMax(9, 10 * scale / 100));
             drawWrappedText(painter, previewRect.adjusted(glyphSize + 12 * scale / 100, 2 * scale / 100, -4 * scale / 100, -2 * scale / 100),
-                            previewTextForCard(card), previewFont, QColor(QStringLiteral("#30343B")));
+                            previewTextForCard(card), previewFont, bodyTextColor);
             break;
         }
         case ClipboardItem::Text:
         case ClipboardItem::All: {
             QFont previewFont = painter->font();
             previewFont.setPointSize(qMax(9, 10 * scale / 100));
-            drawWrappedText(painter, previewRect, previewTextForCard(card), previewFont, QColor(QStringLiteral("#30343B")));
+            drawWrappedText(painter, previewRect, previewTextForCard(card), previewFont, bodyTextColor);
             break;
         }
     }
@@ -1160,11 +1168,11 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             footerRect.width() - footerPadding * 2 - shortcutWidth,
             footerRect.height());
         const bool isSingleFilePath = card.contentType == ClipboardItem::File && card.normalizedUrls.size() == 1;
-        drawElidedText(painter, countRect, countLabelForCard(card), footerFont, QColor(QStringLiteral("#556270")),
+        drawElidedText(painter, countRect, countLabelForCard(card), footerFont, footerTextColor,
                        Qt::AlignLeft | Qt::AlignVCenter,
                        isSingleFilePath ? Qt::ElideMiddle : Qt::ElideRight);
         if (!shortcutText.isEmpty()) {
-            drawElidedText(painter, shortcutRect, shortcutText, footerFont, QColor(QStringLiteral("#556270")),
+            drawElidedText(painter, shortcutRect, shortcutText, footerFont, footerTextColor,
                            Qt::AlignRight | Qt::AlignVCenter);
         }
     }
@@ -1178,7 +1186,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     }
 
     const int borderWidth = selected ? qMax(2, 3 * scale / 100) : qMax(1, scale / 100);
-    const QColor borderColor = selected ? borderColor_ : (card.favorite ? QColor(QStringLiteral("#F4C542")) : QColor(0, 0, 0, 18));
+    const QColor borderColor = selected ? borderColor_ : (card.favorite ? QColor(QStringLiteral("#F4C542")) : subtleBorderColor);
     painter->setPen(QPen(borderColor, borderWidth));
     painter->setBrush(Qt::NoBrush);
     painter->drawRoundedRect(QRectF(cardRect).adjusted(0.5, 0.5, -0.5, -0.5), cardRadius, cardRadius);

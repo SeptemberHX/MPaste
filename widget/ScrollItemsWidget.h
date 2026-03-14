@@ -2,6 +2,7 @@
 // output: Exposes one history board with lazy loading, filtering, dedup indexing, and paste signals.
 // pos: Widget-layer horizontal board declaration for clipboard/favorites views.
 // update: If I change, update this header block and my folder README.md.
+// note: Added theme application entry point.
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
 
@@ -69,6 +70,7 @@ public:
     void setItemFavorite(const ClipboardItem &item, bool favorite);
     QList<ClipboardItem> allItems();
     bool handleWheelScroll(QWheelEvent *event);
+    void applyTheme(bool dark);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -168,6 +170,7 @@ private:
 
     QString currentKeyword_;
     ClipboardItem::ContentType currentTypeFilter_ = ClipboardItem::All;
+    bool darkTheme_ = false;
 
     static constexpr int INITIAL_LOAD_BATCH_SIZE = 24;
     static constexpr int LOAD_BATCH_SIZE = 16;

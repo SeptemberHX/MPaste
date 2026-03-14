@@ -29,6 +29,7 @@
 #include <QPointer>
 
 #include "data/LocalSaver.h"
+#include "utils/MPasteSettings.h"
 namespace {
 constexpr int kPreviewDialogWidth = 980;
 constexpr int kPreviewDialogHeight = 760;
@@ -156,6 +157,100 @@ struct PreviewPayload {
     QImage image;
     QString imageUrl;
 };
+
+QString previewStyleSheet(bool dark) {
+    if (dark) {
+        return QStringLiteral(R"(
+            QFrame#previewCard {
+                background-color: rgba(26, 31, 38, 245);
+                border: none;
+                border-radius: 18px;
+            }
+            QLabel#previewTitle {
+                color: #E6EDF5;
+                font-size: 22px;
+                font-weight: 700;
+                background: transparent;
+            }
+            QLabel#previewSubtitle {
+                color: #9AA7B5;
+                font-size: 14px;
+                background: transparent;
+            }
+            QTextBrowser {
+                background-color: #1F242D;
+                border: 1px solid rgba(116, 154, 214, 40);
+                border-radius: 14px;
+                padding: 12px;
+                color: #E6EDF5;
+                font-size: 16px;
+                selection-background-color: rgba(74, 144, 226, 110);
+            }
+            QTextBrowser:focus {
+                border-color: rgba(116, 154, 214, 80);
+            }
+            QToolButton#closeButton {
+                background-color: #1F242D;
+                border: 1px solid rgba(116, 154, 214, 40);
+                border-radius: 14px;
+                color: #C9D4E0;
+                font-size: 17px;
+                font-weight: 700;
+                min-width: 28px;
+                min-height: 28px;
+            }
+            QToolButton#closeButton:hover {
+                background-color: #27303A;
+                border-color: rgba(116, 154, 214, 80);
+            }
+        )");
+    }
+
+    return QStringLiteral(R"(
+        QFrame#previewCard {
+            background-color: rgba(247, 250, 255, 245);
+            border: none;
+            border-radius: 18px;
+        }
+        QLabel#previewTitle {
+            color: #1E2936;
+            font-size: 22px;
+            font-weight: 700;
+            background: transparent;
+        }
+        QLabel#previewSubtitle {
+            color: #5E7084;
+            font-size: 14px;
+            background: transparent;
+        }
+        QTextBrowser {
+            background-color: #FFFFFF;
+            border: 1px solid rgba(74, 144, 226, 18);
+            border-radius: 14px;
+            padding: 12px;
+            color: #1E2936;
+            font-size: 16px;
+            selection-background-color: rgba(74, 144, 226, 76);
+        }
+        QTextBrowser:focus {
+            border-color: rgba(74, 144, 226, 30);
+        }
+        QToolButton#closeButton {
+            background-color: #FFFFFF;
+            border: 1px solid rgba(74, 144, 226, 16);
+            border-radius: 14px;
+            color: #5E7084;
+            font-size: 17px;
+            font-weight: 700;
+            min-width: 28px;
+            min-height: 28px;
+        }
+        QToolButton#closeButton:hover {
+            background-color: #F7FAFF;
+            border-color: rgba(74, 144, 226, 24);
+        }
+    )");
+}
 
 PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
                                    const QString &normalizedText,
@@ -335,6 +430,8 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     ui_.browser->viewport()->installEventFilter(this);
     ui_.browser->viewport()->setCursor(Qt::ArrowCursor);
     cardLayout->addWidget(ui_.browser, 1);
+
+    applyTheme(MPasteSettings::getInst()->isDarkTheme());
 }
 
 bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {
@@ -486,6 +583,19 @@ void ClipboardItemPreviewDialog::reject() {
     QDialog::reject();
 }
 
+void ClipboardItemPreviewDialog::applyTheme(bool dark) {
+    darkTheme_ = dark;
+    if (ui_.browser) {
+        ui_.browser->setStyleSheet(QString());
+    }
+    if (QWidget *card = findChild<QWidget*>(QStringLiteral("previewCard"))) {
+        card->setStyleSheet(previewStyleSheet(darkTheme_));
+    } else {
+        setStyleSheet(previewStyleSheet(darkTheme_));
+    }
+    update();
+}
+
 bool ClipboardItemPreviewDialog::eventFilter(QObject *watched, QEvent *event) {
     if ((watched == ui_.browser || watched == ui_.browser->viewport())
         && event->type() == QEvent::KeyPress) {
@@ -531,7 +641,7 @@ void ClipboardItemPreviewDialog::paintEvent(QPaintEvent *) {
     gradient.setColorAt(1.00, QColor("#4A90E2"));
 
     painter.setPen(QPen(QBrush(gradient), borderWidth));
-    painter.setBrush(QColor(247, 250, 255, 245));
+    painter.setBrush(darkTheme_ ? QColor(26, 31, 38, 245) : QColor(247, 250, 255, 245));
     painter.drawRoundedRect(outerRect, radius, radius);
 }
 

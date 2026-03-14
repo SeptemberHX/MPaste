@@ -1,0 +1,135 @@
+﻿/*
+ * input: Depends on Qt style system and resource paths.
+ * output: Provides dark theme color overrides for the main window and common controls.
+ * pos: resources/style theme stylesheet.
+ * update: Keep this header and resources/style/README.md in sync.
+ * note: Added for dark theme support.
+ */
+QWidget#pasteWidget {
+    background: transparent;  /* Background and gradient border are painted in paintEvent */
+}
+
+QWidget#pasteWidget,
+QWidget#pasteWidget QLabel,
+QWidget#pasteWidget QToolButton,
+QWidget#pasteWidget QPushButton {
+    color: #D6DEE8;
+}
+
+QToolButton#clipboardButton,
+QToolButton#staredButton,
+QToolButton#allTypeBtn,
+QToolButton#textTypeBtn,
+QToolButton#linkTypeBtn,
+QToolButton#imageTypeBtn,
+QToolButton#richTextTypeBtn,
+QToolButton#fileTypeBtn {
+    color: #D6DEE8;
+}
+
+#firstButton:hover, #lastButton:hover,
+#firstButton:selected, #lastButton:selected,
+#searchButton:selected, #searchButton:hover,
+#menuButton:selected, #menuButton:hover {
+    background-color: rgba(28, 34, 44, 0.92);
+}
+
+/* Input box */
+QLineEdit {
+    border-color: #3A4655;
+    background-color: rgba(24, 29, 36, 0.95);
+    color: #E6EDF5;
+}
+
+QLineEdit:focus {
+    border-color: #4A90E2;
+}
+
+QLineEdit::placeholder {
+    color: rgba(214, 222, 232, 0.55);
+}
+
+/* Count badge */
+QToolButton#countArea {
+    background-color: rgba(20, 26, 34, 0.55);
+    color: #F2F6FB;
+    border: 1px solid rgba(116, 154, 214, 0.25);
+}
+
+QToolButton#countArea:hover {
+    background-color: rgba(30, 38, 48, 0.7);
+    border-color: rgba(116, 154, 214, 0.35);
+}
+
+/* Clipboard tabs */
+QWidget#clipboardBtnWidget QToolButton {
+    color: #F2F6FB;
+}
+QWidget#clipboardBtnWidget QToolButton:!checked {
+    color: #F2F6FB;
+}
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:hover,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:pressed,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:checked,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
+    background-color: rgba(28, 34, 44, 0.92);
+    border: 2px solid #4A90E2;
+    color: #F2F6FB;
+    outline: none;
+}
+
+QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
+QWidget#clipboardBtnWidget QToolButton#staredButton:pressed,
+QWidget#clipboardBtnWidget QToolButton#staredButton:checked,
+QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
+    background-color: rgba(28, 34, 44, 0.92);
+    border: 2px solid #fc9867;
+    color: #F2F6FB;
+    outline: none;
+}
+
+/* Type filter pills */
+QWidget#typeBtnWidget QToolButton {
+    color: #F2F6FB;
+}
+QWidget#typeBtnWidget QToolButton:!checked {
+    color: #F2F6FB;
+}
+
+QWidget#typeBtnWidget QToolButton:hover,
+QWidget#typeBtnWidget QToolButton:pressed,
+QWidget#typeBtnWidget QToolButton:checked {
+    background-color: rgba(28, 34, 44, 0.92);
+    border: 2px solid #4A90E2;
+    color: #F2F6FB;
+    outline: none;
+}
+
+/* About window */
+QWidget#AboutWidget {
+    background-color: rgba(26, 31, 38, 0.96);
+    border: 1px solid #2C3440;
+}
+QWidget#AboutWidget QLabel {
+    color: #D6DEE8;
+}
+
+/* Menu and tooltip */
+QMenu {
+    background-color: #1E232B;
+    border: 1px solid #2C3440;
+    color: #D6DEE8;
+}
+QMenu::item:selected {
+    background-color: #2D7FD3;
+    color: #FFFFFF;
+}
+QMenu::separator {
+    background-color: #2A313C;
+}
+
+QToolTip {
+    color: #E6EDF5;
+    background-color: #1E232B;
+    border: 1px solid #2C3440;
+}

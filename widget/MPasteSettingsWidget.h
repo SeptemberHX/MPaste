@@ -23,10 +23,12 @@ class MPasteSettingsWidget : public QDialog
 public:
     explicit MPasteSettingsWidget(QWidget *parent = nullptr);
     ~MPasteSettingsWidget();
+    void applyTheme(bool dark);
 
 signals:
     void shortcutChanged(const QString &newShortcut);
     void historyRetentionChanged();
+    void themeChanged();
 
 public slots:
     void accept() override;
@@ -45,8 +47,11 @@ private:
     ToggleSwitch *autoStartSwitch_;
     QLabel *pasteShortcutLabel_ = nullptr;
     QComboBox *pasteShortcutCombo_ = nullptr;
+    QLabel *themeLabel_ = nullptr;
+    QComboBox *themeCombo_ = nullptr;
     QComboBox *retentionUnitCombo_ = nullptr;
     QPoint dragPos_;
+    bool darkTheme_ = false;
 };
 
 #endif // MPASTESETTINGSWIDGET_H

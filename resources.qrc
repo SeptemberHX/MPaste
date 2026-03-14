@@ -4,35 +4,49 @@ output: 对外提供 Qt 资源索引清单。
 pos: 根目录中的资源注册清单。
 update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 -->
+<!-- note: Added dark theme stylesheet and light icon variants. -->
 <RCC>
     <qresource prefix="/resources">
         <file>resources/sound.mp3</file>
         <file>resources/mpaste.svg</file>
         <file>resources/unknown.svg</file>
         <file>resources/search.svg</file>
+        <file>resources/search_light.svg</file>
         <file>resources/broken.svg</file>
         <file>resources/files.svg</file>
         <file>resources/unknown_favico.svg</file>
         <file>resources/app_zh.qm</file>
         <file>resources/star_outline.svg</file>
+        <file>resources/star_outline_light.svg</file>
         <file>resources/star_filled.svg</file>
         <file>resources/delete.svg</file>
         <file>resources/save_black.svg</file>
         <file>resources/text_plain.svg</file>
+        <file>resources/text_plain_light.svg</file>
         <file>resources/details.svg</file>
+        <file>resources/details_light.svg</file>
         <file>resources/add_black.svg</file>
         <file>resources/first.svg</file>
+        <file>resources/first_light.svg</file>
         <file>resources/last.svg</file>
+        <file>resources/last_light.svg</file>
         <file>resources/preview.svg</file>
+        <file>resources/preview_light.svg</file>
         <file>resources/quit.svg</file>
         <file>resources/info.svg</file>
+        <file>resources/info_light.svg</file>
         <file>resources/settings.svg</file>
+        <file>resources/settings_light.svg</file>
         <file>resources/menu_more.svg</file>
+        <file>resources/menu_more_light.svg</file>
         <file>resources/star.svg</file>
 
         <file>resources/spin_up.svg</file>
         <file>resources/spin_down.svg</file>
+        <file>resources/spin_up_light.svg</file>
+        <file>resources/spin_down_light.svg</file>
 
         <file>resources/style/defaultStyle.qss</file>
+        <file>resources/style/darkStyle.qss</file>
     </qresource>
 </RCC>

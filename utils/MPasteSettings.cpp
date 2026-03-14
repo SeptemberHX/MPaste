@@ -11,6 +11,9 @@
 #include <QDir>
 #include <iostream>
 #include <QSettings>
+#include <QGuiApplication>
+#include <QPalette>
+#include <QStyleHints>
 
 MPasteSettings *MPasteSettings::inst = nullptr;
 
@@ -47,6 +50,7 @@ MPasteSettings::MPasteSettings()
     this->shortcutStr = "Alt+Q";
     this->itemScale = 100;
     this->playSound = true;
+    this->themeMode = ThemeSystem;
 
     this->terminalNames << tr("Terminal");
 
@@ -106,6 +110,8 @@ void MPasteSettings::loadSettings() {
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
     this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
+    this->themeMode = static_cast<ThemeMode>(
+        settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
 }
 
 void MPasteSettings::saveSettings() {
@@ -120,6 +126,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/shortcut", this->shortcutStr);
     settings.setValue("main/itemScale", this->itemScale);
     settings.setValue("main/playSound", this->playSound);
+    settings.setValue("main/themeMode", static_cast<int>(this->themeMode));
 }
 
 bool MPasteSettings::isAutoPaste() const {
@@ -188,6 +195,33 @@ bool MPasteSettings::isPlaySound() const {
 
 void MPasteSettings::setPlaySound(bool playSound) {
     MPasteSettings::playSound = playSound;
+}
+
+MPasteSettings::ThemeMode MPasteSettings::getThemeMode() const {
+    return themeMode;
+}
+
+void MPasteSettings::setThemeMode(MPasteSettings::ThemeMode mode) {
+    themeMode = mode;
+}
+
+bool MPasteSettings::isDarkTheme() const {
+    switch (themeMode) {
+        case ThemeDark:
+            return true;
+        case ThemeLight:
+            return false;
+        case ThemeSystem:
+        default:
+            break;
+    }
+
+    if (auto *hints = QGuiApplication::styleHints()) {
+        return hints->colorScheme() == Qt::ColorScheme::Dark;
+    }
+
+    const QColor windowColor = QGuiApplication::palette().color(QPalette::Window);
+    return windowColor.lightness() < 128;
 }
 
 bool MPasteSettings::isTerminalTitle(const QString &title) {

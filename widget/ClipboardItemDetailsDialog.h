@@ -2,6 +2,7 @@
 // output: Exposes a lightweight details dialog for one clipboard item with a stable inspector width and no card shadow.
 // pos: Widget-layer inspector dialog declaration used to debug and understand clipboard items.
 // update: If I change, update this header block and my folder README.md.
+// note: Added theme application support.
 #ifndef MPASTE_CLIPBOARDITEMDETAILSDIALOG_H
 #define MPASTE_CLIPBOARDITEMDETAILSDIALOG_H
 
@@ -24,6 +25,7 @@ class ClipboardItemDetailsDialog : public QDialog {
 public:
     explicit ClipboardItemDetailsDialog(QWidget *parent = nullptr);
     void showItem(const ClipboardItem &item, int sequence = -1, int totalCount = -1);
+    void applyTheme(bool dark);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -70,6 +72,7 @@ private:
     } ui_;
 
     QPoint dragOffset_;
+    bool darkTheme_ = false;
 };
 
 #endif // MPASTE_CLIPBOARDITEMDETAILSDIALOG_H

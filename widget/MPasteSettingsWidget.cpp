@@ -2,6 +2,7 @@
 // output: 提供设置窗口的界面初始化、样式和交互逻辑实现。
 // pos: widget 层中的 MPasteSettingsWidget 实现文件。
 // update: 修改本文件时，同步更新文件头注释与 `widget/README.md`。
+// note: Dark theme now uses light spin icons.
 #include "MPasteSettingsWidget.h"
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"
@@ -49,7 +50,188 @@ QString uiText(const char *source, const QString &zhFallback) {
 }
 }
 
-static QString settingsStyleSheet() {
+static QString settingsStyleSheet(bool dark) {
+    if (dark) {
+        return QStringLiteral(R"(
+            QDialog {
+                background: transparent;
+            }
+
+            QLabel#titleLabel {
+                color: #E6EDF5;
+                font-size: 20px;
+                font-weight: 700;
+                background: transparent;
+            }
+
+            QFrame#generalCard {
+                background-color: #1E232B;
+                border: 1px solid #2B3440;
+                border-radius: 8px;
+            }
+
+            QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
+                background-color: #2A313C;
+                border: none;
+                max-height: 1px;
+            }
+
+            QFrame#generalCard QLabel {
+                color: #D6DEE8;
+                font-size: 13px;
+                font-weight: 400;
+                background: transparent;
+                padding: 0;
+                border: none;
+            }
+
+            QSpinBox {
+                background-color: #252B34;
+                border: 1px solid #2F3945;
+                border-radius: 6px;
+                padding: 2px 6px;
+                font-size: 13px;
+                color: #E6EDF5;
+                selection-background-color: #2D7FD3;
+                selection-color: white;
+            }
+            QSpinBox:hover {
+                background-color: #2A313C;
+                border-color: #3A4552;
+            }
+            QSpinBox:focus {
+                background-color: #20262F;
+                border: 2px solid #2D7FD3;
+                padding: 1px 5px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                width: 20px;
+                border: none;
+                background: transparent;
+            }
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #2D343F;
+            }
+            QSpinBox::up-arrow {
+                image: url(:/resources/resources/spin_up_light.svg);
+                width: 10px; height: 6px;
+            }
+            QSpinBox::down-arrow {
+                image: url(:/resources/resources/spin_down_light.svg);
+                width: 10px; height: 6px;
+            }
+
+            QComboBox {
+                background-color: #252B34;
+                border: 1px solid #2F3945;
+                border-radius: 6px;
+                padding: 2px 28px 2px 8px;
+                font-size: 13px;
+                color: #E6EDF5;
+                min-height: 28px;
+            }
+            QComboBox:hover {
+                background-color: #2A313C;
+                border-color: #3A4552;
+            }
+            QComboBox:focus {
+                background-color: #20262F;
+                border: 2px solid #2D7FD3;
+                padding: 1px 27px 1px 7px;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 22px;
+                border: none;
+                background: transparent;
+            }
+            QComboBox::down-arrow {
+                image: url(:/resources/resources/spin_down_light.svg);
+                width: 10px;
+                height: 6px;
+            }
+            QComboBox QAbstractItemView {
+                background: #1E232B;
+                border: 1px solid #3A4552;
+                selection-background-color: #2D7FD3;
+                selection-color: #FFFFFF;
+            }
+
+            QKeySequenceEdit {
+                background-color: #252B34;
+                border: 1px solid #2F3945;
+                border-radius: 6px;
+                padding: 4px 8px;
+                font-size: 13px;
+                color: #E6EDF5;
+            }
+            QKeySequenceEdit:hover {
+                background-color: #2A313C;
+                border-color: #3A4552;
+            }
+            QKeySequenceEdit:focus {
+                background-color: #20262F;
+                border: 2px solid #2D7FD3;
+                padding: 3px 7px;
+            }
+
+            QPushButton {
+                background-color: #252B34;
+                border: 1px solid #2F3945;
+                border-radius: 4px;
+                padding: 4px 16px;
+                font-size: 13px;
+                font-weight: 600;
+                color: #E6EDF5;
+                min-width: 60px;
+                min-height: 24px;
+            }
+            QPushButton:hover {
+                background-color: #2A313C;
+            }
+            QPushButton:pressed {
+                background-color: #1E232B;
+                color: #C6D0DB;
+            }
+
+            QPushButton[text="OK"] {
+                background-color: #2D7FD3;
+                border: 1px solid #2D7FD3;
+                color: white;
+            }
+            QPushButton[text="OK"]:hover {
+                background-color: #276FBA;
+                border-color: #276FBA;
+            }
+            QPushButton[text="OK"]:pressed {
+                background-color: #215C9A;
+                border-color: #215C9A;
+            }
+
+            QSlider::groove:horizontal {
+                border: 1px solid #2F3945;
+                height: 4px;
+                background: #262C35;
+                border-radius: 2px;
+            }
+            QSlider::handle:horizontal {
+                background: #2D7FD3;
+                border: none;
+                width: 14px;
+                height: 14px;
+                margin: -5px 0;
+                border-radius: 7px;
+            }
+            QSlider::handle:horizontal:hover {
+                background: #276FBA;
+            }
+
+            QDialogButtonBox {
+                button-layout: 2;
+            }
+        )");
+    }
     return QStringLiteral(R"(
         QDialog {
             background: transparent;
@@ -241,13 +423,17 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
 
-    setStyleSheet(settingsStyleSheet());
+    applyTheme(MPasteSettings::getInst()->isDarkTheme());
 
     setWindowTitle(uiText("Settings", QStringLiteral("设置")));
     ui->titleLabel->setText(uiText("Settings", QStringLiteral("设置")));
+    if (auto *grid = qobject_cast<QGridLayout*>(ui->generalCard->layout())) {
+        grid->removeWidget(ui->label);
+        grid->removeWidget(ui->numSpinBox);
+    }
     ui->label->hide();
     ui->numSpinBox->hide();
-    ui->sep1->hide();
+    ui->sep1->show();
     ui->label_2->setText(uiText("Retention period", QStringLiteral("保留时长")));
     ui->label_autostart->setText(uiText("Launch at startup", QStringLiteral("开机自启动")));
     ui->label_3->setText(uiText("Play copy sound", QStringLiteral("播放复制提示音")));
@@ -266,6 +452,26 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         grid->removeWidget(ui->playSoundCheckBox);
         ui->playSoundCheckBox->hide();
         grid->addWidget(toggleSwitch_, 6, 1, Qt::AlignRight | Qt::AlignVCenter);
+
+        themeLabel_ = new QLabel(uiText("Theme", QStringLiteral("主题")), this);
+        themeLabel_->setMinimumHeight(44);
+        themeCombo_ = new QComboBox(this);
+        themeCombo_->setMinimumSize(QSize(140, 32));
+        themeCombo_->setMaximumHeight(32);
+        themeCombo_->addItem(uiText("Follow system", QStringLiteral("跟随系统")), static_cast<int>(MPasteSettings::ThemeSystem));
+        themeCombo_->addItem(uiText("Light", QStringLiteral("浅色")), static_cast<int>(MPasteSettings::ThemeLight));
+        themeCombo_->addItem(uiText("Dark", QStringLiteral("暗色")), static_cast<int>(MPasteSettings::ThemeDark));
+        grid->addWidget(themeLabel_, 0, 0);
+        grid->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+        connect(themeCombo_, &QComboBox::currentIndexChanged, this, [this]() {
+            if (!themeCombo_) {
+                return;
+            }
+            const auto mode = static_cast<MPasteSettings::ThemeMode>(themeCombo_->currentData().toInt());
+            const bool dark = mode == MPasteSettings::ThemeDark
+                || (mode == MPasteSettings::ThemeSystem && MPasteSettings::getInst()->isDarkTheme());
+            applyTheme(dark);
+        });
 
         pasteShortcutLabel_ = new QLabel(uiText("Auto-paste shortcut", QStringLiteral("自动粘贴快捷键")), this);
         pasteShortcutLabel_->setMinimumHeight(44);
@@ -343,7 +549,7 @@ void MPasteSettingsWidget::paintEvent(QPaintEvent *)
 
     QPen pen(QBrush(grad), BORDER_WIDTH);
     p.setPen(pen);
-    p.setBrush(QColor("#F3F3F3"));
+    p.setBrush(darkTheme_ ? QColor("#171B22") : QColor("#F3F3F3"));
     p.drawRoundedRect(r.adjusted(BORDER_WIDTH / 2.0, BORDER_WIDTH / 2.0,
                                  -BORDER_WIDTH / 2.0, -BORDER_WIDTH / 2.0),
                       CORNER_RADIUS, CORNER_RADIUS);
@@ -387,6 +593,11 @@ void MPasteSettingsWidget::loadSettings()
     ui->itemScaleSlider->setValue(settings->getItemScale());
     ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
     toggleSwitch_->setChecked(settings->isPlaySound());
+    if (themeCombo_) {
+        const int index = themeCombo_->findData(static_cast<int>(settings->getThemeMode()));
+        themeCombo_->setCurrentIndex(index >= 0 ? index : 0);
+    }
+    applyTheme(settings->isDarkTheme());
 
 #ifdef Q_OS_WIN
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
@@ -420,6 +631,13 @@ void MPasteSettingsWidget::accept()
     }
     settings->setItemScale(ui->itemScaleSlider->value());
     settings->setPlaySound(toggleSwitch_->isChecked());
+    if (themeCombo_) {
+        const auto mode = static_cast<MPasteSettings::ThemeMode>(themeCombo_->currentData().toInt());
+        if (settings->getThemeMode() != mode) {
+            settings->setThemeMode(mode);
+            emit themeChanged();
+        }
+    }
 
 #ifdef Q_OS_WIN
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
@@ -436,4 +654,10 @@ void MPasteSettingsWidget::accept()
         emit historyRetentionChanged();
     }
     QDialog::accept();
+}
+
+void MPasteSettingsWidget::applyTheme(bool dark) {
+    darkTheme_ = dark;
+    setStyleSheet(settingsStyleSheet(darkTheme_));
+    update();
 }
