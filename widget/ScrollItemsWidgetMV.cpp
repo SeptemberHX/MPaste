@@ -1318,16 +1318,88 @@ void ScrollItemsWidget::filterByType(ClipboardItem::ContentType type) {
     applyFilters();
 }
 
+QList<QModelIndex> ScrollItemsWidget::shortcutVisibleIndexes() const {
+    QList<QModelIndex> result;
+    if (!listView_ || !proxyModel_ || !listView_->viewport()) {
+        return result;
+    }
+
+    const QRect viewportRect = listView_->viewport()->rect();
+    if (!viewportRect.isValid()) {
+        return result;
+    }
+
+    const int rowCount = proxyModel_->rowCount();
+    if (rowCount <= 0) {
+        return result;
+    }
+
+    const int midY = viewportRect.center().y();
+    const QPoint probe(qMax(0, viewportRect.left() + 1), midY);
+    QModelIndex startIndex = listView_->indexAt(probe);
+    int startRow = startIndex.isValid() ? startIndex.row() : 0;
+    if (startRow < 0 || startRow >= rowCount) {
+        startRow = 0;
+    }
+
+    int firstFullRow = -1;
+    for (int row = startRow; row < rowCount; ++row) {
+        const QModelIndex idx = proxyModel_->index(row, 0);
+        const QRect rect = listView_->visualRect(idx);
+        if (!rect.isValid()) {
+            continue;
+        }
+        if (rect.left() > viewportRect.right()) {
+            break;
+        }
+        if (viewportRect.contains(rect)) {
+            firstFullRow = row;
+            break;
+        }
+    }
+
+    if (firstFullRow < 0) {
+        for (int row = startRow; row < rowCount && result.size() < 10; ++row) {
+            result.append(proxyModel_->index(row, 0));
+        }
+        return result;
+    }
+
+    for (int row = firstFullRow; row < rowCount && result.size() < 10; ++row) {
+        const QModelIndex idx = proxyModel_->index(row, 0);
+        const QRect rect = listView_->visualRect(idx);
+        if (!rect.isValid()) {
+            continue;
+        }
+        if (rect.left() > viewportRect.right()) {
+            break;
+        }
+        if (!viewportRect.contains(rect)) {
+            continue;
+        }
+        result.append(idx);
+    }
+
+    return result;
+}
+
 void ScrollItemsWidget::setShortcutInfo() {
     cleanShortCutInfo();
-    if (!proxyModel_) {
+    if (!proxyModel_ || !boardModel_) {
         return;
     }
 
-    for (int row = 0; row < proxyModel_->rowCount() && row < 10; ++row) {
-        const QModelIndex proxyIndex = proxyModel_->index(row, 0);
+    const QList<QModelIndex> indexes = shortcutVisibleIndexes();
+    for (int i = 0; i < indexes.size(); ++i) {
+        const QModelIndex proxyIndex = indexes.at(i);
+        if (!proxyIndex.isValid()) {
+            continue;
+        }
         const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
-        boardModel_->setShortcutText(sourceRow, QStringLiteral("Alt+%1").arg((row + 1) % 10));
+        if (sourceRow < 0) {
+            continue;
+        }
+        boardModel_->setShortcutText(sourceRow, QStringLiteral("Alt+%1").arg((i + 1) % 10));
     }
 }
 
@@ -1383,11 +1455,19 @@ const ClipboardItem *ScrollItemsWidget::currentSelectedItem() const {
 }
 
 const ClipboardItem *ScrollItemsWidget::selectedByShortcut(int keyIndex) {
-    if (!proxyModel_ || keyIndex < 0 || keyIndex >= proxyModel_->rowCount()) {
+    if (!proxyModel_ || keyIndex < 0) {
         return currentSelectedItem();
     }
 
-    const QModelIndex proxyIndex = proxyModel_->index(keyIndex, 0);
+    const QList<QModelIndex> indexes = shortcutVisibleIndexes();
+    if (keyIndex >= indexes.size()) {
+        return currentSelectedItem();
+    }
+
+    const QModelIndex proxyIndex = indexes.at(keyIndex);
+    if (!proxyIndex.isValid()) {
+        return currentSelectedItem();
+    }
     setCurrentProxyIndex(proxyIndex);
     moveItemToFirst(proxyModel_->mapToSource(proxyIndex).row());
     return cacheSelectedItem(0);

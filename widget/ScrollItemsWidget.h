@@ -125,6 +125,7 @@ private:
     void updateHoverFavoriteButton(bool favorite);
     void startAsyncKeywordSearch();
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
+    QList<QModelIndex> shortcutVisibleIndexes() const;
     QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
     int selectedSourceRow() const;
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;
