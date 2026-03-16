@@ -88,6 +88,7 @@ signals:
     void itemCountChanged(int itemCount);
     void itemStared(const ClipboardItem &item);
     void itemUnstared(const ClipboardItem &item);
+    void localPersistenceChanged();
 
 private slots:
     void handleCurrentIndexChanged(const QModelIndex &current, const QModelIndex &previous);
@@ -129,6 +130,7 @@ private:
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
     QList<QModelIndex> shortcutVisibleIndexes() const;
     int pinnedInsertRow() const;
+    int unpinnedInsertRowForItem(const ClipboardItem &item, int excludeRow) const;
     void setItemPinned(const ClipboardItem &item, bool pinned);
     QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
     int selectedSourceRow() const;

@@ -485,7 +485,6 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     QString url;
     QString alias;
     bool pinned = false;
-    bool pinned = false;
     quint32 contentType = 0;
     QString normalizedText;
     quint32 normalizedUrlCount = 0;
@@ -660,6 +659,7 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath) {
     QString title;
     QString url;
     QString alias;
+    bool pinned = false;
     quint32 contentType = 0;
     QString normalizedText;
     quint32 normalizedUrlCount = 0;

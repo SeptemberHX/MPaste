@@ -65,6 +65,7 @@ signals:
     void itemsLoaded(const QList<QPair<QString, ClipboardItem>> &items);
     void pendingItemReady(const QString &expectedName, const ClipboardItem &item);
     void keywordMatched(const QSet<QString> &matchedNames, quint64 token);
+    void localPersistenceChanged();
     void totalItemCountChanged(int total);
     void pendingCountChanged(int pending);
     void deferredLoadCompleted();

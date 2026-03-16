@@ -1,7 +1,7 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
-// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line).
+// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line + pinned badge).
 // note: Adjusted card palette for dark theme.
 #include "ClipboardCardDelegate.h"
 
@@ -87,6 +87,7 @@ struct CardData {
     QSize imageSize;
     QColor color;
     bool favorite = false;
+    bool pinned = false;
     QString shortcutText;
     QString name;
 };
@@ -551,6 +552,13 @@ QPixmap starPixmap(const QSize &size) {
     return QIcon(QStringLiteral(":/resources/resources/star_filled.svg")).pixmap(size);
 }
 
+QPixmap pinPixmap(const QSize &size, bool dark) {
+    const QString path = dark
+        ? QStringLiteral(":/resources/resources/pin_light.svg")
+        : QStringLiteral(":/resources/resources/pin.svg");
+    return QIcon(path).pixmap(size);
+}
+
 QPixmap filePixmap(const QSize &size) {
     return QIcon(QStringLiteral(":/resources/resources/files.svg")).pixmap(size);
 }
@@ -821,6 +829,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     card.title = index.data(ClipboardBoardModel::TitleRole).toString();
     card.url = index.data(ClipboardBoardModel::UrlRole).toString();
     card.alias = index.data(ClipboardBoardModel::AliasRole).toString();
+    card.pinned = index.data(ClipboardBoardModel::PinnedRole).toBool();
     card.normalizedText = index.data(ClipboardBoardModel::NormalizedTextRole).toString();
     card.normalizedUrls = qvariant_cast<QList<QUrl>>(index.data(ClipboardBoardModel::NormalizedUrlsRole));
     card.time = index.data(ClipboardBoardModel::TimeRole).toDateTime();
@@ -893,7 +902,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     painter->restore();
 
     const int topRightMargin = 10 * scale / 100;
-    const int textLeftMargin = 24 * scale / 100;
+    const int baseTextLeftMargin = 24 * scale / 100;
     const QRect iconRect(topRect.right() - topRightMargin - iconLabelSize + 1,
                          topRect.top() + (topHeight - iconLabelSize) / 2,
                          iconLabelSize, iconLabelSize);
@@ -933,14 +942,28 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     const int textGap = qMax(2, 4 * scale / 100);
     const int textBlockHeight = typeHeight + textGap + timeHeight;
     const int textBlockTop = topRect.top() + qMax(0, (topRect.height() - textBlockHeight) / 2);
-    const QRect typeRect(topRect.left() + textLeftMargin,
+    int effectiveTextLeftMargin = baseTextLeftMargin;
+    QRect pinRect;
+    if (card.pinned) {
+        const int pinSize = qMax(14, 20 * scale / 100);
+        pinRect = QRect(cardRect.left() + qMax(4, 6 * scale / 100),
+                        cardRect.top() + qMax(4, 6 * scale / 100),
+                        pinSize,
+                        pinSize);
+        effectiveTextLeftMargin = qMax(baseTextLeftMargin, pinRect.right() + qMax(6, 8 * scale / 100));
+    }
+
+    const QRect typeRect(topRect.left() + effectiveTextLeftMargin,
                          textBlockTop,
-                         topRect.width() - textLeftMargin - textRightPadding,
+                         topRect.width() - effectiveTextLeftMargin - textRightPadding,
                          typeHeight);
     const QRect timeRect(typeRect.left(),
                          typeRect.bottom() + 1 + textGap,
                          typeRect.width(),
                          timeHeight);
+    if (card.pinned && pinRect.isValid()) {
+        painter->drawPixmap(pinRect, pinPixmap(pinRect.size(), darkTheme));
+    }
     const QString typeLabel = typeLabelForCard(card);
     const QString timeLabel = QLocale::system().toString(card.time, QLocale::ShortFormat);
     const QString aliasLabel = card.alias.trimmed();

@@ -632,6 +632,9 @@ void MPasteWidget::setupConnections() {
                 ui_.clipboardWidget->setItemFavorite(item, false);
             }
         });
+        connect(boardWidget, &ScrollItemsWidget::localPersistenceChanged, this, [this]() {
+            sync_.suppressReloadUntilMs = QDateTime::currentMSecsSinceEpoch() + 800;
+        });
     }
 
     connect(ui_.ui->menuButton, &QToolButton::clicked, this, [this]() {
@@ -1159,6 +1162,10 @@ void MPasteWidget::setupSyncWatcher() {
 
 void MPasteWidget::scheduleSyncReload() {
     if (!sync_.reloadTimer) {
+        return;
+    }
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (sync_.suppressReloadUntilMs > now) {
         return;
     }
     if (!isVisible()) {

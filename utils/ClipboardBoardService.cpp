@@ -449,6 +449,7 @@ ClipboardItem ClipboardBoardService::prepareItemForSave(const ClipboardItem &sou
 void ClipboardBoardService::saveItem(const ClipboardItem &item) {
     checkSaveDir();
     saver_->saveToFile(item, filePathForItem(item));
+    emit localPersistenceChanged();
 }
 
 void ClipboardBoardService::removeItemFile(const QString &filePath) {
@@ -456,6 +457,7 @@ void ClipboardBoardService::removeItemFile(const QString &filePath) {
         return;
     }
     saver_->removeItem(filePath);
+    emit localPersistenceChanged();
 }
 
 void ClipboardBoardService::deleteItemByPath(const QString &filePath) {
@@ -464,6 +466,7 @@ void ClipboardBoardService::deleteItemByPath(const QString &filePath) {
     }
 
     saver_->removeItem(filePath);
+    emit localPersistenceChanged();
     const int pendingIndex = pendingLoadFilePaths_.indexOf(filePath);
     if (pendingIndex >= 0) {
         pendingLoadFilePaths_.removeAt(pendingIndex);
@@ -484,6 +487,7 @@ bool ClipboardBoardService::deletePendingItemByPath(const QString &filePath) {
 
     pendingLoadFilePaths_.removeAt(pendingIndex);
     saver_->removeItem(filePath);
+    emit localPersistenceChanged();
     emit pendingCountChanged(pendingLoadFilePaths_.size());
     decrementTotalItemCount();
     return true;

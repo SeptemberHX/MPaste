@@ -432,6 +432,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     connect(boardService_, &ClipboardBoardService::keywordMatched, this, &ScrollItemsWidget::handleKeywordMatched);
     connect(boardService_, &ClipboardBoardService::totalItemCountChanged, this, &ScrollItemsWidget::handleTotalItemCountChanged);
     connect(boardService_, &ClipboardBoardService::deferredLoadCompleted, this, &ScrollItemsWidget::handleDeferredLoadCompleted);
+    connect(boardService_, &ClipboardBoardService::localPersistenceChanged, this, &ScrollItemsWidget::localPersistenceChanged);
 
     connect(listView_->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &ScrollItemsWidget::handleCurrentIndexChanged);
@@ -608,7 +609,7 @@ void ScrollItemsWidget::createHoverActionBar() {
 
     hoverDetailsBtn_ = createButton(IconResolver::themedPath(QStringLiteral("details"), dark), detailsLabel());
     hoverAliasBtn_ = createButton(IconResolver::themedPath(QStringLiteral("rename"), dark), aliasLabel());
-    hoverPinBtn_ = createButton(IconResolver::themedPath(QStringLiteral("first"), dark), pinActionLabel(false));
+    hoverPinBtn_ = createButton(IconResolver::themedPath(QStringLiteral("pin"), dark), pinActionLabel(false));
     hoverFavoriteBtn_ = createButton(IconResolver::themedPath(QStringLiteral("star_outline"), dark), favoriteActionLabel(false));
     hoverDeleteBtn_ = createButton(QStringLiteral(":/resources/resources/delete.svg"), tr("Delete"));
 
@@ -751,8 +752,7 @@ void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
     if (updated.isPinned() == pinned) {
         return;
     }
-
-    const int targetRow = pinned ? 0 : qMax(0, pinnedInsertRow() - 1);
+    const int targetRow = pinned ? 0 : unpinnedInsertRowForItem(updated, row);
     updated.setPinned(pinned);
     boardModel_->updateItem(row, updated);
     boardModel_->moveItemToRow(row, targetRow);
@@ -994,7 +994,7 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
     }
 
     const bool isPinned = item.isPinned();
-    menu.addAction(IconResolver::themedIcon(QStringLiteral("first"), dark),
+    menu.addAction(IconResolver::themedIcon(QStringLiteral("pin"), dark),
                    pinActionLabel(isPinned),
                    [this, item, isPinned]() {
                        setItemPinned(item, !isPinned);
@@ -1541,6 +1541,42 @@ int ScrollItemsWidget::pinnedInsertRow() const {
         }
     }
     return rowCount;
+}
+
+int ScrollItemsWidget::unpinnedInsertRowForItem(const ClipboardItem &item, int excludeRow) const {
+    if (!boardModel_) {
+        return 0;
+    }
+    const QDateTime targetTime = item.getTime();
+    const int rowCount = boardModel_->rowCount();
+    int pinnedCount = 0;
+    int insertRow = rowCount;
+
+    for (int row = 0; row < rowCount; ++row) {
+        if (row == excludeRow) {
+            continue;
+        }
+        const ClipboardItem *candidate = boardModel_->itemPtrAt(row);
+        if (!candidate) {
+            continue;
+        }
+        if (candidate->isPinned()) {
+            ++pinnedCount;
+            continue;
+        }
+        if (!targetTime.isValid() || !candidate->getTime().isValid()) {
+            continue;
+        }
+        if (targetTime >= candidate->getTime()) {
+            insertRow = row;
+            break;
+        }
+    }
+
+    if (insertRow < pinnedCount) {
+        insertRow = pinnedCount;
+    }
+    return insertRow;
 }
 
 void ScrollItemsWidget::setShortcutInfo() {

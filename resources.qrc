@@ -42,6 +42,8 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
         <file>resources/star.svg</file>
         <file>resources/rename.svg</file>
         <file>resources/rename_light.svg</file>
+        <file>resources/pin.svg</file>
+        <file>resources/pin_light.svg</file>
 
         <file>resources/spin_up.svg</file>
         <file>resources/spin_down.svg</file>

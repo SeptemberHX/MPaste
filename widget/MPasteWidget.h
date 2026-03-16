@@ -139,6 +139,7 @@ private:
         QFileSystemWatcher *watcher = nullptr;
         QTimer *reloadTimer = nullptr;
         bool pendingReload = false;
+        qint64 suppressReloadUntilMs = 0;
     } sync_;
 
     struct {
