@@ -29,6 +29,7 @@ public:
     static const QString STAR_CATEGORY_COLOR;
 
     const QString &getSaveDir() const;
+    void setSaveDir(const QString &dir);
 
     int getMaxSize() const;
     int getHistoryRetentionValue() const;

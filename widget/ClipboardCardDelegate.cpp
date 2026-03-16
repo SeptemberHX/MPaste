@@ -908,14 +908,22 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     typeFont.setPointSize(qMax(10, 12 * scale / 100));
     typeFont.setFamilies({QStringLiteral("Microsoft YaHei UI"),
                            QStringLiteral("Microsoft YaHei"),
-                           QStringLiteral("Segoe UI")});
+                           QStringLiteral("Segoe UI"),
+                           QStringLiteral("Segoe UI Emoji"),
+                           QStringLiteral("Segoe UI Symbol"),
+                           QStringLiteral("Noto Color Emoji"),
+                           QStringLiteral("Noto Emoji")});
     typeFont.setBold(true);
     typeFont.setWeight(QFont::ExtraBold);
     QFont timeFont = painter->font();
     timeFont.setPointSize(qMax(8, 9 * scale / 100));
     timeFont.setFamilies({QStringLiteral("Microsoft YaHei UI"),
                            QStringLiteral("Microsoft YaHei"),
-                           QStringLiteral("Segoe UI")});
+                           QStringLiteral("Segoe UI"),
+                           QStringLiteral("Segoe UI Emoji"),
+                           QStringLiteral("Segoe UI Symbol"),
+                           QStringLiteral("Noto Color Emoji"),
+                           QStringLiteral("Noto Emoji")});
 
     const int textRightPadding = iconLabelSize + topRightMargin + 12 * scale / 100;
     const QFontMetrics typeMetrics(typeFont);

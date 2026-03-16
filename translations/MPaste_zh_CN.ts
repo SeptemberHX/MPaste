@@ -95,17 +95,17 @@
     <name>ClipboardItemRenameDialog</name>
     <message>
         <location filename="../widget/ClipboardItemRenameDialog.cpp" line="169"/>
-        <source>Rename</source>
+        <source>Alias</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../widget/ClipboardItemRenameDialog.cpp" line="170"/>
-        <source>Custom name</source>
+        <source>Alias name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../widget/ClipboardItemRenameDialog.cpp" line="171"/>
-        <source>Leave empty to clear custom name.</source>
+        <source>Leave empty to clear alias.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -157,7 +157,7 @@
 <context>
     <name>MPasteSettings</name>
     <message>
-        <location filename="../utils/MPasteSettings.cpp" line="55"/>
+        <location filename="../utils/MPasteSettings.cpp" line="59"/>
         <source>Terminal</source>
         <translatorcomment>已 top-panel 显示为准</translatorcomment>
         <translation type="unfinished">终端</translation>
@@ -207,7 +207,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.cpp" line="510"/>
+        <location filename="../widget/MPasteSettingsWidget.cpp" line="571"/>
         <source>Auto-start is currently only supported on Windows.</source>
         <translation type="unfinished"></translation>
     </message>

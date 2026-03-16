@@ -18,6 +18,8 @@
 #include <QSystemTrayIcon>
 #include <QElapsedTimer>
 #include <QHideEvent>
+#include <QFileSystemWatcher>
+#include <QTimer>
 
 #include "utils/ClipboardMonitor.h"
 #include "data/ClipboardItem.h"
@@ -95,6 +97,8 @@ private:
     bool triggerShortcutPaste(int shortcutIndex, bool plainText);
 
     ScrollItemsWidget* currItemsWidget();
+    void setupSyncWatcher();
+    void scheduleSyncReload();
 
 private:
     struct {
@@ -130,6 +134,12 @@ private:
         bool isPasting = false;
         bool copiedWhenHide = false;
     } clipboard_;
+
+    struct {
+        QFileSystemWatcher *watcher = nullptr;
+        QTimer *reloadTimer = nullptr;
+        bool pendingReload = false;
+    } sync_;
 
     struct {
         QMediaPlayer *player = nullptr;

@@ -34,6 +34,10 @@ const QString &MPasteSettings::getSaveDir() const {
     return saveDir;
 }
 
+void MPasteSettings::setSaveDir(const QString &dir) {
+    saveDir = dir;
+}
+
 MPasteSettings::MPasteSettings()
     : saveDir(QDir::homePath() + QDir::separator() +  ".MPaste")
     , maxSize(500)

@@ -48,3 +48,5 @@ update: 修改本目录文件时，同步更新本 README。
 - `PlatformRelated` 现在支持可配置的自动粘贴快捷键模式，可在多种粘贴方案之间切换。
 
 - ClipboardBoardService now owns board persistence I/O, deferred loading, and background item processing for widgets.
+
+- MPasteSettings now persists a configurable save directory for external sync tools.

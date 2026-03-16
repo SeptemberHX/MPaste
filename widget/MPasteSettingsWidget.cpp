@@ -19,6 +19,11 @@
 #include <QLabel>
 #include <QComboBox>
 #include <QLocale>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QFileDialog>
+#include <QUrl>
+#include <QDesktopServices>
 
 static const int BORDER_WIDTH = 2;
 static const int CORNER_RADIUS = 10;
@@ -504,6 +509,62 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         retentionUnitCombo_->addItem(uiText("Months", QStringLiteral("月")), static_cast<int>(MPasteSettings::RetentionMonths));
         retentionLayout->addWidget(retentionUnitCombo_);
         grid->addWidget(retentionWidget, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
+
+        auto *syncSep = new QFrame(this);
+        syncSep->setMaximumHeight(1);
+        syncSep->setFrameShape(QFrame::HLine);
+        grid->addWidget(syncSep, 12, 0, 1, 2);
+
+        syncLabel_ = new QLabel(uiText("Sync folder", QStringLiteral("同步目录")), this);
+        syncLabel_->setMinimumHeight(44);
+        syncPathEdit_ = new QLineEdit(this);
+        syncPathEdit_->setReadOnly(true);
+        syncPathEdit_->setMinimumHeight(32);
+        syncPathEdit_->setPlaceholderText(uiText("Select a folder to sync", QStringLiteral("选择同步目录")));
+        syncPathEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+        grid->addWidget(syncLabel_, 13, 0);
+        grid->addWidget(syncPathEdit_, 13, 1);
+
+        auto *syncButtonsRow = new QWidget(this);
+        auto *syncButtonsLayout = new QHBoxLayout(syncButtonsRow);
+        syncButtonsLayout->setContentsMargins(0, 0, 0, 0);
+        syncButtonsLayout->setSpacing(6);
+        syncButtonsLayout->addStretch(1);
+
+        syncOpenButton_ = new QPushButton(uiText("Open", QStringLiteral("打开")), this);
+        syncOpenButton_->setMinimumSize(QSize(52, 32));
+        syncOpenButton_->setMaximumHeight(32);
+        syncButtonsLayout->addWidget(syncOpenButton_);
+
+        syncChangeButton_ = new QPushButton(uiText("Change", QStringLiteral("修改")), this);
+        syncChangeButton_->setMinimumSize(QSize(64, 32));
+        syncChangeButton_->setMaximumHeight(32);
+        syncButtonsLayout->addWidget(syncChangeButton_);
+
+        grid->addWidget(new QWidget(this), 14, 0);
+        grid->addWidget(syncButtonsRow, 14, 1, Qt::AlignRight | Qt::AlignVCenter);
+
+        // WebDAV sync UI intentionally omitted; external sync tools are recommended.
+
+        connect(syncChangeButton_, &QPushButton::clicked, this, [this]() {
+            const QString currentDir = syncPathEdit_ ? syncPathEdit_->text() : QString();
+            const QString selected = QFileDialog::getExistingDirectory(
+                this,
+                uiText("Select sync folder", QStringLiteral("选择同步目录")),
+                currentDir.isEmpty() ? QDir::homePath() : currentDir);
+            if (!selected.isEmpty() && syncPathEdit_) {
+                syncPathEdit_->setText(QDir::cleanPath(selected));
+            }
+        });
+
+        connect(syncOpenButton_, &QPushButton::clicked, this, [this]() {
+            const QString path = syncPathEdit_ ? syncPathEdit_->text().trimmed() : QString();
+            if (path.isEmpty()) {
+                return;
+            }
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        });
     }
 
 #ifndef Q_OS_WIN
@@ -599,6 +660,9 @@ void MPasteSettingsWidget::loadSettings()
         const int index = themeCombo_->findData(static_cast<int>(settings->getThemeMode()));
         themeCombo_->setCurrentIndex(index >= 0 ? index : 0);
     }
+    if (syncPathEdit_) {
+        syncPathEdit_->setText(QDir::cleanPath(settings->getSaveDir()));
+    }
     applyTheme(ThemeManager::instance()->isDark());
 
 #ifdef Q_OS_WIN
@@ -638,6 +702,18 @@ void MPasteSettingsWidget::accept()
         if (settings->getThemeMode() != mode) {
             settings->setThemeMode(mode);
             emit themeChanged();
+        }
+    }
+
+    if (syncPathEdit_) {
+        const QString newDir = QDir::cleanPath(syncPathEdit_->text().trimmed());
+        if (!newDir.isEmpty() && newDir != settings->getSaveDir()) {
+            QDir dir(newDir);
+            if (!dir.exists()) {
+                dir.mkpath(QStringLiteral("."));
+            }
+            settings->setSaveDir(newDir);
+            emit saveDirChanged();
         }
     }
 

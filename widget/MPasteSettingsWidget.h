@@ -11,6 +11,8 @@
 class ToggleSwitch;
 class QLabel;
 class QComboBox;
+class QLineEdit;
+class QPushButton;
 
 namespace Ui {
 class MPasteSettingsWidget;
@@ -29,6 +31,7 @@ signals:
     void shortcutChanged(const QString &newShortcut);
     void historyRetentionChanged();
     void themeChanged();
+    void saveDirChanged();
 
 public slots:
     void accept() override;
@@ -50,6 +53,10 @@ private:
     QLabel *themeLabel_ = nullptr;
     QComboBox *themeCombo_ = nullptr;
     QComboBox *retentionUnitCombo_ = nullptr;
+    QLabel *syncLabel_ = nullptr;
+    QLineEdit *syncPathEdit_ = nullptr;
+    QPushButton *syncOpenButton_ = nullptr;
+    QPushButton *syncChangeButton_ = nullptr;
     QPoint dragPos_;
     bool darkTheme_ = false;
 };

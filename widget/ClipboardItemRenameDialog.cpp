@@ -166,15 +166,15 @@ ClipboardItemRenameDialog::ClipboardItemRenameDialog(const QString &currentAlias
     cardLayout->setContentsMargins(16, 14, 16, 16);
     cardLayout->setSpacing(12);
 
-    const QString renameText = fallbackText(tr("Rename"), QStringLiteral("Rename"), QStringLiteral("重命名"));
-    const QString customNameText = fallbackText(tr("Custom name"), QStringLiteral("Custom name"), QStringLiteral("自定义名称"));
-    const QString hintText = fallbackText(tr("Leave empty to clear custom name."),
-                                          QStringLiteral("Leave empty to clear custom name."),
-                                          QStringLiteral("留空可清除自定义名称。"));
+    const QString aliasText = fallbackText(tr("Alias"), QStringLiteral("Alias"), QStringLiteral("别名"));
+    const QString customNameText = fallbackText(tr("Alias name"), QStringLiteral("Alias name"), QStringLiteral("别名名称"));
+    const QString hintText = fallbackText(tr("Leave empty to clear alias."),
+                                          QStringLiteral("Leave empty to clear alias."),
+                                          QStringLiteral("留空可清除别名。"));
     const QString cancelText = fallbackText(tr("Cancel"), QStringLiteral("Cancel"), QStringLiteral("取消"));
     const QString saveText = fallbackText(tr("Save"), QStringLiteral("Save"), QStringLiteral("保存"));
 
-    titleLabel_ = new QLabel(renameText, card_);
+    titleLabel_ = new QLabel(aliasText, card_);
     titleLabel_->setObjectName(QStringLiteral("renameTitle"));
     cardLayout->addWidget(titleLabel_);
 
@@ -220,7 +220,7 @@ ClipboardItemRenameDialog::ClipboardItemRenameDialog(const QString &currentAlias
 
     cardLayout->addLayout(buttonRow);
 
-    setWindowTitle(renameText);
+    setWindowTitle(aliasText);
     applyTheme(ThemeManager::instance()->isDark());
     connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &ClipboardItemRenameDialog::applyTheme);
 }

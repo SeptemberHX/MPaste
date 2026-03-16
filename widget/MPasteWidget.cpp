@@ -255,6 +255,7 @@ void MPasteWidget::initializeWidget() {
     qInfo().noquote() << QStringLiteral("[startup] initSound done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     setupConnections();
     qInfo().noquote() << QStringLiteral("[startup] setupConnections done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
+    setupSyncWatcher();
     loadFromSaveDir();
     qInfo().noquote() << QStringLiteral("[startup] loadFromSaveDir done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     clipboard_.monitor->primeCurrentClipboard();
@@ -337,6 +338,11 @@ void MPasteWidget::initUI() {
             this, &MPasteWidget::shortcutChanged);
     connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
             this, &MPasteWidget::reloadHistoryBoards);
+    connect(ui_.settingsWidget, &MPasteSettingsWidget::saveDirChanged,
+            this, [this]() {
+                setupSyncWatcher();
+                reloadHistoryBoards();
+            });
 
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
@@ -1092,6 +1098,10 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     activateWindow();
     raise();
     setFocus();
+    if (sync_.pendingReload) {
+        sync_.pendingReload = false;
+        scheduleSyncReload();
+    }
 }
 
 void MPasteWidget::hideEvent(QHideEvent *event) {
@@ -1101,6 +1111,61 @@ void MPasteWidget::hideEvent(QHideEvent *event) {
             board->hideHoverTools();
         }
     }
+    sync_.pendingReload = true;
+}
+
+void MPasteWidget::setupSyncWatcher() {
+    const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
+    if (rootDir.isEmpty()) {
+        return;
+    }
+
+    if (!sync_.watcher) {
+        sync_.watcher = new QFileSystemWatcher(this);
+        connect(sync_.watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
+            scheduleSyncReload();
+        });
+    }
+
+    if (!sync_.reloadTimer) {
+        sync_.reloadTimer = new QTimer(this);
+        sync_.reloadTimer->setSingleShot(true);
+        sync_.reloadTimer->setInterval(400);
+        connect(sync_.reloadTimer, &QTimer::timeout, this, [this]() {
+            if (!isVisible()) {
+                sync_.pendingReload = true;
+                return;
+            }
+            reloadHistoryBoards();
+        });
+    }
+
+    QDir().mkpath(rootDir);
+    const QStringList watchDirs = {
+        rootDir,
+        QDir::cleanPath(rootDir + QDir::separator() + MPasteSettings::CLIPBOARD_CATEGORY_NAME),
+        QDir::cleanPath(rootDir + QDir::separator() + MPasteSettings::STAR_CATEGORY_NAME)
+    };
+    for (const QString &dir : watchDirs) {
+        QDir().mkpath(dir);
+    }
+
+    const QStringList existing = sync_.watcher->directories();
+    if (!existing.isEmpty()) {
+        sync_.watcher->removePaths(existing);
+    }
+    sync_.watcher->addPaths(watchDirs);
+}
+
+void MPasteWidget::scheduleSyncReload() {
+    if (!sync_.reloadTimer) {
+        return;
+    }
+    if (!isVisible()) {
+        sync_.pendingReload = true;
+        return;
+    }
+    sync_.reloadTimer->start();
 }
 
 void MPasteWidget::loadFromSaveDir() {

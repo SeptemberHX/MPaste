@@ -84,3 +84,7 @@ update: 修改本目录文件时，同步更新本 README。
 - Card headers now show custom aliases above the type/time line when provided.
 
 - ClipboardItemRenameDialog provides the themed rename prompt used by card context menus.
+
+- Settings now expose the sync folder path for external sync tools.
+
+- The main window now watches the save folder for external sync changes and reloads history with a debounce.
