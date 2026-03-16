@@ -28,6 +28,7 @@
 #include "ClipboardBoardProxyModel.h"
 #include "ClipboardCardDelegate.h"
 #include "ClipboardItemPreviewDialog.h"
+#include "ClipboardItemRenameDialog.h"
 #include "CardMetrics.h"
 #include "ScrollItemsWidget.h"
 #include "ui_ScrollItemsWidget.h"
@@ -230,6 +231,31 @@ QString openContainingFolderLabel() {
     return label;
 }
 
+QString aliasLabel() {
+    QString label = QObject::tr("Alias");
+    const QLocale locale = QLocale::system();
+    if (label == QLatin1String("Alias") || looksBrokenTranslation(label)) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
+            return QString::fromUtf16(u"\u522B\u540D");
+        }
+        return QStringLiteral("Alias");
+    }
+    return label;
+}
+
+QString favoriteActionLabel(bool favorite) {
+    const QString key = favorite ? QStringLiteral("Remove from favorites") : QStringLiteral("Add to favorites");
+    QString label = QObject::tr(key.toUtf8().constData());
+    const QLocale locale = QLocale::system();
+    if (label == key || looksBrokenTranslation(label)) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
+            return favorite ? QString::fromUtf16(u"\u79FB\u9664\u6536\u85CF") : QString::fromUtf16(u"\u52A0\u5165\u6536\u85CF");
+        }
+        return key;
+    }
+    return label;
+}
+
 class EdgeFadeOverlay final : public QWidget {
 public:
     enum Side {
@@ -377,6 +403,10 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     QScrollerProperties sp = scroller->scrollerProperties();
     sp.setScrollMetric(QScrollerProperties::FrameRate, QVariant::fromValue(QScrollerProperties::Fps60));
     sp.setScrollMetric(QScrollerProperties::DragStartDistance, 0.0025);
+    sp.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy,
+                       QVariant::fromValue(QScrollerProperties::OvershootAlwaysOn));
+    sp.setScrollMetric(QScrollerProperties::VerticalOvershootPolicy,
+                       QVariant::fromValue(QScrollerProperties::OvershootAlwaysOn));
     scroller->setScrollerProperties(sp);
 
     listView_->horizontalScrollBar()->setSingleStep(48);
@@ -564,10 +594,12 @@ void ScrollItemsWidget::createHoverActionBar() {
     };
 
     hoverDetailsBtn_ = createButton(IconResolver::themedPath(QStringLiteral("details"), dark), detailsLabel());
-    hoverFavoriteBtn_ = createButton(IconResolver::themedPath(QStringLiteral("star_outline"), dark), tr("Add to favorites"));
+    hoverAliasBtn_ = createButton(IconResolver::themedPath(QStringLiteral("rename"), dark), aliasLabel());
+    hoverFavoriteBtn_ = createButton(IconResolver::themedPath(QStringLiteral("star_outline"), dark), favoriteActionLabel(false));
     hoverDeleteBtn_ = createButton(QStringLiteral(":/resources/resources/delete.svg"), tr("Delete"));
 
     layout->addWidget(hoverDetailsBtn_);
+    layout->addWidget(hoverAliasBtn_);
     layout->addWidget(hoverFavoriteBtn_);
     layout->addWidget(hoverDeleteBtn_);
 
@@ -582,6 +614,19 @@ void ScrollItemsWidget::createHoverActionBar() {
         }
         const auto seq = displaySequenceForIndex(hoverProxyIndex_);
         emit detailsRequested(*item, seq.first, seq.second);
+    });
+
+    connect(hoverAliasBtn_, &QToolButton::clicked, this, [this]() {
+        if (!proxyModel_ || !boardModel_ || !hoverProxyIndex_.isValid()) {
+            return;
+        }
+        const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
+        if (!item) {
+            return;
+        }
+        openAliasDialogForItem(*item);
+        hideHoverActionBar(false);
     });
 
     connect(hoverFavoriteBtn_, &QToolButton::clicked, this, [this]() {
@@ -635,9 +680,27 @@ void ScrollItemsWidget::updateHoverFavoriteButton(bool favorite) {
     } else {
         hoverFavoriteBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("star_outline"), darkTheme_));
     }
-    hoverFavoriteBtn_->setToolTip(favorite
-        ? tr("Remove from favorites")
-        : tr("Add to favorites"));
+    hoverFavoriteBtn_->setToolTip(favoriteActionLabel(favorite));
+}
+
+void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
+    if (!boardModel_) {
+        return;
+    }
+    const int row = boardModel_->rowForName(item.getName());
+    if (row < 0) {
+        return;
+    }
+    ClipboardItemRenameDialog dialog(item.getAlias(), this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    ClipboardItem updated = boardModel_->itemAt(row);
+    updated.setAlias(dialog.alias());
+    boardModel_->updateItem(row, updated);
+    if (boardService_) {
+        boardService_->saveItem(updated);
+    }
 }
 
 void ScrollItemsWidget::updateHoverActionBar(const QModelIndex &proxyIndex) {
@@ -850,6 +913,9 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         const QPair<int, int> sequenceInfo = displaySequenceForIndex(proxyIndex);
         emit detailsRequested(*selectedItem, sequenceInfo.first, sequenceInfo.second);
     });
+    menu.addAction(IconResolver::themedIcon(QStringLiteral("rename"), dark), aliasLabel(), [this, item]() {
+        openAliasDialogForItem(item);
+    });
     if (ClipboardItemPreviewDialog::supportsPreview(item)) {
         menu.addAction(IconResolver::themedIcon(QStringLiteral("preview"), dark), tr("Preview"), [this]() {
             const ClipboardItem *selectedItem = currentSelectedItem();
@@ -868,7 +934,7 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
     menu.addAction(QIcon(isFavorite
                          ? QStringLiteral(":/resources/resources/star_filled.svg")
                          : QStringLiteral(":/resources/resources/star.svg")),
-                   isFavorite ? tr("Remove from favorites") : tr("Add to favorites"),
+                   favoriteActionLabel(isFavorite),
                    [this, item, isFavorite]() {
                        if (isFavorite) {
                            setItemFavorite(item, false);
@@ -1600,7 +1666,10 @@ bool ScrollItemsWidget::handleWheelScroll(QWheelEvent *event) {
     int delta = 0;
     const QPoint pixelDelta = event->pixelDelta();
     if (!pixelDelta.isNull()) {
-        delta = qRound((qAbs(pixelDelta.x()) > qAbs(pixelDelta.y()) ? -pixelDelta.x() : -pixelDelta.y()) * 1.6);
+        if (qAbs(pixelDelta.x()) < qAbs(pixelDelta.y()) || pixelDelta.x() == 0) {
+            return false;
+        }
+        delta = qRound((-pixelDelta.x()) * 1.6);
     } else {
         const QPoint angleDelta = event->angleDelta();
         const int dominantDelta = qAbs(angleDelta.x()) > qAbs(angleDelta.y()) ? angleDelta.x() : angleDelta.y();

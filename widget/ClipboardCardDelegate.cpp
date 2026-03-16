@@ -1,7 +1,7 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
-// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks + link preview caption trimmed + header spacing + link url shortcut spacing).
+// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line).
 // note: Adjusted card palette for dark theme.
 #include "ClipboardCardDelegate.h"
 
@@ -80,6 +80,7 @@ struct CardData {
     QPixmap favicon;
     QString title;
     QString url;
+    QString alias;
     QString normalizedText;
     QList<QUrl> normalizedUrls;
     QDateTime time;
@@ -819,6 +820,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     card.favicon = qvariant_cast<QPixmap>(index.data(ClipboardBoardModel::FaviconRole));
     card.title = index.data(ClipboardBoardModel::TitleRole).toString();
     card.url = index.data(ClipboardBoardModel::UrlRole).toString();
+    card.alias = index.data(ClipboardBoardModel::AliasRole).toString();
     card.normalizedText = index.data(ClipboardBoardModel::NormalizedTextRole).toString();
     card.normalizedUrls = qvariant_cast<QList<QUrl>>(index.data(ClipboardBoardModel::NormalizedUrlsRole));
     card.time = index.data(ClipboardBoardModel::TimeRole).toDateTime();
@@ -931,9 +933,37 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                          typeRect.bottom() + 1 + textGap,
                          typeRect.width(),
                          timeHeight);
-    drawElidedText(painter, typeRect, typeLabelForCard(card), typeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
-    drawElidedText(painter, timeRect, QLocale::system().toString(card.time, QLocale::ShortFormat),
-                   timeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
+    const QString typeLabel = typeLabelForCard(card);
+    const QString timeLabel = QLocale::system().toString(card.time, QLocale::ShortFormat);
+    const QString aliasLabel = card.alias.trimmed();
+    if (!aliasLabel.isEmpty()) {
+        drawElidedText(painter, typeRect, aliasLabel, typeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
+
+        QFont metaTypeFont = timeFont;
+        metaTypeFont.setFamilies(typeFont.families());
+        metaTypeFont.setBold(true);
+        metaTypeFont.setWeight(QFont::ExtraBold);
+
+        const QFontMetrics metaTypeMetrics(metaTypeFont);
+        const int metaGap = qMax(6, 8 * scale / 100);
+        const int typeTextWidth = metaTypeMetrics.horizontalAdvance(typeLabel);
+        const int typeDrawWidth = qMin(typeTextWidth, timeRect.width());
+        const QRect typeMetaRect(timeRect.left(), timeRect.top(),
+                                 typeDrawWidth, timeRect.height());
+        drawElidedText(painter, typeMetaRect, typeLabel, metaTypeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
+
+        const QString timeSuffix = QStringLiteral("- %1").arg(timeLabel);
+        const int timeX = timeRect.left() + typeDrawWidth + metaGap;
+        if (timeX < timeRect.right()) {
+            const QRect timeMetaRect(timeX, timeRect.top(),
+                                     timeRect.right() - timeX, timeRect.height());
+            drawElidedText(painter, timeMetaRect, timeSuffix, timeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
+        }
+    } else {
+        drawElidedText(painter, typeRect, typeLabel, typeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
+        drawElidedText(painter, timeRect, timeLabel,
+                       timeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
+    }
 
     const QRect previewRect = bodyRect.adjusted(10 * scale / 100, 8 * scale / 100, -10 * scale / 100, -6 * scale / 100);
     const QRect imagePreviewRect = bodyRect;

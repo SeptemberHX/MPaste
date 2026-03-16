@@ -123,6 +123,7 @@ private:
     void updateHoverActionBarPosition();
     void hideHoverActionBar(bool animated = true);
     void updateHoverFavoriteButton(bool favorite);
+    void openAliasDialogForItem(const ClipboardItem &item);
     void startAsyncKeywordSearch();
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
     QList<QModelIndex> shortcutVisibleIndexes() const;
@@ -144,6 +145,7 @@ private:
     QWidget *rightEdgeFadeOverlay_ = nullptr;
     QWidget *hoverActionBar_ = nullptr;
     QToolButton *hoverDetailsBtn_ = nullptr;
+    QToolButton *hoverAliasBtn_ = nullptr;
     QToolButton *hoverFavoriteBtn_ = nullptr;
     QToolButton *hoverDeleteBtn_ = nullptr;
     QGraphicsOpacityEffect *hoverOpacity_ = nullptr;

@@ -80,3 +80,7 @@ update: 修改本目录文件时，同步更新本 README。
 - 链接预览图和图片卡片现在都优先占满可用高度，只在宽度超出时做左右居中裁剪。
 
 - ScrollItemsWidget now delegates persistence, deferred loading, and background item completion to ClipboardBoardService.
+
+- Card headers now show custom aliases above the type/time line when provided.
+
+- ClipboardItemRenameDialog provides the themed rename prompt used by card context menus.

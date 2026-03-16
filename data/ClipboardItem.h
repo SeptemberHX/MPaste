@@ -1,5 +1,5 @@
 // input: Depends on Qt mime/image/text primitives and raw clipboard payloads from the system.
-// output: Exposes a comparable clipboard item with cached search text and lightweight content fingerprint.
+// output: Exposes a comparable clipboard item with cached search text, custom alias metadata, and lightweight content fingerprint.
 // pos: Data-layer core clipboard model used by persistence, filtering, dedup, and rendering code.
 // update: If I change, update this header block and my folder README.md.
 #ifndef MPASTE_CLIPBOARDITEM_H
@@ -37,6 +37,7 @@ private:
     QPixmap favicon_;
     QString title_;
     QString url_;
+    QString alias_;
     mutable QByteArray fingerprintCache_;
     mutable bool fingerprintCacheInitialized_ = false;
     mutable QString searchableTextCache_;
@@ -900,6 +901,9 @@ private:
         }
 
         QStringList parts;
+        if (!alias_.isEmpty()) {
+            parts << alias_;
+        }
         if (!title_.isEmpty()) {
             parts << title_;
         }
@@ -1058,6 +1062,9 @@ public:
             const QByteArray imageBytes = extractFastImagePayloadBytes(mimeData);
             if (!imageBytes.isEmpty()) {
                 item.mimeData_->setData(QStringLiteral("application/x-qt-image"), imageBytes);
+            } else if (mimeData->hasImage()) {
+                const QPixmap pixmap = decodePixmapFromMimeData(mimeData);
+                materializeCanonicalImage(item.mimeData_.data(), pixmap);
             }
         }
         item.time_ = QDateTime::currentDateTime();
@@ -1082,6 +1089,7 @@ public:
         favicon_ = other.favicon_;
         title_ = other.title_;
         url_ = other.url_;
+        alias_ = other.alias_;
         icon_ = other.icon_;
         fingerprintCache_ = other.fingerprintCache_;
         fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
@@ -1109,6 +1117,7 @@ public:
             favicon_ = other.favicon_;
             title_ = other.title_;
             url_ = other.url_;
+            alias_ = other.alias_;
             icon_ = other.icon_;
             fingerprintCache_ = other.fingerprintCache_;
             fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
@@ -1150,7 +1159,8 @@ public:
         if (!mimeDataLoaded_) {
             return cachedNormalizedText_.toLower().contains(lower)
                 || title_.toLower().contains(lower)
-                || url_.toLower().contains(lower);
+                || url_.toLower().contains(lower)
+                || alias_.toLower().contains(lower);
         }
 
         if (!mimeData_) {
@@ -1415,9 +1425,11 @@ public:
 
     QString getTitle() const { return title_; }
     QString getUrl() const { return url_; }
+    QString getAlias() const { return alias_; }
 
     void setTitle(const QString &title) { title_ = title; invalidateSearchCache(); }
     void setUrl(const QString &url) { url_ = url; invalidateSearchCache(); }
+    void setAlias(const QString &alias) { alias_ = alias; invalidateSearchCache(); }
 
     void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }

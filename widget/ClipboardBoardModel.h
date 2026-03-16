@@ -1,5 +1,5 @@
 // input: Depends on Qt item-model APIs and ClipboardItem value semantics.
-// output: Exposes a lightweight board model that stores clipboard rows for delegate painting.
+// output: Exposes a lightweight board model that stores clipboard rows, including custom aliases, for delegate painting.
 // pos: Widget-layer model backing clipboard and favorites boards.
 // update: If I change, update this header block and my folder README.md.
 #ifndef MPASTE_CLIPBOARDBOARDMODEL_H
@@ -24,6 +24,7 @@ public:
         FaviconRole,
         TitleRole,
         UrlRole,
+        AliasRole,
         NormalizedTextRole,
         NormalizedUrlsRole,
         TimeRole,
