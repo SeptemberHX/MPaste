@@ -88,3 +88,5 @@ update: 修改本目录文件时，同步更新本 README。
 - Settings now expose the sync folder path for external sync tools.
 
 - The main window now watches the save folder for external sync changes and reloads history with a debounce.
+
+- Cards can be pinned to the top via the hover bar or context menu.

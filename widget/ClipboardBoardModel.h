@@ -25,6 +25,7 @@ public:
         TitleRole,
         UrlRole,
         AliasRole,
+        PinnedRole,
         NormalizedTextRole,
         NormalizedUrlsRole,
         TimeRole,
@@ -49,9 +50,11 @@ public:
     void clear();
     int prependItem(const ClipboardItem &item, bool favorite);
     int appendItem(const ClipboardItem &item, bool favorite);
+    int insertItem(int row, const ClipboardItem &item, bool favorite);
     bool updateItem(int row, const ClipboardItem &item);
     bool removeItemAt(int row);
     bool moveItemToFront(int row);
+    bool moveItemToRow(int row, int targetRow);
 
     int rowForMatchingItem(const ClipboardItem &item) const;
     int rowForName(const QString &name) const;

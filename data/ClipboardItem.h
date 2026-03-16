@@ -1,5 +1,5 @@
 // input: Depends on Qt mime/image/text primitives and raw clipboard payloads from the system.
-// output: Exposes a comparable clipboard item with cached search text, custom alias metadata, and lightweight content fingerprint.
+// output: Exposes a comparable clipboard item with cached search text, alias + pin metadata, and lightweight content fingerprint.
 // pos: Data-layer core clipboard model used by persistence, filtering, dedup, and rendering code.
 // update: If I change, update this header block and my folder README.md.
 #ifndef MPASTE_CLIPBOARDITEM_H
@@ -38,6 +38,7 @@ private:
     QString title_;
     QString url_;
     QString alias_;
+    bool pinned_ = false;
     mutable QByteArray fingerprintCache_;
     mutable bool fingerprintCacheInitialized_ = false;
     mutable QString searchableTextCache_;
@@ -1090,6 +1091,7 @@ public:
         title_ = other.title_;
         url_ = other.url_;
         alias_ = other.alias_;
+        pinned_ = other.pinned_;
         icon_ = other.icon_;
         fingerprintCache_ = other.fingerprintCache_;
         fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
@@ -1118,6 +1120,7 @@ public:
             title_ = other.title_;
             url_ = other.url_;
             alias_ = other.alias_;
+            pinned_ = other.pinned_;
             icon_ = other.icon_;
             fingerprintCache_ = other.fingerprintCache_;
             fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
@@ -1426,10 +1429,12 @@ public:
     QString getTitle() const { return title_; }
     QString getUrl() const { return url_; }
     QString getAlias() const { return alias_; }
+    bool isPinned() const { return pinned_; }
 
     void setTitle(const QString &title) { title_ = title; invalidateSearchCache(); }
     void setUrl(const QString &url) { url_ = url; invalidateSearchCache(); }
     void setAlias(const QString &alias) { alias_ = alias; invalidateSearchCache(); }
+    void setPinned(bool pinned) { pinned_ = pinned; }
 
     void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }

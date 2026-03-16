@@ -39,3 +39,5 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItem` 现在会优先把已物化的本地图片 MIME 载荷判成 `Image`，避免带着 WPS HTML 的条目在后续显示时又回退到远程 HTML 图片路径。
 
 - LocalSaver now writes .mpaste v5 with custom alias metadata while still reading v4.
+
+- LocalSaver now writes .mpaste v6 with alias + pin metadata while still reading v4/v5.

@@ -105,7 +105,7 @@ private:
     void setCurrentProxyIndex(const QModelIndex &index);
     void setFirstVisibleItemSelected();
     void applyFilters();
-    void moveItemToFirst(int sourceRow);
+    int moveItemToFirst(int sourceRow);
     void animateScrollTo(int targetValue);
     int wheelStepPixels() const;
     void ensureAllItemsLoaded();
@@ -123,10 +123,13 @@ private:
     void updateHoverActionBarPosition();
     void hideHoverActionBar(bool animated = true);
     void updateHoverFavoriteButton(bool favorite);
+    void updateHoverPinButton(bool pinned);
     void openAliasDialogForItem(const ClipboardItem &item);
     void startAsyncKeywordSearch();
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
     QList<QModelIndex> shortcutVisibleIndexes() const;
+    int pinnedInsertRow() const;
+    void setItemPinned(const ClipboardItem &item, bool pinned);
     QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
     int selectedSourceRow() const;
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;
@@ -146,6 +149,7 @@ private:
     QWidget *hoverActionBar_ = nullptr;
     QToolButton *hoverDetailsBtn_ = nullptr;
     QToolButton *hoverAliasBtn_ = nullptr;
+    QToolButton *hoverPinBtn_ = nullptr;
     QToolButton *hoverFavoriteBtn_ = nullptr;
     QToolButton *hoverDeleteBtn_ = nullptr;
     QGraphicsOpacityEffect *hoverOpacity_ = nullptr;

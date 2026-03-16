@@ -42,6 +42,8 @@ QVariant ClipboardBoardModel::data(const QModelIndex &index, int role) const {
             return entry.item.getUrl();
         case AliasRole:
             return entry.item.getAlias();
+        case PinnedRole:
+            return entry.item.isPinned();
         case NormalizedTextRole:
             return entry.item.getNormalizedText();
         case NormalizedUrlsRole:
@@ -135,6 +137,14 @@ int ClipboardBoardModel::appendItem(const ClipboardItem &item, bool favorite) {
     return row;
 }
 
+int ClipboardBoardModel::insertItem(int row, const ClipboardItem &item, bool favorite) {
+    const int clampedRow = qBound(0, row, entries_.size());
+    beginInsertRows(QModelIndex(), clampedRow, clampedRow);
+    entries_.insert(clampedRow, {item, favorite, QString()});
+    endInsertRows();
+    return clampedRow;
+}
+
 bool ClipboardBoardModel::updateItem(int row, const ClipboardItem &item) {
     if (row < 0 || row >= entries_.size()) {
         return false;
@@ -145,6 +155,7 @@ bool ClipboardBoardModel::updateItem(int row, const ClipboardItem &item) {
         existing.getTitle() != item.getTitle()
         || existing.getUrl() != item.getUrl()
         || existing.getAlias() != item.getAlias()
+        || existing.isPinned() != item.isPinned()
         || existing.getName() != item.getName()
         || existing.getFavicon().cacheKey() != item.getFavicon().cacheKey()
         || existing.thumbnail().cacheKey() != item.thumbnail().cacheKey();
@@ -177,6 +188,21 @@ bool ClipboardBoardModel::moveItemToFront(int row) {
 
     beginMoveRows(QModelIndex(), row, row, QModelIndex(), 0);
     entries_.move(row, 0);
+    endMoveRows();
+    return true;
+}
+
+bool ClipboardBoardModel::moveItemToRow(int row, int targetRow) {
+    if (row < 0 || row >= entries_.size()) {
+        return false;
+    }
+    const int clampedTarget = qBound(0, targetRow, entries_.size() - 1);
+    if (row == clampedTarget) {
+        return true;
+    }
+    const int destination = row < clampedTarget ? clampedTarget + 1 : clampedTarget;
+    beginMoveRows(QModelIndex(), row, row, QModelIndex(), destination);
+    entries_.move(row, clampedTarget);
     endMoveRows();
     return true;
 }

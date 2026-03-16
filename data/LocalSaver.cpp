@@ -1,5 +1,5 @@
 // input: Depends on LocalSaver.h, Qt serialization primitives, and clipboard item metadata/MIME payloads.
-// output: Implements current `.mpaste` v5 persistence with thumbnail + dedup, alias metadata, and lazy MIME load.
+// output: Implements current `.mpaste` v6 persistence with thumbnail + dedup, alias/pin metadata, and lazy MIME load.
 // pos: Data-layer persistence implementation responsible for durable item storage and current-format reload.
 // update: If I change, update this header block and my folder README.md.
 //
@@ -24,6 +24,9 @@ constexpr quint32 kLocalSaverFlagsV4 = 0;
 constexpr quint32 kLocalSaverVersionV5 = 5;
 const QString kLocalSaverMagicV5 = QStringLiteral("MPASTE_CLIP_V5");
 constexpr quint32 kLocalSaverFlagsV5 = 0;
+constexpr quint32 kLocalSaverVersionV6 = 6;
+const QString kLocalSaverMagicV6 = QStringLiteral("MPASTE_CLIP_V6");
+constexpr quint32 kLocalSaverFlagsV6 = 0;
 
 bool hasMeaningfulMimeData(const QMimeData *mimeData) {
     if (!mimeData) {
@@ -45,6 +48,7 @@ ClipboardItem finalizeLoadedItem(const QPixmap &icon,
                                  const QString &title,
                                  const QString &url,
                                  const QString &alias,
+                                 bool pinned,
                                  QMimeData *mimeData) {
     if (!hasMeaningfulMimeData(mimeData) || name.isEmpty()) {
         delete mimeData;
@@ -59,6 +63,7 @@ ClipboardItem finalizeLoadedItem(const QPixmap &icon,
     item.setTitle(title);
     item.setUrl(url);
     item.setAlias(alias);
+    item.setPinned(pinned);
     return item;
 }
 
@@ -66,7 +71,8 @@ bool readCurrentFormatPrefix(QDataStream &in, quint32 &flags, quint32 &version) 
     QString magic;
     in >> magic >> version >> flags;
     return in.status() == QDataStream::Ok
-        && ((magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
+        && ((magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
+            || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
             || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4));
 }
 
@@ -81,7 +87,8 @@ bool isCurrentFormatDevice(QIODevice *device) {
     quint32 version = 0;
     in >> magic >> version;
     const bool isCurrent = in.status() == QDataStream::Ok
-        && ((magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
+        && ((magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
+            || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
             || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4));
     device->seek(originalPos);
     return isCurrent;
@@ -477,6 +484,8 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     QString title;
     QString url;
     QString alias;
+    bool pinned = false;
+    bool pinned = false;
     quint32 contentType = 0;
     QString normalizedText;
     quint32 normalizedUrlCount = 0;
@@ -493,6 +502,9 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     in >> time >> name >> icon >> favicon >> title >> url;
     if (version >= kLocalSaverVersionV5) {
         in >> alias;
+        if (version >= kLocalSaverVersionV6) {
+            in >> pinned;
+        }
     }
     in >> contentType >> normalizedText >> normalizedUrlCount;
     for (quint32 i = 0; i < normalizedUrlCount; ++i) {
@@ -531,7 +543,7 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
         }
     }
 
-    ClipboardItem item = finalizeLoadedItem(icon, time, name, favicon, title, url, alias, mimeData);
+    ClipboardItem item = finalizeLoadedItem(icon, time, name, favicon, title, url, alias, pinned, mimeData);
     if (!item.getName().isEmpty()) {
         item.setThumbnail(thumbnail);
     }
@@ -546,9 +558,9 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
     }
 
     QDataStream out(&file);
-    out << kLocalSaverMagicV5 << kLocalSaverVersionV5 << kLocalSaverFlagsV5;
+    out << kLocalSaverMagicV6 << kLocalSaverVersionV6 << kLocalSaverFlagsV6;
     out << item.getTime() << item.getName() << item.getIcon();
-    out << item.getFavicon() << item.getTitle() << item.getUrl() << item.getAlias();
+    out << item.getFavicon() << item.getTitle() << item.getUrl() << item.getAlias() << item.isPinned();
     out << quint32(item.getContentType()) << item.getNormalizedText();
 
     const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
@@ -658,6 +670,9 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath) {
     in >> time >> name >> icon >> favicon >> title >> url;
     if (version >= kLocalSaverVersionV5) {
         in >> alias;
+        if (version >= kLocalSaverVersionV6) {
+            in >> pinned;
+        }
     }
     in >> contentType >> normalizedText >> normalizedUrlCount;
 
@@ -688,6 +703,7 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath) {
     item.setTitle(title);
     item.setUrl(url);
     item.setAlias(alias);
+    item.setPinned(pinned);
     item.setFavicon(favicon);
     item.setThumbnail(thumbnail);
     item.setSourceFilePath(filePath);

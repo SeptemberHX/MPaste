@@ -256,6 +256,19 @@ QString favoriteActionLabel(bool favorite) {
     return label;
 }
 
+QString pinActionLabel(bool pinned) {
+    const QString key = pinned ? QStringLiteral("Unpin") : QStringLiteral("Pin to top");
+    QString label = QObject::tr(key.toUtf8().constData());
+    const QLocale locale = QLocale::system();
+    if (label == key || looksBrokenTranslation(label)) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
+            return pinned ? QString::fromUtf16(u"\u53D6\u6D88\u7F6E\u9876") : QString::fromUtf16(u"\u7F6E\u9876");
+        }
+        return key;
+    }
+    return label;
+}
+
 class EdgeFadeOverlay final : public QWidget {
 public:
     enum Side {
@@ -595,11 +608,13 @@ void ScrollItemsWidget::createHoverActionBar() {
 
     hoverDetailsBtn_ = createButton(IconResolver::themedPath(QStringLiteral("details"), dark), detailsLabel());
     hoverAliasBtn_ = createButton(IconResolver::themedPath(QStringLiteral("rename"), dark), aliasLabel());
+    hoverPinBtn_ = createButton(IconResolver::themedPath(QStringLiteral("first"), dark), pinActionLabel(false));
     hoverFavoriteBtn_ = createButton(IconResolver::themedPath(QStringLiteral("star_outline"), dark), favoriteActionLabel(false));
     hoverDeleteBtn_ = createButton(QStringLiteral(":/resources/resources/delete.svg"), tr("Delete"));
 
     layout->addWidget(hoverDetailsBtn_);
     layout->addWidget(hoverAliasBtn_);
+    layout->addWidget(hoverPinBtn_);
     layout->addWidget(hoverFavoriteBtn_);
     layout->addWidget(hoverDeleteBtn_);
 
@@ -627,6 +642,19 @@ void ScrollItemsWidget::createHoverActionBar() {
         }
         openAliasDialogForItem(*item);
         hideHoverActionBar(false);
+    });
+
+    connect(hoverPinBtn_, &QToolButton::clicked, this, [this]() {
+        if (!proxyModel_ || !boardModel_ || !hoverProxyIndex_.isValid()) {
+            return;
+        }
+        const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
+        if (!item) {
+            return;
+        }
+        setItemPinned(*item, !item->isPinned());
+        updateHoverPinButton(!item->isPinned());
     });
 
     connect(hoverFavoriteBtn_, &QToolButton::clicked, this, [this]() {
@@ -683,6 +711,13 @@ void ScrollItemsWidget::updateHoverFavoriteButton(bool favorite) {
     hoverFavoriteBtn_->setToolTip(favoriteActionLabel(favorite));
 }
 
+void ScrollItemsWidget::updateHoverPinButton(bool pinned) {
+    if (!hoverPinBtn_) {
+        return;
+    }
+    hoverPinBtn_->setToolTip(pinActionLabel(pinned));
+}
+
 void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
     if (!boardModel_) {
         return;
@@ -701,6 +736,33 @@ void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
     if (boardService_) {
         boardService_->saveItem(updated);
     }
+}
+
+void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
+    if (!boardModel_) {
+        return;
+    }
+    const int row = boardModel_->rowForName(item.getName());
+    if (row < 0) {
+        return;
+    }
+
+    ClipboardItem updated = boardModel_->itemAt(row);
+    if (updated.isPinned() == pinned) {
+        return;
+    }
+
+    const int targetRow = pinned ? 0 : qMax(0, pinnedInsertRow() - 1);
+    updated.setPinned(pinned);
+    boardModel_->updateItem(row, updated);
+    boardModel_->moveItemToRow(row, targetRow);
+    if (boardService_) {
+        boardService_->saveItem(updated);
+    }
+    const QModelIndex targetIndex = proxyIndexForSourceRow(targetRow);
+    setCurrentProxyIndex(targetIndex);
+    updateHoverActionBar(targetIndex);
+    refreshContentWidthHint();
 }
 
 void ScrollItemsWidget::updateHoverActionBar(const QModelIndex &proxyIndex) {
@@ -730,6 +792,7 @@ void ScrollItemsWidget::updateHoverActionBar(const QModelIndex &proxyIndex) {
 
     hoverProxyIndex_ = proxyIndex;
     updateHoverFavoriteButton(boardModel_->isFavorite(sourceRow));
+    updateHoverPinButton(item->isPinned());
     updateHoverActionBarPosition();
 
     if (!hoverActionBar_->isVisible()) {
@@ -930,6 +993,13 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         });
     }
 
+    const bool isPinned = item.isPinned();
+    menu.addAction(IconResolver::themedIcon(QStringLiteral("first"), dark),
+                   pinActionLabel(isPinned),
+                   [this, item, isPinned]() {
+                       setItemPinned(item, !isPinned);
+                   });
+
     menu.addSeparator();
     menu.addAction(QIcon(isFavorite
                          ? QStringLiteral(":/resources/resources/star_filled.svg")
@@ -1028,14 +1098,14 @@ void ScrollItemsWidget::applyFilters() {
     emit itemCountChanged(itemCountForDisplay());
 }
 
-void ScrollItemsWidget::moveItemToFirst(int sourceRow) {
+int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
     if (sourceRow < 0 || !boardModel_ || !boardService_) {
-        return;
+        return sourceRow;
     }
 
     ClipboardItem item = boardModel_->itemAt(sourceRow);
     if (item.getName().isEmpty()) {
-        return;
+        return sourceRow;
     }
 
     item.getMimeData();
@@ -1043,8 +1113,10 @@ void ScrollItemsWidget::moveItemToFirst(int sourceRow) {
     boardService_->removeItemFile(boardService_->filePathForItem(boardModel_->itemAt(sourceRow)));
     boardService_->saveItem(item);
     boardModel_->updateItem(sourceRow, item);
-    boardModel_->moveItemToFront(sourceRow);
-    setCurrentProxyIndex(proxyIndexForSourceRow(0));
+    const int targetRow = item.isPinned() ? 0 : pinnedInsertRow();
+    boardModel_->moveItemToRow(sourceRow, targetRow);
+    setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+    return targetRow;
 }
 
 void ScrollItemsWidget::animateScrollTo(int targetValue) {
@@ -1267,7 +1339,12 @@ bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const Clipboar
 
     const bool favorite = category == MPasteSettings::STAR_CATEGORY_NAME
         || favoriteFingerprints_.contains(item.fingerprint());
-    boardModel_->appendItem(item, favorite);
+    if (item.isPinned()) {
+        const int insertRow = pinnedInsertRow();
+        boardModel_->insertItem(insertRow, item, favorite);
+    } else {
+        boardModel_->appendItem(item, favorite);
+    }
     if (!item.hasThumbnail()
         && (item.getContentType() == ClipboardItem::RichText || item.getContentType() == ClipboardItem::Image)) {
         if (boardService_) {
@@ -1317,14 +1394,16 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
             if (boardService_) {
                 boardService_->removeItemFile(boardService_->filePathForItem(existingItem));
             }
-            boardModel_->updateItem(row, nItem);
+            ClipboardItem updated = nItem;
+            updated.setPinned(existingItem.isPinned());
+            boardModel_->updateItem(row, updated);
             if (!nItem.isMimeDataLoaded() && nItem.sourceFilePath().isEmpty()) {
                 if (boardService_) {
-                    boardService_->processPendingItemAsync(nItem, nItem.getName());
+                    boardService_->processPendingItemAsync(updated, updated.getName());
                 }
             } else {
                 if (boardService_) {
-                    boardService_->saveItem(nItem);
+                    boardService_->saveItem(updated);
                 }
             }
         }
@@ -1336,8 +1415,9 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
 
     const bool favorite = category == MPasteSettings::STAR_CATEGORY_NAME
         || favoriteFingerprints_.contains(nItem.fingerprint());
-    boardModel_->prependItem(nItem, favorite);
-    const QModelIndex firstProxyIndex = proxyIndexForSourceRow(0);
+    const int insertRow = pinnedInsertRow();
+    boardModel_->insertItem(insertRow, nItem, favorite);
+    const QModelIndex firstProxyIndex = proxyIndexForSourceRow(insertRow);
     setCurrentProxyIndex(firstProxyIndex);
     ensureLinkPreviewForIndex(firstProxyIndex);
 
@@ -1449,6 +1529,20 @@ QList<QModelIndex> ScrollItemsWidget::shortcutVisibleIndexes() const {
     return result;
 }
 
+int ScrollItemsWidget::pinnedInsertRow() const {
+    if (!boardModel_) {
+        return 0;
+    }
+    const int rowCount = boardModel_->rowCount();
+    for (int row = 0; row < rowCount; ++row) {
+        const ClipboardItem *item = boardModel_->itemPtrAt(row);
+        if (!item || !item->isPinned()) {
+            return row;
+        }
+    }
+    return rowCount;
+}
+
 void ScrollItemsWidget::setShortcutInfo() {
     cleanShortCutInfo();
     if (!proxyModel_ || !boardModel_) {
@@ -1535,8 +1629,8 @@ const ClipboardItem *ScrollItemsWidget::selectedByShortcut(int keyIndex) {
         return currentSelectedItem();
     }
     setCurrentProxyIndex(proxyIndex);
-    moveItemToFirst(proxyModel_->mapToSource(proxyIndex).row());
-    return cacheSelectedItem(0);
+    const int row = moveItemToFirst(proxyModel_->mapToSource(proxyIndex).row());
+    return cacheSelectedItem(row);
 }
 
 const ClipboardItem *ScrollItemsWidget::selectedByEnter() {
@@ -1545,8 +1639,8 @@ const ClipboardItem *ScrollItemsWidget::selectedByEnter() {
         return nullptr;
     }
 
-    moveItemToFirst(sourceRow);
-    return cacheSelectedItem(0);
+    const int row = moveItemToFirst(sourceRow);
+    return cacheSelectedItem(row);
 }
 
 void ScrollItemsWidget::hideHoverTools() {
