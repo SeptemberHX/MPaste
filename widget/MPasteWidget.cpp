@@ -2,7 +2,7 @@
 // output: Implements the main window, item interaction flow, reliable quick-paste shortcuts, and plain-text paste behavior.
 // pos: Widget-layer main window implementation coordinating boards, shortcuts, and system integration.
 // update: If I change, update this header block and my folder README.md.
-// note: Added theme application and dark mode propagation.
+// note: Added theme application, dark mode propagation, tray menu theming, and robust paste rehydration.
 #include <QScrollBar>
 #include <QClipboard>
 #include <QKeyEvent>
@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QButtonGroup>
 #include <QLocale>
 #include <QIcon>
@@ -34,6 +35,7 @@
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
 #include "utils/PlatformRelated.h"
+#include "data/LocalSaver.h"
 
 namespace {
 bool looksBrokenTranslation(const QString &text) {
@@ -61,6 +63,42 @@ QString menuText(const char *source, const QString &zhFallback) {
         return QString::fromUtf8(source);
     }
     return translated;
+}
+
+ClipboardItem rehydrateClipboardItem(const ClipboardItem &item) {
+    if (item.getName().isEmpty()) {
+        return {};
+    }
+
+    const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
+    if (rootDir.isEmpty()) {
+        return {};
+    }
+
+    LocalSaver saver;
+    const QStringList categories = {
+        MPasteSettings::STAR_CATEGORY_NAME,
+        MPasteSettings::CLIPBOARD_CATEGORY_NAME
+    };
+    for (const QString &category : categories) {
+        const QString filePath = QDir::cleanPath(rootDir + QDir::separator()
+                                                 + category + QDir::separator()
+                                                 + item.getName() + ".mpaste");
+        if (!QFileInfo::exists(filePath)) {
+            continue;
+        }
+        ClipboardItem loaded = saver.loadFromFile(filePath);
+        if (!loaded.getName().isEmpty()) {
+            return loaded;
+        }
+    }
+
+    return {};
+}
+
+bool hasUsableMimeData(ClipboardItem item) {
+    const QMimeData *mimeData = item.getMimeData();
+    return mimeData && !mimeData->formats().isEmpty();
 }
 
 void applyMenuTheme(QMenu *menu) {
@@ -674,6 +712,7 @@ void MPasteWidget::initMenu() {
     addActions(ui_.trayMenu);
 
     applyMenuTheme(ui_.menu);
+    applyMenuTheme(ui_.trayMenu);
 }
 
 
@@ -707,6 +746,7 @@ void MPasteWidget::applyTheme(bool dark) {
         ui_.quitAction->setIcon(QIcon(QStringLiteral(":/resources/resources/quit.svg")));
     }
     applyMenuTheme(ui_.menu);
+    applyMenuTheme(ui_.trayMenu);
     update();
 }
 
@@ -749,6 +789,12 @@ void MPasteWidget::setupConnections() {
 
         connect(boardWidget, &ScrollItemsWidget::itemStared, this, [this](const ClipboardItem &item) {
             ClipboardItem updatedItem(item);
+            if (!hasUsableMimeData(updatedItem)) {
+                ClipboardItem rehydrated = rehydrateClipboardItem(updatedItem);
+                if (!rehydrated.getName().isEmpty()) {
+                    updatedItem = rehydrated;
+                }
+            }
             ui_.staredWidget->addAndSaveItem(updatedItem);
             ui_.clipboardWidget->setItemFavorite(updatedItem, true);
         });
@@ -916,6 +962,15 @@ bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
     clipboard_.monitor->disconnectMonitor();
 
     QMimeData *mimeData = plainText ? createPlainTextMimeData(item) : item.createMimeData();
+    if (!mimeData && !plainText) {
+        const ClipboardItem rehydrated = rehydrateClipboardItem(item);
+        if (!rehydrated.getName().isEmpty()) {
+            mimeData = rehydrated.createMimeData();
+            if (!mimeData) {
+                mimeData = createPlainTextMimeData(rehydrated);
+            }
+        }
+    }
     if (!mimeData) {
         qInfo() << "[clipboard-widget] setClipboard aborted: no mimeData";
         clipboard_.monitor->connectMonitor();

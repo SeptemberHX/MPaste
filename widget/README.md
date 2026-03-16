@@ -33,6 +33,9 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## Recent Notes
 - UI components now listen to ThemeManager for theme updates instead of coordinating via the main window.
+- System tray context menus now receive the themed dark palette and stylesheet to keep text/icon contrast consistent.
+- Auto-paste now attempts a disk rehydrate fallback when clipboard MIME data is missing, keeping favorites usable.
+- Favoriting now tries to rehydrate full MIME data before persisting, reducing light-item paste failures.
 - ???????????/??/?????????????????????
 
 - `ClipboardItemPreviewDialog` now provides a larger centered preview window for rich text, plain text, images, and files; it is read-only but still allows selection and copy, can be opened from the item preview menu action or the Space key on the current supported selection, and pressing Space again closes it.
