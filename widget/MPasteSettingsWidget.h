@@ -32,6 +32,7 @@ signals:
     void historyRetentionChanged();
     void themeChanged();
     void saveDirChanged();
+    void itemScaleChanged(int itemScale);
 
 public slots:
     void accept() override;

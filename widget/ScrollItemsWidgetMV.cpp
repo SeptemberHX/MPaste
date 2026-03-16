@@ -1616,6 +1616,49 @@ void ScrollItemsWidget::loadFromSaveDir() {
     maybeLoadMoreItems();
 }
 
+void ScrollItemsWidget::applyScale(int scale) {
+    if (!listView_ || !ui) {
+        return;
+    }
+
+    hideHoverActionBar(false);
+    if (hoverActionBar_) {
+        hoverActionBar_->deleteLater();
+        hoverActionBar_ = nullptr;
+    }
+    if (hoverHideTimer_) {
+        hoverHideTimer_->stop();
+        hoverHideTimer_->deleteLater();
+        hoverHideTimer_ = nullptr;
+    }
+    hoverDetailsBtn_ = nullptr;
+    hoverAliasBtn_ = nullptr;
+    hoverPinBtn_ = nullptr;
+    hoverFavoriteBtn_ = nullptr;
+    hoverDeleteBtn_ = nullptr;
+    hoverOpacity_ = nullptr;
+
+    const QSize itemOuterSize = cardOuterSizeForScale(scale);
+    const int spacing = qMax(6, 8 * scale / 100);
+    listView_->setSpacing(spacing);
+    listView_->setGridSize(QSize(itemOuterSize.width() + spacing, itemOuterSize.height()));
+
+    const int scrollbarHeight = qMax(12, listView_->horizontalScrollBar()->sizeHint().height());
+    const int scrollHeight = itemOuterSize.height() + scrollbarHeight;
+    edgeContentPadding_ = qMax(6, 8 * scale / 100);
+    edgeFadeWidth_ = qMax(12, 16 * scale / 100);
+    if (auto *boardView = dynamic_cast<ClipboardBoardView *>(listView_)) {
+        boardView->applyViewportMargins(edgeContentPadding_, 0, edgeContentPadding_, 0);
+    }
+    listView_->setFixedHeight(scrollHeight);
+    ui->viewHost->setFixedHeight(scrollHeight);
+    setFixedHeight(scrollHeight);
+
+    createHoverActionBar();
+    applyTheme(darkTheme_);
+    refreshContentWidthHint();
+}
+
 void ScrollItemsWidget::loadFromSaveDirDeferred() {
     if (boardService_) {
         boardService_->stopDeferredLoad();

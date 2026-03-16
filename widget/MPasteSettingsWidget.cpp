@@ -679,6 +679,7 @@ void MPasteSettingsWidget::accept()
     auto *settings = MPasteSettings::getInst();
     const int oldRetentionValue = settings->getHistoryRetentionValue();
     const auto oldRetentionUnit = settings->getHistoryRetentionUnit();
+    const int oldScale = settings->getItemScale();
     const int newRetentionValue = ui->daySpinBox->value();
     const auto newRetentionUnit = retentionUnitCombo_
         ? static_cast<MPasteSettings::HistoryRetentionUnit>(retentionUnitCombo_->currentData().toInt())
@@ -695,7 +696,8 @@ void MPasteSettingsWidget::accept()
     if (pasteShortcutCombo_) {
         settings->setPasteShortcutMode(static_cast<MPasteSettings::PasteShortcutMode>(pasteShortcutCombo_->currentData().toInt()));
     }
-    settings->setItemScale(ui->itemScaleSlider->value());
+    const int newScale = ui->itemScaleSlider->value();
+    settings->setItemScale(newScale);
     settings->setPlaySound(toggleSwitch_->isChecked());
     if (themeCombo_) {
         const auto mode = static_cast<MPasteSettings::ThemeMode>(themeCombo_->currentData().toInt());
@@ -730,6 +732,9 @@ void MPasteSettingsWidget::accept()
     settings->saveSettings();
     if (oldRetentionValue != newRetentionValue || oldRetentionUnit != newRetentionUnit) {
         emit historyRetentionChanged();
+    }
+    if (oldScale != newScale) {
+        emit itemScaleChanged(newScale);
     }
     QDialog::accept();
 }

@@ -19,6 +19,8 @@
 #include <QAction>
 #include <QStringList>
 #include <QTimer>
+#include <QScreen>
+#include <QGuiApplication>
 #include <QTextDocument>
 #include <QWheelEvent>
 #include <QWindow>
@@ -343,6 +345,10 @@ void MPasteWidget::initUI() {
                 setupSyncWatcher();
                 reloadHistoryBoards();
             });
+    connect(ui_.settingsWidget, &MPasteSettingsWidget::itemScaleChanged,
+            this, [this](int scale) {
+                applyScale(scale);
+            });
 
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
@@ -385,8 +391,7 @@ void MPasteWidget::initUI() {
     ui_.ui->menuButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     ui_.ui->menuButton->setToolTip(menuText("More", QStringLiteral("更多")));
 
-    // Adjust window height to fit content (adapts to card scale)
-    adjustSize();
+    applyScale(MPasteSettings::getInst()->getItemScale());
 
     ui_.buttonGroup = new QButtonGroup(this);
     ui_.buttonGroup->setExclusive(true);
@@ -422,6 +427,128 @@ void MPasteWidget::initUI() {
 
     applyTheme(ThemeManager::instance()->isDark());
 
+}
+
+void MPasteWidget::applyScale(int scale) {
+    if (ui_.clipboardWidget) {
+        ui_.clipboardWidget->applyScale(scale);
+    }
+    if (ui_.staredWidget) {
+        ui_.staredWidget->applyScale(scale);
+    }
+
+    auto scaleFont = [scale](QWidget *widget) {
+        if (!widget) {
+            return;
+        }
+        QFont font = widget->font();
+        QVariant baseVar = widget->property("baseFontPt");
+        qreal base = baseVar.isValid() ? baseVar.toReal() : font.pointSizeF();
+        if (!baseVar.isValid()) {
+            widget->setProperty("baseFontPt", base);
+        }
+        if (base > 0) {
+            font.setPointSizeF(qMax<qreal>(8.0, base * scale / 100.0));
+            widget->setFont(font);
+        }
+    };
+
+    auto scaleHeight = [scale](QWidget *widget, int minBase = 24) {
+        if (!widget) {
+            return;
+        }
+        QVariant baseVar = widget->property("baseHeight");
+        int base = baseVar.isValid() ? baseVar.toInt() : widget->sizeHint().height();
+        if (!baseVar.isValid()) {
+            widget->setProperty("baseHeight", base);
+        }
+        const int height = qMax(minBase, base * scale / 100);
+        widget->setMinimumHeight(height);
+        widget->setMaximumHeight(height);
+    };
+    auto applyRadius = [](QWidget *widget) {
+        if (!widget) {
+            return;
+        }
+        const int height = qMax(1, widget->maximumHeight());
+        const int radius = qMax(6, height / 2);
+        widget->setStyleSheet(QStringLiteral("border-radius: %1px;").arg(radius));
+    };
+
+    const int topBarHeight = qMax(32, 36 * scale / 100);
+    if (ui_.ui->topLine) {
+        ui_.ui->topLine->setFixedHeight(qMax(1, scale / 20));
+    }
+    scaleHeight(ui_.ui->widget, topBarHeight);
+
+    const int tabButtonHeight = qMax(24, 28 * scale / 100);
+    scaleHeight(ui_.ui->clipboardButton, tabButtonHeight);
+    scaleHeight(ui_.ui->staredButton, tabButtonHeight);
+    scaleHeight(ui_.ui->allTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->textTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->linkTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->imageTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->richTextTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->fileTypeBtn, tabButtonHeight);
+    scaleFont(ui_.ui->clipboardButton);
+    scaleFont(ui_.ui->staredButton);
+    scaleFont(ui_.ui->allTypeBtn);
+    scaleFont(ui_.ui->textTypeBtn);
+    scaleFont(ui_.ui->linkTypeBtn);
+    scaleFont(ui_.ui->imageTypeBtn);
+    scaleFont(ui_.ui->richTextTypeBtn);
+    scaleFont(ui_.ui->fileTypeBtn);
+
+    applyRadius(ui_.ui->clipboardButton);
+    applyRadius(ui_.ui->staredButton);
+    applyRadius(ui_.ui->allTypeBtn);
+    applyRadius(ui_.ui->textTypeBtn);
+    applyRadius(ui_.ui->linkTypeBtn);
+    applyRadius(ui_.ui->imageTypeBtn);
+    applyRadius(ui_.ui->richTextTypeBtn);
+    applyRadius(ui_.ui->fileTypeBtn);
+
+    if (ui_.ui->searchEdit) {
+        scaleHeight(ui_.ui->searchEdit, tabButtonHeight);
+    }
+    if (ui_.ui->firstButton) {
+        scaleHeight(ui_.ui->firstButton, tabButtonHeight);
+    }
+    if (ui_.ui->lastButton) {
+        scaleHeight(ui_.ui->lastButton, tabButtonHeight);
+    }
+
+    if (ui_.layout) {
+        ui_.layout->setContentsMargins(0, qMax(6, 10 * scale / 100), 0, 0);
+    }
+
+    const int newHeight = ui_.ui->widget->height()
+        + ui_.ui->itemsWidget->sizeHint().height()
+        + qMax(6, 10 * scale / 100)
+        + qMax(1, scale / 20);
+    setFixedHeight(newHeight);
+
+    QScreen *screen = this->screen();
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (screen) {
+        const QRect avail = screen->availableGeometry();
+        QRect geom = geometry();
+        const int newWidth = geom.width();
+        int newY = avail.bottom() - newHeight + 1;
+        if (newY < avail.top()) {
+            newY = avail.top();
+        }
+        int newX = geom.x();
+        if (newX + newWidth > avail.right()) {
+            newX = avail.right() - newWidth + 1;
+        }
+        if (newX < avail.left()) {
+            newX = avail.left();
+        }
+        setGeometry(newX, newY, newWidth, newHeight);
+    }
 }
 
 void MPasteWidget::initSearchAnimations() {
@@ -1114,7 +1241,6 @@ void MPasteWidget::hideEvent(QHideEvent *event) {
             board->hideHoverTools();
         }
     }
-    sync_.pendingReload = true;
 }
 
 void MPasteWidget::setupSyncWatcher() {

@@ -99,6 +99,7 @@ private:
     ScrollItemsWidget* currItemsWidget();
     void setupSyncWatcher();
     void scheduleSyncReload();
+    void applyScale(int scale);
 
 private:
     struct {

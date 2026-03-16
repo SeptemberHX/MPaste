@@ -54,6 +54,7 @@ public:
     void cleanShortCutInfo();
     void loadFromSaveDir();
     void loadFromSaveDirDeferred();
+    void applyScale(int scale);
     QScrollBar* horizontalScrollbar() const;
     void setAllItemVisible();
     const ClipboardItem* currentSelectedItem() const;
