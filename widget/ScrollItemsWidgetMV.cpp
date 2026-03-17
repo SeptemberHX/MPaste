@@ -2,7 +2,7 @@
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
 // update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar).
-// note: Added dark theme rendering hooks.
+// note: Added dark theme rendering hooks, metadata-save rehydrate fixes, and alias sync.
 #include <QGuiApplication>
 #include <QItemSelectionModel>
 #include <QListView>
@@ -18,6 +18,7 @@
 #include <QStyle>
 #include <QStyleFactory>
 #include <QGraphicsOpacityEffect>
+#include <QFileInfo>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -36,6 +37,7 @@
 #include "utils/PlatformRelated.h"
 #include "utils/ThemeManager.h"
 #include "utils/IconResolver.h"
+#include "data/LocalSaver.h"
 
 namespace {
 
@@ -80,6 +82,63 @@ void applyMenuTheme(QMenu *menu) {
         fusion->setParent(menu);
         menu->setStyle(fusion);
     }
+}
+
+void refreshPersistedItem(ClipboardBoardModel *boardModel,
+                          ClipboardBoardService *boardService,
+                          int row);
+
+bool persistItemMetadata(ClipboardBoardService *boardService,
+                         ClipboardBoardModel *boardModel,
+                         int row,
+                         const ClipboardItem &item) {
+    if (!boardService || item.getName().isEmpty()) {
+        return false;
+    }
+
+    const QString filePath = boardService->filePathForItem(item);
+    if (filePath.isEmpty() || !QFileInfo::exists(filePath)) {
+        return false;
+    }
+
+    LocalSaver saver;
+    if (saver.updateMetadata(filePath, item.getAlias(), item.isPinned())) {
+        refreshPersistedItem(boardModel, boardService, row);
+        return true;
+    }
+
+    ClipboardItem fullItem = saver.loadFromFile(filePath);
+    if (fullItem.getName().isEmpty()) {
+        return false;
+    }
+
+    fullItem.setAlias(item.getAlias());
+    fullItem.setPinned(item.isPinned());
+    if (!saver.saveToFile(fullItem, filePath)) {
+        return false;
+    }
+    refreshPersistedItem(boardModel, boardService, row);
+    return true;
+}
+
+void refreshPersistedItem(ClipboardBoardModel *boardModel,
+                          ClipboardBoardService *boardService,
+                          int row) {
+    if (!boardModel || !boardService || row < 0) {
+        return;
+    }
+
+    const ClipboardItem existing = boardModel->itemAt(row);
+    if (existing.getName().isEmpty()) {
+        return;
+    }
+
+    ClipboardItem reloaded = boardService->loadItemLight(boardService->filePathForItem(existing));
+    if (reloaded.getName().isEmpty()) {
+        return;
+    }
+
+    boardModel->updateItem(row, reloaded);
 }
 
 
@@ -735,8 +794,9 @@ void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
     updated.setAlias(dialog.alias());
     boardModel_->updateItem(row, updated);
     if (boardService_) {
-        boardService_->saveItem(updated);
+        persistItemMetadata(boardService_, boardModel_, row, updated);
     }
+    emit aliasChanged(updated.fingerprint(), updated.getAlias());
 }
 
 void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
@@ -757,7 +817,7 @@ void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
     boardModel_->updateItem(row, updated);
     boardModel_->moveItemToRow(row, targetRow);
     if (boardService_) {
-        boardService_->saveItem(updated);
+        persistItemMetadata(boardService_, boardModel_, targetRow, updated);
     }
     const QModelIndex targetIndex = proxyIndexForSourceRow(targetRow);
     setCurrentProxyIndex(targetIndex);
@@ -1099,7 +1159,7 @@ void ScrollItemsWidget::applyFilters() {
 }
 
 int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
-    if (sourceRow < 0 || !boardModel_ || !boardService_) {
+    if (sourceRow < 0 || !boardModel_) {
         return sourceRow;
     }
 
@@ -1108,13 +1168,10 @@ int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
         return sourceRow;
     }
 
-    item.getMimeData();
-    item = boardService_->prepareItemForSave(item);
-    boardService_->removeItemFile(boardService_->filePathForItem(boardModel_->itemAt(sourceRow)));
-    boardService_->saveItem(item);
-    boardModel_->updateItem(sourceRow, item);
     const int targetRow = item.isPinned() ? 0 : pinnedInsertRow();
-    boardModel_->moveItemToRow(sourceRow, targetRow);
+    if (targetRow != sourceRow) {
+        boardModel_->moveItemToRow(sourceRow, targetRow);
+    }
     setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
     return targetRow;
 }
@@ -1819,6 +1876,29 @@ void ScrollItemsWidget::setItemFavorite(const ClipboardItem &item, bool favorite
         favoriteFingerprints_.remove(item.fingerprint());
     }
     boardModel_->setFavoriteByFingerprint(item.fingerprint(), favorite);
+}
+
+void ScrollItemsWidget::syncAlias(const QByteArray &fingerprint, const QString &alias) {
+    if (!boardModel_ || fingerprint.isEmpty()) {
+        return;
+    }
+
+    const int rowCount = boardModel_->rowCount();
+    for (int row = 0; row < rowCount; ++row) {
+        const ClipboardItem *item = boardModel_->itemPtrAt(row);
+        if (!item || item->fingerprint() != fingerprint) {
+            continue;
+        }
+        ClipboardItem updated = boardModel_->itemAt(row);
+        if (updated.getAlias() == alias) {
+            continue;
+        }
+        updated.setAlias(alias);
+        boardModel_->updateItem(row, updated);
+        if (boardService_) {
+            persistItemMetadata(boardService_, boardModel_, row, updated);
+        }
+    }
 }
 
 QList<ClipboardItem> ScrollItemsWidget::allItems() {

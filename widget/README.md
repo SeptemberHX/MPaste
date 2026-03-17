@@ -36,6 +36,11 @@ update: 修改本目录文件时，同步更新本 README。
 - System tray context menus now receive the themed dark palette and stylesheet to keep text/icon contrast consistent.
 - Auto-paste now attempts a disk rehydrate fallback when clipboard MIME data is missing, keeping favorites usable.
 - Favoriting now tries to rehydrate full MIME data before persisting, reducing light-item paste failures.
+- Renames/pin toggles now reload persisted offsets to keep post-edit pastes working.
+- Alias edits now sync across boards so favorites and clipboard stay consistent.
+- Metadata-only saves now rehydrate full items to avoid MIME loss after edits.
+- Clipboard paste now falls back to plain text when MIME payloads are missing or empty.
+- Alias/pin edits now update only metadata on disk, leaving MIME blobs untouched.
 - ???????????/??/?????????????????????
 
 - `ClipboardItemPreviewDialog` now provides a larger centered preview window for rich text, plain text, images, and files; it is read-only but still allows selection and copy, can be opened from the item preview menu action or the Space key on the current supported selection, and pressing Space again closes it.

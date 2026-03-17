@@ -2,6 +2,7 @@
 // output: Implements current `.mpaste` v6 persistence with thumbnail + dedup, alias/pin metadata, and lazy MIME load.
 // pos: Data-layer persistence implementation responsible for durable item storage and current-format reload.
 // update: If I change, update this header block and my folder README.md.
+// note: Preserve alias/pin metadata and avoid empty MIME payloads when rehydrating.
 //
 // Created by ragdoll on 2021/5/24.
 //
@@ -15,7 +16,9 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QImageReader>
+#include <QScopedPointer>
 #include <QScreen>
+#include <QSaveFile>
 
 namespace {
 constexpr quint32 kLocalSaverVersionV4 = 4;
@@ -33,12 +36,30 @@ bool hasMeaningfulMimeData(const QMimeData *mimeData) {
         return false;
     }
 
-    return mimeData->hasText()
-        || mimeData->hasHtml()
-        || mimeData->hasImage()
-        || mimeData->hasUrls()
-        || mimeData->hasColor()
-        || !mimeData->formats().isEmpty();
+    if (mimeData->hasText() && !mimeData->text().isEmpty()) {
+        return true;
+    }
+    if (mimeData->hasHtml() && !mimeData->html().isEmpty()) {
+        return true;
+    }
+    if (mimeData->hasUrls() && !mimeData->urls().isEmpty()) {
+        return true;
+    }
+    if (mimeData->hasColor()) {
+        return true;
+    }
+    if (mimeData->hasImage()) {
+        const QVariant imageData = mimeData->imageData();
+        if (imageData.isValid() && !imageData.isNull()) {
+            return true;
+        }
+    }
+    for (const QString &format : mimeData->formats()) {
+        if (!mimeData->data(format).isEmpty()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ClipboardItem finalizeLoadedItem(const QPixmap &icon,
@@ -506,9 +527,11 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
         }
     }
     in >> contentType >> normalizedText >> normalizedUrlCount;
+    QList<QUrl> normalizedUrls;
     for (quint32 i = 0; i < normalizedUrlCount; ++i) {
-        QString ignoredUrl;
-        in >> ignoredUrl;
+        QString urlStr;
+        in >> urlStr;
+        normalizedUrls << QUrl(urlStr);
     }
     in >> fingerprint >> thumbnail >> mimeDataOffset >> formatCount;
     if (in.status() != QDataStream::Ok) {
@@ -539,6 +562,15 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
             mimeData->setData(format, data);
         } else if (static_cast<int>(dataIndex) < uniqueBlobs.size()) {
             mimeData->setData(format, uniqueBlobs[dataIndex]);
+        }
+    }
+
+    if (!hasMeaningfulMimeData(mimeData)) {
+        if (!normalizedText.isEmpty()) {
+            mimeData->setText(normalizedText);
+        }
+        if (!normalizedUrls.isEmpty()) {
+            mimeData->setUrls(normalizedUrls);
         }
     }
 
@@ -590,6 +622,21 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
 
     // Write MIME formats with dedup
     const QMimeData* mimeData = item.getMimeData();
+    QScopedPointer<QMimeData> fallbackMime;
+    if (!mimeData || !hasMeaningfulMimeData(mimeData)) {
+        const QString fallbackText = item.getNormalizedText();
+        const QList<QUrl> fallbackUrls = item.getNormalizedUrls();
+        if (!fallbackText.isEmpty() || !fallbackUrls.isEmpty()) {
+            fallbackMime.reset(new QMimeData);
+            if (!fallbackText.isEmpty()) {
+                fallbackMime->setText(fallbackText);
+            }
+            if (!fallbackUrls.isEmpty()) {
+                fallbackMime->setUrls(fallbackUrls);
+            }
+            mimeData = fallbackMime.data();
+        }
+    }
     if (mimeData) {
         const QStringList formats = mimeData->formats();
         out << quint32(formats.size());
@@ -620,6 +667,174 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
 
     file.close();
     return out.status() == QDataStream::Ok;
+}
+
+bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, bool pinned) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    QDataStream in(&file);
+    QString magic;
+    quint32 version = 0;
+    quint32 flags = 0;
+    in >> magic >> version >> flags;
+    const bool isCurrent = (magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
+        || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
+        || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4);
+    if (!isCurrent || in.status() != QDataStream::Ok) {
+        return false;
+    }
+    Q_UNUSED(flags);
+
+    QDateTime time;
+    QString name;
+    QPixmap icon;
+    QPixmap favicon;
+    QString title;
+    QString url;
+    quint32 contentType = 0;
+    QString normalizedText;
+    quint32 normalizedUrlCount = 0;
+    QByteArray fingerprint;
+    QPixmap thumbnail;
+    quint64 mimeDataOffset = 0;
+
+    in >> time >> name >> icon >> favicon >> title >> url;
+    if (version >= kLocalSaverVersionV5) {
+        QString ignoredAlias;
+        in >> ignoredAlias;
+        if (version >= kLocalSaverVersionV6) {
+            bool ignoredPinned = false;
+            in >> ignoredPinned;
+        }
+    }
+    in >> contentType >> normalizedText >> normalizedUrlCount;
+    QList<QUrl> normalizedUrls;
+    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
+        QString urlStr;
+        in >> urlStr;
+        normalizedUrls << QUrl(urlStr);
+    }
+    in >> fingerprint >> thumbnail >> mimeDataOffset;
+    if (in.status() != QDataStream::Ok || name.isEmpty()) {
+        return false;
+    }
+
+    const qint64 fileSize = file.size();
+    const bool hasBlob = mimeDataOffset > 0 && mimeDataOffset < static_cast<quint64>(fileSize);
+    bool blobHasPayload = false;
+    if (hasBlob) {
+        if (!file.seek(static_cast<qint64>(mimeDataOffset))) {
+            return false;
+        }
+        QDataStream blobIn(&file);
+        quint32 formatCount = 0;
+        blobIn >> formatCount;
+        if (blobIn.status() != QDataStream::Ok) {
+            return false;
+        }
+        QList<QByteArray> uniqueBlobs;
+        uniqueBlobs.reserve(static_cast<int>(formatCount));
+        for (quint32 i = 0; i < formatCount; ++i) {
+            QString format;
+            quint32 dataIndex = 0;
+            QByteArray data;
+            blobIn >> format >> dataIndex >> data;
+            if (blobIn.status() != QDataStream::Ok) {
+                return false;
+            }
+            if (!data.isEmpty()) {
+                while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
+                    uniqueBlobs.append(QByteArray());
+                }
+                uniqueBlobs[dataIndex] = data;
+                blobHasPayload = true;
+            } else if (static_cast<int>(dataIndex) < uniqueBlobs.size()
+                       && !uniqueBlobs[dataIndex].isEmpty()) {
+                blobHasPayload = true;
+            }
+        }
+        if (!file.seek(static_cast<qint64>(mimeDataOffset))) {
+            return false;
+        }
+    }
+
+    QSaveFile outFile(filePath);
+    if (!outFile.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+
+    QDataStream out(&outFile);
+    out << kLocalSaverMagicV6 << kLocalSaverVersionV6 << kLocalSaverFlagsV6;
+    out << time << name << icon << favicon << title << url;
+    out << alias << pinned;
+    out << contentType << normalizedText;
+    out << quint32(normalizedUrls.size());
+    for (const QUrl &u : normalizedUrls) {
+        out << u.toString(QUrl::FullyEncoded);
+    }
+    out << fingerprint;
+    out << thumbnail;
+
+    const qint64 offsetPos = outFile.pos();
+    quint64 newMimeOffset = 0;
+    out << newMimeOffset;
+    const qint64 blobStart = outFile.pos();
+
+    const bool shouldRepairMime = !blobHasPayload
+        && (!normalizedText.isEmpty() || !normalizedUrls.isEmpty());
+
+    if (hasBlob && !shouldRepairMime) {
+        constexpr qint64 kChunkSize = 64 * 1024;
+        QByteArray buffer;
+        buffer.resize(static_cast<int>(kChunkSize));
+        while (!file.atEnd()) {
+            const qint64 read = file.read(buffer.data(), buffer.size());
+            if (read <= 0) {
+                break;
+            }
+            outFile.write(buffer.constData(), read);
+        }
+    } else {
+        if (shouldRepairMime) {
+            QByteArray urlPayload;
+            if (!normalizedUrls.isEmpty()) {
+                for (const QUrl &u : normalizedUrls) {
+                    urlPayload.append(u.toString(QUrl::FullyEncoded).toUtf8());
+                    urlPayload.append("\r\n");
+                }
+            }
+
+            quint32 formatCount = 0;
+            if (!normalizedText.isEmpty()) {
+                ++formatCount;
+            }
+            if (!urlPayload.isEmpty()) {
+                ++formatCount;
+            }
+            out << formatCount;
+            quint32 dataIndex = 0;
+            if (!normalizedText.isEmpty()) {
+                out << QStringLiteral("text/plain;charset=utf-8") << dataIndex++ << normalizedText.toUtf8();
+            }
+            if (!urlPayload.isEmpty()) {
+                out << QStringLiteral("text/uri-list") << dataIndex++ << urlPayload;
+            }
+        } else {
+            out << quint32(0);
+        }
+    }
+
+    outFile.seek(offsetPos);
+    out << quint64(blobStart);
+
+    if (out.status() != QDataStream::Ok) {
+        return false;
+    }
+
+    return outFile.commit();
 }
 
 ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
@@ -766,6 +981,9 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
 
     // Read MIME formats with dedup reconstruction.
     QList<QByteArray> uniqueBlobs;
+    const QString savedNormalizedText = item.getNormalizedText();
+    const QList<QUrl> savedNormalizedUrls = item.getNormalizedUrls();
+
     auto *mimeData = new QMimeData;
     for (quint32 i = 0; i < formatCount; ++i) {
         QString format;
@@ -790,14 +1008,27 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     }
     file.close();
 
+    if (!hasMeaningfulMimeData(mimeData)) {
+        if (!savedNormalizedText.isEmpty()) {
+            mimeData->setText(savedNormalizedText);
+        }
+        if (!savedNormalizedUrls.isEmpty()) {
+            mimeData->setUrls(savedNormalizedUrls);
+        }
+    }
+
     // Save metadata that would be overwritten by operator=.
     const QString savedName = item.getName();
     const QDateTime savedTime = item.getTime();
     const QString savedTitle = item.getTitle();
     const QString savedUrl = item.getUrl();
+    const QString savedAlias = item.getAlias();
+    const bool savedPinned = item.isPinned();
     const QPixmap savedFavicon = item.getFavicon();
     const QPixmap savedThumbnail = item.thumbnail();
     const QByteArray savedFingerprint = item.fingerprint();
+    const QString savedSourceFilePath = item.sourceFilePath();
+    const quint64 savedMimeOffset = item.mimeDataFileOffset();
 
     // Materialize canonical image formats through ClipboardItem(icon, mimeData)
     // and then restore the metadata that only exists on light-loaded items.
@@ -811,9 +1042,13 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     item.setTime(savedTime);
     item.setTitle(savedTitle);
     item.setUrl(savedUrl);
+    item.setAlias(savedAlias);
+    item.setPinned(savedPinned);
     item.setFavicon(savedFavicon);
     item.setThumbnail(savedThumbnail);
     item.setFingerprintCache(savedFingerprint);
+    item.setSourceFilePath(savedSourceFilePath);
+    item.setMimeDataFileOffset(savedMimeOffset);
     return true;
 }
 

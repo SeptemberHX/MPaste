@@ -2,7 +2,7 @@
 // output: Implements the main window, item interaction flow, reliable quick-paste shortcuts, and plain-text paste behavior.
 // pos: Widget-layer main window implementation coordinating boards, shortcuts, and system integration.
 // update: If I change, update this header block and my folder README.md.
-// note: Added theme application, dark mode propagation, tray menu theming, and robust paste rehydration.
+// note: Added theme application, dark mode propagation, tray menu theming, robust paste rehydration, and alias sync.
 #include <QScrollBar>
 #include <QClipboard>
 #include <QKeyEvent>
@@ -805,6 +805,13 @@ void MPasteWidget::setupConnections() {
                 ui_.clipboardWidget->setItemFavorite(item, false);
             }
         });
+        connect(boardWidget, &ScrollItemsWidget::aliasChanged, this, [this, boardWidget](const QByteArray &fingerprint, const QString &alias) {
+            for (auto *other : ui_.boardWidgetMap.values()) {
+                if (other && other != boardWidget) {
+                    other->syncAlias(fingerprint, alias);
+                }
+            }
+        });
         connect(boardWidget, &ScrollItemsWidget::localPersistenceChanged, this, [this]() {
             sync_.suppressReloadUntilMs = QDateTime::currentMSecsSinceEpoch() + 800;
         });
@@ -969,6 +976,43 @@ bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
             if (!mimeData) {
                 mimeData = createPlainTextMimeData(rehydrated);
             }
+        }
+    }
+    if (mimeData) {
+        bool hasPayload = false;
+        if (mimeData->hasText() && !mimeData->text().isEmpty()) {
+            hasPayload = true;
+        } else if (mimeData->hasHtml() && !mimeData->html().isEmpty()) {
+            hasPayload = true;
+        } else if (mimeData->hasUrls() && !mimeData->urls().isEmpty()) {
+            hasPayload = true;
+        } else if (mimeData->hasColor()) {
+            hasPayload = true;
+        } else if (mimeData->hasImage()) {
+            const QVariant imageData = mimeData->imageData();
+            hasPayload = imageData.isValid() && !imageData.isNull();
+        } else {
+            for (const QString &format : mimeData->formats()) {
+                if (!mimeData->data(format).isEmpty()) {
+                    hasPayload = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasPayload) {
+            delete mimeData;
+            mimeData = createPlainTextMimeData(item);
+        }
+    }
+    if (mimeData && !plainText) {
+        const QString normalizedText = item.getNormalizedText();
+        const bool hasText = mimeData->hasText() && !mimeData->text().isEmpty();
+        const bool hasHtml = mimeData->hasHtml() && !mimeData->html().isEmpty();
+        const bool hasUrls = mimeData->hasUrls() && !mimeData->urls().isEmpty();
+        if (!normalizedText.isEmpty() && !hasText && !hasHtml && !hasUrls) {
+            mimeData->setText(normalizedText);
+            mimeData->setData("text/plain;charset=utf-8", normalizedText.toUtf8());
         }
     }
     if (!mimeData) {

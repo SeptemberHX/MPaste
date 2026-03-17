@@ -2,7 +2,7 @@
 // output: Exposes one history board with lazy loading, filtering, dedup indexing, and paste signals.
 // pos: Widget-layer horizontal board declaration for clipboard/favorites views.
 // update: If I change, update this header block and my folder README.md.
-// note: Added theme application entry point.
+// note: Added theme application entry point and alias sync hooks.
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
 
@@ -70,6 +70,7 @@ public:
     QString getCategory() const;
     void removeItemByContent(const ClipboardItem &item);
     void setItemFavorite(const ClipboardItem &item, bool favorite);
+    void syncAlias(const QByteArray &fingerprint, const QString &alias);
     QList<ClipboardItem> allItems();
     bool handleWheelScroll(QWheelEvent *event);
     void applyTheme(bool dark);
@@ -89,6 +90,7 @@ signals:
     void itemCountChanged(int itemCount);
     void itemStared(const ClipboardItem &item);
     void itemUnstared(const ClipboardItem &item);
+    void aliasChanged(const QByteArray &fingerprint, const QString &alias);
     void localPersistenceChanged();
 
 private slots:
