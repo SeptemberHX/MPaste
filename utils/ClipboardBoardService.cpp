@@ -290,7 +290,8 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
 
 ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {
     ClipboardItem item(source);
-    if (!item.hasThumbnail() && item.getContentType() == ClipboardItem::Image) {
+    if (!item.hasThumbnail() && (item.getContentType() == ClipboardItem::Image
+                                 || item.getContentType() == ClipboardItem::Office)) {
         const QPixmap thumbnail = buildCardThumbnail(item);
         if (!thumbnail.isNull()) {
             item.setThumbnail(thumbnail);
@@ -534,11 +535,14 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
 
     const ClipboardItem::ContentType contentType = item.getContentType();
     const ClipboardItem baseItem = item;
-    const QByteArray imageBytes = (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)
+    const QByteArray imageBytes = (contentType == ClipboardItem::Image
+            || contentType == ClipboardItem::Office
+            || contentType == ClipboardItem::RichText)
         ? item.imagePayloadBytesFast()
         : QByteArray();
     const QString richHtml = contentType == ClipboardItem::RichText ? item.getHtml() : QString();
-    const QSize imageSize = item.isMimeDataLoaded() && contentType == ClipboardItem::Image
+    const QSize imageSize = item.isMimeDataLoaded()
+        && (contentType == ClipboardItem::Image || contentType == ClipboardItem::Office)
         ? item.getImagePixelSize()
         : QSize();
     const QString sourceFilePath = item.sourceFilePath();
@@ -552,13 +556,17 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
         QString resolvedHtml = richHtml;
         if ((resolvedImageBytes.isEmpty() || resolvedHtml.isEmpty())
             && !sourceFilePath.isEmpty()
-            && (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)) {
+            && (contentType == ClipboardItem::Image
+                || contentType == ClipboardItem::Office
+                || contentType == ClipboardItem::RichText)) {
             QString htmlPayload;
             QByteArray imagePayload;
             LocalSaver::loadMimePayloads(sourceFilePath,
                                          mimeOffset,
                                          contentType == ClipboardItem::RichText ? &htmlPayload : nullptr,
-                                         (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText) ? &imagePayload : nullptr);
+                                         (contentType == ClipboardItem::Image
+                                             || contentType == ClipboardItem::Office
+                                             || contentType == ClipboardItem::RichText) ? &imagePayload : nullptr);
             if (resolvedHtml.isEmpty()) {
                 resolvedHtml = htmlPayload;
             }
@@ -567,7 +575,8 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             }
         }
 
-        if (contentType == ClipboardItem::Image && !resolvedImageBytes.isEmpty()) {
+        if ((contentType == ClipboardItem::Image || contentType == ClipboardItem::Office)
+            && !resolvedImageBytes.isEmpty()) {
             result.thumbnailImage = buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr);
             if (isVeryTallImage(imageSize)) {
                 qInfo().noquote() << QStringLiteral("[thumb-build] stage=worker name=%1 image=%2x%3 thumbPx=%4x%5 thumbDpr=%6")

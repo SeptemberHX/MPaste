@@ -41,6 +41,7 @@ update: 修改本目录文件时，同步更新本 README。
 - Metadata-only saves now rehydrate full items to avoid MIME loss after edits.
 - Clipboard paste now falls back to plain text when MIME payloads are missing or empty.
 - Alias/pin edits now update only metadata on disk, leaving MIME blobs untouched.
+- Type filters now include Office shapes for editable PPT/Word objects.
 - ???????????/??/?????????????????????
 
 - `ClipboardItemPreviewDialog` now provides a larger centered preview window for rich text, plain text, images, and files; it is read-only but still allows selection and copy, can be opened from the item preview menu action or the Space key on the current supported selection, and pressing Space again closes it.

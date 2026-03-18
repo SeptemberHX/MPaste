@@ -109,6 +109,8 @@ QString typeLabelForCard(const CardData &card) {
             return QObject::tr("Link");
         case ClipboardItem::Image:
             return QObject::tr("Image");
+        case ClipboardItem::Office:
+            return QObject::tr("Office Shape");
         case ClipboardItem::RichText:
             return QObject::tr("Rich Text");
         case ClipboardItem::File:
@@ -126,6 +128,7 @@ QString typeLabelForCard(const CardData &card) {
 QString countLabelForCard(const CardData &card) {
     switch (card.contentType) {
         case ClipboardItem::Image:
+        case ClipboardItem::Office:
             return card.imageSize.isValid()
                 ? QStringLiteral("%1 x %2 %3").arg(card.imageSize.width()).arg(card.imageSize.height()).arg(QObject::tr("Pixels"))
                 : QString();
@@ -172,6 +175,8 @@ QString previewTextForCard(const CardData &card) {
             return card.normalizedText.trimmed().isEmpty() ? QObject::tr("Rich text preview") : card.normalizedText.trimmed();
         case ClipboardItem::Image:
             return QObject::tr("Image preview");
+        case ClipboardItem::Office:
+            return QObject::tr("Office shape preview");
         case ClipboardItem::Text:
         case ClipboardItem::All:
             break;
@@ -396,6 +401,29 @@ void drawCoverPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &
     const int cacheCost = qMax(1, (cropped.width() * cropped.height() * 4) / 1024);
     cache.insert(cacheKey, new QPixmap(cropped), cacheCost);
     painter->drawPixmap(targetRect.topLeft(), cropped);
+}
+
+void drawContainPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &pixmap) {
+    if (!painter || pixmap.isNull() || targetRect.isEmpty()) {
+        return;
+    }
+
+    const qreal targetDpr = painter->device()
+        ? qMax<qreal>(1.0, painter->device()->devicePixelRatioF())
+        : qMax<qreal>(1.0, pixmap.devicePixelRatio());
+    const qreal sourceDpr = qMax<qreal>(1.0, pixmap.devicePixelRatio());
+    const QSize sourceLogicalSize(qRound(pixmap.width() / sourceDpr),
+                                  qRound(pixmap.height() / sourceDpr));
+    const QSize scaledSize = sourceLogicalSize.scaled(targetRect.size(), Qt::KeepAspectRatio);
+    if (!scaledSize.isValid()) {
+        return;
+    }
+
+    QPixmap scaled = pixmap.scaled(scaledSize * targetDpr, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    scaled.setDevicePixelRatio(targetDpr);
+    const QPoint topLeft(targetRect.center().x() - scaledSize.width() / 2,
+                         targetRect.center().y() - scaledSize.height() / 2);
+    painter->drawPixmap(topLeft, scaled);
 }
 
 QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QSize &targetSize, qreal devicePixelRatio,
@@ -1002,6 +1030,16 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
         case ClipboardItem::Image:
             if (!card.thumbnail.isNull()) {
                 drawCoverPixmap(painter, imagePreviewRect, card.thumbnail, card.name, card.imageSize);
+            } else {
+                QFont previewFont = painter->font();
+                previewFont.setPointSize(qMax(9, 10 * scale / 100));
+                drawWrappedText(painter, imagePreviewRect.adjusted(10 * scale / 100, 8 * scale / 100, -10 * scale / 100, -6 * scale / 100),
+                                previewTextForCard(card), previewFont, bodyTextColor);
+            }
+            break;
+        case ClipboardItem::Office:
+            if (!card.thumbnail.isNull()) {
+                drawContainPixmap(painter, imagePreviewRect, card.thumbnail);
             } else {
                 QFont previewFont = painter->font();
                 previewFont.setPointSize(qMax(9, 10 * scale / 100));

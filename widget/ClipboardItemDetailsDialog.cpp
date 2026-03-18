@@ -568,6 +568,8 @@ QString ClipboardItemDetailsDialog::contentTypeLabel(ClipboardItem::ContentType 
             return uiText(QStringLiteral("Link"), zh(u"链接"));
         case ClipboardItem::Image:
             return uiText(QStringLiteral("Image"), zh(u"图片"));
+        case ClipboardItem::Office:
+            return uiText(QStringLiteral("Office Shape"), zh(u"Office Shape"));
         case ClipboardItem::RichText:
             return uiText(QStringLiteral("Rich Text"), zh(u"富文本"));
         case ClipboardItem::File:
@@ -640,7 +642,8 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
     QString summary;
 
     switch (item.getContentType()) {
-        case ClipboardItem::Image: {
+        case ClipboardItem::Image:
+        case ClipboardItem::Office: {
             previewPixmap = item.getImage();
             if (item.hasThumbnail()) {
                 thumbnailPixmap = item.thumbnail();

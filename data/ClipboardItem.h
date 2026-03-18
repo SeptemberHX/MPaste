@@ -27,7 +27,8 @@
 
 class ClipboardItem {
 public:
-    enum ContentType { All = 0, Text, Link, Image, RichText, File, Color };
+    // NOTE: Append new values to preserve on-disk enum compatibility.
+    enum ContentType { All = 0, Text, Link, Image, RichText, File, Color, Office };
 
 private:
     QString name_;
@@ -58,6 +59,118 @@ private:
     mutable ContentType cachedContentType_ = Text;
     mutable QString cachedNormalizedText_;
     mutable QList<QUrl> cachedNormalizedUrls_;
+
+    struct OfficePayloadInfo {
+        bool hasVector = false;
+        bool hasOle = false;
+        bool hasOleNative = false;
+        bool hasBitmap = false;
+    };
+
+    static OfficePayloadInfo officePayloadInfo(const QMimeData *mimeData) {
+        OfficePayloadInfo info;
+        if (!mimeData) {
+            return info;
+        }
+        const QStringList formats = mimeData->formats();
+        for (const QString &format : formats) {
+            const QString lower = format.toLower();
+            if (lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
+                if (lower.contains(QStringLiteral("enhancedmetafile"))
+                    || lower.contains(QStringLiteral("metafilepict"))
+                    || lower.contains(QStringLiteral("cf_enhmetafile"))
+                    || lower.contains(QStringLiteral("cf_metafilepict"))
+                    || lower.contains(QStringLiteral("emf"))
+                    || lower.contains(QStringLiteral("wmf"))) {
+                    info.hasVector = true;
+                }
+                if (lower.contains(QStringLiteral("object descriptor"))
+                    || lower.contains(QStringLiteral("embedded object"))
+                    || lower.contains(QStringLiteral("embed source"))
+                    || lower.contains(QStringLiteral("link source"))
+                    || lower.contains(QStringLiteral("ole"))
+                    || lower.contains(QStringLiteral("office"))
+                    || lower.contains(QStringLiteral("powerpoint"))
+                    || lower.contains(QStringLiteral("excel"))
+                    || lower.contains(QStringLiteral("word"))) {
+                    info.hasOle = true;
+                }
+                if (lower.contains(QStringLiteral("object descriptor"))
+                    || lower.contains(QStringLiteral("embedded object"))
+                    || lower.contains(QStringLiteral("embed source"))
+                    || lower.contains(QStringLiteral("link source"))
+                    || lower.contains(QStringLiteral("native"))) {
+                    info.hasOleNative = true;
+                }
+                if (lower.contains(QStringLiteral("png"))
+                    || lower.contains(QStringLiteral("jpeg"))
+                    || lower.contains(QStringLiteral("jpg"))
+                    || lower.contains(QStringLiteral("bmp"))
+                    || lower.contains(QStringLiteral("dib"))
+                    || lower.contains(QStringLiteral("gif"))
+                    || lower.contains(QStringLiteral("webp"))) {
+                    info.hasBitmap = true;
+                }
+            } else if (lower == QStringLiteral("image/emf")
+                       || lower == QStringLiteral("image/x-emf")
+                       || lower == QStringLiteral("image/wmf")
+                       || lower == QStringLiteral("image/x-wmf")) {
+                info.hasVector = true;
+            } else if (lower.startsWith(QStringLiteral("image/"))) {
+                info.hasBitmap = true;
+            }
+        }
+        if (mimeData->hasImage()) {
+            info.hasBitmap = true;
+        }
+        return info;
+    }
+
+    static bool formatLooksOffice(const QString &format) {
+        const QString lower = format.toLower();
+        if (lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
+            return lower.contains(QStringLiteral("enhancedmetafile"))
+                || lower.contains(QStringLiteral("metafilepict"))
+                || lower.contains(QStringLiteral("cf_enhmetafile"))
+                || lower.contains(QStringLiteral("cf_metafilepict"))
+                || lower.contains(QStringLiteral("emf"))
+                || lower.contains(QStringLiteral("wmf"))
+                || lower.contains(QStringLiteral("object descriptor"))
+                || lower.contains(QStringLiteral("embedded object"))
+                || lower.contains(QStringLiteral("embed source"))
+                || lower.contains(QStringLiteral("link source"))
+                || lower.contains(QStringLiteral("ole"))
+                || lower.contains(QStringLiteral("office"))
+                || lower.contains(QStringLiteral("powerpoint"))
+                || lower.contains(QStringLiteral("excel"))
+                || lower.contains(QStringLiteral("word"));
+        }
+        return lower == QStringLiteral("image/emf")
+            || lower == QStringLiteral("image/x-emf")
+            || lower == QStringLiteral("image/wmf")
+            || lower == QStringLiteral("image/x-wmf");
+    }
+
+    static bool hasOfficePayload(const QMimeData *mimeData) {
+        const OfficePayloadInfo info = officePayloadInfo(mimeData);
+        return info.hasVector || info.hasOle;
+    }
+
+    static bool shouldTreatOfficePayloadAsType(const QMimeData *mimeData, bool htmlImageLike) {
+        const OfficePayloadInfo info = officePayloadInfo(mimeData);
+        if (!(info.hasVector || info.hasOle)) {
+            return false;
+        }
+        if (info.hasVector) {
+            return true;
+        }
+        // If Office payload exists but it is only bitmap-backed, prefer Image/Text types.
+        if (info.hasOleNative && !info.hasBitmap) {
+            return true;
+        }
+        Q_UNUSED(htmlImageLike);
+        return false;
+    }
 
     static QString windowsDrivePathFromUrl(const QUrl &url) {
         if (!url.isValid() || url.isLocalFile()) {
@@ -739,6 +852,10 @@ private:
 
     static bool shouldCopyLightMimeFormat(const QString &format) {
         const QString lower = format.toLower();
+        if (lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
+            // Preserve Windows clipboard formats (EMF/OLE/Office) so Office shapes remain editable.
+            return true;
+        }
         return lower.startsWith(QStringLiteral("text/"))
             || lower.contains(QStringLiteral("html"))
             || lower.contains(QStringLiteral("plain"))
@@ -839,7 +956,11 @@ private:
         }
 
         if (mimeData_->hasHtml()) {
-            if (shouldTreatHtmlPayloadAsImageFast()) {
+            const bool htmlImageLike = shouldTreatHtmlPayloadAsImageFast();
+            if (htmlImageLike) {
+                if (shouldTreatOfficePayloadAsType(mimeData_.data(), true)) {
+                    return Office;
+                }
                 return Image;
             }
             QString text = buildNormalizedText().trimmed();
@@ -851,7 +972,12 @@ private:
             return RichText;
         }
 
-        if (hasFastImagePayload()) return Image;
+        if (hasFastImagePayload()) {
+            return shouldTreatOfficePayloadAsType(mimeData_.data(), true) ? Office : Image;
+        }
+        if (shouldTreatOfficePayloadAsType(mimeData_.data(), false)) {
+            return Office;
+        }
         return Text;
     }
 
@@ -1486,7 +1612,11 @@ public:
         }
 
         if (mimeData_->hasHtml()) {
-            if (shouldTreatHtmlPayloadAsImage()) {
+            const bool htmlImageLike = shouldTreatHtmlPayloadAsImage();
+            if (htmlImageLike) {
+                if (shouldTreatOfficePayloadAsType(mimeData_.data(), true)) {
+                    return Office;
+                }
                 return Image;
             }
             QString text = buildNormalizedText().trimmed();
@@ -1499,10 +1629,15 @@ public:
         }
 
         if (hasMaterializedImagePayload()) {
-            return Image;
+            return shouldTreatOfficePayloadAsType(mimeData_.data(), true) ? Office : Image;
         }
 
-        if (hasDecodableImage()) return Image;
+        if (hasDecodableImage()) {
+            return shouldTreatOfficePayloadAsType(mimeData_.data(), true) ? Office : Image;
+        }
+        if (shouldTreatOfficePayloadAsType(mimeData_.data(), false)) {
+            return Office;
+        }
         return Text;
     }
 };

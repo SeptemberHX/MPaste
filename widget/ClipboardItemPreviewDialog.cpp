@@ -143,6 +143,25 @@ QImage loadPreviewImageFileBytes(const QString &filePath, const QSize &targetSiz
     return image;
 }
 
+QImage scalePreviewImage(const QImage &image, const QSize &targetSize, qreal devicePixelRatio) {
+    if (image.isNull()) {
+        return {};
+    }
+
+    QImage scaled = image;
+    if (targetSize.isValid()) {
+        const QSize pixelTargetSize = targetSize * devicePixelRatio;
+        if (pixelTargetSize.isValid()) {
+            scaled = scaled.scaled(pixelTargetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+    }
+
+    if (devicePixelRatio > 0.0) {
+        scaled.setDevicePixelRatio(devicePixelRatio);
+    }
+    return scaled;
+}
+
 enum class PreviewKind {
     PlainText,
     Html,
@@ -257,6 +276,7 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
                                    const QList<QUrl> &normalizedUrls,
                                    const QString &html,
                                    const QByteArray &imageBytes,
+                                   const QImage &fallbackImage,
                                    const QString &filePath,
                                    const QSize &targetSize,
                                    qreal devicePixelRatio) {
@@ -271,6 +291,23 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
         }
         case ClipboardItem::Image: {
             QImage image = loadPreviewImageFromBytes(imageBytes, targetSize, devicePixelRatio);
+            if (image.isNull() && !fallbackImage.isNull()) {
+                image = scalePreviewImage(fallbackImage, targetSize, devicePixelRatio);
+            }
+            if (!image.isNull()) {
+                payload.kind = PreviewKind::Image;
+                payload.image = image;
+                payload.imageUrl = QStringLiteral("preview-image://clipboard-item");
+            } else {
+                payload.kind = PreviewKind::PlainText;
+                payload.text = unavailableText();
+            }
+            break;
+        }
+        case ClipboardItem::Office: {
+            QImage image = !fallbackImage.isNull()
+                ? scalePreviewImage(fallbackImage, targetSize, devicePixelRatio)
+                : loadPreviewImageFromBytes(imageBytes, targetSize, devicePixelRatio);
             if (!image.isNull()) {
                 payload.kind = PreviewKind::Image;
                 payload.image = image;
@@ -441,6 +478,7 @@ bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {
         case ClipboardItem::Link:
         case ClipboardItem::RichText:
         case ClipboardItem::Image:
+        case ClipboardItem::Office:
             return true;
         case ClipboardItem::File:
             return !item.getNormalizedUrls().isEmpty();
@@ -468,32 +506,89 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     const QString normalizedText = item.getNormalizedText();
     const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
     const QString html = contentType == ClipboardItem::RichText ? item.getHtml() : QString();
-    const QByteArray imageBytes = (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)
+    const QByteArray imageBytes = (contentType == ClipboardItem::Image
+            || contentType == ClipboardItem::Office
+            || contentType == ClipboardItem::RichText)
         ? item.imagePayloadBytesFast()
         : QByteArray();
+    QImage fallbackImage;
+    if (contentType == ClipboardItem::Office) {
+        const QPixmap previewPixmap = item.getImage();
+        if (!previewPixmap.isNull()) {
+            fallbackImage = previewPixmap.toImage();
+            fallbackImage.setDevicePixelRatio(previewPixmap.devicePixelRatio());
+        } else if (item.hasThumbnail()) {
+            fallbackImage = item.thumbnail().toImage();
+        }
+    } else if (contentType == ClipboardItem::Image && item.hasThumbnail()) {
+        fallbackImage = item.thumbnail().toImage();
+    }
     QString filePath;
     if (contentType == ClipboardItem::File && normalizedUrls.size() == 1 && normalizedUrls.first().isLocalFile()) {
         filePath = normalizedUrls.first().toLocalFile();
     }
     const QString sourceFilePath = item.sourceFilePath();
     const quint64 mimeOffset = item.mimeDataFileOffset();
+    const bool preferFullItem = !sourceFilePath.isEmpty();
     const QSize targetSize(kPreviewDialogWidth - 120, kPreviewDialogHeight - 180);
     const qreal dpr = devicePixelRatioF();
     const quint64 token = ++previewToken_;
 
     QPointer<ClipboardItemPreviewDialog> guard(this);
-    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, filePath, sourceFilePath, mimeOffset, targetSize, dpr, token]() mutable {
+    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, fallbackImage, filePath, sourceFilePath, mimeOffset, preferFullItem, targetSize, dpr, token]() mutable {
+        ClipboardItem::ContentType resolvedType = contentType;
+        QString resolvedText = normalizedText;
+        QList<QUrl> resolvedUrls = normalizedUrls;
         QString resolvedHtml = html;
         QByteArray resolvedImageBytes = imageBytes;
+        QImage resolvedFallbackImage = fallbackImage;
+        QString resolvedFilePath = filePath;
+
+        if (preferFullItem && !sourceFilePath.isEmpty()) {
+            LocalSaver saver;
+            ClipboardItem fullItem = saver.loadFromFile(sourceFilePath);
+            if (!fullItem.getName().isEmpty()) {
+                resolvedType = fullItem.getContentType();
+                resolvedText = fullItem.getNormalizedText();
+                resolvedUrls = fullItem.getNormalizedUrls();
+                resolvedHtml = resolvedType == ClipboardItem::RichText ? fullItem.getHtml() : QString();
+                if (resolvedType == ClipboardItem::Image
+                    || resolvedType == ClipboardItem::Office
+                    || resolvedType == ClipboardItem::RichText) {
+                    resolvedImageBytes = fullItem.imagePayloadBytesFast();
+                }
+                const QPixmap fullPixmap = fullItem.getImage();
+                if (!fullPixmap.isNull()) {
+                    resolvedFallbackImage = fullPixmap.toImage();
+                    resolvedFallbackImage.setDevicePixelRatio(fullPixmap.devicePixelRatio());
+                } else if (fullItem.hasThumbnail()) {
+                    resolvedFallbackImage = fullItem.thumbnail().toImage();
+                }
+                if (resolvedType == ClipboardItem::File && resolvedUrls.size() == 1 && resolvedUrls.front().isLocalFile()) {
+                    resolvedFilePath = resolvedUrls.front().toLocalFile();
+                }
+            } else {
+                QByteArray imagePayload;
+                LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset, nullptr, &imagePayload);
+                if (!imagePayload.isEmpty()
+                    && (resolvedImageBytes.isEmpty() || imagePayload.size() > resolvedImageBytes.size())) {
+                    resolvedImageBytes = imagePayload;
+                }
+            }
+        }
         if ((resolvedHtml.isEmpty() || resolvedImageBytes.isEmpty())
             && !sourceFilePath.isEmpty()
-            && (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText)) {
+            && (resolvedType == ClipboardItem::Image
+                || resolvedType == ClipboardItem::Office
+                || resolvedType == ClipboardItem::RichText)) {
             QString htmlPayload;
             QByteArray imagePayload;
             LocalSaver::loadMimePayloads(sourceFilePath,
                                          mimeOffset,
-                                         contentType == ClipboardItem::RichText ? &htmlPayload : nullptr,
-                                         (contentType == ClipboardItem::Image || contentType == ClipboardItem::RichText) ? &imagePayload : nullptr);
+                                         resolvedType == ClipboardItem::RichText ? &htmlPayload : nullptr,
+                                         (resolvedType == ClipboardItem::Image
+                                             || resolvedType == ClipboardItem::Office
+                                             || resolvedType == ClipboardItem::RichText) ? &imagePayload : nullptr);
             if (resolvedHtml.isEmpty()) {
                 resolvedHtml = htmlPayload;
             }
@@ -502,12 +597,13 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
             }
         }
 
-        PreviewPayload payload = buildPreviewPayload(contentType,
-                                                     normalizedText,
-                                                     normalizedUrls,
+        PreviewPayload payload = buildPreviewPayload(resolvedType,
+                                                     resolvedText,
+                                                     resolvedUrls,
                                                      resolvedHtml,
                                                      resolvedImageBytes,
-                                                     filePath,
+                                                     resolvedFallbackImage,
+                                                     resolvedFilePath,
                                                      targetSize,
                                                      dpr);
         if (guard) {
@@ -530,7 +626,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                         guard->ui_.browser->document()->addResource(QTextDocument::ImageResource,
                                                                     QUrl(imageUrl),
                                                                     payload.image);
-                        guard->ui_.browser->setHtml(QStringLiteral("<div style=\"text-align:center;\"><img src=\"%1\"></div>")
+                        guard->ui_.browser->setHtml(QStringLiteral("<div style=\"text-align:center;\"><img src=\"%1\" style=\"max-width:100%%; max-height:100%%; height:auto; width:auto;\"></div>")
                                                        .arg(imageUrl));
                         break;
                     }
@@ -554,8 +650,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
             }, Qt::QueuedConnection);
         }
     });
-
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     thread->start();
 
     QScreen *targetScreen = nullptr;

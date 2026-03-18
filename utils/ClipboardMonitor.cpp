@@ -108,6 +108,7 @@ const char *contentTypeName(ClipboardItem::ContentType type) {
         case ClipboardItem::RichText: return "RichText";
         case ClipboardItem::File: return "File";
         case ClipboardItem::Color: return "Color";
+        case ClipboardItem::Office: return "Office";
     }
     return "Unknown";
 }

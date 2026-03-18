@@ -414,6 +414,7 @@ void MPasteWidget::initUI() {
     ui_.ui->textTypeBtn->setText(menuText("Text", QStringLiteral("文本")));
     ui_.ui->linkTypeBtn->setText(menuText("Link", QStringLiteral("链接")));
     ui_.ui->imageTypeBtn->setText(menuText("Image", QStringLiteral("图片")));
+    ui_.ui->officeTypeBtn->setText(menuText("Office", QStringLiteral("Office")));
     ui_.ui->richTextTypeBtn->setText(menuText("Rich Text", QStringLiteral("富文本")));
     ui_.ui->fileTypeBtn->setText(menuText("File", QStringLiteral("文件")));
 
@@ -443,6 +444,7 @@ void MPasteWidget::initUI() {
     ui_.ui->textTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Text));
     ui_.ui->linkTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Link));
     ui_.ui->imageTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Image));
+    ui_.ui->officeTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Office));
     ui_.ui->richTextTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::RichText));
     ui_.ui->fileTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::File));
 
@@ -450,6 +452,7 @@ void MPasteWidget::initUI() {
     ui_.typeButtonGroup->addButton(ui_.ui->textTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->linkTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->imageTypeBtn);
+    ui_.typeButtonGroup->addButton(ui_.ui->officeTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->richTextTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->fileTypeBtn);
 
@@ -526,6 +529,7 @@ void MPasteWidget::applyScale(int scale) {
     scaleHeight(ui_.ui->textTypeBtn, tabButtonHeight);
     scaleHeight(ui_.ui->linkTypeBtn, tabButtonHeight);
     scaleHeight(ui_.ui->imageTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->officeTypeBtn, tabButtonHeight);
     scaleHeight(ui_.ui->richTextTypeBtn, tabButtonHeight);
     scaleHeight(ui_.ui->fileTypeBtn, tabButtonHeight);
     scaleFont(ui_.ui->clipboardButton);
@@ -534,6 +538,7 @@ void MPasteWidget::applyScale(int scale) {
     scaleFont(ui_.ui->textTypeBtn);
     scaleFont(ui_.ui->linkTypeBtn);
     scaleFont(ui_.ui->imageTypeBtn);
+    scaleFont(ui_.ui->officeTypeBtn);
     scaleFont(ui_.ui->richTextTypeBtn);
     scaleFont(ui_.ui->fileTypeBtn);
 
@@ -543,6 +548,7 @@ void MPasteWidget::applyScale(int scale) {
     applyRadius(ui_.ui->textTypeBtn);
     applyRadius(ui_.ui->linkTypeBtn);
     applyRadius(ui_.ui->imageTypeBtn);
+    applyRadius(ui_.ui->officeTypeBtn);
     applyRadius(ui_.ui->richTextTypeBtn);
     applyRadius(ui_.ui->fileTypeBtn);
 
