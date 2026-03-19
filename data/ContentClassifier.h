@@ -6,6 +6,7 @@
 #define MPASTE_CONTENTCLASSIFIER_H
 
 #include <QBuffer>
+#include <QDataStream>
 #include <QImage>
 #include <QMimeData>
 #include <QPixmap>
@@ -32,6 +33,30 @@ struct ContentTraits {
     bool hasUrls = false;
     bool hasColor = false;
 };
+
+inline const QStringList &preferredImageFormats() {
+    static const QStringList formats = {
+        QStringLiteral("image/png"),
+        QStringLiteral("image/jpeg"),
+        QStringLiteral("image/jpg"),
+        QStringLiteral("image/webp"),
+        QStringLiteral("image/gif"),
+        QStringLiteral("image/bmp"),
+        QStringLiteral("application/x-qt-image")
+    };
+    return formats;
+}
+
+inline const QStringList &commonImageFormats() {
+    static const QStringList formats = {
+        QStringLiteral("image/png"),
+        QStringLiteral("image/jpeg"),
+        QStringLiteral("image/gif"),
+        QStringLiteral("image/bmp"),
+        QStringLiteral("application/x-qt-image")
+    };
+    return formats;
+}
 
 inline ContentTraits analyze(const QMimeData *mimeData) {
     ContentTraits traits;
@@ -132,6 +157,31 @@ inline bool shouldSkipImageDecodeFormatName(const QString &format) {
         || lower.contains(QStringLiteral("rich text"));
 }
 
+inline QImage decodeQtSerializedImage(const QByteArray &bytes) {
+    if (bytes.isEmpty()) {
+        return {};
+    }
+
+    QBuffer buffer;
+    buffer.setData(bytes);
+    if (!buffer.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    QDataStream stream(&buffer);
+    QImage image;
+    stream >> image;
+    return image;
+}
+
+inline QString firstHtmlImageSource(const QString &html) {
+    static const QRegularExpression srcRegex(
+        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = srcRegex.match(html);
+    return match.hasMatch() ? match.captured(1).trimmed() : QString();
+}
+
 inline bool hasFastImagePayload(const QMimeData *mimeData) {
     if (!mimeData) {
         return false;
@@ -182,15 +232,7 @@ inline bool hasDecodableImage(const QMimeData *mimeData) {
         }
     }
 
-    static const QStringList commonFormats = {
-        QStringLiteral("image/png"),
-        QStringLiteral("image/jpeg"),
-        QStringLiteral("image/gif"),
-        QStringLiteral("image/bmp"),
-        QStringLiteral("application/x-qt-image")
-    };
-
-    for (const QString &format : commonFormats) {
+    for (const QString &format : commonImageFormats()) {
         if (mimeData->hasFormat(format)) {
             QPixmap pixmap;
             const QByteArray data = mimeData->data(format);

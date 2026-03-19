@@ -2,12 +2,12 @@
 // output: Implements a centered read-only preview dialog with selection/copy support for rich text, text, images, and files.
 // pos: Widget-layer preview dialog implementation for larger clipboard inspection.
 // update: If I change, update this header block and my folder README.md (tuned preview font size + hidden caret/focus).
-// note: Adds fallback decoding for Qt serialized image payloads.
+// note: Adds fallback decoding for Qt serialized image payloads and image zoom interactions.
 #include "ClipboardItemPreviewDialog.h"
 
 #include <QCursor>
-#include <QDataStream>
 #include <QBuffer>
+#include <cmath>
 #include <QFileInfo>
 #include <QFrame>
 #include <QGuiApplication>
@@ -21,7 +21,7 @@
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
-#include <QRegularExpression>
+#include <QPalette>
 #include <QTextBrowser>
 #include <QTextDocument>
 #include <QThread>
@@ -29,13 +29,19 @@
 #include <QVBoxLayout>
 #include <QWindow>
 #include <QPointer>
+#include <QScrollArea>
+#include <QStackedLayout>
 
+#include "data/ContentClassifier.h"
 #include "data/LocalSaver.h"
 #include "utils/ThemeManager.h"
 namespace {
 constexpr int kPreviewDialogWidth = 980;
 constexpr int kPreviewDialogHeight = 760;
 constexpr int kPreviewBodyFontSize = 16;
+constexpr qreal kImageZoomMin = 0.1;
+constexpr qreal kImageZoomMax = 8.0;
+constexpr qreal kImageZoomStep = 1.15;
 
 bool looksBrokenTranslation(const QString &text) {
     if (text.isEmpty()) {
@@ -65,14 +71,6 @@ QString joinUrls(const QList<QUrl> &urls) {
     return lines.join(QStringLiteral("\n"));
 }
 
-QString firstHtmlImageSource(const QString &html) {
-    static const QRegularExpression srcRegex(
-        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch match = srcRegex.match(html);
-    return match.hasMatch() ? match.captured(1).trimmed() : QString();
-}
-
 bool isLocalImageFile(const QString &filePath) {
     const QFileInfo info(filePath);
     if (!info.exists() || !info.isFile()) {
@@ -85,23 +83,6 @@ bool isLocalImageFile(const QString &filePath) {
 
 QString unavailableText() {
     return QStringLiteral("该条目暂无可用预览");
-}
-
-QImage decodeQtSerializedImage(const QByteArray &bytes) {
-    if (bytes.isEmpty()) {
-        return {};
-    }
-
-    QBuffer buffer;
-    buffer.setData(bytes);
-    if (!buffer.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-
-    QDataStream stream(&buffer);
-    QImage image;
-    stream >> image;
-    return image;
 }
 
 QImage loadPreviewImageFromBytes(const QByteArray &imageBytes, const QSize &targetSize, qreal devicePixelRatio) {
@@ -118,7 +99,7 @@ QImage loadPreviewImageFromBytes(const QByteArray &imageBytes, const QSize &targ
     QImageReader reader(&buffer);
     QImage image = reader.read();
     if (image.isNull()) {
-        image = decodeQtSerializedImage(imageBytes);
+        image = ContentClassifier::decodeQtSerializedImage(imageBytes);
     }
     if (image.isNull()) {
         return {};
@@ -138,13 +119,13 @@ QImage loadPreviewImageFromBytes(const QByteArray &imageBytes, const QSize &targ
 }
 
 QImage loadPreviewImageFileBytes(const QString &filePath, const QSize &targetSize, qreal devicePixelRatio) {
-    if (!targetSize.isValid()) {
+    if (filePath.isEmpty()) {
         return {};
     }
 
     QImageReader reader(filePath);
     const QSize sourceSize = reader.size();
-    if (sourceSize.isValid()) {
+    if (targetSize.isValid() && sourceSize.isValid()) {
         const QSize pixelTargetSize = targetSize * devicePixelRatio;
         if (pixelTargetSize.isValid()) {
             const QSize scaledSize = sourceSize.scaled(pixelTargetSize, Qt::KeepAspectRatio);
@@ -312,9 +293,9 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
             break;
         }
         case ClipboardItem::Image: {
-            QImage image = loadPreviewImageFromBytes(imageBytes, targetSize, devicePixelRatio);
+            QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
             if (image.isNull() && !fallbackImage.isNull()) {
-                image = scalePreviewImage(fallbackImage, targetSize, devicePixelRatio);
+                image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
             }
             if (!image.isNull()) {
                 payload.kind = PreviewKind::Image;
@@ -342,7 +323,7 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
         }
         case ClipboardItem::File: {
             if (!filePath.isEmpty() && isLocalImageFile(filePath)) {
-                QImage image = loadPreviewImageFileBytes(filePath, targetSize, devicePixelRatio);
+                QImage image = loadPreviewImageFileBytes(filePath, QSize(), devicePixelRatio);
                 if (!image.isNull()) {
                     payload.kind = PreviewKind::Image;
                     payload.image = image;
@@ -358,7 +339,7 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
             if (!html.isEmpty()) {
                 payload.kind = PreviewKind::Html;
                 payload.html = html;
-                const QString imageSource = firstHtmlImageSource(html);
+                const QString imageSource = ContentClassifier::firstHtmlImageSource(html);
                 if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
                     QImage image = loadPreviewImageFromBytes(imageBytes, targetSize, devicePixelRatio);
                     if (!image.isNull()) {
@@ -488,7 +469,33 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     ui_.browser->installEventFilter(this);
     ui_.browser->viewport()->installEventFilter(this);
     ui_.browser->viewport()->setCursor(Qt::ArrowCursor);
-    cardLayout->addWidget(ui_.browser, 1);
+
+    ui_.imageLabel = new QLabel(card);
+    ui_.imageLabel->setAlignment(Qt::AlignCenter);
+    ui_.imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    ui_.imageLabel->setBackgroundRole(QPalette::Base);
+    ui_.imageLabel->setFocusPolicy(Qt::NoFocus);
+
+    ui_.imageScrollArea = new QScrollArea(card);
+    ui_.imageScrollArea->setFrameShape(QFrame::NoFrame);
+    ui_.imageScrollArea->setWidgetResizable(false);
+    ui_.imageScrollArea->setAlignment(Qt::AlignCenter);
+    ui_.imageScrollArea->setFocusPolicy(Qt::NoFocus);
+    ui_.imageScrollArea->setWidget(ui_.imageLabel);
+    ui_.imageScrollArea->setStyleSheet(QStringLiteral("QScrollArea { background: transparent; border: none; }"));
+    if (ui_.imageScrollArea->viewport()) {
+        ui_.imageScrollArea->viewport()->setAutoFillBackground(false);
+        ui_.imageScrollArea->viewport()->setCursor(Qt::OpenHandCursor);
+    }
+    ui_.imageScrollArea->viewport()->installEventFilter(this);
+
+    auto *contentHost = new QWidget(card);
+    ui_.contentLayout = new QStackedLayout(contentHost);
+    ui_.contentLayout->setContentsMargins(0, 0, 0, 0);
+    ui_.contentLayout->addWidget(ui_.browser);
+    ui_.contentLayout->addWidget(ui_.imageScrollArea);
+    ui_.contentLayout->setCurrentWidget(ui_.browser);
+    cardLayout->addWidget(contentHost, 1);
 
     applyTheme(ThemeManager::instance()->isDark());
     connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &ClipboardItemPreviewDialog::applyTheme);
@@ -633,40 +640,40 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 if (!guard || guard->previewToken_ != token) {
                     return;
                 }
-                if (!guard->ui_.browser) {
+                if (!guard->ui_.browser || !guard->ui_.contentLayout) {
                     return;
                 }
 
-                guard->ui_.browser->clear();
-                guard->ui_.browser->document()->clear();
-
                 switch (payload.kind) {
                     case PreviewKind::Image: {
-                        const QString imageUrl = payload.imageUrl.isEmpty()
-                            ? QStringLiteral("preview-image://clipboard-item")
-                            : payload.imageUrl;
-                        guard->ui_.browser->document()->addResource(QTextDocument::ImageResource,
-                                                                    QUrl(imageUrl),
-                                                                    payload.image);
-                        guard->ui_.browser->setHtml(QStringLiteral("<div style=\"text-align:center;\"><img src=\"%1\" style=\"max-width:100%%; max-height:100%%; height:auto; width:auto;\"></div>")
-                                                       .arg(imageUrl));
+                        guard->setImagePreview(payload.image);
+                        guard->ui_.contentLayout->setCurrentWidget(guard->ui_.imageScrollArea);
                         break;
                     }
                     case PreviewKind::Html: {
+                        guard->ui_.browser->clear();
+                        guard->ui_.browser->document()->clear();
                         if (!payload.imageUrl.isEmpty() && !payload.image.isNull()) {
                             guard->ui_.browser->document()->addResource(QTextDocument::ImageResource,
                                                                         QUrl(payload.imageUrl),
                                                                         payload.image);
                         }
                         guard->ui_.browser->setHtml(payload.html);
+                        guard->ui_.contentLayout->setCurrentWidget(guard->ui_.browser);
                         break;
                     }
                     case PreviewKind::PlainText: {
+                        guard->ui_.browser->clear();
+                        guard->ui_.browser->document()->clear();
                         guard->ui_.browser->setPlainText(payload.text.isEmpty() ? unavailableText() : payload.text);
+                        guard->ui_.contentLayout->setCurrentWidget(guard->ui_.browser);
                         break;
                     }
                     case PreviewKind::Unavailable:
+                        guard->ui_.browser->clear();
+                        guard->ui_.browser->document()->clear();
                         guard->ui_.browser->setPlainText(unavailableText());
+                        guard->ui_.contentLayout->setCurrentWidget(guard->ui_.browser);
                         break;
                 }
             }, Qt::QueuedConnection);
@@ -714,10 +721,126 @@ void ClipboardItemPreviewDialog::applyTheme(bool dark) {
     update();
 }
 
+bool ClipboardItemPreviewDialog::isImagePreviewActive() const {
+    return ui_.contentLayout && ui_.imageScrollArea
+        && ui_.contentLayout->currentWidget() == ui_.imageScrollArea;
+}
+
+void ClipboardItemPreviewDialog::setImagePreview(const QImage &image) {
+    if (!ui_.imageLabel || !ui_.imageScrollArea) {
+        return;
+    }
+
+    imageOriginal_ = image;
+    if (!imageOriginal_.isNull()) {
+        imageOriginal_.setDevicePixelRatio(1.0);
+    }
+    imageZoomFactor_ = 1.0;
+    updateImagePreview();
+}
+
+void ClipboardItemPreviewDialog::updateImagePreview() {
+    if (!ui_.imageLabel || imageOriginal_.isNull()) {
+        if (ui_.imageLabel) {
+            ui_.imageLabel->clear();
+        }
+        return;
+    }
+
+    QSize viewportSize;
+    if (ui_.imageScrollArea && ui_.imageScrollArea->viewport()) {
+        viewportSize = ui_.imageScrollArea->viewport()->size();
+    }
+    if (!viewportSize.isValid() && ui_.imageScrollArea) {
+        viewportSize = ui_.imageScrollArea->size();
+    }
+
+    const QSize imageSize = imageOriginal_.size();
+    qreal fitScale = 1.0;
+    if (viewportSize.isValid() && imageSize.isValid()) {
+        const qreal scaleX = viewportSize.width() / static_cast<qreal>(imageSize.width());
+        const qreal scaleY = viewportSize.height() / static_cast<qreal>(imageSize.height());
+        fitScale = qMin(scaleX, scaleY);
+        fitScale = qMin(fitScale, 1.0);
+    }
+    imageFitScale_ = fitScale;
+
+    qreal scale = imageFitScale_ * imageZoomFactor_;
+    scale = qBound(kImageZoomMin, scale, kImageZoomMax);
+    if (imageFitScale_ > 0.0) {
+        imageZoomFactor_ = scale / imageFitScale_;
+    }
+
+    const qreal dpr = devicePixelRatioF();
+    const QSizeF scaledPixelF = QSizeF(imageSize) * (scale * dpr);
+    QSize scaledPixelSize = scaledPixelF.toSize();
+    if (!scaledPixelSize.isValid()) {
+        return;
+    }
+
+    QImage scaled = imageOriginal_.scaled(scaledPixelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    if (scaled.isNull()) {
+        return;
+    }
+
+    QPixmap pixmap = QPixmap::fromImage(scaled);
+    pixmap.setDevicePixelRatio(dpr);
+    ui_.imageLabel->setPixmap(pixmap);
+    ui_.imageLabel->resize(pixmap.size() / pixmap.devicePixelRatio());
+}
+
+void ClipboardItemPreviewDialog::adjustImageZoom(qreal factor) {
+    if (imageOriginal_.isNull()) {
+        return;
+    }
+    imageZoomFactor_ = qBound(kImageZoomMin, imageZoomFactor_ * factor, kImageZoomMax);
+    updateImagePreview();
+}
+
+void ClipboardItemPreviewDialog::resetImageZoom() {
+    if (imageOriginal_.isNull()) {
+        return;
+    }
+    imageZoomFactor_ = 1.0;
+    updateImagePreview();
+}
+
+bool ClipboardItemPreviewDialog::handleImageZoomKey(QKeyEvent *event) {
+    if (!isImagePreviewActive()) {
+        return false;
+    }
+    const Qt::KeyboardModifiers mods = event->modifiers();
+    if (!(mods == Qt::NoModifier || mods == Qt::ControlModifier)) {
+        return false;
+    }
+
+    switch (event->key()) {
+        case Qt::Key_Plus:
+        case Qt::Key_Equal:
+            adjustImageZoom(kImageZoomStep);
+            event->accept();
+            return true;
+        case Qt::Key_Minus:
+            adjustImageZoom(1.0 / kImageZoomStep);
+            event->accept();
+            return true;
+        case Qt::Key_0:
+            resetImageZoom();
+            event->accept();
+            return true;
+        default:
+            break;
+    }
+
+    return false;
+}
+
 bool ClipboardItemPreviewDialog::eventFilter(QObject *watched, QEvent *event) {
-    if ((watched == ui_.browser || watched == ui_.browser->viewport())
-        && event->type() == QEvent::KeyPress) {
+    if (event->type() == QEvent::KeyPress) {
         auto *keyEvent = static_cast<QKeyEvent *>(event);
+        if (handleImageZoomKey(keyEvent)) {
+            return true;
+        }
         if (keyEvent->modifiers() == Qt::NoModifier
             && (keyEvent->key() == Qt::Key_Space || keyEvent->key() == Qt::Key_Escape)) {
             reject();
@@ -726,10 +849,68 @@ bool ClipboardItemPreviewDialog::eventFilter(QObject *watched, QEvent *event) {
         }
     }
 
+    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::MouseButtonPress) {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() == Qt::LeftButton && isImagePreviewActive()) {
+            imageDragActive_ = true;
+            imageDragStartPos_ = mouseEvent->globalPosition().toPoint();
+            imageDragStartScroll_ = QPoint(ui_.imageScrollArea->horizontalScrollBar()->value(),
+                                           ui_.imageScrollArea->verticalScrollBar()->value());
+            ui_.imageScrollArea->viewport()->setCursor(Qt::ClosedHandCursor);
+            mouseEvent->accept();
+            return true;
+        }
+    }
+
+    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::MouseMove) {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (imageDragActive_ && isImagePreviewActive()) {
+            const QPoint delta = mouseEvent->globalPosition().toPoint() - imageDragStartPos_;
+            ui_.imageScrollArea->horizontalScrollBar()->setValue(imageDragStartScroll_.x() - delta.x());
+            ui_.imageScrollArea->verticalScrollBar()->setValue(imageDragStartScroll_.y() - delta.y());
+            mouseEvent->accept();
+            return true;
+        }
+    }
+
+    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::MouseButtonRelease) {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() == Qt::LeftButton && imageDragActive_) {
+            imageDragActive_ = false;
+            ui_.imageScrollArea->viewport()->setCursor(Qt::OpenHandCursor);
+            mouseEvent->accept();
+            return true;
+        }
+    }
+
+    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::Wheel) {
+        auto *wheelEvent = static_cast<QWheelEvent *>(event);
+        if (wheelEvent->modifiers() & Qt::ControlModifier) {
+            const QPoint angle = wheelEvent->angleDelta();
+            if (!angle.isNull()) {
+                const qreal steps = angle.y() / 120.0;
+                if (!qFuzzyIsNull(steps)) {
+                    adjustImageZoom(std::pow(kImageZoomStep, steps));
+                    wheelEvent->accept();
+                    return true;
+                }
+            }
+        }
+    }
+
+    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::Resize) {
+        if (isImagePreviewActive()) {
+            updateImagePreview();
+        }
+    }
+
     return QDialog::eventFilter(watched, event);
 }
 
 void ClipboardItemPreviewDialog::keyPressEvent(QKeyEvent *event) {
+    if (handleImageZoomKey(event)) {
+        return;
+    }
     if (event->modifiers() == Qt::NoModifier
         && (event->key() == Qt::Key_Space || event->key() == Qt::Key_Escape)) {
         reject();
@@ -764,6 +945,10 @@ void ClipboardItemPreviewDialog::paintEvent(QPaintEvent *) {
 }
 
 void ClipboardItemPreviewDialog::mousePressEvent(QMouseEvent *event) {
+    if (isImagePreviewActive()) {
+        QDialog::mousePressEvent(event);
+        return;
+    }
     if (event->button() == Qt::LeftButton) {
         dragOffset_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
         event->accept();
@@ -772,6 +957,10 @@ void ClipboardItemPreviewDialog::mousePressEvent(QMouseEvent *event) {
 }
 
 void ClipboardItemPreviewDialog::mouseMoveEvent(QMouseEvent *event) {
+    if (isImagePreviewActive()) {
+        QDialog::mouseMoveEvent(event);
+        return;
+    }
     if (event->buttons() & Qt::LeftButton) {
         move(event->globalPosition().toPoint() - dragOffset_);
         event->accept();
@@ -790,6 +979,20 @@ QString ClipboardItemPreviewDialog::uiText(const QString &source, const QString 
 void ClipboardItemPreviewDialog::releasePreviewContent() {
     if (!ui_.browser) {
         return;
+    }
+
+    imageOriginal_ = QImage();
+    imageZoomFactor_ = 1.0;
+    imageFitScale_ = 1.0;
+    imageDragActive_ = false;
+    if (ui_.imageLabel) {
+        ui_.imageLabel->clear();
+    }
+    if (ui_.contentLayout && ui_.browser) {
+        ui_.contentLayout->setCurrentWidget(ui_.browser);
+    }
+    if (ui_.imageScrollArea && ui_.imageScrollArea->viewport()) {
+        ui_.imageScrollArea->viewport()->setCursor(Qt::OpenHandCursor);
     }
 
     QPointer<QTextDocument> oldDocument = ui_.browser->document();

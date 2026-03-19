@@ -1,5 +1,5 @@
 // input: Depends on ClipboardItem data plus Qt dialog/text browser widgets.
-// output: Exposes a centered read-only preview dialog for larger rich-text clipboard inspection.
+// output: Exposes a centered read-only preview dialog for larger clipboard inspection with image zoom.
 // pos: Widget-layer preview dialog used by item context actions and keyboard preview shortcuts.
 // update: If I change, update this header block and my folder README.md.
 #ifndef MPASTE_CLIPBOARDITEMPREVIEWDIALOG_H
@@ -34,6 +34,12 @@ protected:
 private:
     QString uiText(const QString &source, const QString &zhFallback) const;
     void releasePreviewContent();
+    void setImagePreview(const QImage &image);
+    void updateImagePreview();
+    void adjustImageZoom(qreal factor);
+    void resetImageZoom();
+    bool handleImageZoomKey(QKeyEvent *event);
+    bool isImagePreviewActive() const;
 
     struct {
         QLabel *titleLabel = nullptr;
@@ -46,6 +52,12 @@ private:
     } ui_;
 
     QPoint dragOffset_;
+    bool imageDragActive_ = false;
+    QPoint imageDragStartPos_;
+    QPoint imageDragStartScroll_;
+    QImage imageOriginal_;
+    qreal imageZoomFactor_ = 1.0;
+    qreal imageFitScale_ = 1.0;
     quint64 previewToken_ = 0;
     bool darkTheme_ = false;
 };

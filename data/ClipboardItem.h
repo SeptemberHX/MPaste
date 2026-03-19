@@ -71,118 +71,6 @@ private:
     mutable QString cachedNormalizedText_;
     mutable QList<QUrl> cachedNormalizedUrls_;
 
-    struct OfficePayloadInfo {
-        bool hasVector = false;
-        bool hasOle = false;
-        bool hasOleNative = false;
-        bool hasBitmap = false;
-    };
-
-    static OfficePayloadInfo officePayloadInfo(const QMimeData *mimeData) {
-        OfficePayloadInfo info;
-        if (!mimeData) {
-            return info;
-        }
-        const QStringList formats = mimeData->formats();
-        for (const QString &format : formats) {
-            const QString lower = format.toLower();
-            if (lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
-                if (lower.contains(QStringLiteral("enhancedmetafile"))
-                    || lower.contains(QStringLiteral("metafilepict"))
-                    || lower.contains(QStringLiteral("cf_enhmetafile"))
-                    || lower.contains(QStringLiteral("cf_metafilepict"))
-                    || lower.contains(QStringLiteral("emf"))
-                    || lower.contains(QStringLiteral("wmf"))) {
-                    info.hasVector = true;
-                }
-                if (lower.contains(QStringLiteral("object descriptor"))
-                    || lower.contains(QStringLiteral("embedded object"))
-                    || lower.contains(QStringLiteral("embed source"))
-                    || lower.contains(QStringLiteral("link source"))
-                    || lower.contains(QStringLiteral("ole"))
-                    || lower.contains(QStringLiteral("office"))
-                    || lower.contains(QStringLiteral("powerpoint"))
-                    || lower.contains(QStringLiteral("excel"))
-                    || lower.contains(QStringLiteral("word"))) {
-                    info.hasOle = true;
-                }
-                if (lower.contains(QStringLiteral("object descriptor"))
-                    || lower.contains(QStringLiteral("embedded object"))
-                    || lower.contains(QStringLiteral("embed source"))
-                    || lower.contains(QStringLiteral("link source"))
-                    || lower.contains(QStringLiteral("native"))) {
-                    info.hasOleNative = true;
-                }
-                if (lower.contains(QStringLiteral("png"))
-                    || lower.contains(QStringLiteral("jpeg"))
-                    || lower.contains(QStringLiteral("jpg"))
-                    || lower.contains(QStringLiteral("bmp"))
-                    || lower.contains(QStringLiteral("dib"))
-                    || lower.contains(QStringLiteral("gif"))
-                    || lower.contains(QStringLiteral("webp"))) {
-                    info.hasBitmap = true;
-                }
-            } else if (lower == QStringLiteral("image/emf")
-                       || lower == QStringLiteral("image/x-emf")
-                       || lower == QStringLiteral("image/wmf")
-                       || lower == QStringLiteral("image/x-wmf")) {
-                info.hasVector = true;
-            } else if (lower.startsWith(QStringLiteral("image/"))) {
-                info.hasBitmap = true;
-            }
-        }
-        if (mimeData->hasImage()) {
-            info.hasBitmap = true;
-        }
-        return info;
-    }
-
-    static bool formatLooksOffice(const QString &format) {
-        const QString lower = format.toLower();
-        if (lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
-            return lower.contains(QStringLiteral("enhancedmetafile"))
-                || lower.contains(QStringLiteral("metafilepict"))
-                || lower.contains(QStringLiteral("cf_enhmetafile"))
-                || lower.contains(QStringLiteral("cf_metafilepict"))
-                || lower.contains(QStringLiteral("emf"))
-                || lower.contains(QStringLiteral("wmf"))
-                || lower.contains(QStringLiteral("object descriptor"))
-                || lower.contains(QStringLiteral("embedded object"))
-                || lower.contains(QStringLiteral("embed source"))
-                || lower.contains(QStringLiteral("link source"))
-                || lower.contains(QStringLiteral("ole"))
-                || lower.contains(QStringLiteral("office"))
-                || lower.contains(QStringLiteral("powerpoint"))
-                || lower.contains(QStringLiteral("excel"))
-                || lower.contains(QStringLiteral("word"));
-        }
-        return lower == QStringLiteral("image/emf")
-            || lower == QStringLiteral("image/x-emf")
-            || lower == QStringLiteral("image/wmf")
-            || lower == QStringLiteral("image/x-wmf");
-    }
-
-    static bool hasOfficePayload(const QMimeData *mimeData) {
-        const OfficePayloadInfo info = officePayloadInfo(mimeData);
-        return info.hasVector || info.hasOle;
-    }
-
-    static bool shouldTreatOfficePayloadAsType(const QMimeData *mimeData, bool htmlImageLike) {
-        const OfficePayloadInfo info = officePayloadInfo(mimeData);
-        if (!(info.hasVector || info.hasOle)) {
-            return false;
-        }
-        if (info.hasVector) {
-            return true;
-        }
-        // If Office payload exists but it is only bitmap-backed, prefer Image/Text types.
-        if (info.hasOleNative && !info.hasBitmap) {
-            return true;
-        }
-        Q_UNUSED(htmlImageLike);
-        return false;
-    }
-
     static QString windowsDrivePathFromUrl(const QUrl &url) {
         if (!url.isValid() || url.isLocalFile()) {
             return {};
@@ -512,21 +400,6 @@ private:
     }
 
 
-    static bool shouldSkipImageDecodeFormatName(const QString &format) {
-        const QString lower = format.toLower();
-        return lower.startsWith(QStringLiteral("text/"))
-            || lower.contains(QStringLiteral("html"))
-            || lower.contains(QStringLiteral("plain"))
-            || lower.contains(QStringLiteral("xml"))
-            || lower.contains(QStringLiteral("json"))
-            || lower.contains(QStringLiteral("url"))
-            || lower.contains(QStringLiteral("uri"))
-            || lower.contains(QStringLiteral("descriptor"))
-            || lower.contains(QStringLiteral("gvml"))
-            || lower.contains(QStringLiteral("rtf"))
-            || lower.contains(QStringLiteral("rich text"));
-    }
-
     static QPixmap decodePixmapFromMimeData(const QMimeData *mimeData) {
         if (!mimeData) {
             return QPixmap();
@@ -543,15 +416,7 @@ private:
             }
         }
 
-        static const QStringList commonFormats = {
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp"),
-            QStringLiteral("application/x-qt-image")
-        };
-
-        for (const QString &format : commonFormats) {
+        for (const QString &format : ContentClassifier::commonImageFormats()) {
             if (mimeData->hasFormat(format)) {
                 QPixmap pixmap;
                 const QByteArray data = mimeData->data(format);
@@ -562,7 +427,7 @@ private:
         }
 
         for (const QString &format : formats) {
-            if (shouldSkipImageDecodeFormatName(format)) {
+            if (ContentClassifier::shouldSkipImageDecodeFormatName(format)) {
                 continue;
             }
 
@@ -609,22 +474,6 @@ private:
         mimeData->setData(QStringLiteral("application/x-qt-windows-mime;value=\"PNG\""), imageData);
     }
 
-    bool isImageLikeText(const QString &text) const {
-        const QString trimmed = text.trimmed();
-        if (trimmed.isEmpty()) {
-            return true;
-        }
-
-        if (trimmed.size() == 1) {
-            const QChar ch = trimmed.at(0);
-            if (ch == QChar(0xFFFC) || ch == QChar::ReplacementCharacter) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     bool hasDecodableImage() const {
         return ContentClassifier::hasDecodableImage(mimeData_.data());
     }
@@ -641,17 +490,7 @@ private:
             formatOut->clear();
         }
 
-        static const QStringList preferredFormats = {
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/jpg"),
-            QStringLiteral("image/webp"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp"),
-            QStringLiteral("application/x-qt-image")
-        };
-
-        for (const QString &format : preferredFormats) {
+        for (const QString &format : ContentClassifier::preferredImageFormats()) {
             if (mimeData_->hasFormat(format)) {
                 const QByteArray data = mimeData_->data(format);
                 if (!data.isEmpty()) {
@@ -697,17 +536,7 @@ private:
             formatOut->clear();
         }
 
-        static const QStringList preferredFormats = {
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/jpg"),
-            QStringLiteral("image/webp"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp"),
-            QStringLiteral("application/x-qt-image")
-        };
-
-        for (const QString &format : preferredFormats) {
+        for (const QString &format : ContentClassifier::preferredImageFormats()) {
             if (mimeData->hasFormat(format)) {
                 const QByteArray data = mimeData->data(format);
                 if (!data.isEmpty()) {
@@ -764,18 +593,7 @@ private:
     }
 
     bool shouldSkipImageDecodeFormat(const QString &format) const {
-        const QString lower = format.toLower();
-        return lower.startsWith(QStringLiteral("text/"))
-            || lower.contains(QStringLiteral("html"))
-            || lower.contains(QStringLiteral("plain"))
-            || lower.contains(QStringLiteral("xml"))
-            || lower.contains(QStringLiteral("json"))
-            || lower.contains(QStringLiteral("url"))
-            || lower.contains(QStringLiteral("uri"))
-            || lower.contains(QStringLiteral("descriptor"))
-            || lower.contains(QStringLiteral("gvml"))
-            || lower.contains(QStringLiteral("rtf"))
-            || lower.contains(QStringLiteral("rich text"));
+        return ContentClassifier::shouldSkipImageDecodeFormatName(format);
     }
 
     bool shouldTreatHtmlPayloadAsImage() const {
@@ -1293,15 +1111,7 @@ public:
             }
         }
 
-        static const QStringList commonFormats = {
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp"),
-            QStringLiteral("application/x-qt-image")
-        };
-
-        for (const QString &format : commonFormats) {
+        for (const QString &format : ContentClassifier::commonImageFormats()) {
             if (mimeData_->hasFormat(format)) {
                 QPixmap pixmap;
                 QByteArray data = mimeData_->data(format);

@@ -7,7 +7,6 @@
 
 #include <QBuffer>
 #include <QCoreApplication>
-#include <QDataStream>
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
@@ -20,7 +19,6 @@
 #include <QImageReader>
 #include <QPixmap>
 #include <QPointer>
-#include <QRegularExpression>
 #include <QScreen>
 #include <QPainter>
 #include <QTextDocument>
@@ -28,6 +26,7 @@
 #include <QTimer>
 #include <QUrl>
 
+#include "data/ContentClassifier.h"
 #include "data/LocalSaver.h"
 #include "utils/MPasteSettings.h"
 
@@ -35,31 +34,6 @@ namespace {
 
 qreal htmlPreviewZoom(qreal devicePixelRatio) {
     return qMax<qreal>(1.0, devicePixelRatio);
-}
-
-QString firstHtmlImageSource(const QString &html) {
-    static const QRegularExpression srcRegex(
-        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch match = srcRegex.match(html);
-    return match.hasMatch() ? match.captured(1).trimmed() : QString();
-}
-
-QImage decodeQtSerializedImage(const QByteArray &bytes) {
-    if (bytes.isEmpty()) {
-        return {};
-    }
-
-    QBuffer buffer;
-    buffer.setData(bytes);
-    if (!buffer.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-
-    QDataStream stream(&buffer);
-    QImage image;
-    stream >> image;
-    return image;
 }
 
 qreal maxScreenDevicePixelRatio() {
@@ -172,12 +146,12 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     QTextDocument document;
     document.setDocumentMargin(0);
     document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
-    const QString imageSource = firstHtmlImageSource(html);
+    const QString imageSource = ContentClassifier::firstHtmlImageSource(html);
     const QByteArray imageBytes = item.imagePayloadBytesFast();
     if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
         QImage image;
         if (!image.loadFromData(imageBytes)) {
-            image = decodeQtSerializedImage(imageBytes);
+            image = ContentClassifier::decodeQtSerializedImage(imageBytes);
         }
         if (!image.isNull()) {
             document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
@@ -237,7 +211,7 @@ QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targ
         decoded.loadFromData(imageBytes);
     }
     if (decoded.isNull()) {
-        decoded = decodeQtSerializedImage(imageBytes);
+        decoded = ContentClassifier::decodeQtSerializedImage(imageBytes);
     }
     if (decoded.isNull()) {
         return QImage();
@@ -286,7 +260,7 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
     QTextDocument document;
     document.setDocumentMargin(0);
     document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
-    const QString imageSource = firstHtmlImageSource(html);
+    const QString imageSource = ContentClassifier::firstHtmlImageSource(html);
     if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
         QImage image;
         if (image.loadFromData(imageBytes)) {

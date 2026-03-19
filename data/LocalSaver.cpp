@@ -200,15 +200,7 @@ QSize probeImageSizeFromMimeData(const QMimeData *mimeData) {
         }
     }
 
-    static const QStringList commonFormats = {
-        QStringLiteral("image/png"),
-        QStringLiteral("image/jpeg"),
-        QStringLiteral("image/gif"),
-        QStringLiteral("image/bmp"),
-        QStringLiteral("application/x-qt-image")
-    };
-
-    for (const QString &format : commonFormats) {
+    for (const QString &format : ContentClassifier::commonImageFormats()) {
         if (mimeData->hasFormat(format)) {
             const QSize size = probeImageSizeFromBytes(mimeData->data(format));
             if (size.isValid()) {
@@ -1080,16 +1072,6 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
 
     constexpr quint32 kMaxPreviewHtmlBytes = 2 * 1024 * 1024;
     constexpr quint32 kMaxPreviewImageBytes = 12 * 1024 * 1024;
-    static const QStringList preferredImageFormats = {
-        QStringLiteral("application/x-qt-image"),
-        QStringLiteral("image/png"),
-        QStringLiteral("image/jpeg"),
-        QStringLiteral("image/jpg"),
-        QStringLiteral("image/webp"),
-        QStringLiteral("image/gif"),
-        QStringLiteral("image/bmp")
-    };
-
     QList<QByteArray> uniqueBlobs;
     QByteArray htmlBytes;
     QByteArray imageBytes;
@@ -1109,7 +1091,8 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
 
         const bool wantsHtml = htmlOut && htmlBytes.isEmpty() && format == QStringLiteral("text/html");
         const bool wantsImage = imageOut && imageBytes.isEmpty()
-            && (preferredImageFormats.contains(format) || format.startsWith(QStringLiteral("image/")));
+            && (ContentClassifier::preferredImageFormats().contains(format)
+                || format.startsWith(QStringLiteral("image/")));
         const bool shouldRead = wantsHtml || wantsImage;
 
         QByteArray data;
