@@ -51,5 +51,8 @@ update: 修改本目录文件时，同步更新本 README。
 - ClipboardBoardService now owns board persistence I/O, deferred loading, and background item processing for widgets.
 - ClipboardBoardService thumbnail generation now falls back to Qt serialized image payloads when PNG/JPEG bytes are unavailable.
 - ClipboardBoardService now reuses ContentClassifier helpers for HTML image discovery and Qt-serialized image decoding.
+- ClipboardBoardService thumbnail sizing now follows CardPreviewMetrics for consistent preview dimensions.
+- Rich text thumbnails now render without extra padding to maximize preview fill.
+- Rich text thumbnail generation now trims transparent margins before scaling to reduce empty borders.
 
 - MPasteSettings now persists a configurable save directory for external sync tools.

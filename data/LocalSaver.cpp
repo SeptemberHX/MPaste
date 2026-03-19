@@ -2,12 +2,14 @@
 // output: Implements current `.mpaste` v6 persistence with thumbnail + dedup, alias/pin metadata, and lazy MIME load.
 // pos: Data-layer persistence implementation responsible for durable item storage and current-format reload.
 // update: If I change, update this header block and my folder README.md.
-// note: Preserve alias/pin metadata and avoid empty MIME payloads when rehydrating.
+// note: Preserve alias/pin metadata, avoid empty MIME payloads when rehydrating, and use shared card preview metrics.
 //
 // Created by ragdoll on 2021/5/24.
 //
 
 #include "LocalSaver.h"
+
+#include "CardPreviewMetrics.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -131,8 +133,8 @@ QPixmap buildCardThumbnailPixmap(const QPixmap &fullImage) {
         return QPixmap();
     }
 
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
+    constexpr int cardW = kCardPreviewWidth;
+    constexpr int cardH = kCardPreviewHeight;
     const qreal thumbnailDpr = maxThumbnailDevicePixelRatio();
     const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
     if (!pixelTargetSize.isValid()) {

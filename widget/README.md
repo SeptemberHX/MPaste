@@ -88,8 +88,10 @@ update: 修改本目录文件时，同步更新本 README。
 - `MPasteWidget` 现在会在设置窗口打开期间临时停用全局唤起热键，避免编辑快捷键时被当前热键立即抢走。
 - `ScrollItemsWidget` 现在会在列表左右预留呼吸边距，并在视口边缘绘制接近主窗口淡灰玻璃底色的轻雾渐变遮罩，让横向滚动时更接近贴边淡出的效果。
 - 文件类卡片现在也会像链接卡片一样隐藏底部 `infoWidget`，让缩略图区域更完整。
-- `ScrollItemsWidget` 现在会在新增图片条目时按 `275x218` 逻辑尺寸和较高 device pixel ratio 生成横向居中缩略图，减少首个图片条目发糊。
+- `ScrollItemsWidget` 现在会在新增图片条目时按 `CardPreviewMetrics` 提供的逻辑尺寸和较高 device pixel ratio 生成横向居中缩略图，减少首个图片条目发糊。
 - 链接预览图和图片卡片现在都优先占满可用高度，只在宽度超出时做左右居中裁剪。
+- 卡片底部 info 条高度已压缩，减少预览被占用的垂直空间。
+- 富文本/文本卡片预览现在保留少量内边距，避免内容贴边过紧。
 
 - ScrollItemsWidget now delegates persistence, deferred loading, and background item completion to ClipboardBoardService.
 

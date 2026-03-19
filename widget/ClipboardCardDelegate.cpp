@@ -1,7 +1,7 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
-// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer path tweaks + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line + pinned badge).
+// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer height tweak + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line + pinned badge + rich text fill).
 // note: Adjusted card palette for dark theme.
 #include "ClipboardCardDelegate.h"
 
@@ -874,8 +874,8 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     const int scale = MPasteSettings::getInst()->getItemScale();
     const QSize outerSize = cardOuterSizeForScale(scale);
     const QSize innerSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
-    const int topHeight = 64 * scale / 100;
-    const int footerHeight = 30 * scale / 100;
+    const int topHeight = kCardHeaderHeight * scale / 100;
+    const int footerHeight = kCardFooterHeight * scale / 100;
     const bool hideFooter = card.contentType == ClipboardItem::Link;
     const int effectiveFooterHeight = hideFooter ? 0 : footerHeight;
     const int iconLabelSize = 48 * scale / 100;
@@ -1047,15 +1047,22 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                                 previewTextForCard(card), previewFont, bodyTextColor);
             }
             break;
-        case ClipboardItem::RichText:
+        case ClipboardItem::RichText: {
+            const int richPadX = qMax(4, 6 * scale / 100);
+            const int richPadY = qMax(3, 4 * scale / 100);
+            QRect richTextRect = bodyRect.adjusted(richPadX, richPadY, -richPadX, -richPadY);
+            if (richTextRect.width() <= 0 || richTextRect.height() <= 0) {
+                richTextRect = bodyRect;
+            }
             if (!card.thumbnail.isNull()) {
-                drawCoverPixmap(painter, previewRect, card.thumbnail, card.name, card.imageSize);
+                drawCoverPixmap(painter, richTextRect, card.thumbnail, card.name, card.imageSize);
             } else {
                 QFont previewFont = painter->font();
                 previewFont.setPointSize(qMax(9, 10 * scale / 100));
-                drawWrappedText(painter, previewRect, previewTextForCard(card), previewFont, bodyTextColor);
+                drawWrappedText(painter, richTextRect, previewTextForCard(card), previewFont, bodyTextColor);
             }
             break;
+        }
         case ClipboardItem::Color: {
             const QColor color = card.color.isValid() ? card.color : QColor(QStringLiteral("#4A5F7A"));
             painter->setPen(Qt::NoPen);
@@ -1238,7 +1245,13 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
         case ClipboardItem::All: {
             QFont previewFont = painter->font();
             previewFont.setPointSize(qMax(9, 10 * scale / 100));
-            drawWrappedText(painter, previewRect, previewTextForCard(card), previewFont, bodyTextColor);
+            const int textPadX = qMax(4, 6 * scale / 100);
+            const int textPadY = qMax(3, 4 * scale / 100);
+            QRect textRect = bodyRect.adjusted(textPadX, textPadY, -textPadX, -textPadY);
+            if (textRect.width() <= 0 || textRect.height() <= 0) {
+                textRect = bodyRect;
+            }
+            drawWrappedText(painter, textRect, previewTextForCard(card), previewFont, bodyTextColor);
             break;
         }
     }

@@ -2,7 +2,7 @@
 // output: Implements board persistence, deferred loading, thumbnail processing, and keyword search routines.
 // pos: utils layer board service implementation.
 // update: If I change, update this header block and my folder README.md.
-// note: Thumbnail decode now accepts Qt serialized image payloads when needed.
+// note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, and trims rich-text margins.
 #include "ClipboardBoardService.h"
 
 #include <QBuffer>
@@ -26,6 +26,7 @@
 #include <QTimer>
 #include <QUrl>
 
+#include "data/CardPreviewMetrics.h"
 #include "data/ContentClassifier.h"
 #include "data/LocalSaver.h"
 #include "utils/MPasteSettings.h"
@@ -34,6 +35,12 @@ namespace {
 
 qreal htmlPreviewZoom(qreal devicePixelRatio) {
     return qMax<qreal>(1.0, devicePixelRatio);
+}
+
+QSize previewLogicalSize(int itemScale) {
+    const int scale = qMax(50, itemScale);
+    return QSize(qMax(1, kCardPreviewWidth * scale / 100),
+                 qMax(1, kCardPreviewHeight * scale / 100));
 }
 
 qreal maxScreenDevicePixelRatio() {
@@ -49,6 +56,66 @@ qreal maxScreenDevicePixelRatio() {
 
 bool isVeryTallImage(const QSize &size) {
     return size.isValid() && size.height() >= qMax(4000, size.width() * 4);
+}
+
+QImage trimTransparentPadding(const QImage &source, int paddingPx) {
+    if (source.isNull()) {
+        return {};
+    }
+
+    QImage image = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    const int width = image.width();
+    const int height = image.height();
+    if (width <= 0 || height <= 0) {
+        return image;
+    }
+
+    int left = width;
+    int right = -1;
+    int top = height;
+    int bottom = -1;
+    constexpr int kAlphaThreshold = 6;
+
+    for (int y = 0; y < height; ++y) {
+        const QRgb *line = reinterpret_cast<const QRgb *>(image.constScanLine(y));
+        for (int x = 0; x < width; ++x) {
+            if (qAlpha(line[x]) > kAlphaThreshold) {
+                left = qMin(left, x);
+                right = qMax(right, x);
+                top = qMin(top, y);
+                bottom = qMax(bottom, y);
+            }
+        }
+    }
+
+    if (right < left || bottom < top) {
+        return image;
+    }
+
+    left = qMax(0, left - paddingPx);
+    right = qMin(width - 1, right + paddingPx);
+    top = qMax(0, top - paddingPx);
+    bottom = qMin(height - 1, bottom + paddingPx);
+
+    const QRect bounds(left, top, right - left + 1, bottom - top + 1);
+    return image.copy(bounds);
+}
+
+QImage scaleCropToTarget(const QImage &source, const QSize &pixelTargetSize) {
+    if (source.isNull() || !pixelTargetSize.isValid()) {
+        return source;
+    }
+
+    QImage scaled = source.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    if (scaled.isNull()) {
+        return source;
+    }
+
+    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
+    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
+    return scaled.copy(x, y,
+                       qMin(scaled.width(), pixelTargetSize.width()),
+                       qMin(scaled.height(), pixelTargetSize.height()));
 }
 
 QDateTime itemTimestampForFile(const QFileInfo &info) {
@@ -77,16 +144,9 @@ QPixmap buildCardThumbnail(const ClipboardItem &item) {
         return QPixmap();
     }
 
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    qreal thumbnailDpr = 1.0;
-    const QList<QScreen *> screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen) {
-            thumbnailDpr = qMax(thumbnailDpr, screen->devicePixelRatio());
-        }
-    }
-    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
+    const QSize logicalSize = previewLogicalSize(MPasteSettings::getInst()->getItemScale());
+    const qreal thumbnailDpr = maxScreenDevicePixelRatio();
+    const QSize pixelTargetSize = logicalSize * thumbnailDpr;
     if (!pixelTargetSize.isValid()) {
         return fullImage;
     }
@@ -116,26 +176,18 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
         return QPixmap();
     }
 
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    qreal thumbnailDpr = 1.0;
-    const QList<QScreen *> screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen) {
-            thumbnailDpr = qMax(thumbnailDpr, screen->devicePixelRatio());
-        }
-    }
-
-    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
+    const QSize logicalSize = previewLogicalSize(MPasteSettings::getInst()->getItemScale());
+    const qreal thumbnailDpr = maxScreenDevicePixelRatio();
+    const QSize pixelTargetSize = logicalSize * thumbnailDpr;
     if (!pixelTargetSize.isValid()) {
         return QPixmap();
     }
 
     const qreal previewZoom = htmlPreviewZoom(thumbnailDpr);
-    const int leftPadding = qRound(10 * thumbnailDpr);
-    const int rightPadding = qRound(10 * thumbnailDpr);
-    const int topPadding = qRound(6 * thumbnailDpr);
-    const int bottomPadding = qRound(2 * thumbnailDpr);
+    const int leftPadding = 0;
+    const int rightPadding = 0;
+    const int topPadding = 0;
+    const int bottomPadding = 0;
     const QSize contentSize(
         qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
         qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
@@ -173,18 +225,20 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
     painter.end();
 
-    snapshot.setDevicePixelRatio(thumbnailDpr);
-    return snapshot;
+    QImage trimmed = trimTransparentPadding(snapshot.toImage(), qRound(2 * thumbnailDpr));
+    QImage scaled = scaleCropToTarget(trimmed, pixelTargetSize);
+    QPixmap finalPixmap = QPixmap::fromImage(scaled.isNull() ? snapshot.toImage() : scaled);
+    finalPixmap.setDevicePixelRatio(thumbnailDpr);
+    return finalPixmap;
 }
 
-QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targetDpr) {
+QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targetDpr, int itemScale) {
     if (imageBytes.isEmpty()) {
         return QImage();
     }
 
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    const QSize pixelTargetSize = QSize(cardW, cardH) * targetDpr;
+    const QSize logicalSize = previewLogicalSize(itemScale);
+    const QSize pixelTargetSize = logicalSize * targetDpr;
     if (!pixelTargetSize.isValid()) {
         return QImage();
     }
@@ -233,23 +287,22 @@ QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targ
     return thumbnail;
 }
 
-QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray &imageBytes, qreal thumbnailDpr) {
+QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray &imageBytes, qreal thumbnailDpr, int itemScale) {
     if (html.isEmpty()) {
         return QImage();
     }
 
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
-    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
+    const QSize logicalSize = previewLogicalSize(itemScale);
+    const QSize pixelTargetSize = logicalSize * thumbnailDpr;
     if (!pixelTargetSize.isValid()) {
         return QImage();
     }
 
     const qreal previewZoom = htmlPreviewZoom(thumbnailDpr);
-    const int leftPadding = qRound(10 * thumbnailDpr);
-    const int rightPadding = qRound(10 * thumbnailDpr);
-    const int topPadding = qRound(6 * thumbnailDpr);
-    const int bottomPadding = qRound(2 * thumbnailDpr);
+    const int leftPadding = 0;
+    const int rightPadding = 0;
+    const int topPadding = 0;
+    const int bottomPadding = 0;
     const QSize contentSize(
         qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
         qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
@@ -283,6 +336,12 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
     document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
     painter.end();
 
+    QImage trimmed = trimTransparentPadding(snapshot, qRound(2 * thumbnailDpr));
+    QImage scaled = scaleCropToTarget(trimmed, pixelTargetSize);
+    if (!scaled.isNull()) {
+        scaled.setDevicePixelRatio(thumbnailDpr);
+        return scaled;
+    }
     snapshot.setDevicePixelRatio(thumbnailDpr);
     return snapshot;
 }
@@ -547,9 +606,10 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
     const QString sourceFilePath = item.sourceFilePath();
     const quint64 mimeOffset = item.mimeDataFileOffset();
     const qreal thumbnailDpr = maxScreenDevicePixelRatio();
+    const int itemScale = MPasteSettings::getInst()->getItemScale();
 
     QPointer<ClipboardBoardService> guard(this);
-    QThread *thread = QThread::create([guard, expectedName, contentType, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr]() mutable {
+    QThread *thread = QThread::create([guard, expectedName, contentType, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
         PendingItemProcessingResult result;
         QByteArray resolvedImageBytes = imageBytes;
         QString resolvedHtml = richHtml;
@@ -576,7 +636,7 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
 
         if ((contentType == ClipboardItem::Image || contentType == ClipboardItem::Office)
             && !resolvedImageBytes.isEmpty()) {
-            result.thumbnailImage = buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr);
+            result.thumbnailImage = buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr, itemScale);
             if (isVeryTallImage(imageSize)) {
                 qInfo().noquote() << QStringLiteral("[thumb-build] stage=worker name=%1 image=%2x%3 thumbPx=%4x%5 thumbDpr=%6")
                     .arg(expectedName)
@@ -587,7 +647,7 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                     .arg(result.thumbnailImage.devicePixelRatio(), 0, 'f', 2);
             }
         } else if (contentType == ClipboardItem::RichText && !resolvedHtml.isEmpty()) {
-            result.thumbnailImage = buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr);
+            result.thumbnailImage = buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
         }
 
         if (guard) {

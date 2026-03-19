@@ -7,8 +7,8 @@
 #include <QSize>
 #include <QtGlobal>
 
-constexpr int kCardBaseWidth = 275;
-constexpr int kCardBaseHeight = 300;
+#include "data/CardPreviewMetrics.h"
+
 constexpr int kShadowRightPadding = 10;
 constexpr int kShadowBottomPadding = 12;
 

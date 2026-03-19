@@ -30,6 +30,7 @@
 #include <QWindow>
 #include <QPointer>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QStackedLayout>
 
 #include "data/ContentClassifier.h"
