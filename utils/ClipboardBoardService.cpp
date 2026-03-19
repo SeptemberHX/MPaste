@@ -2,10 +2,12 @@
 // output: Implements board persistence, deferred loading, thumbnail processing, and keyword search routines.
 // pos: utils layer board service implementation.
 // update: If I change, update this header block and my folder README.md.
+// note: Thumbnail decode now accepts Qt serialized image payloads when needed.
 #include "ClipboardBoardService.h"
 
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QDataStream>
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
@@ -41,6 +43,23 @@ QString firstHtmlImageSource(const QString &html) {
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch match = srcRegex.match(html);
     return match.hasMatch() ? match.captured(1).trimmed() : QString();
+}
+
+QImage decodeQtSerializedImage(const QByteArray &bytes) {
+    if (bytes.isEmpty()) {
+        return {};
+    }
+
+    QBuffer buffer;
+    buffer.setData(bytes);
+    if (!buffer.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    QDataStream stream(&buffer);
+    QImage image;
+    stream >> image;
+    return image;
 }
 
 qreal maxScreenDevicePixelRatio() {
@@ -157,7 +176,10 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     const QByteArray imageBytes = item.imagePayloadBytesFast();
     if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
         QImage image;
-        if (image.loadFromData(imageBytes)) {
+        if (!image.loadFromData(imageBytes)) {
+            image = decodeQtSerializedImage(imageBytes);
+        }
+        if (!image.isNull()) {
             document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
         }
     }
@@ -213,6 +235,9 @@ QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targ
     QImage decoded = reader.read();
     if (decoded.isNull()) {
         decoded.loadFromData(imageBytes);
+    }
+    if (decoded.isNull()) {
+        decoded = decodeQtSerializedImage(imageBytes);
     }
     if (decoded.isNull()) {
         return QImage();

@@ -2,9 +2,11 @@
 // output: Implements a centered read-only preview dialog with selection/copy support for rich text, text, images, and files.
 // pos: Widget-layer preview dialog implementation for larger clipboard inspection.
 // update: If I change, update this header block and my folder README.md (tuned preview font size + hidden caret/focus).
+// note: Adds fallback decoding for Qt serialized image payloads.
 #include "ClipboardItemPreviewDialog.h"
 
 #include <QCursor>
+#include <QDataStream>
 #include <QBuffer>
 #include <QFileInfo>
 #include <QFrame>
@@ -85,6 +87,23 @@ QString unavailableText() {
     return QStringLiteral("该条目暂无可用预览");
 }
 
+QImage decodeQtSerializedImage(const QByteArray &bytes) {
+    if (bytes.isEmpty()) {
+        return {};
+    }
+
+    QBuffer buffer;
+    buffer.setData(bytes);
+    if (!buffer.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    QDataStream stream(&buffer);
+    QImage image;
+    stream >> image;
+    return image;
+}
+
 QImage loadPreviewImageFromBytes(const QByteArray &imageBytes, const QSize &targetSize, qreal devicePixelRatio) {
     if (imageBytes.isEmpty()) {
         return {};
@@ -98,6 +117,9 @@ QImage loadPreviewImageFromBytes(const QByteArray &imageBytes, const QSize &targ
 
     QImageReader reader(&buffer);
     QImage image = reader.read();
+    if (image.isNull()) {
+        image = decodeQtSerializedImage(imageBytes);
+    }
     if (image.isNull()) {
         return {};
     }

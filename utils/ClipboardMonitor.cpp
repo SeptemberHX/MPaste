@@ -2,6 +2,7 @@
 // output: 提供 ClipboardMonitor 的实现逻辑。
 // pos: utils 层中的 ClipboardMonitor 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
+// note: Adds image payload settle retries for lazy clipboard providers.
 //
 // Created by ragdoll on 2021/5/22.
 //
@@ -273,6 +274,18 @@ void ClipboardMonitor::captureClipboard() {
     wpsSettlePending_ = false;
 
     ClipboardItem immediateItem = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(pendingWId_), mimeData);
+    if (ContentClassifier::hasFastImagePayload(mimeData)
+        && immediateItem.imagePayloadBytesFast().isEmpty()
+        && retryCount_ < MAX_RETRIES) {
+        retryCount_++;
+        stabilizeTimer_.setInterval(IMAGE_SETTLE_INTERVAL);
+        stabilizeTimer_.start();
+        qInfo().noquote() << QStringLiteral("[clipboard-monitor] image payload pending token=%1 retry=%2/%3")
+            .arg(captureToken_)
+            .arg(retryCount_)
+            .arg(MAX_RETRIES);
+        return;
+    }
     if (!immediateItem.imagePayloadBytesFast().isEmpty()) {
         qInfo().noquote() << QStringLiteral("[clipboard-monitor] immediate image item token=%1 %2")
             .arg(captureToken_)

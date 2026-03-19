@@ -46,6 +46,7 @@ update: 修改本目录文件时，同步更新本 README。
 
 - `ClipboardItemPreviewDialog` now provides a larger centered preview window for rich text, plain text, images, and files; it is read-only but still allows selection and copy, can be opened from the item preview menu action or the Space key on the current supported selection, and pressing Space again closes it.
 - `ClipboardItemPreviewDialog` now uses a tuned body font size and hides the text caret by disabling focus, while keeping mouse selection/copy behavior.
+- `ClipboardItemPreviewDialog` now decodes Qt serialized image payloads when standard image bytes are unavailable.
 - Clipboard card typography has been reduced slightly to make list items feel lighter.
 - File-type cards now show image thumbnails when they contain a single local image file.
 - File-type cards now show the single file path in the footer info line.

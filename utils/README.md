@@ -40,6 +40,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `PlatformRelated` now also exposes file-manager reveal helpers; on Windows it opens Explorer and selects one or more local files when the item context menu requests "Open Containing Folder".
 - `MPasteSettings` 现在提供按“数值 + 单位（天 / 周 / 月）”定义的历史保留策略，供列表层按时间自动清理过期条目。
 - `ClipboardMonitor` now reconnects `QClipboard::dataChanged` with `Qt::UniqueConnection`, and suppresses short-window duplicate captures with the same normalized content so one logical copy does not fan out into repeated app-level updates.
+- `ClipboardMonitor` now retries short image-settle windows when the clipboard advertises image formats but the payload bytes are not ready yet.
 - `ClipboardMonitor` 现在会在需要时额外等待 WPS / 金山的分阶段剪贴板写入，减少一次复制产生两条记录的问题。
 - `ClipboardMonitor` 现在能在捕获阶段下载并落地 WPS 单图 HTML 载荷，方便后续统一保存为标准图片数据。
 - `ClipboardMonitor` 现在会在观察到有效剪贴板变化时立刻发出早期活动信号，供界面先播提示音，再静默完成后续 settle / 抓图。
@@ -48,5 +49,6 @@ update: 修改本目录文件时，同步更新本 README。
 - `PlatformRelated` 现在支持可配置的自动粘贴快捷键模式，可在多种粘贴方案之间切换。
 
 - ClipboardBoardService now owns board persistence I/O, deferred loading, and background item processing for widgets.
+- ClipboardBoardService thumbnail generation now falls back to Qt serialized image payloads when PNG/JPEG bytes are unavailable.
 
 - MPasteSettings now persists a configurable save directory for external sync tools.

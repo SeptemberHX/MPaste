@@ -35,6 +35,8 @@ update: 修改本目录文件时，同步更新本 README。
 - `LocalSaver` now supports metadata-only updates that preserve existing MIME blobs.
 - Clipboard items now preserve Windows clipboard MIME formats in lightweight capture to keep Office shapes editable.
 - Clipboard items now classify Office clipboard payloads as a distinct content type.
+- Content classification is centralized in `ContentClassifier` with shared `ContentType`.
+- Clipboard items now prefer decodable image MIME bytes in lightweight capture and classify light items using the source clipboard snapshot to avoid blank image cards.
 - `ClipboardItem` 现在会缓存可搜索纯文本，减少重复关键字扫描开销。
 - `ClipboardItem` 现在提供轻量级内容指纹，用于更快地定位去重候选项。
 - `ClipboardItem` 现在会把协议文本和原始 MIME 数据统一归一化为 URLs / 文本，供共享的类型识别逻辑使用。
