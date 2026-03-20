@@ -699,6 +699,35 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
     thread->start();
 }
 
+void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, const QString &filePath) {
+    if (expectedName.isEmpty() || filePath.isEmpty()) {
+        return;
+    }
+
+    QPointer<ClipboardBoardService> guard(this);
+    QThread *thread = QThread::create([guard, expectedName, filePath]() mutable {
+        LocalSaver saver;
+        ClipboardItem loaded = saver.loadFromFileLight(filePath);
+        const QPixmap thumbnail = loaded.thumbnail();
+
+        if (guard) {
+            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, thumbnail]() {
+                if (!guard) {
+                    return;
+                }
+                emit guard->thumbnailReady(expectedName, thumbnail);
+            }, Qt::QueuedConnection);
+        }
+    });
+
+    processingThreads_.append(thread);
+    connect(thread, &QThread::finished, this, [this, thread]() {
+        processingThreads_.removeAll(thread);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+}
+
 void ClipboardBoardService::startAsyncKeywordSearch(const QList<QPair<QString, quint64>> &candidates,
                                                     const QString &keyword,
                                                     quint64 token) {

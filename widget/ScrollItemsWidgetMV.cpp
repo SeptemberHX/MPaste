@@ -2,10 +2,11 @@
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
 // update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar).
-// note: Added dark theme rendering hooks, metadata-save rehydrate fixes, and alias sync.
+// note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, and loading overlay.
 #include <QGuiApplication>
 #include <QItemSelectionModel>
 #include <QListView>
+#include <QLabel>
 #include <QLocale>
 #include <QMenu>
 #include <QPainter>
@@ -22,6 +23,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QDateTime>
 
 #include <utils/MPasteSettings.h>
 
@@ -461,6 +463,14 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     listView_->setAttribute(Qt::WA_TranslucentBackground);
     listView_->viewport()->setAttribute(Qt::WA_TranslucentBackground);
 
+    loadingLabel_ = new QLabel(ui->viewHost);
+    loadingLabel_->setObjectName(QStringLiteral("loadingOverlay"));
+    loadingLabel_->setAlignment(Qt::AlignCenter);
+    loadingLabel_->setWordWrap(true);
+    loadingLabel_->setText(QStringLiteral("Loading...\n正在加载..."));
+    loadingLabel_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    loadingLabel_->hide();
+
     const int scrollbarHeight = qMax(12, listView_->horizontalScrollBar()->sizeHint().height());
     const int scrollHeight = itemOuterSize.height() + scrollbarHeight;
     edgeContentPadding_ = qMax(6, 8 * scale / 100);
@@ -488,6 +498,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
 
     connect(boardService_, &ClipboardBoardService::itemsLoaded, this, &ScrollItemsWidget::handleLoadedItems);
     connect(boardService_, &ClipboardBoardService::pendingItemReady, this, &ScrollItemsWidget::handlePendingItemReady);
+    connect(boardService_, &ClipboardBoardService::thumbnailReady, this, &ScrollItemsWidget::handleThumbnailReady);
     connect(boardService_, &ClipboardBoardService::keywordMatched, this, &ScrollItemsWidget::handleKeywordMatched);
     connect(boardService_, &ClipboardBoardService::totalItemCountChanged, this, &ScrollItemsWidget::handleTotalItemCountChanged);
     connect(boardService_, &ClipboardBoardService::deferredLoadCompleted, this, &ScrollItemsWidget::handleDeferredLoadCompleted);
@@ -501,7 +512,10 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     connect(listView_, &QListView::doubleClicked, this, &ScrollItemsWidget::handleActivatedIndex);
     connect(listView_, &QListView::customContextMenuRequested, this, &ScrollItemsWidget::showContextMenu);
     connect(listView_->horizontalScrollBar(), &QScrollBar::valueChanged,
-            this, [this](int) { maybeLoadMoreItems(); });
+            this, [this](int) {
+                maybeLoadMoreItems();
+                scheduleThumbnailUpdate();
+            });
 
     leftEdgeFadeOverlay_ = new EdgeFadeOverlay(EdgeFadeOverlay::Left, ui->viewHost);
     rightEdgeFadeOverlay_ = new EdgeFadeOverlay(EdgeFadeOverlay::Right, ui->viewHost);
@@ -517,8 +531,25 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
         updateHoverActionBarPosition();
     });
 
+    thumbnailUpdateTimer_ = new QTimer(this);
+    thumbnailUpdateTimer_->setSingleShot(true);
+    thumbnailUpdateTimer_->setInterval(80);
+    connect(thumbnailUpdateTimer_, &QTimer::timeout, this, &ScrollItemsWidget::updateVisibleThumbnails);
+
+    thumbnailPulseTimer_ = new QTimer(this);
+    thumbnailPulseTimer_->setInterval(220);
+    connect(thumbnailPulseTimer_, &QTimer::timeout, this, [this]() {
+        if (!cardDelegate_ || !listView_) {
+            return;
+        }
+        thumbnailLoadingPhase_ = (thumbnailLoadingPhase_ + 7) % 100;
+        cardDelegate_->setLoadingPhase(thumbnailLoadingPhase_);
+        listView_->viewport()->update();
+    });
+
     applyTheme(ThemeManager::instance()->isDark());
     connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &ScrollItemsWidget::applyTheme);
+    updateLoadingOverlay();
 }
 
 ScrollItemsWidget::~ScrollItemsWidget() {
@@ -538,6 +569,15 @@ void ScrollItemsWidget::applyTheme(bool dark) {
         hoverBar->setColors(darkTheme_ ? QColor(26, 31, 38, 205) : QColor(255, 255, 255, 185),
                             darkTheme_ ? QColor(255, 255, 255, 40) : QColor(255, 255, 255, 120));
     }
+
+    if (loadingLabel_) {
+        const QString textColor = darkTheme_ ? QStringLiteral("#A7B2C4") : QStringLiteral("#6B7788");
+        const QString glowColor = darkTheme_ ? QStringLiteral("rgba(31, 36, 45, 180)") : QStringLiteral("rgba(255, 255, 255, 180)");
+        loadingLabel_->setStyleSheet(QStringLiteral("QLabel#loadingOverlay { color: %1; font-size: 16px; font-weight: 600; background: %2; border-radius: 12px; padding: 14px 18px; }")
+                                         .arg(textColor, glowColor));
+    }
+
+    updateLoadingOverlay();
 
     if (hoverDetailsBtn_) {
         hoverDetailsBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("details"), darkTheme_));
@@ -1097,6 +1137,8 @@ void ScrollItemsWidget::handleLoadedItems(const QList<QPair<QString, ClipboardIt
     setFirstVisibleItemSelected();
     emit itemCountChanged(itemCountForDisplay());
     updateContentWidthHint();
+    scheduleThumbnailUpdate();
+    updateLoadingOverlay();
 }
 
 void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, const ClipboardItem &item) {
@@ -1106,6 +1148,32 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
 
     const int row = boardModel_->rowForName(expectedName);
     if (row >= 0) {
+        boardModel_->updateItem(row, item);
+    }
+    scheduleThumbnailUpdate();
+    updateLoadingOverlay();
+}
+
+void ScrollItemsWidget::handleThumbnailReady(const QString &expectedName, const QPixmap &thumbnail) {
+    pendingThumbnailNames_.remove(expectedName);
+    if (!desiredThumbnailNames_.contains(expectedName)) {
+        return;
+    }
+    if (!boardModel_) {
+        return;
+    }
+
+    const int row = boardModel_->rowForName(expectedName);
+    if (row < 0) {
+        return;
+    }
+
+    ClipboardItem item = boardModel_->itemAt(row);
+    if (!shouldManageThumbnail(item)) {
+        return;
+    }
+    if (!thumbnail.isNull()) {
+        item.setThumbnail(thumbnail);
         boardModel_->updateItem(row, item);
     }
 }
@@ -1125,6 +1193,8 @@ void ScrollItemsWidget::handleTotalItemCountChanged(int total) {
 
 void ScrollItemsWidget::handleDeferredLoadCompleted() {
     refreshContentWidthHint();
+    scheduleThumbnailUpdate();
+    updateLoadingOverlay();
 }
 
 void ScrollItemsWidget::setFirstVisibleItemSelected() {
@@ -1274,6 +1344,7 @@ void ScrollItemsWidget::prepareLoadFromSaveDir() {
     asyncKeywordMatchedNames_.clear();
     boardService_->refreshIndex();
     updateContentWidthHint();
+    updateLoadingOverlay();
 }
 
 bool ScrollItemsWidget::shouldKeepDeferredLoading() const {
@@ -1298,6 +1369,130 @@ void ScrollItemsWidget::refreshContentWidthHint() {
     QScrollBar *scrollBar = horizontalScrollbar();
     if (scrollBar) {
         scrollBar->setValue(qMin(scrollBar->value(), scrollBar->maximum()));
+    }
+}
+
+void ScrollItemsWidget::updateLoadingOverlay() {
+    if (!loadingLabel_ || !ui || !ui->viewHost) {
+        return;
+    }
+
+    const bool hasItems = boardModel_ && boardModel_->rowCount() > 0;
+    const bool isLoading = boardService_ && (boardService_->hasPendingItems() || boardService_->deferredLoadActive());
+    const bool shouldShow = isLoading && !hasItems;
+    loadingLabel_->setVisible(shouldShow);
+    if (shouldShow) {
+        const QRect hostRect = ui->viewHost->rect();
+        const QSize labelSize(qMin(hostRect.width(), 260), qMin(hostRect.height(), 80));
+        const QPoint topLeft((hostRect.width() - labelSize.width()) / 2,
+                             (hostRect.height() - labelSize.height()) / 2);
+        loadingLabel_->setGeometry(QRect(topLeft, labelSize));
+        loadingLabel_->raise();
+    }
+}
+
+void ScrollItemsWidget::scheduleThumbnailUpdate() {
+    if (!thumbnailUpdateTimer_) {
+        return;
+    }
+    thumbnailUpdateTimer_->start();
+}
+
+bool ScrollItemsWidget::shouldManageThumbnail(const ClipboardItem &item) const {
+    const ClipboardItem::ContentType type = item.getContentType();
+    return type == ClipboardItem::Image
+        || type == ClipboardItem::Office
+        || type == ClipboardItem::RichText;
+}
+
+void ScrollItemsWidget::requestThumbnailForItem(const ClipboardItem &item) {
+    if (!boardService_ || item.getName().isEmpty() || item.sourceFilePath().isEmpty()) {
+        return;
+    }
+    if (pendingThumbnailNames_.contains(item.getName())) {
+        return;
+    }
+    pendingThumbnailNames_.insert(item.getName());
+    boardService_->requestThumbnailAsync(item.getName(), item.sourceFilePath());
+}
+
+void ScrollItemsWidget::updateVisibleThumbnails() {
+    if (!boardModel_ || !proxyModel_ || !listView_) {
+        return;
+    }
+
+    const int proxyCount = proxyModel_->rowCount();
+    if (proxyCount <= 0) {
+        desiredThumbnailNames_.clear();
+        return;
+    }
+
+    const QRect viewportRect = listView_->viewport()->rect();
+    const QPoint leftProbe(viewportRect.left() + 1, viewportRect.center().y());
+    const QPoint rightProbe(viewportRect.right() - 1, viewportRect.center().y());
+    QModelIndex leftIndex = listView_->indexAt(leftProbe);
+    QModelIndex rightIndex = listView_->indexAt(rightProbe);
+    int startRow = leftIndex.isValid() ? leftIndex.row() : 0;
+    int endRow = rightIndex.isValid() ? rightIndex.row() : proxyCount - 1;
+    if (startRow > endRow) {
+        std::swap(startRow, endRow);
+    }
+
+    const int prefetch = MPasteSettings::getInst()->getThumbnailPrefetchCount();
+    startRow = qMax(0, startRow - prefetch);
+    endRow = qMin(proxyCount - 1, endRow + prefetch);
+
+    QSet<int> desiredSourceRows;
+    QSet<QString> desiredNames;
+    bool wantsPulse = false;
+    for (int proxyRow = startRow; proxyRow <= endRow; ++proxyRow) {
+        const QModelIndex proxyIndex = proxyModel_->index(proxyRow, 0);
+        if (!proxyIndex.isValid()) {
+            continue;
+        }
+        const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+        if (sourceRow < 0) {
+            continue;
+        }
+        desiredSourceRows.insert(sourceRow);
+        const ClipboardItem item = boardModel_->itemAt(sourceRow);
+        if (!item.getName().isEmpty()) {
+            desiredNames.insert(item.getName());
+            if (shouldManageThumbnail(item) && !item.hasThumbnail()) {
+                wantsPulse = true;
+            }
+        }
+    }
+
+    desiredThumbnailNames_ = desiredNames;
+
+    const int sourceCount = boardModel_->rowCount();
+    for (int row = 0; row < sourceCount; ++row) {
+        ClipboardItem item = boardModel_->itemAt(row);
+        if (!shouldManageThumbnail(item)) {
+            continue;
+        }
+        const bool isDesired = desiredSourceRows.contains(row);
+        if (isDesired) {
+            if (!item.hasThumbnail()) {
+                requestThumbnailForItem(item);
+            }
+        } else {
+            if (item.hasThumbnail() && !item.sourceFilePath().isEmpty()) {
+                item.setThumbnail(QPixmap());
+                boardModel_->updateItem(row, item);
+            }
+        }
+    }
+
+    if (thumbnailPulseTimer_) {
+        if (wantsPulse) {
+            if (!thumbnailPulseTimer_->isActive()) {
+                thumbnailPulseTimer_->start();
+            }
+        } else {
+            thumbnailPulseTimer_->stop();
+        }
     }
 }
 
@@ -1477,6 +1672,7 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     const QModelIndex firstProxyIndex = proxyIndexForSourceRow(insertRow);
     setCurrentProxyIndex(firstProxyIndex);
     ensureLinkPreviewForIndex(firstProxyIndex);
+    scheduleThumbnailUpdate();
 
     if (boardService_) {
         boardService_->notifyItemAdded();
@@ -1820,6 +2016,10 @@ int ScrollItemsWidget::getItemCount() {
     return itemCountForDisplay();
 }
 
+void ScrollItemsWidget::refreshThumbnailCache() {
+    updateVisibleThumbnails();
+}
+
 void ScrollItemsWidget::scrollToFirst() {
     if (!proxyModel_ || proxyModel_->rowCount() <= 0) {
         return;
@@ -1946,6 +2146,8 @@ void ScrollItemsWidget::showEvent(QShowEvent *event) {
     if (boardService_) {
         boardService_->setVisibleHint(isVisible() && window() && window()->isVisible());
     }
+    scheduleThumbnailUpdate();
+    updateLoadingOverlay();
 }
 
 void ScrollItemsWidget::hideEvent(QHideEvent *event) {
@@ -1959,6 +2161,8 @@ void ScrollItemsWidget::hideEvent(QHideEvent *event) {
 void ScrollItemsWidget::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     refreshContentWidthHint();
+    scheduleThumbnailUpdate();
+    updateLoadingOverlay();
 }
 
 bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
@@ -1970,6 +2174,7 @@ bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
         const bool handled = handleWheelScroll(static_cast<QWheelEvent *>(event));
         if (handled) {
             updateHoverActionBarPosition();
+            scheduleThumbnailUpdate();
         }
         return handled;
     }
@@ -1977,6 +2182,8 @@ bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::Resize && watched == listView_->viewport()) {
         refreshContentWidthHint();
         updateHoverActionBarPosition();
+        scheduleThumbnailUpdate();
+        updateLoadingOverlay();
     }
 
     if ((watched == listView_ || watched == listView_->viewport()) && event->type() == QEvent::MouseMove) {

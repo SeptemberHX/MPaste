@@ -12,11 +12,13 @@ class ClipboardCardDelegate : public QStyledItemDelegate {
 public:
     explicit ClipboardCardDelegate(const QColor &borderColor, QObject *parent = nullptr);
 
+    void setLoadingPhase(int phase);
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
 private:
     QColor borderColor_;
+    int loadingPhase_ = 0;
 };
 
 #endif // MPASTE_CLIPBOARDCARDDELEGATE_H

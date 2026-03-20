@@ -53,6 +53,7 @@ MPasteSettings::MPasteSettings()
     this->pasteShortcutMode = AutoPasteShortcut;
     this->shortcutStr = "Alt+Q";
     this->itemScale = 100;
+    this->thumbnailPrefetchCount = 50;
     this->playSound = true;
     this->themeMode = ThemeSystem;
 
@@ -113,6 +114,7 @@ void MPasteSettings::loadSettings() {
     this->pasteShortcutMode = static_cast<PasteShortcutMode>(settings.value("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode)).toInt());
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
     this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
+    this->thumbnailPrefetchCount = settings.value("main/thumbnailPrefetchCount", this->thumbnailPrefetchCount).toInt();
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
     this->themeMode = static_cast<ThemeMode>(
         settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
@@ -129,6 +131,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode));
     settings.setValue("main/shortcut", this->shortcutStr);
     settings.setValue("main/itemScale", this->itemScale);
+    settings.setValue("main/thumbnailPrefetchCount", this->thumbnailPrefetchCount);
     settings.setValue("main/playSound", this->playSound);
     settings.setValue("main/themeMode", static_cast<int>(this->themeMode));
 }
@@ -191,6 +194,14 @@ int MPasteSettings::getItemScale() const {
 
 void MPasteSettings::setItemScale(int itemScale) {
     MPasteSettings::itemScale = itemScale;
+}
+
+int MPasteSettings::getThumbnailPrefetchCount() const {
+    return thumbnailPrefetchCount;
+}
+
+void MPasteSettings::setThumbnailPrefetchCount(int count) {
+    thumbnailPrefetchCount = qBound(10, count, 200);
 }
 
 bool MPasteSettings::isPlaySound() const {

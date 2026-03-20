@@ -387,6 +387,15 @@ void MPasteWidget::initUI() {
             this, [this](int scale) {
                 applyScale(scale);
             });
+    connect(ui_.settingsWidget, &MPasteSettingsWidget::thumbnailPrefetchChanged,
+            this, [this](int) {
+                if (ui_.clipboardWidget) {
+                    ui_.clipboardWidget->refreshThumbnailCache();
+                }
+                if (ui_.staredWidget) {
+                    ui_.staredWidget->refreshThumbnailCache();
+                }
+            });
 
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);

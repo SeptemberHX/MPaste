@@ -2,7 +2,7 @@
 // output: Exposes one history board with lazy loading, filtering, dedup indexing, and paste signals.
 // pos: Widget-layer horizontal board declaration for clipboard/favorites views.
 // update: If I change, update this header block and my folder README.md.
-// note: Added theme application entry point and alias sync hooks.
+// note: Added theme application entry point, alias sync hooks, on-demand thumbnail loading with prefetch, and loading overlay.
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
 
@@ -29,6 +29,7 @@ class QShowEvent;
 class QListView;
 class QGraphicsOpacityEffect;
 class QToolButton;
+class QLabel;
 
 class ClipboardBoardModel;
 class ClipboardBoardProxyModel;
@@ -64,6 +65,7 @@ public:
     void focusMoveLeft();
     void focusMoveRight();
     int getItemCount();
+    void refreshThumbnailCache();
 
     void scrollToFirst();
     void scrollToLast();
@@ -99,6 +101,7 @@ private slots:
     void showContextMenu(const QPoint &pos);
     void handleLoadedItems(const QList<QPair<QString, ClipboardItem>> &items);
     void handlePendingItemReady(const QString &expectedName, const ClipboardItem &item);
+    void handleThumbnailReady(const QString &expectedName, const QPixmap &thumbnail);
     void handleKeywordMatched(const QSet<QString> &matchedNames, quint64 token);
     void handleTotalItemCountChanged(int total);
     void handleDeferredLoadCompleted();
@@ -138,6 +141,11 @@ private:
     QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
     int selectedSourceRow() const;
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;
+    void scheduleThumbnailUpdate();
+    void updateVisibleThumbnails();
+    bool shouldManageThumbnail(const ClipboardItem &item) const;
+    void requestThumbnailForItem(const ClipboardItem &item);
+    void updateLoadingOverlay();
 
     Ui::ScrollItemsWidget *ui;
     QString category;
@@ -158,10 +166,16 @@ private:
     QToolButton *hoverFavoriteBtn_ = nullptr;
     QToolButton *hoverDeleteBtn_ = nullptr;
     QGraphicsOpacityEffect *hoverOpacity_ = nullptr;
+    QLabel *loadingLabel_ = nullptr;
     QPersistentModelIndex hoverProxyIndex_;
     QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;
     QSet<QString> pendingLinkPreviewUrls_;
+    QSet<QString> pendingThumbnailNames_;
+    QSet<QString> desiredThumbnailNames_;
+    QTimer *thumbnailUpdateTimer_ = nullptr;
+    QTimer *thumbnailPulseTimer_ = nullptr;
+    int thumbnailLoadingPhase_ = 0;
     int edgeContentPadding_ = 0;
     int edgeFadeWidth_ = 0;
     quint64 keywordSearchToken_ = 0;

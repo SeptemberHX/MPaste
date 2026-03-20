@@ -33,6 +33,7 @@ signals:
     void themeChanged();
     void saveDirChanged();
     void itemScaleChanged(int itemScale);
+    void thumbnailPrefetchChanged(int count);
 
 public slots:
     void accept() override;

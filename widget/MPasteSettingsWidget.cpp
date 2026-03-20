@@ -2,7 +2,7 @@
 // output: 提供设置窗口的界面初始化、样式和交互逻辑实现。
 // pos: widget 层中的 MPasteSettingsWidget 实现文件。
 // update: 修改本文件时，同步更新文件头注释与 `widget/README.md`。
-// note: Dark theme now uses light spin icons.
+// note: Dark theme now uses light spin icons and exposes thumbnail prefetch controls.
 #include "MPasteSettingsWidget.h"
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"
@@ -490,8 +490,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         pasteShortcutCombo_->addItem(QStringLiteral("Shift+Insert"), static_cast<int>(MPasteSettings::ShiftInsertShortcut));
         pasteShortcutCombo_->addItem(QStringLiteral("Ctrl+Shift+V"), static_cast<int>(MPasteSettings::CtrlShiftVShortcut));
         pasteShortcutCombo_->addItem(QStringLiteral("Alt+Insert"), static_cast<int>(MPasteSettings::AltInsertShortcut));
-        grid->addWidget(pasteShortcutLabel_, 11, 0);
-        grid->addWidget(pasteShortcutCombo_, 11, 1, Qt::AlignRight | Qt::AlignVCenter);
+        grid->addWidget(pasteShortcutLabel_, 12, 0);
+        grid->addWidget(pasteShortcutCombo_, 12, 1, Qt::AlignRight | Qt::AlignVCenter);
 
         auto *retentionWidget = new QWidget(this);
         auto *retentionLayout = new QHBoxLayout(retentionWidget);
@@ -513,7 +513,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         auto *syncSep = new QFrame(this);
         syncSep->setMaximumHeight(1);
         syncSep->setFrameShape(QFrame::HLine);
-        grid->addWidget(syncSep, 12, 0, 1, 2);
+        grid->addWidget(syncSep, 13, 0, 1, 2);
 
         syncLabel_ = new QLabel(uiText("Sync folder", QStringLiteral("同步目录")), this);
         syncLabel_->setMinimumHeight(44);
@@ -523,8 +523,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         syncPathEdit_->setPlaceholderText(uiText("Select a folder to sync", QStringLiteral("选择同步目录")));
         syncPathEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-        grid->addWidget(syncLabel_, 13, 0);
-        grid->addWidget(syncPathEdit_, 13, 1);
+        grid->addWidget(syncLabel_, 14, 0);
+        grid->addWidget(syncPathEdit_, 14, 1);
 
         auto *syncButtonsRow = new QWidget(this);
         auto *syncButtonsLayout = new QHBoxLayout(syncButtonsRow);
@@ -542,8 +542,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         syncChangeButton_->setMaximumHeight(32);
         syncButtonsLayout->addWidget(syncChangeButton_);
 
-        grid->addWidget(new QWidget(this), 14, 0);
-        grid->addWidget(syncButtonsRow, 14, 1, Qt::AlignRight | Qt::AlignVCenter);
+        grid->addWidget(new QWidget(this), 15, 0);
+        grid->addWidget(syncButtonsRow, 15, 1, Qt::AlignRight | Qt::AlignVCenter);
 
         // WebDAV sync UI intentionally omitted; external sync tools are recommended.
 
@@ -655,6 +655,9 @@ void MPasteSettingsWidget::loadSettings()
     }
     ui->itemScaleSlider->setValue(settings->getItemScale());
     ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
+    if (ui->thumbnailPrefetchSpin) {
+        ui->thumbnailPrefetchSpin->setValue(settings->getThumbnailPrefetchCount());
+    }
     toggleSwitch_->setChecked(settings->isPlaySound());
     if (themeCombo_) {
         const int index = themeCombo_->findData(static_cast<int>(settings->getThemeMode()));
@@ -680,6 +683,7 @@ void MPasteSettingsWidget::accept()
     const int oldRetentionValue = settings->getHistoryRetentionValue();
     const auto oldRetentionUnit = settings->getHistoryRetentionUnit();
     const int oldScale = settings->getItemScale();
+    const int oldPrefetch = settings->getThumbnailPrefetchCount();
     const int newRetentionValue = ui->daySpinBox->value();
     const auto newRetentionUnit = retentionUnitCombo_
         ? static_cast<MPasteSettings::HistoryRetentionUnit>(retentionUnitCombo_->currentData().toInt())
@@ -698,6 +702,10 @@ void MPasteSettingsWidget::accept()
     }
     const int newScale = ui->itemScaleSlider->value();
     settings->setItemScale(newScale);
+    if (ui->thumbnailPrefetchSpin) {
+        settings->setThumbnailPrefetchCount(ui->thumbnailPrefetchSpin->value());
+    }
+    const int newPrefetch = settings->getThumbnailPrefetchCount();
     settings->setPlaySound(toggleSwitch_->isChecked());
     if (themeCombo_) {
         const auto mode = static_cast<MPasteSettings::ThemeMode>(themeCombo_->currentData().toInt());
@@ -735,6 +743,9 @@ void MPasteSettingsWidget::accept()
     }
     if (oldScale != newScale) {
         emit itemScaleChanged(newScale);
+    }
+    if (oldPrefetch != newPrefetch) {
+        emit thumbnailPrefetchChanged(newPrefetch);
     }
     QDialog::accept();
 }

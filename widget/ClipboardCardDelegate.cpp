@@ -844,6 +844,48 @@ ClipboardCardDelegate::ClipboardCardDelegate(const QColor &borderColor, QObject 
     : QStyledItemDelegate(parent),
       borderColor_(borderColor) {}
 
+void ClipboardCardDelegate::setLoadingPhase(int phase) {
+    loadingPhase_ = phase;
+}
+
+void drawLoadingPlaceholder(QPainter *painter,
+                            const QRect &rect,
+                            int scale,
+                            bool darkTheme,
+                            int phase) {
+    if (!painter || !rect.isValid()) {
+        return;
+    }
+
+    const QColor base = darkTheme ? QColor(255, 255, 255, 18) : QColor(0, 0, 0, 18);
+    const QColor highlight = darkTheme ? QColor(255, 255, 255, 42) : QColor(0, 0, 0, 36);
+    const qreal t = (phase % 100) / 100.0;
+
+    QLinearGradient gradient(rect.topLeft(), rect.topRight());
+    gradient.setColorAt(0.0, base);
+    gradient.setColorAt(qMax(0.0, t - 0.15), base);
+    gradient.setColorAt(t, highlight);
+    gradient.setColorAt(qMin(1.0, t + 0.15), base);
+    gradient.setColorAt(1.0, base);
+
+    painter->save();
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(gradient);
+    const qreal radius = qMax(10.0, 12 * scale / 100.0);
+    painter->drawRoundedRect(rect.adjusted(4, 4, -4, -4), radius, radius);
+
+    QFont font = painter->font();
+    font.setPointSize(qMax(8, 9 * scale / 100));
+    painter->setFont(font);
+    painter->setPen(darkTheme ? QColor(220, 230, 240, 120) : QColor(90, 100, 115, 120));
+    const int dots = phase % 4;
+    const QString text = dots == 0
+        ? QObject::tr("Loading")
+        : QObject::tr("Loading") + QString(dots, QLatin1Char('.'));
+    painter->drawText(rect, Qt::AlignCenter, text);
+    painter->restore();
+}
+
 void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     if (!painter || !index.isValid()) {
         return;
@@ -1031,20 +1073,14 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             if (!card.thumbnail.isNull()) {
                 drawCoverPixmap(painter, imagePreviewRect, card.thumbnail, card.name, card.imageSize);
             } else {
-                QFont previewFont = painter->font();
-                previewFont.setPointSize(qMax(9, 10 * scale / 100));
-                drawWrappedText(painter, imagePreviewRect.adjusted(10 * scale / 100, 8 * scale / 100, -10 * scale / 100, -6 * scale / 100),
-                                previewTextForCard(card), previewFont, bodyTextColor);
+                drawLoadingPlaceholder(painter, imagePreviewRect, scale, darkTheme, loadingPhase_);
             }
             break;
         case ClipboardItem::Office:
             if (!card.thumbnail.isNull()) {
                 drawContainPixmap(painter, imagePreviewRect, card.thumbnail);
             } else {
-                QFont previewFont = painter->font();
-                previewFont.setPointSize(qMax(9, 10 * scale / 100));
-                drawWrappedText(painter, imagePreviewRect.adjusted(10 * scale / 100, 8 * scale / 100, -10 * scale / 100, -6 * scale / 100),
-                                previewTextForCard(card), previewFont, bodyTextColor);
+                drawLoadingPlaceholder(painter, imagePreviewRect, scale, darkTheme, loadingPhase_);
             }
             break;
         case ClipboardItem::RichText: {
@@ -1057,9 +1093,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             if (!card.thumbnail.isNull()) {
                 drawCoverPixmap(painter, richTextRect, card.thumbnail, card.name, card.imageSize);
             } else {
-                QFont previewFont = painter->font();
-                previewFont.setPointSize(qMax(9, 10 * scale / 100));
-                drawWrappedText(painter, richTextRect, previewTextForCard(card), previewFont, bodyTextColor);
+                drawLoadingPlaceholder(painter, richTextRect, scale, darkTheme, loadingPhase_);
             }
             break;
         }

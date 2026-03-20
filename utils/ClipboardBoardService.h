@@ -2,6 +2,7 @@
 // output: Provides board-level persistence, deferred loading, and background processing services.
 // pos: utils layer board service.
 // update: If I change, update this header block and my folder README.md.
+// note: Adds async thumbnail fetch for on-demand UI loading.
 #ifndef MPASTE_CLIPBOARD_BOARD_SERVICE_H
 #define MPASTE_CLIPBOARD_BOARD_SERVICE_H
 
@@ -13,6 +14,7 @@
 #include <QString>
 #include <QStringList>
 #include <QObject>
+#include <QPixmap>
 
 #include <memory>
 
@@ -57,6 +59,7 @@ public:
     void trimExpiredPendingItems(const QDateTime &cutoff);
 
     void processPendingItemAsync(const ClipboardItem &item, const QString &expectedName);
+    void requestThumbnailAsync(const QString &expectedName, const QString &filePath);
     void startAsyncKeywordSearch(const QList<QPair<QString, quint64>> &candidates,
                                  const QString &keyword,
                                  quint64 token);
@@ -64,6 +67,7 @@ public:
 signals:
     void itemsLoaded(const QList<QPair<QString, ClipboardItem>> &items);
     void pendingItemReady(const QString &expectedName, const ClipboardItem &item);
+    void thumbnailReady(const QString &expectedName, const QPixmap &thumbnail);
     void keywordMatched(const QSet<QString> &matchedNames, quint64 token);
     void localPersistenceChanged();
     void totalItemCountChanged(int total);

@@ -2,6 +2,7 @@
 // output: Implements a themed rename dialog matching the app's card language.
 // pos: Widget-layer rename dialog implementation.
 // update: If I change, update this header block and my folder README.md.
+// note: Rename dialog now explicitly activates and focuses the input field.
 #include "ClipboardItemRenameDialog.h"
 
 #include <QFrame>
@@ -11,6 +12,7 @@
 #include <QLocale>
 #include <QPushButton>
 #include <QShowEvent>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "utils/ThemeManager.h"
@@ -183,6 +185,7 @@ ClipboardItemRenameDialog::ClipboardItemRenameDialog(const QString &currentAlias
     input_->setText(currentAlias);
     input_->setPlaceholderText(customNameText);
     input_->setMaxLength(80);
+    input_->setFocusPolicy(Qt::StrongFocus);
     {
         QFont emojiFont = input_->font();
         emojiFont.setFamilies({
@@ -231,10 +234,14 @@ QString ClipboardItemRenameDialog::alias() const {
 
 void ClipboardItemRenameDialog::showEvent(QShowEvent *event) {
     QDialog::showEvent(event);
-    if (input_) {
-        input_->setFocus();
-        input_->selectAll();
-    }
+    QTimer::singleShot(0, this, [this]() {
+        raise();
+        activateWindow();
+        if (input_) {
+            input_->setFocus(Qt::ActiveWindowFocusReason);
+            input_->selectAll();
+        }
+    });
 }
 
 void ClipboardItemRenameDialog::applyTheme(bool dark) {

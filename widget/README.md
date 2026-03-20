@@ -92,12 +92,18 @@ update: 修改本目录文件时，同步更新本 README。
 - 链接预览图和图片卡片现在都优先占满可用高度，只在宽度超出时做左右居中裁剪。
 - 卡片底部 info 条高度已压缩，减少预览被占用的垂直空间。
 - 富文本/文本卡片预览现在保留少量内边距，避免内容贴边过紧。
+- 列表现在按可见范围按需加载缩略图，离屏条目会释放缩略图以降低内存占用。
+- 列表加载中会显示居中 loading 提示，加载完成后自动隐藏。
+- 缩略图在滚动过程中按可见范围附近约 50 个条目动态加载与释放，避免全量常驻。
+- 图片/富文本在缩略图未就绪时显示加载占位，避免文字与图片闪烁切换。
+- 设置里新增了预览缓存数量配置，可调整缩略图预取数量。
 
 - ScrollItemsWidget now delegates persistence, deferred loading, and background item completion to ClipboardBoardService.
 
 - Card headers now show custom aliases above the type/time line when provided.
 
 - ClipboardItemRenameDialog provides the themed rename prompt used by card context menus.
+- ClipboardItemRenameDialog now activates the window and focuses the input on show.
 
 - Settings now expose the sync folder path for external sync tools.
 

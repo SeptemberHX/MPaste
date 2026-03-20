@@ -54,5 +54,7 @@ update: 修改本目录文件时，同步更新本 README。
 - ClipboardBoardService thumbnail sizing now follows CardPreviewMetrics for consistent preview dimensions.
 - Rich text thumbnails now render without extra padding to maximize preview fill.
 - Rich text thumbnail generation now trims transparent margins before scaling to reduce empty borders.
+- ClipboardBoardService now supports async thumbnail reads for visible-only UI loading.
+- Thumbnail prefetch count is now configurable via settings.
 
 - MPasteSettings now persists a configurable save directory for external sync tools.
