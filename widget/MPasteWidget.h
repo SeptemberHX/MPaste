@@ -2,7 +2,7 @@
 // output: 对外提供 MPasteWidget 的声明接口。
 // pos: widget 层中的 MPasteWidget 接口定义。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
-// note: Added theme application hooks for dark mode.
+// note: Added theme application hooks for dark mode and multi-select count handling.
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
 

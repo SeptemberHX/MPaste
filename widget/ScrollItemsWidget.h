@@ -1,7 +1,7 @@
 // input: Depends on Qt Widgets, ClipboardItem data, persistence service, and item widgets.
 // output: Exposes one history board with lazy loading, filtering, dedup indexing, and paste signals.
 // pos: Widget-layer horizontal board declaration for clipboard/favorites views.
-// update: If I change, update this header block and my folder README.md (main-card context menu save/export).
+// update: If I change, update this header block and my folder README.md (main-card context menu save/export + multi-select batch actions).
 // note: Added theme application entry point, alias sync hooks, on-demand thumbnail loading with prefetch, and loading overlay.
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
@@ -61,6 +61,8 @@ public:
     const ClipboardItem* currentSelectedItem() const;
     const ClipboardItem* selectedByShortcut(int visibleOrder);
     const ClipboardItem* selectedByEnter();
+    int selectedItemCount() const;
+    bool hasMultipleSelectedItems() const;
     void hideHoverTools();
     void focusMoveLeft();
     void focusMoveRight();
@@ -94,6 +96,7 @@ signals:
     void itemUnstared(const ClipboardItem &item);
     void aliasChanged(const QByteArray &fingerprint, const QString &alias);
     void localPersistenceChanged();
+    void selectionStateChanged();
 
 private slots:
     void handleCurrentIndexChanged(const QModelIndex &current, const QModelIndex &previous);
@@ -109,6 +112,9 @@ private slots:
 private:
     QModelIndex currentProxyIndex() const;
     QModelIndex proxyIndexForSourceRow(int sourceRow) const;
+    QList<QModelIndex> selectedProxyIndexes() const;
+    QList<int> selectedSourceRows() const;
+    QList<ClipboardItem> selectedItems() const;
     void setCurrentProxyIndex(const QModelIndex &index);
     void setFirstVisibleItemSelected();
     void applyFilters();
@@ -134,6 +140,8 @@ private:
     void openAliasDialogForItem(const ClipboardItem &item);
     void startAsyncKeywordSearch();
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
+    void removeItems(const QList<ClipboardItem> &items);
+    void applyFavoriteToItems(const QList<ClipboardItem> &items, bool favorite);
     QList<QModelIndex> shortcutVisibleIndexes() const;
     int pinnedInsertRow() const;
     int unpinnedInsertRowForItem(const ClipboardItem &item, int excludeRow) const;
@@ -147,6 +155,7 @@ private:
     bool shouldManageThumbnail(const ClipboardItem &item) const;
     void requestThumbnailForItem(const ClipboardItem &item);
     void updateLoadingOverlay();
+    void updateSelectionState();
 
     Ui::ScrollItemsWidget *ui;
     QString category;

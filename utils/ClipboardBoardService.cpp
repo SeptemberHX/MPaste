@@ -2,7 +2,7 @@
 // output: Implements board persistence, deferred loading, thumbnail processing, and keyword search routines.
 // pos: utils layer board service implementation.
 // update: If I change, update this header block and my folder README.md.
-// note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, and trims rich-text margins.
+// note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, trims rich-text margins, and backfills missing on-disk thumbnails on demand.
 #include "ClipboardBoardService.h"
 
 #include <QBuffer>
@@ -22,6 +22,7 @@
 #include <QScreen>
 #include <QPainter>
 #include <QTextDocument>
+#include <QTextOption>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
@@ -43,6 +44,94 @@ QSize previewLogicalSize(int itemScale) {
                  qMax(1, kCardPreviewHeight * scale / 100));
 }
 
+QString richTextThumbnailStyleSheet() {
+    return QStringLiteral(
+        "html, body { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: 100% !important; }"
+        "body, body * {"
+        " margin: 0 !important;"
+        " padding: 0 !important;"
+        " max-width: 100% !important;"
+        " white-space: normal !important;"
+        " overflow-wrap: anywhere !important;"
+        " word-wrap: break-word !important;"
+        " word-break: break-word !important;"
+        "}"
+        "table {"
+        " width: 100% !important;"
+        " max-width: 100% !important;"
+        " table-layout: fixed !important;"
+        " border-collapse: collapse !important;"
+        "}"
+        "tr, td, th {"
+        " max-width: 100% !important;"
+        " white-space: normal !important;"
+        " overflow-wrap: anywhere !important;"
+        " word-wrap: break-word !important;"
+        " word-break: break-word !important;"
+        "}"
+        "a, span, font, strong, em, b, i, u, sub, sup {"
+        " white-space: normal !important;"
+        " overflow-wrap: anywhere !important;"
+        " word-wrap: break-word !important;"
+        " word-break: break-word !important;"
+        "}"
+        "img { max-width: 100% !important; height: auto !important; }"
+        "pre, code {"
+        " white-space: pre-wrap !important;"
+        " overflow-wrap: anywhere !important;"
+        " word-break: break-word !important;"
+        "}");
+}
+
+QString richTextHtmlForThumbnail(QString html) {
+    const QString styleTag = QStringLiteral("<style>%1</style>").arg(richTextThumbnailStyleSheet());
+    const QRegularExpression headCloseRegex(QStringLiteral(R"(</head\s*>)"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch headCloseMatch = headCloseRegex.match(html);
+    if (headCloseMatch.hasMatch()) {
+        html.insert(headCloseMatch.capturedStart(), styleTag);
+        return html;
+    }
+
+    const QRegularExpression headOpenRegex(QStringLiteral(R"(<head[^>]*>)"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch headMatch = headOpenRegex.match(html);
+    if (headMatch.hasMatch()) {
+        html.insert(headMatch.capturedEnd(), styleTag);
+        return html;
+    }
+
+    const QRegularExpression htmlOpenRegex(QStringLiteral(R"(<html[^>]*>)"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch htmlMatch = htmlOpenRegex.match(html);
+    if (htmlMatch.hasMatch()) {
+        html.insert(htmlMatch.capturedEnd(), QStringLiteral("<head>%1</head>").arg(styleTag));
+        return html;
+    }
+
+    return QStringLiteral("<html><head>%1</head><body>%2</body></html>").arg(styleTag, html);
+}
+
+void configureRichTextThumbnailDocument(QTextDocument &document,
+                                        const QString &html,
+                                        const QString &imageSource,
+                                        const QByteArray &imageBytes) {
+    document.setDocumentMargin(0);
+    QTextOption option = document.defaultTextOption();
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    document.setDefaultTextOption(option);
+    document.setDefaultStyleSheet(richTextThumbnailStyleSheet());
+
+    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
+        QImage image;
+        if (!image.loadFromData(imageBytes)) {
+            image = ContentClassifier::decodeQtSerializedImage(imageBytes);
+        }
+        if (!image.isNull()) {
+            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
+        }
+    }
+
+    document.setHtml(richTextHtmlForThumbnail(html));
+}
+
 qreal maxScreenDevicePixelRatio() {
     qreal dpr = 1.0;
     const QList<QScreen *> screens = QGuiApplication::screens();
@@ -56,6 +145,11 @@ qreal maxScreenDevicePixelRatio() {
 
 bool isVeryTallImage(const QSize &size) {
     return size.isValid() && size.height() >= qMax(4000, size.width() * 4);
+}
+
+bool richTextHtmlHasImageContent(const QString &html) {
+    return !ContentClassifier::firstHtmlImageSource(html).isEmpty()
+        || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive);
 }
 
 QImage trimTransparentPadding(const QImage &source, int paddingPx) {
@@ -195,21 +289,10 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
         qMax(1.0, contentSize.width() / previewZoom),
         qMax(1.0, contentSize.height() / previewZoom));
 
-    QTextDocument document;
-    document.setDocumentMargin(0);
-    document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
     const QString imageSource = ContentClassifier::firstHtmlImageSource(html);
     const QByteArray imageBytes = item.imagePayloadBytesFast();
-    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
-        QImage image;
-        if (!image.loadFromData(imageBytes)) {
-            image = ContentClassifier::decodeQtSerializedImage(imageBytes);
-        }
-        if (!image.isNull()) {
-            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
-        }
-    }
-    document.setHtml(html);
+    QTextDocument document;
+    configureRichTextThumbnailDocument(document, html, imageSource, imageBytes);
     document.setPageSize(layoutSize);
     document.setTextWidth(layoutSize.width());
 
@@ -224,6 +307,11 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
     document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
     painter.end();
+
+    if (!richTextHtmlHasImageContent(html)) {
+        snapshot.setDevicePixelRatio(thumbnailDpr);
+        return snapshot;
+    }
 
     QImage trimmed = trimTransparentPadding(snapshot.toImage(), qRound(2 * thumbnailDpr));
     QImage scaled = scaleCropToTarget(trimmed, pixelTargetSize);
@@ -310,17 +398,9 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
         qMax(1.0, contentSize.width() / previewZoom),
         qMax(1.0, contentSize.height() / previewZoom));
 
-    QTextDocument document;
-    document.setDocumentMargin(0);
-    document.setDefaultStyleSheet(QStringLiteral("body, p, div, ul, ol, li { margin: 0; padding: 0; }"));
     const QString imageSource = ContentClassifier::firstHtmlImageSource(html);
-    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
-        QImage image;
-        if (image.loadFromData(imageBytes)) {
-            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
-        }
-    }
-    document.setHtml(html);
+    QTextDocument document;
+    configureRichTextThumbnailDocument(document, html, imageSource, imageBytes);
     document.setPageSize(layoutSize);
     document.setTextWidth(layoutSize.width());
 
@@ -335,6 +415,11 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
     painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
     document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
     painter.end();
+
+    if (!richTextHtmlHasImageContent(html)) {
+        snapshot.setDevicePixelRatio(thumbnailDpr);
+        return snapshot;
+    }
 
     QImage trimmed = trimTransparentPadding(snapshot, qRound(2 * thumbnailDpr));
     QImage scaled = scaleCropToTarget(trimmed, pixelTargetSize);
@@ -708,12 +793,34 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
     QThread *thread = QThread::create([guard, expectedName, filePath]() mutable {
         LocalSaver saver;
         ClipboardItem loaded = saver.loadFromFileLight(filePath);
-        const QPixmap thumbnail = loaded.thumbnail();
+        ClipboardItem preparedItem = loaded;
+        bool generatedThumbnail = false;
+        if (!loaded.getName().isEmpty()) {
+            const ClipboardItem::ContentType type = loaded.getContentType();
+            const bool shouldRebuild = type == ClipboardItem::RichText
+                || ((type == ClipboardItem::Image || type == ClipboardItem::Office) && loaded.thumbnail().isNull());
+            if (shouldRebuild) {
+                ClipboardItem fullItem = saver.loadFromFile(filePath);
+                if (!fullItem.getName().isEmpty()) {
+                    preparedItem = prepareItemForDisplayAndSave(fullItem);
+                    generatedThumbnail = !preparedItem.thumbnail().isNull();
+                }
+            }
+        }
+        const QPixmap thumbnail = preparedItem.thumbnail();
 
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, thumbnail]() {
+            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, preparedItem, thumbnail, generatedThumbnail]() {
                 if (!guard) {
                     return;
+                }
+                if (generatedThumbnail && !preparedItem.getName().isEmpty()) {
+                    guard->saveItem(preparedItem);
+                    ClipboardItem reloaded = guard->loadItemLight(guard->filePathForName(expectedName));
+                    if (!reloaded.getName().isEmpty()) {
+                        emit guard->pendingItemReady(expectedName, reloaded);
+                        return;
+                    }
                 }
                 emit guard->thumbnailReady(expectedName, thumbnail);
             }, Qt::QueuedConnection);

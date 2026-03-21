@@ -54,7 +54,10 @@ update: 修改本目录文件时，同步更新本 README。
 - ClipboardBoardService thumbnail sizing now follows CardPreviewMetrics for consistent preview dimensions.
 - Rich text thumbnails now render without extra padding to maximize preview fill.
 - Rich text thumbnail generation now trims transparent margins before scaling to reduce empty borders.
+- Rich text thumbnail rendering now injects wrap-safe CSS so text, tables, and inline blocks are laid out within the card width before capture.
 - ClipboardBoardService now supports async thumbnail reads for visible-only UI loading.
+- ClipboardBoardService now regenerates and persists visible rich-text thumbnails during on-demand thumbnail fetches, and backfills missing image thumbnails, so filtered/search results do not get stuck on loading placeholders and old single-line rich-text captures can self-heal.
+- Text-only rich-text thumbnails now keep their natural layout instead of trimming-and-cover-scaling a tiny text fragment to fill the whole card.
 - Thumbnail prefetch count is now configurable via settings.
 
 - MPasteSettings now persists a configurable save directory for external sync tools.

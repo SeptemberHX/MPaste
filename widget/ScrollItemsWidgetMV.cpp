@@ -1,13 +1,14 @@
 // input: Depends on ScrollItemsWidget.h, ClipboardBoardService, Qt model/view APIs, and delegate-based card painting.
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
-// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export).
+// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export + multi-select batch actions).
 // note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, and loading overlay.
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QItemSelectionModel>
+#include <QKeyEvent>
 #include <QListView>
 #include <QLabel>
 #include <QLocale>
@@ -349,6 +350,22 @@ QString saveItemLabel() {
     return label;
 }
 
+QString deleteLabel() {
+    QString label = QObject::tr("Delete");
+    if (label == QLatin1String("Delete") || looksBrokenTranslation(label)) {
+        return prefersChineseUi() ? QString::fromUtf16(u"\u5220\u9664") : QStringLiteral("Delete");
+    }
+    return label;
+}
+
+QString deleteSelectedLabel() {
+    QString label = QObject::tr("Delete Selected");
+    if (label == QLatin1String("Delete Selected") || looksBrokenTranslation(label)) {
+        return prefersChineseUi() ? QString::fromUtf16(u"\u5220\u9664\u6240\u9009") : QStringLiteral("Delete Selected");
+    }
+    return label;
+}
+
 QString saveDialogTitle(ClipboardItem::ContentType type) {
     switch (type) {
         case ClipboardItem::Image:
@@ -599,7 +616,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     listView_->setResizeMode(QListView::Adjust);
     listView_->setLayoutMode(QListView::SinglePass);
     listView_->setUniformItemSizes(true);
-    listView_->setSelectionMode(QAbstractItemView::SingleSelection);
+    listView_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     listView_->setSelectionBehavior(QAbstractItemView::SelectItems);
     listView_->setSelectionRectVisible(false);
     listView_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -659,9 +676,10 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
 
     connect(listView_->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &ScrollItemsWidget::handleCurrentIndexChanged);
-    connect(listView_, &QListView::clicked, this, [this](const QModelIndex &index) {
-        setCurrentProxyIndex(index);
-    });
+    connect(listView_->selectionModel(), &QItemSelectionModel::selectionChanged,
+            this, [this](const QItemSelection &, const QItemSelection &) {
+                updateSelectionState();
+            });
     connect(listView_, &QListView::doubleClicked, this, &ScrollItemsWidget::handleActivatedIndex);
     connect(listView_, &QListView::customContextMenuRequested, this, &ScrollItemsWidget::showContextMenu);
     connect(listView_->horizontalScrollBar(), &QScrollBar::valueChanged,
@@ -782,6 +800,63 @@ QModelIndex ScrollItemsWidget::proxyIndexForSourceRow(int sourceRow) const {
     return proxyModel_->mapFromSource(boardModel_->index(sourceRow, 0));
 }
 
+QList<QModelIndex> ScrollItemsWidget::selectedProxyIndexes() const {
+    QList<QModelIndex> result;
+    if (!listView_ || !listView_->selectionModel()) {
+        return result;
+    }
+
+    result = listView_->selectionModel()->selectedRows();
+    std::sort(result.begin(), result.end(), [](const QModelIndex &lhs, const QModelIndex &rhs) {
+        return lhs.row() < rhs.row();
+    });
+
+    if (!result.isEmpty()) {
+        return result;
+    }
+
+    const QModelIndex current = currentProxyIndex();
+    if (current.isValid()) {
+        result.append(current);
+    }
+    return result;
+}
+
+QList<int> ScrollItemsWidget::selectedSourceRows() const {
+    QList<int> result;
+    if (!proxyModel_) {
+        return result;
+    }
+
+    for (const QModelIndex &proxyIndex : selectedProxyIndexes()) {
+        if (!proxyIndex.isValid()) {
+            continue;
+        }
+        const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+        if (sourceRow >= 0 && !result.contains(sourceRow)) {
+            result.append(sourceRow);
+        }
+    }
+
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
+QList<ClipboardItem> ScrollItemsWidget::selectedItems() const {
+    QList<ClipboardItem> result;
+    if (!boardModel_) {
+        return result;
+    }
+
+    for (const int sourceRow : selectedSourceRows()) {
+        const ClipboardItem item = boardModel_->itemAt(sourceRow);
+        if (!item.getName().isEmpty()) {
+            result.append(item);
+        }
+    }
+    return result;
+}
+
 void ScrollItemsWidget::setCurrentProxyIndex(const QModelIndex &index) {
     if (!listView_ || !listView_->selectionModel()) {
         return;
@@ -863,7 +938,7 @@ void ScrollItemsWidget::createHoverActionBar() {
     hoverAliasBtn_ = createButton(IconResolver::themedPath(QStringLiteral("rename"), dark), aliasLabel());
     hoverPinBtn_ = createButton(IconResolver::themedPath(QStringLiteral("pin"), dark), pinActionLabel(false));
     hoverFavoriteBtn_ = createButton(IconResolver::themedPath(QStringLiteral("star_outline"), dark), favoriteActionLabel(false));
-    hoverDeleteBtn_ = createButton(QStringLiteral(":/resources/resources/delete.svg"), tr("Delete"));
+    hoverDeleteBtn_ = createButton(QStringLiteral(":/resources/resources/delete.svg"), deleteLabel());
 
     layout->addWidget(hoverDetailsBtn_);
     layout->addWidget(hoverAliasBtn_);
@@ -1103,6 +1178,11 @@ void ScrollItemsWidget::updateHoverActionBar(const QModelIndex &proxyIndex) {
         return;
     }
 
+    if (selectedItemCount() > 1) {
+        hideHoverActionBar(false);
+        return;
+    }
+
     if (!proxyIndex.isValid()) {
         if (hoverHideTimer_ && !hoverHideTimer_->isActive()) {
             hoverHideTimer_->start();
@@ -1277,94 +1357,145 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         return;
     }
 
-    setCurrentProxyIndex(proxyIndex);
-    const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
-    const ClipboardItem item = boardModel_->itemAt(sourceRow);
+    QItemSelectionModel *selectionModel = listView_->selectionModel();
+    const bool preserveSelection = selectionModel
+        && selectionModel->isSelected(proxyIndex)
+        && selectionModel->selectedRows().size() > 1;
+    if (preserveSelection) {
+        selectionModel->setCurrentIndex(proxyIndex, QItemSelectionModel::NoUpdate);
+    } else {
+        setCurrentProxyIndex(proxyIndex);
+    }
+
+    const QList<ClipboardItem> selection = selectedItems();
+    if (selection.isEmpty()) {
+        return;
+    }
+
+    const ClipboardItem item = selection.first();
     if (item.getName().isEmpty()) {
         return;
     }
 
     const bool dark = darkTheme_;
-
-    const ClipboardItem::ContentType contentType = item.getContentType();
-    const bool isFavorite = boardModel_->isFavorite(sourceRow);
-    const QList<QUrl> urls = item.getNormalizedUrls();
-    const bool canOpenFolder = contentType == ClipboardItem::File
-        && !urls.isEmpty()
-        && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) { return url.isLocalFile(); });
-    const bool canSaveToFile = supportsSaveToFile(contentType);
+    const bool multiSelection = selection.size() > 1;
 
     QMenu menu(this);
     applyMenuTheme(&menu);
-    menu.addAction(IconResolver::themedIcon(QStringLiteral("text_plain"), dark), plainTextPasteLabel(), [this]() {
-        const ClipboardItem *selectedItem = selectedByEnter();
-        if (selectedItem) {
-            emit plainTextPasteRequested(*selectedItem);
+    if (multiSelection) {
+        const QList<int> sourceRows = selectedSourceRows();
+        bool hasFavorite = false;
+        bool hasNonFavorite = false;
+        for (const int sourceRow : sourceRows) {
+            const bool favorite = boardModel_ && boardModel_->isFavorite(sourceRow);
+            hasFavorite = hasFavorite || favorite;
+            hasNonFavorite = hasNonFavorite || !favorite;
         }
-    });
-    menu.addAction(IconResolver::themedIcon(QStringLiteral("details"), dark), detailsLabel(), [this, proxyIndex]() {
-        setCurrentProxyIndex(proxyIndex);
-        const ClipboardItem *selectedItem = currentSelectedItem();
-        if (!selectedItem) {
-            return;
+
+        if (hasNonFavorite) {
+            menu.addAction(QIcon(QStringLiteral(":/resources/resources/star.svg")),
+                           favoriteActionLabel(false),
+                           [this, selection]() {
+                               applyFavoriteToItems(selection, true);
+                           });
         }
-        const QPair<int, int> sequenceInfo = displaySequenceForIndex(proxyIndex);
-        emit detailsRequested(*selectedItem, sequenceInfo.first, sequenceInfo.second);
-    });
-    menu.addAction(IconResolver::themedIcon(QStringLiteral("rename"), dark), aliasLabel(), [this, item]() {
-        openAliasDialogForItem(item);
-    });
-    if (ClipboardItemPreviewDialog::supportsPreview(item)) {
-        menu.addAction(IconResolver::themedIcon(QStringLiteral("preview"), dark), tr("Preview"), [this]() {
-            const ClipboardItem *selectedItem = currentSelectedItem();
+        if (hasFavorite) {
+            menu.addAction(QIcon(QStringLiteral(":/resources/resources/star_filled.svg")),
+                           favoriteActionLabel(true),
+                           [this, selection]() {
+                               applyFavoriteToItems(selection, false);
+                           });
+        }
+        if (category != MPasteSettings::STAR_CATEGORY_NAME) {
+            if (hasFavorite || hasNonFavorite) {
+                menu.addSeparator();
+            }
+            menu.addAction(QIcon(QStringLiteral(":/resources/resources/delete.svg")),
+                           deleteSelectedLabel(),
+                           [this, selection]() {
+                               removeItems(selection);
+                           });
+        }
+    } else {
+        const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+        const ClipboardItem::ContentType contentType = item.getContentType();
+        const bool isFavorite = boardModel_->isFavorite(sourceRow);
+        const QList<QUrl> urls = item.getNormalizedUrls();
+        const bool canOpenFolder = contentType == ClipboardItem::File
+            && !urls.isEmpty()
+            && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) { return url.isLocalFile(); });
+        const bool canSaveToFile = supportsSaveToFile(contentType);
+
+        menu.addAction(IconResolver::themedIcon(QStringLiteral("text_plain"), dark), plainTextPasteLabel(), [this]() {
+            const ClipboardItem *selectedItem = selectedByEnter();
             if (selectedItem) {
-                emit previewRequested(*selectedItem);
+                emit plainTextPasteRequested(*selectedItem);
             }
         });
-    }
-    if (canSaveToFile) {
-        menu.addAction(QIcon(QStringLiteral(":/resources/resources/save_black.svg")), saveItemLabel(), [this, proxyIndex]() {
+        menu.addAction(IconResolver::themedIcon(QStringLiteral("details"), dark), detailsLabel(), [this, proxyIndex]() {
             setCurrentProxyIndex(proxyIndex);
             const ClipboardItem *selectedItem = currentSelectedItem();
-            if (selectedItem) {
-                saveItemToFile(*selectedItem);
+            if (!selectedItem) {
+                return;
             }
+            const QPair<int, int> sequenceInfo = displaySequenceForIndex(proxyIndex);
+            emit detailsRequested(*selectedItem, sequenceInfo.first, sequenceInfo.second);
         });
-    }
-    if (canOpenFolder) {
-        menu.addAction(QIcon(QStringLiteral(":/resources/resources/files.svg")), openContainingFolderLabel(), [urls]() {
-            PlatformRelated::revealInFileManager(urls);
+        menu.addAction(IconResolver::themedIcon(QStringLiteral("rename"), dark), aliasLabel(), [this, item]() {
+            openAliasDialogForItem(item);
         });
-    }
-
-    const bool isPinned = item.isPinned();
-    menu.addAction(IconResolver::themedIcon(QStringLiteral("pin"), dark),
-                   pinActionLabel(isPinned),
-                   [this, item, isPinned]() {
-                       setItemPinned(item, !isPinned);
-                   });
-
-    menu.addSeparator();
-    menu.addAction(QIcon(isFavorite
-                         ? QStringLiteral(":/resources/resources/star_filled.svg")
-                         : QStringLiteral(":/resources/resources/star.svg")),
-                   favoriteActionLabel(isFavorite),
-                   [this, item, isFavorite]() {
-                       if (isFavorite) {
-                           setItemFavorite(item, false);
-                           emit itemUnstared(item);
-                       } else {
-                           setItemFavorite(item, true);
-                           emit itemStared(item);
-                       }
-                   });
-    menu.addAction(QIcon(QStringLiteral(":/resources/resources/delete.svg")), tr("Delete"), [this, item]() {
-        if (category == MPasteSettings::STAR_CATEGORY_NAME) {
-            emit itemUnstared(item);
-            return;
+        if (ClipboardItemPreviewDialog::supportsPreview(item)) {
+            menu.addAction(IconResolver::themedIcon(QStringLiteral("preview"), dark), tr("Preview"), [this]() {
+                const ClipboardItem *selectedItem = currentSelectedItem();
+                if (selectedItem) {
+                    emit previewRequested(*selectedItem);
+                }
+            });
         }
-        removeItemByContent(item);
-    });
+        if (canSaveToFile) {
+            menu.addAction(QIcon(QStringLiteral(":/resources/resources/save_black.svg")), saveItemLabel(), [this, proxyIndex]() {
+                setCurrentProxyIndex(proxyIndex);
+                const ClipboardItem *selectedItem = currentSelectedItem();
+                if (selectedItem) {
+                    saveItemToFile(*selectedItem);
+                }
+            });
+        }
+        if (canOpenFolder) {
+            menu.addAction(QIcon(QStringLiteral(":/resources/resources/files.svg")), openContainingFolderLabel(), [urls]() {
+                PlatformRelated::revealInFileManager(urls);
+            });
+        }
+
+        const bool isPinned = item.isPinned();
+        menu.addAction(IconResolver::themedIcon(QStringLiteral("pin"), dark),
+                       pinActionLabel(isPinned),
+                       [this, item, isPinned]() {
+                           setItemPinned(item, !isPinned);
+                       });
+
+        menu.addSeparator();
+        menu.addAction(QIcon(isFavorite
+                             ? QStringLiteral(":/resources/resources/star_filled.svg")
+                             : QStringLiteral(":/resources/resources/star.svg")),
+                       favoriteActionLabel(isFavorite),
+                       [this, item, isFavorite]() {
+                           if (isFavorite) {
+                               setItemFavorite(item, false);
+                               emit itemUnstared(item);
+                           } else {
+                               setItemFavorite(item, true);
+                               emit itemStared(item);
+                           }
+                       });
+        menu.addAction(QIcon(QStringLiteral(":/resources/resources/delete.svg")), deleteLabel(), [this, item]() {
+            if (category == MPasteSettings::STAR_CATEGORY_NAME) {
+                emit itemUnstared(item);
+                return;
+            }
+            removeItemByContent(item);
+        });
+    }
 
     menu.exec(listView_->viewport()->mapToGlobal(pos));
 }
@@ -1446,6 +1577,10 @@ void ScrollItemsWidget::setFirstVisibleItemSelected() {
         return;
     }
 
+    if (listView_->selectionModel() && !listView_->selectionModel()->selectedRows().isEmpty()) {
+        return;
+    }
+
     const QModelIndex current = currentProxyIndex();
     if (current.isValid() && current.model() == proxyModel_) {
         return;
@@ -1469,7 +1604,15 @@ void ScrollItemsWidget::applyFilters() {
     proxyModel_->setAsyncMatchedNames(asyncKeywordMatchedNames_);
     setFirstVisibleItemSelected();
     refreshContentWidthHint();
+    scheduleThumbnailUpdate();
     emit itemCountChanged(itemCountForDisplay());
+}
+
+void ScrollItemsWidget::updateSelectionState() {
+    if (selectedItemCount() > 1) {
+        hideHoverActionBar(false);
+    }
+    emit selectionStateChanged();
 }
 
 int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
@@ -1857,12 +2000,25 @@ QPair<int, int> ScrollItemsWidget::displaySequenceForIndex(const QModelIndex &pr
     return qMakePair(proxyIndex.row() + 1, proxyModel_->rowCount());
 }
 
+int ScrollItemsWidget::selectedItemCount() const {
+    return selectedSourceRows().size();
+}
+
+bool ScrollItemsWidget::hasMultipleSelectedItems() const {
+    return selectedItemCount() > 1;
+}
+
 int ScrollItemsWidget::selectedSourceRow() const {
     const QModelIndex proxyIndex = currentProxyIndex();
-    if (!proxyIndex.isValid() || !proxyModel_) {
-        return -1;
+    if (proxyIndex.isValid() && proxyModel_) {
+        return proxyModel_->mapToSource(proxyIndex).row();
     }
-    return proxyModel_->mapToSource(proxyIndex).row();
+
+    const QList<int> selectedRows = selectedSourceRows();
+    if (!selectedRows.isEmpty()) {
+        return selectedRows.first();
+    }
+    return -1;
 }
 
 const ClipboardItem *ScrollItemsWidget::cacheSelectedItem(int sourceRow) const {
@@ -2287,6 +2443,69 @@ QString ScrollItemsWidget::getCategory() const {
     return category;
 }
 
+void ScrollItemsWidget::removeItems(const QList<ClipboardItem> &items) {
+    if (!boardModel_ || items.isEmpty()) {
+        return;
+    }
+
+    QList<int> rowsToRemove;
+    for (const ClipboardItem &item : items) {
+        int row = boardModel_->rowForMatchingItem(item);
+        if (row < 0) {
+            row = boardModel_->rowForFingerprint(item.fingerprint());
+        }
+        if (row >= 0 && !rowsToRemove.contains(row)) {
+            rowsToRemove.append(row);
+        }
+    }
+
+    if (rowsToRemove.isEmpty()) {
+        return;
+    }
+
+    std::sort(rowsToRemove.begin(), rowsToRemove.end(), std::greater<int>());
+    for (const int row : rowsToRemove) {
+        if (boardService_) {
+            boardService_->deleteItemByPath(boardService_->filePathForItem(boardModel_->itemAt(row)));
+        }
+        boardModel_->removeItemAt(row);
+    }
+
+    setFirstVisibleItemSelected();
+    maybeLoadMoreItems();
+    refreshContentWidthHint();
+    emit itemCountChanged(itemCountForDisplay());
+}
+
+void ScrollItemsWidget::applyFavoriteToItems(const QList<ClipboardItem> &items, bool favorite) {
+    if (!boardModel_ || items.isEmpty()) {
+        return;
+    }
+
+    for (const ClipboardItem &item : items) {
+        int row = boardModel_->rowForMatchingItem(item);
+        if (row < 0) {
+            row = boardModel_->rowForFingerprint(item.fingerprint());
+        }
+        if (row < 0) {
+            continue;
+        }
+
+        const ClipboardItem currentItem = boardModel_->itemAt(row);
+        const bool isFavorite = boardModel_->isFavorite(row);
+        if (isFavorite == favorite) {
+            continue;
+        }
+
+        setItemFavorite(currentItem, favorite);
+        if (favorite) {
+            emit itemStared(currentItem);
+        } else {
+            emit itemUnstared(currentItem);
+        }
+    }
+}
+
 void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
     int row = boardModel_->rowForMatchingItem(item);
     if (row < 0) {
@@ -2448,6 +2667,16 @@ bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
     }
 
     if (event->type() == QEvent::KeyPress) {
+        const auto *keyEvent = static_cast<QKeyEvent *>(event);
+        if (keyEvent->key() == Qt::Key_Delete && selectedItemCount() > 0) {
+            const QList<ClipboardItem> selection = selectedItems();
+            if (category == MPasteSettings::STAR_CATEGORY_NAME) {
+                applyFavoriteToItems(selection, false);
+            } else {
+                removeItems(selection);
+            }
+            return true;
+        }
         QGuiApplication::sendEvent(parent(), event);
         return true;
     }

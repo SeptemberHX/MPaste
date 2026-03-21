@@ -801,6 +801,11 @@ void MPasteWidget::setupConnections() {
                 this->updateItemCount(itemCount);
             }
         });
+        connect(boardWidget, &ScrollItemsWidget::selectionStateChanged, this, [this, boardWidget]() {
+            if (ui_.buttonGroup->checkedButton()->property("category").toString() == boardWidget->getCategory()) {
+                this->updateItemCount(boardWidget->getItemCount());
+            }
+        });
 
         connect(boardWidget, &ScrollItemsWidget::itemStared, this, [this](const ClipboardItem &item) {
             ClipboardItem updatedItem(item);
@@ -1133,6 +1138,10 @@ void MPasteWidget::handleEscapeKey() {
 }
 
 void MPasteWidget::handleEnterKey(bool plainText) {
+    if (currItemsWidget()->hasMultipleSelectedItems()) {
+        return;
+    }
+
     const ClipboardItem *selectedItem = currItemsWidget()->selectedByEnter();
     if (selectedItem && setClipboard(*selectedItem, plainText)) {
         hideAndPaste();
@@ -1142,6 +1151,10 @@ void MPasteWidget::handleEnterKey(bool plainText) {
 void MPasteWidget::handlePreviewKey() {
     if (ui_.previewDialog && ui_.previewDialog->isVisible()) {
         ui_.previewDialog->reject();
+        return;
+    }
+
+    if (currItemsWidget()->hasMultipleSelectedItems()) {
         return;
     }
 
@@ -1461,7 +1474,10 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
 }
 
 void MPasteWidget::updateItemCount(int itemCount) {
-    ui_.ui->countArea->setText(QString::number(itemCount));
+    const int selectedCount = currItemsWidget() ? currItemsWidget()->selectedItemCount() : 0;
+    ui_.ui->countArea->setText(selectedCount > 1
+        ? QStringLiteral("%1/%2").arg(selectedCount).arg(itemCount)
+        : QString::number(itemCount));
     ui_.ui->countArea->adjustSize();
     ui_.ui->countArea->setFixedWidth(qMax(30, ui_.ui->countArea->sizeHint().width()));
     ui_.ui->countArea->updateGeometry();
