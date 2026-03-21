@@ -1,7 +1,7 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
-// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer height tweak + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line + pinned badge + rich text fill).
+// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer height tweak + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line + pinned badge + rich text fill + text-first rich-text preview).
 // note: Adjusted card palette for dark theme.
 #include "ClipboardCardDelegate.h"
 
@@ -1090,7 +1090,12 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             if (richTextRect.width() <= 0 || richTextRect.height() <= 0) {
                 richTextRect = bodyRect;
             }
-            if (!card.thumbnail.isNull()) {
+            QFont previewFont = painter->font();
+            previewFont.setPointSize(qMax(9, 10 * scale / 100));
+            const QString richTextPreview = previewTextForCard(card);
+            if (!richTextPreview.trimmed().isEmpty()) {
+                drawWrappedText(painter, richTextRect, richTextPreview, previewFont, bodyTextColor);
+            } else if (!card.thumbnail.isNull()) {
                 drawCoverPixmap(painter, richTextRect, card.thumbnail, card.name, card.imageSize);
             } else {
                 drawLoadingPlaceholder(painter, richTextRect, scale, darkTheme, loadingPhase_);

@@ -795,6 +795,8 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
         ClipboardItem loaded = saver.loadFromFileLight(filePath);
         ClipboardItem preparedItem = loaded;
         bool generatedThumbnail = false;
+        bool refreshedRichText = false;
+        const QString loadedNormalizedText = loaded.getNormalizedText();
         if (!loaded.getName().isEmpty()) {
             const ClipboardItem::ContentType type = loaded.getContentType();
             const bool shouldRebuild = type == ClipboardItem::RichText
@@ -803,26 +805,43 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                 ClipboardItem fullItem = saver.loadFromFile(filePath);
                 if (!fullItem.getName().isEmpty()) {
                     preparedItem = prepareItemForDisplayAndSave(fullItem);
-                    generatedThumbnail = !preparedItem.thumbnail().isNull();
+                    generatedThumbnail = !preparedItem.thumbnail().isNull()
+                        && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
+                    refreshedRichText = type == ClipboardItem::RichText;
                 }
             }
         }
         const QPixmap thumbnail = preparedItem.thumbnail();
+        const bool shouldPersistPreparedItem = generatedThumbnail
+            || (refreshedRichText && preparedItem.getNormalizedText() != loadedNormalizedText);
 
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, preparedItem, thumbnail, generatedThumbnail]() {
+            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, preparedItem, thumbnail, generatedThumbnail, refreshedRichText, shouldPersistPreparedItem]() {
                 if (!guard) {
                     return;
                 }
-                if (generatedThumbnail && !preparedItem.getName().isEmpty()) {
-                    guard->saveItem(preparedItem);
+                if ((generatedThumbnail || refreshedRichText) && !preparedItem.getName().isEmpty()) {
+                    if (shouldPersistPreparedItem) {
+                        guard->saveItem(preparedItem);
+                        ClipboardItem reloaded = guard->loadItemLight(guard->filePathForName(expectedName));
+                        if (!reloaded.getName().isEmpty()) {
+                            emit guard->pendingItemReady(expectedName, reloaded);
+                            return;
+                        }
+                    }
+                    emit guard->pendingItemReady(expectedName, preparedItem);
+                    return;
+                }
+                if (!thumbnail.isNull()) {
+                    emit guard->thumbnailReady(expectedName, thumbnail);
+                } else {
                     ClipboardItem reloaded = guard->loadItemLight(guard->filePathForName(expectedName));
                     if (!reloaded.getName().isEmpty()) {
                         emit guard->pendingItemReady(expectedName, reloaded);
                         return;
                     }
+                    emit guard->thumbnailReady(expectedName, thumbnail);
                 }
-                emit guard->thumbnailReady(expectedName, thumbnail);
             }, Qt::QueuedConnection);
         }
     });

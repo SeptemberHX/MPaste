@@ -1521,6 +1521,7 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
         return;
     }
 
+    pendingThumbnailNames_.remove(expectedName);
     const int row = boardModel_->rowForName(expectedName);
     if (row >= 0) {
         boardModel_->updateItem(row, item);
