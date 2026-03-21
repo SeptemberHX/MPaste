@@ -71,6 +71,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `MPasteWidget` 和 `ScrollItemsWidget` 现在会输出启动、窗口 show、延迟历史加载和后台条目补全的阶段耗时日志，方便定位卡顿发生在哪一步。
 - `MPasteWidget` 现在会在监控器首次观察到有效复制动作时立即播放提示音，不再等待后续 WPS settle / 抓图完成。
 - `ScrollItemsWidget` 会把纯文本粘贴请求继续转发给主窗口。
+- `ScrollItemsWidget` 现在会在主窗口卡片右键菜单中开放保存功能：图片导出为图片文件、富文本导出为 HTML、纯文本导出为 TXT，其他类型暂不开放保存。
 - `ScrollItemsWidget` 现在会先快速插入轻量条目，再在后台线程补做缩略图和保存落盘，减少复制大图时卡住界面。
 - `ClipboardItemDetailsDialog` 现在提供更完整的条目检查视图，可查看归一化结果与原始 MIME 数据。
 - `ClipboardItemDetailsDialog` 现在锁定了检查器宽度，并让概览页长链接/长标题优先在窗口内换行，避免详情窗口被内容横向撑开。

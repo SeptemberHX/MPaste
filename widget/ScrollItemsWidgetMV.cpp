@@ -1,25 +1,30 @@
 // input: Depends on ScrollItemsWidget.h, ClipboardBoardService, Qt model/view APIs, and delegate-based card painting.
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
-// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar).
+// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export).
 // note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, and loading overlay.
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QItemSelectionModel>
 #include <QListView>
 #include <QLabel>
 #include <QLocale>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
+#include <QSaveFile>
 #include <QScrollBar>
 #include <QScroller>
 #include <QShowEvent>
+#include <QStandardPaths>
 #include <QToolButton>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QGraphicsOpacityEffect>
-#include <QFileInfo>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -256,6 +261,12 @@ bool looksBrokenTranslation(const QString &text) {
     return suspiciousCount >= qMax(2, text.size() / 2);
 }
 
+bool prefersChineseUi() {
+    const QLocale locale = QLocale::system();
+    return locale.language() == QLocale::Chinese
+        || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive);
+}
+
 QString plainTextPasteLabel() {
     QString label = QObject::tr("Paste as Plain Text");
     const QLocale locale = QLocale::system();
@@ -328,6 +339,148 @@ QString pinActionLabel(bool pinned) {
         return key;
     }
     return label;
+}
+
+QString saveItemLabel() {
+    QString label = QObject::tr("Save");
+    if (label == QLatin1String("Save") || looksBrokenTranslation(label)) {
+        return prefersChineseUi() ? QString::fromUtf16(u"\u4FDD\u5B58") : QStringLiteral("Save");
+    }
+    return label;
+}
+
+QString saveDialogTitle(ClipboardItem::ContentType type) {
+    switch (type) {
+        case ClipboardItem::Image:
+            return prefersChineseUi() ? QString::fromUtf16(u"\u4FDD\u5B58\u56FE\u7247") : QStringLiteral("Save Image");
+        case ClipboardItem::RichText:
+            return prefersChineseUi() ? QString::fromUtf16(u"\u4FDD\u5B58 HTML") : QStringLiteral("Save HTML");
+        case ClipboardItem::Text:
+            return prefersChineseUi() ? QString::fromUtf16(u"\u4FDD\u5B58\u6587\u672C") : QStringLiteral("Save Text");
+        default:
+            return prefersChineseUi() ? QString::fromUtf16(u"\u4FDD\u5B58") : QStringLiteral("Save");
+    }
+}
+
+QString saveFailedTitle() {
+    return prefersChineseUi() ? QString::fromUtf16(u"\u4FDD\u5B58\u5931\u8D25") : QStringLiteral("Save Failed");
+}
+
+QString saveFailedMessage(const QString &reason) {
+    if (prefersChineseUi()) {
+        return reason.isEmpty()
+            ? QString::fromUtf16(u"\u4FDD\u5B58\u6587\u4EF6\u5931\u8D25\u3002")
+            : QString::fromUtf16(u"\u4FDD\u5B58\u6587\u4EF6\u5931\u8D25\u3002\n%1").arg(reason);
+    }
+    return reason.isEmpty()
+        ? QStringLiteral("Failed to save the file.")
+        : QStringLiteral("Failed to save the file.\n%1").arg(reason);
+}
+
+bool supportsSaveToFile(ClipboardItem::ContentType type) {
+    return type == ClipboardItem::Text
+        || type == ClipboardItem::RichText
+        || type == ClipboardItem::Image;
+}
+
+QString sanitizeExportBaseName(QString baseName) {
+    static const QString invalidChars = QStringLiteral("<>:\"/\\|?*");
+    for (QChar &ch : baseName) {
+        if (ch.unicode() < 32 || invalidChars.contains(ch)) {
+            ch = QLatin1Char(' ');
+        }
+    }
+
+    baseName = baseName.simplified();
+    while (!baseName.isEmpty()
+           && (baseName.endsWith(QLatin1Char(' ')) || baseName.endsWith(QLatin1Char('.')))) {
+        baseName.chop(1);
+    }
+    return baseName;
+}
+
+QString exportBaseNameForItem(const ClipboardItem &item) {
+    QString baseName = item.getAlias().trimmed();
+    if (baseName.isEmpty()) {
+        baseName = item.getTitle().trimmed();
+    }
+    if (baseName.isEmpty()) {
+        baseName = item.getNormalizedText().section(QLatin1Char('\n'), 0, 0).trimmed();
+    }
+    if (baseName.isEmpty()) {
+        baseName = item.getName().trimmed();
+    }
+
+    baseName = sanitizeExportBaseName(baseName);
+    if (baseName.size() > 64) {
+        baseName = baseName.left(64).trimmed();
+    }
+    if (!baseName.isEmpty()) {
+        return baseName;
+    }
+
+    const QDateTime timestamp = item.getTime().isValid() ? item.getTime() : QDateTime::currentDateTime();
+    return QStringLiteral("clipboard-%1").arg(timestamp.toString(QStringLiteral("yyyyMMdd-HHmmss")));
+}
+
+QString defaultExportDirectory() {
+    const QString documentsDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    return documentsDir.isEmpty() ? QDir::homePath() : documentsDir;
+}
+
+QString suggestedExportPath(const ClipboardItem &item, const QString &suffix) {
+    return QDir(defaultExportDirectory()).filePath(exportBaseNameForItem(item) + suffix);
+}
+
+QString ensureFileSuffix(const QString &filePath, const QString &suffix) {
+    if (filePath.isEmpty() || !QFileInfo(filePath).suffix().isEmpty()) {
+        return filePath;
+    }
+    return filePath + suffix;
+}
+
+QString imageSaveFilters() {
+    return QStringLiteral("PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;BMP Image (*.bmp);;WebP Image (*.webp);;All Files (*)");
+}
+
+QString defaultImageSuffixForFilter(const QString &selectedFilter) {
+    const QString lowerFilter = selectedFilter.toLower();
+    if (lowerFilter.contains(QStringLiteral("*.jpg")) || lowerFilter.contains(QStringLiteral("*.jpeg"))) {
+        return QStringLiteral(".jpg");
+    }
+    if (lowerFilter.contains(QStringLiteral("*.bmp"))) {
+        return QStringLiteral(".bmp");
+    }
+    if (lowerFilter.contains(QStringLiteral("*.webp"))) {
+        return QStringLiteral(".webp");
+    }
+    return QStringLiteral(".png");
+}
+
+bool writeUtf8File(const QString &filePath, const QString &contents, QString *errorMessage) {
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+
+    const QByteArray payload = contents.toUtf8();
+    if (file.write(payload) != payload.size()) {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+
+    if (!file.commit()) {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+    return true;
 }
 
 class EdgeFadeOverlay final : public QWidget {
@@ -839,6 +992,86 @@ void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
     emit aliasChanged(updated.fingerprint(), updated.getAlias());
 }
 
+void ScrollItemsWidget::saveItemToFile(const ClipboardItem &item) {
+    const ClipboardItem::ContentType contentType = item.getContentType();
+    if (!supportsSaveToFile(contentType)) {
+        return;
+    }
+
+    QString selectedFilter;
+    QString filePath;
+    switch (contentType) {
+        case ClipboardItem::Image:
+            selectedFilter = QStringLiteral("PNG Image (*.png)");
+            filePath = QFileDialog::getSaveFileName(this,
+                                                    saveDialogTitle(contentType),
+                                                    suggestedExportPath(item, QStringLiteral(".png")),
+                                                    imageSaveFilters(),
+                                                    &selectedFilter);
+            filePath = ensureFileSuffix(filePath, defaultImageSuffixForFilter(selectedFilter));
+            break;
+        case ClipboardItem::RichText:
+            filePath = QFileDialog::getSaveFileName(this,
+                                                    saveDialogTitle(contentType),
+                                                    suggestedExportPath(item, QStringLiteral(".html")),
+                                                    QStringLiteral("HTML Files (*.html *.htm);;All Files (*)"));
+            filePath = ensureFileSuffix(filePath, QStringLiteral(".html"));
+            break;
+        case ClipboardItem::Text:
+            filePath = QFileDialog::getSaveFileName(this,
+                                                    saveDialogTitle(contentType),
+                                                    suggestedExportPath(item, QStringLiteral(".txt")),
+                                                    QStringLiteral("Text Files (*.txt);;All Files (*)"));
+            filePath = ensureFileSuffix(filePath, QStringLiteral(".txt"));
+            break;
+        default:
+            return;
+    }
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    QString errorMessage;
+    bool success = false;
+    switch (contentType) {
+        case ClipboardItem::Text:
+            success = writeUtf8File(filePath, item.getNormalizedText(), &errorMessage);
+            break;
+        case ClipboardItem::RichText: {
+            const QMimeData *mimeData = item.getMimeData();
+            const QString html = mimeData ? mimeData->html() : QString();
+            if (mimeData && mimeData->hasHtml()) {
+                success = writeUtf8File(filePath, html, &errorMessage);
+            } else {
+                errorMessage = prefersChineseUi()
+                    ? QString::fromUtf16(u"\u5F53\u524D\u6761\u76EE\u6CA1\u6709\u53EF\u4FDD\u5B58\u7684 HTML \u5185\u5BB9\u3002")
+                    : QStringLiteral("The current item does not contain savable HTML content.");
+            }
+            break;
+        }
+        case ClipboardItem::Image: {
+            item.getMimeData();
+            const QPixmap pixmap = item.getImage();
+            if (!pixmap.isNull()) {
+                success = pixmap.save(filePath);
+            }
+            if (!success && errorMessage.isEmpty()) {
+                errorMessage = prefersChineseUi()
+                    ? QString::fromUtf16(u"\u65E0\u6CD5\u5C06\u56FE\u50CF\u5199\u5165\u76EE\u6807\u6587\u4EF6\u3002")
+                    : QStringLiteral("Unable to write the image to the target file.");
+            }
+            break;
+        }
+        default:
+            break;
+    }
+
+    if (!success) {
+        QMessageBox::warning(this, saveFailedTitle(), saveFailedMessage(errorMessage));
+    }
+}
+
 void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
     if (!boardModel_) {
         return;
@@ -1053,11 +1286,13 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
 
     const bool dark = darkTheme_;
 
+    const ClipboardItem::ContentType contentType = item.getContentType();
     const bool isFavorite = boardModel_->isFavorite(sourceRow);
     const QList<QUrl> urls = item.getNormalizedUrls();
-    const bool canOpenFolder = item.getContentType() == ClipboardItem::File
+    const bool canOpenFolder = contentType == ClipboardItem::File
         && !urls.isEmpty()
         && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) { return url.isLocalFile(); });
+    const bool canSaveToFile = supportsSaveToFile(contentType);
 
     QMenu menu(this);
     applyMenuTheme(&menu);
@@ -1084,6 +1319,15 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
             const ClipboardItem *selectedItem = currentSelectedItem();
             if (selectedItem) {
                 emit previewRequested(*selectedItem);
+            }
+        });
+    }
+    if (canSaveToFile) {
+        menu.addAction(QIcon(QStringLiteral(":/resources/resources/save_black.svg")), saveItemLabel(), [this, proxyIndex]() {
+            setCurrentProxyIndex(proxyIndex);
+            const ClipboardItem *selectedItem = currentSelectedItem();
+            if (selectedItem) {
+                saveItemToFile(*selectedItem);
             }
         });
     }

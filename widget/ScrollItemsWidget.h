@@ -1,7 +1,7 @@
 // input: Depends on Qt Widgets, ClipboardItem data, persistence service, and item widgets.
 // output: Exposes one history board with lazy loading, filtering, dedup indexing, and paste signals.
 // pos: Widget-layer horizontal board declaration for clipboard/favorites views.
-// update: If I change, update this header block and my folder README.md.
+// update: If I change, update this header block and my folder README.md (main-card context menu save/export).
 // note: Added theme application entry point, alias sync hooks, on-demand thumbnail loading with prefetch, and loading overlay.
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
@@ -138,6 +138,7 @@ private:
     int pinnedInsertRow() const;
     int unpinnedInsertRowForItem(const ClipboardItem &item, int excludeRow) const;
     void setItemPinned(const ClipboardItem &item, bool pinned);
+    void saveItemToFile(const ClipboardItem &item);
     QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
     int selectedSourceRow() const;
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;
