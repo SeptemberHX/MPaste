@@ -1,7 +1,7 @@
 // input: Depends on Qt mime/image/text primitives and raw clipboard payloads from the system.
 // output: Exposes a comparable clipboard item with cached search text, alias + pin metadata, and lightweight content fingerprint + image snapshot hints.
 // pos: Data-layer core clipboard model used by persistence, filtering, dedup, and rendering code.
-// update: If I change, update this header block and my folder README.md.
+// update: If I change, update this header block and my folder README.md (data-layer preview kind for card rendering).
 #ifndef MPASTE_CLIPBOARDITEM_H
 #define MPASTE_CLIPBOARDITEM_H
 
@@ -41,6 +41,11 @@ public:
     static constexpr ContentType Color = ::Color;
     static constexpr ContentType Office = ::Office;
 
+    enum PreviewKind {
+        TextPreview = 0,
+        VisualPreview
+    };
+
 private:
     QString name_;
     QPixmap icon_;
@@ -68,8 +73,79 @@ private:
     quint64 mimeDataFileOffset_ = 0;
     bool mimeDataLoaded_ = true;
     mutable ContentType cachedContentType_ = Text;
+    mutable PreviewKind cachedPreviewKind_ = TextPreview;
     mutable QString cachedNormalizedText_;
     mutable QList<QUrl> cachedNormalizedUrls_;
+
+    static bool hasMeaningfulPreviewText(const QString &text) {
+        const QString trimmed = text.trimmed();
+        return !trimmed.isEmpty() && !ContentClassifier::isImageLikeText(trimmed);
+    }
+
+    static PreviewKind defaultPreviewKindForType(ContentType type) {
+        switch (type) {
+            case Image:
+            case Office:
+            case Color:
+            case Link:
+                return VisualPreview;
+            case RichText:
+            case Text:
+            case File:
+            case All:
+                break;
+        }
+        return TextPreview;
+    }
+
+    PreviewKind detectLightPreviewKind() const {
+        if (cachedContentType_ != RichText) {
+            return defaultPreviewKindForType(cachedContentType_);
+        }
+
+        if (hasMeaningfulPreviewText(cachedNormalizedText_)) {
+            return TextPreview;
+        }
+
+        if (!thumbnail_.isNull()) {
+            return VisualPreview;
+        }
+
+        if (mimeData_ && mimeData_->hasHtml()) {
+            const QString html = mimeData_->html();
+            if (!ContentClassifier::firstHtmlImageSource(html).isEmpty()
+                || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive)
+                || hasFastImagePayload()) {
+                return VisualPreview;
+            }
+        }
+
+        return TextPreview;
+    }
+
+    PreviewKind detectFullPreviewKind() const {
+        const ContentType type = getContentType();
+        if (type != RichText) {
+            return defaultPreviewKindForType(type);
+        }
+
+        const QString normalizedText = getNormalizedText();
+        if (hasMeaningfulPreviewText(normalizedText)) {
+            return TextPreview;
+        }
+
+        if (mimeData_ && mimeData_->hasHtml()) {
+            const QString html = mimeData_->html();
+            if (!ContentClassifier::firstHtmlImageSource(html).isEmpty()
+                || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive)
+                || hasFastImagePayload()
+                || hasDecodableImage()) {
+                return VisualPreview;
+            }
+        }
+
+        return TextPreview;
+    }
 
     static QString windowsDrivePathFromUrl(const QUrl &url) {
         if (!url.isValid() || url.isLocalFile()) {
@@ -832,6 +908,7 @@ public:
         item.cachedContentType_ = mimeData
             ? ContentClassifier::classifyLight(mimeData, item.cachedNormalizedText_, item.cachedNormalizedUrls_)
             : item.detectLightContentType();
+        item.cachedPreviewKind_ = item.detectLightPreviewKind();
         item.mimeDataLoaded_ = false;
         return item;
     }
@@ -867,6 +944,7 @@ public:
         mimeDataFileOffset_ = other.mimeDataFileOffset_;
         mimeDataLoaded_ = other.mimeDataLoaded_;
         cachedContentType_ = other.cachedContentType_;
+        cachedPreviewKind_ = other.cachedPreviewKind_;
         cachedNormalizedText_ = other.cachedNormalizedText_;
         cachedNormalizedUrls_ = other.cachedNormalizedUrls_;
     }
@@ -896,6 +974,7 @@ public:
             mimeDataFileOffset_ = other.mimeDataFileOffset_;
             mimeDataLoaded_ = other.mimeDataLoaded_;
             cachedContentType_ = other.cachedContentType_;
+            cachedPreviewKind_ = other.cachedPreviewKind_;
             cachedNormalizedText_ = other.cachedNormalizedText_;
             cachedNormalizedUrls_ = other.cachedNormalizedUrls_;
 
@@ -1164,6 +1243,12 @@ public:
     QByteArray imagePayloadBytesFast() const { return extractFastImagePayloadBytes(); }
 
     QString getHtml() const { return mimeData_ ? mimeData_->html() : QString(); }
+    PreviewKind getPreviewKind() const {
+        if (!mimeDataLoaded_) {
+            return cachedPreviewKind_;
+        }
+        return detectFullPreviewKind();
+    }
     QList<QUrl> getUrls() const { return mimeData_ ? mimeData_->urls() : QList<QUrl>(); }
     QColor getColor() const {
         return mimeData_ && mimeData_->hasColor()
@@ -1204,6 +1289,10 @@ public:
         cachedContentType_ = type;
         cachedNormalizedText_ = normText;
         cachedNormalizedUrls_ = normUrls;
+        cachedPreviewKind_ = detectLightPreviewKind();
+        if (cachedContentType_ == RichText && cachedPreviewKind_ == TextPreview) {
+            thumbnail_ = QPixmap();
+        }
     }
 
     // Implemented in LocalSaver.cpp to avoid circular dependency

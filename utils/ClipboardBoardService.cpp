@@ -2,7 +2,7 @@
 // output: Implements board persistence, deferred loading, thumbnail processing, and keyword search routines.
 // pos: utils layer board service implementation.
 // update: If I change, update this header block and my folder README.md.
-// note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, trims rich-text margins, and backfills missing on-disk thumbnails on demand.
+// note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, respects data-layer preview kind for rich text, trims rich-text margins, and backfills missing on-disk thumbnails on demand.
 #include "ClipboardBoardService.h"
 
 #include <QBuffer>
@@ -433,13 +433,21 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
 
 ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {
     ClipboardItem item(source);
+    if (item.getContentType() == ClipboardItem::RichText
+        && item.getPreviewKind() == ClipboardItem::TextPreview
+        && item.hasThumbnail()) {
+        item.setThumbnail(QPixmap());
+    }
+
     if (!item.hasThumbnail() && (item.getContentType() == ClipboardItem::Image
                                  || item.getContentType() == ClipboardItem::Office)) {
         const QPixmap thumbnail = buildCardThumbnail(item);
         if (!thumbnail.isNull()) {
             item.setThumbnail(thumbnail);
         }
-    } else if (!item.hasThumbnail() && item.getContentType() == ClipboardItem::RichText) {
+    } else if (!item.hasThumbnail()
+               && item.getContentType() == ClipboardItem::RichText
+               && item.getPreviewKind() == ClipboardItem::VisualPreview) {
         const QPixmap thumbnail = buildRichTextThumbnail(item);
         if (!thumbnail.isNull()) {
             item.setThumbnail(thumbnail);
@@ -677,13 +685,16 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
     }
 
     const ClipboardItem::ContentType contentType = item.getContentType();
+    const ClipboardItem::PreviewKind previewKind = item.getPreviewKind();
     const ClipboardItem baseItem = item;
     const QByteArray imageBytes = (contentType == ClipboardItem::Image
             || contentType == ClipboardItem::Office
-            || contentType == ClipboardItem::RichText)
+            || (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview))
         ? item.imagePayloadBytesFast()
         : QByteArray();
-    const QString richHtml = contentType == ClipboardItem::RichText ? item.getHtml() : QString();
+    const QString richHtml = (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview)
+        ? item.getHtml()
+        : QString();
     const QSize imageSize = item.isMimeDataLoaded()
         && (contentType == ClipboardItem::Image || contentType == ClipboardItem::Office)
         ? item.getImagePixelSize()
@@ -694,7 +705,7 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
     const int itemScale = MPasteSettings::getInst()->getItemScale();
 
     QPointer<ClipboardBoardService> guard(this);
-    QThread *thread = QThread::create([guard, expectedName, contentType, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
+    QThread *thread = QThread::create([guard, expectedName, contentType, previewKind, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
         PendingItemProcessingResult result;
         QByteArray resolvedImageBytes = imageBytes;
         QString resolvedHtml = richHtml;
@@ -702,15 +713,15 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             && !sourceFilePath.isEmpty()
             && (contentType == ClipboardItem::Image
                 || contentType == ClipboardItem::Office
-                || contentType == ClipboardItem::RichText)) {
+                || (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview))) {
             QString htmlPayload;
             QByteArray imagePayload;
             LocalSaver::loadMimePayloads(sourceFilePath,
                                          mimeOffset,
-                                         contentType == ClipboardItem::RichText ? &htmlPayload : nullptr,
+                                         (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview) ? &htmlPayload : nullptr,
                                          (contentType == ClipboardItem::Image
-                                             || contentType == ClipboardItem::Office
-                                             || contentType == ClipboardItem::RichText) ? &imagePayload : nullptr);
+                                            || contentType == ClipboardItem::Office
+                                            || (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview)) ? &imagePayload : nullptr);
             if (resolvedHtml.isEmpty()) {
                 resolvedHtml = htmlPayload;
             }
@@ -731,7 +742,9 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                     .arg(result.thumbnailImage.height())
                     .arg(result.thumbnailImage.devicePixelRatio(), 0, 'f', 2);
             }
-        } else if (contentType == ClipboardItem::RichText && !resolvedHtml.isEmpty()) {
+        } else if (contentType == ClipboardItem::RichText
+                   && previewKind == ClipboardItem::VisualPreview
+                   && !resolvedHtml.isEmpty()) {
             result.thumbnailImage = buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
         }
 
@@ -799,7 +812,7 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
         const QString loadedNormalizedText = loaded.getNormalizedText();
         if (!loaded.getName().isEmpty()) {
             const ClipboardItem::ContentType type = loaded.getContentType();
-            const bool shouldRebuild = type == ClipboardItem::RichText
+            const bool shouldRebuild = (type == ClipboardItem::RichText && loaded.getPreviewKind() == ClipboardItem::VisualPreview)
                 || ((type == ClipboardItem::Image || type == ClipboardItem::Office) && loaded.thumbnail().isNull());
             if (shouldRebuild) {
                 ClipboardItem fullItem = saver.loadFromFile(filePath);

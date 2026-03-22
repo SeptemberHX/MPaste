@@ -58,6 +58,8 @@ update: 修改本目录文件时，同步更新本 README。
 - ClipboardBoardService now supports async thumbnail reads for visible-only UI loading.
 - ClipboardBoardService now regenerates and persists visible rich-text thumbnails during on-demand thumbnail fetches, and backfills missing image thumbnails, so filtered/search results do not get stuck on loading placeholders and old single-line rich-text captures can self-heal.
 - Text-only rich-text thumbnails now keep their natural layout instead of trimming-and-cover-scaling a tiny text fragment to fill the whole card.
+- ClipboardBoardService now trusts `ClipboardItem::PreviewKind` when deciding whether rich text needs visual thumbnail work, reducing duplicated preview policy in the service layer.
+- Text-preview rich-text items now discard persisted thumbnails during light-load/prepare paths so unused snapshots do not accumulate in memory.
 - Thumbnail prefetch count is now configurable via settings.
 
 - MPasteSettings now persists a configurable save directory for external sync tools.
