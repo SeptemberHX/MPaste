@@ -17,6 +17,7 @@
 #include <QPixmap>
 
 #include <memory>
+#include <functional>
 
 #include "data/ClipboardItem.h"
 
@@ -46,6 +47,7 @@ public:
     bool deferredLoadActive() const;
 
     void refreshIndex();
+    void startAsyncLoad(int initialBatchSize, int deferredBatchSize);
     void loadNextBatch(int batchSize);
     void ensureAllItemsLoaded(int batchSize);
 
@@ -61,6 +63,7 @@ public:
     QString filePathForItem(const ClipboardItem &item) const;
     QString filePathForName(const QString &name) const;
     ClipboardItem loadItemLight(const QString &filePath);
+    QSet<QByteArray> loadAllFingerprints();
     void notifyItemAdded();
     void trimExpiredPendingItems(const QDateTime &cutoff);
     int maintainPreviewCache(PreviewCacheMaintenanceMode mode);
@@ -86,16 +89,22 @@ private slots:
     void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchPayloads);
 
 private:
+    QThread *startTrackedThread(const std::function<void()> &task);
+    void trackExclusiveThread(QThread *thread, QThread **slot);
+    void startRawReadBatch(int batchSize);
+    void applyPendingFileIndex(const QStringList &filePaths, int initialBatchSize, int deferredBatchSize, quint64 token);
     void checkSaveDir();
     void updateTotalItemCount(int total);
     void decrementTotalItemCount();
     void scheduleDeferredLoadBatch();
     void processDeferredLoadedItems();
     void waitForDeferredRead();
+    void waitForIndexRefresh();
 
     QString category_;
     std::unique_ptr<LocalSaver> saver_;
     QTimer *deferredLoadTimer_ = nullptr;
+    QThread *indexRefreshThread_ = nullptr;
     QThread *deferredLoadThread_ = nullptr;
     QThread *keywordSearchThread_ = nullptr;
     QList<QThread *> processingThreads_;
@@ -103,6 +112,7 @@ private:
     QList<QPair<QString, QByteArray>> deferredLoadedItems_;
     int totalItemCount_ = 0;
     int deferredBatchSize_ = 0;
+    quint64 asyncLoadToken_ = 0;
     bool deferredLoadActive_ = false;
     bool visibleHint_ = false;
 };

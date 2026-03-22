@@ -73,6 +73,10 @@ private:
     void initSound();
     void initMenu();
     void setupConnections();
+    AboutWidget *ensureAboutWidget();
+    ClipboardItemDetailsDialog *ensureDetailsDialog();
+    ClipboardItemPreviewDialog *ensurePreviewDialog();
+    MPasteSettingsWidget *ensureSettingsWidget();
     void applyTheme(bool dark);
     void syncSoundOutputDevice();
     void rebuildSoundPlaybackChain(const QAudioDevice &device);
@@ -82,6 +86,7 @@ private:
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
     void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
+    void scheduleStartupWarmup();
     void reloadHistoryBoards();
     void runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheAction action);
 
@@ -143,6 +148,11 @@ private:
         bool pendingReload = false;
         qint64 suppressReloadUntilMs = 0;
     } sync_;
+
+    struct {
+        bool startupWarmupScheduled = false;
+        bool startupWarmupCompleted = false;
+    } loading_;
 
     struct {
         QMediaPlayer *player = nullptr;

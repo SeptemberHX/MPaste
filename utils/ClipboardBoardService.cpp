@@ -490,6 +490,9 @@ ClipboardBoardService::~ClipboardBoardService() {
     if (deferredLoadTimer_) {
         deferredLoadTimer_->stop();
     }
+    if (indexRefreshThread_) {
+        indexRefreshThread_->wait();
+    }
     if (deferredLoadThread_) {
         deferredLoadThread_->wait();
     }
@@ -501,6 +504,33 @@ ClipboardBoardService::~ClipboardBoardService() {
             thread->wait();
         }
     }
+}
+
+QThread *ClipboardBoardService::startTrackedThread(const std::function<void()> &task) {
+    QThread *thread = QThread::create([task]() {
+        task();
+    });
+
+    processingThreads_.append(thread);
+    connect(thread, &QThread::finished, this, [this, thread]() {
+        processingThreads_.removeAll(thread);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+    return thread;
+}
+
+void ClipboardBoardService::trackExclusiveThread(QThread *thread, QThread **slot) {
+    if (!thread || !slot) {
+        return;
+    }
+
+    *slot = thread;
+    connect(thread, &QThread::finished, this, [slot, thread]() {
+        if (*slot == thread) {
+            *slot = nullptr;
+        }
+    });
 }
 
 QString ClipboardBoardService::category() const {
@@ -527,12 +557,37 @@ bool ClipboardBoardService::deferredLoadActive() const {
     return deferredLoadActive_;
 }
 
+void ClipboardBoardService::applyPendingFileIndex(const QStringList &filePaths,
+                                                  int initialBatchSize,
+                                                  int deferredBatchSize,
+                                                  quint64 token) {
+    if (token != asyncLoadToken_) {
+        return;
+    }
+
+    pendingLoadFilePaths_ = filePaths;
+    updateTotalItemCount(pendingLoadFilePaths_.size());
+    emit pendingCountChanged(pendingLoadFilePaths_.size());
+
+    if (pendingLoadFilePaths_.isEmpty()) {
+        deferredLoadActive_ = false;
+        emit deferredLoadCompleted();
+        return;
+    }
+
+    deferredLoadActive_ = deferredBatchSize > 0;
+    deferredBatchSize_ = qMax(1, deferredBatchSize);
+    startRawReadBatch(initialBatchSize > 0 ? initialBatchSize
+                                          : (deferredBatchSize_ > 0 ? deferredBatchSize_ : 1));
+}
+
 void ClipboardBoardService::refreshIndex() {
     deferredLoadActive_ = false;
     if (deferredLoadTimer_) {
         deferredLoadTimer_->stop();
     }
     waitForDeferredRead();
+    waitForIndexRefresh();
     deferredLoadedItems_.clear();
     pendingLoadFilePaths_.clear();
     updateTotalItemCount(0);
@@ -549,6 +604,42 @@ void ClipboardBoardService::refreshIndex() {
     updateTotalItemCount(pendingLoadFilePaths_.size());
     trimExpiredPendingItems(MPasteSettings::getInst()->historyRetentionCutoff());
     emit pendingCountChanged(pendingLoadFilePaths_.size());
+}
+
+void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBatchSize) {
+    if (deferredLoadTimer_) {
+        deferredLoadTimer_->stop();
+    }
+    deferredLoadActive_ = false;
+    waitForDeferredRead();
+    deferredLoadedItems_.clear();
+    pendingLoadFilePaths_.clear();
+    updateTotalItemCount(0);
+    emit pendingCountChanged(0);
+    checkSaveDir();
+
+    const quint64 token = ++asyncLoadToken_;
+    const QString directory = saveDir();
+    QPointer<ClipboardBoardService> guard(this);
+    QThread *thread = startTrackedThread([guard, directory, initialBatchSize, deferredBatchSize, token]() {
+        QStringList filePaths;
+        QDir dir(directory);
+        const QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files, QDir::Name | QDir::Reversed);
+        for (const QFileInfo &info : fileInfos) {
+            if (LocalSaver::isCurrentFormatFile(info.filePath())) {
+                filePaths.append(info.filePath());
+            }
+        }
+
+        if (guard) {
+            QMetaObject::invokeMethod(guard.data(), [guard, filePaths, initialBatchSize, deferredBatchSize, token]() {
+                if (guard) {
+                    guard->applyPendingFileIndex(filePaths, initialBatchSize, deferredBatchSize, token);
+                }
+            }, Qt::QueuedConnection);
+        }
+    });
+    trackExclusiveThread(thread, &indexRefreshThread_);
 }
 
 void ClipboardBoardService::loadNextBatch(int batchSize) {
@@ -672,6 +763,24 @@ QString ClipboardBoardService::filePathForName(const QString &name) const {
 
 ClipboardItem ClipboardBoardService::loadItemLight(const QString &filePath) {
     return saver_->loadFromFileLight(filePath);
+}
+
+QSet<QByteArray> ClipboardBoardService::loadAllFingerprints() {
+    checkSaveDir();
+
+    QSet<QByteArray> fingerprints;
+    QDir dir(saveDir());
+    const QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files, QDir::Name | QDir::Reversed);
+    for (const QFileInfo &info : fileInfos) {
+        if (!LocalSaver::isCurrentFormatFile(info.filePath())) {
+            continue;
+        }
+        const ClipboardItem item = saver_->loadFromFileLight(info.filePath());
+        if (!item.getName().isEmpty()) {
+            fingerprints.insert(item.fingerprint());
+        }
+    }
+    return fingerprints;
 }
 
 void ClipboardBoardService::notifyItemAdded() {
@@ -805,7 +914,7 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
     const int itemScale = MPasteSettings::getInst()->getItemScale();
 
     QPointer<ClipboardBoardService> guard(this);
-    QThread *thread = QThread::create([guard, expectedName, contentType, previewKind, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
+    startTrackedThread([guard, expectedName, contentType, previewKind, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
         PendingItemProcessingResult result;
         QByteArray resolvedImageBytes = imageBytes;
         QString resolvedHtml = richHtml;
@@ -888,13 +997,6 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             }, Qt::QueuedConnection);
         }
     });
-
-    processingThreads_.append(thread);
-    connect(thread, &QThread::finished, this, [this, thread]() {
-        processingThreads_.removeAll(thread);
-    });
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    thread->start();
 }
 
 void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, const QString &filePath) {
@@ -903,7 +1005,7 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
     }
 
     QPointer<ClipboardBoardService> guard(this);
-    QThread *thread = QThread::create([guard, expectedName, filePath]() mutable {
+    startTrackedThread([guard, expectedName, filePath]() mutable {
         LocalSaver saver;
         ClipboardItem loaded = saver.loadFromFileLight(filePath);
         ClipboardItem preparedItem = loaded;
@@ -958,13 +1060,6 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
             }, Qt::QueuedConnection);
         }
     });
-
-    processingThreads_.append(thread);
-    connect(thread, &QThread::finished, this, [this, thread]() {
-        processingThreads_.removeAll(thread);
-    });
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    thread->start();
 }
 
 void ClipboardBoardService::startAsyncKeywordSearch(const QList<QPair<QString, quint64>> &candidates,
@@ -975,7 +1070,7 @@ void ClipboardBoardService::startAsyncKeywordSearch(const QList<QPair<QString, q
     }
 
     QPointer<ClipboardBoardService> guard(this);
-    QThread *thread = QThread::create([guard, candidates, keyword, token]() {
+    QThread *thread = startTrackedThread([guard, candidates, keyword, token]() {
         QSet<QString> matchedNames;
         for (const auto &candidate : candidates) {
             if (candidate.first.isEmpty()) {
@@ -996,17 +1091,7 @@ void ClipboardBoardService::startAsyncKeywordSearch(const QList<QPair<QString, q
             }, Qt::QueuedConnection);
         }
     });
-
-    processingThreads_.append(thread);
-    connect(thread, &QThread::finished, this, [this, thread]() {
-        if (keywordSearchThread_ == thread) {
-            keywordSearchThread_ = nullptr;
-        }
-        processingThreads_.removeAll(thread);
-    });
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    keywordSearchThread_ = thread;
-    thread->start();
+    trackExclusiveThread(thread, &keywordSearchThread_);
 }
 
 void ClipboardBoardService::continueDeferredLoad() {
@@ -1016,7 +1101,7 @@ void ClipboardBoardService::continueDeferredLoad() {
 
     processDeferredLoadedItems();
     if (deferredLoadedItems_.isEmpty() && !deferredLoadThread_ && !pendingLoadFilePaths_.isEmpty()) {
-        scheduleDeferredLoadBatch();
+        startRawReadBatch(deferredBatchSize_);
     }
 
     if (deferredLoadedItems_.isEmpty() && !deferredLoadThread_ && pendingLoadFilePaths_.isEmpty()) {
@@ -1067,7 +1152,14 @@ void ClipboardBoardService::scheduleDeferredLoadBatch() {
         return;
     }
 
-    const int batchSize = deferredBatchSize_ > 0 ? deferredBatchSize_ : 1;
+    startRawReadBatch(deferredBatchSize_);
+}
+
+void ClipboardBoardService::startRawReadBatch(int batchSize) {
+    if (batchSize <= 0 || deferredLoadThread_ || pendingLoadFilePaths_.isEmpty()) {
+        return;
+    }
+
     const int count = qMin(batchSize, pendingLoadFilePaths_.size());
     QStringList batchPaths;
     batchPaths.reserve(count);
@@ -1077,7 +1169,7 @@ void ClipboardBoardService::scheduleDeferredLoadBatch() {
     emit pendingCountChanged(pendingLoadFilePaths_.size());
 
     QPointer<ClipboardBoardService> guard(this);
-    deferredLoadThread_ = QThread::create([guard, batchPaths]() {
+    QThread *thread = startTrackedThread([guard, batchPaths]() {
         QList<QPair<QString, QByteArray>> batchPayloads;
         batchPayloads.reserve(batchPaths.size());
         for (const QString &filePath : batchPaths) {
@@ -1097,12 +1189,7 @@ void ClipboardBoardService::scheduleDeferredLoadBatch() {
             }, Qt::QueuedConnection);
         }
     });
-
-    connect(deferredLoadThread_, &QThread::finished, this, [this]() {
-        deferredLoadThread_ = nullptr;
-    });
-    connect(deferredLoadThread_, &QThread::finished, deferredLoadThread_, &QObject::deleteLater);
-    deferredLoadThread_->start();
+    trackExclusiveThread(thread, &deferredLoadThread_);
 }
 
 void ClipboardBoardService::processDeferredLoadedItems() {
@@ -1143,6 +1230,13 @@ void ClipboardBoardService::processDeferredLoadedItems() {
 void ClipboardBoardService::waitForDeferredRead() {
     if (deferredLoadThread_) {
         deferredLoadThread_->wait();
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+    }
+}
+
+void ClipboardBoardService::waitForIndexRefresh() {
+    if (indexRefreshThread_) {
+        indexRefreshThread_->wait();
         QCoreApplication::processEvents(QEventLoop::AllEvents);
     }
 }

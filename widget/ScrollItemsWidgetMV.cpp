@@ -2186,9 +2186,8 @@ void ScrollItemsWidget::loadFromSaveDir() {
     }
     prepareLoadFromSaveDir();
     if (boardService_) {
-        boardService_->loadNextBatch(INITIAL_LOAD_BATCH_SIZE);
+        boardService_->startAsyncLoad(INITIAL_LOAD_BATCH_SIZE, 0);
     }
-    maybeLoadMoreItems();
 }
 
 void ScrollItemsWidget::applyScale(int scale) {
@@ -2240,17 +2239,13 @@ void ScrollItemsWidget::loadFromSaveDirDeferred() {
     }
     prepareLoadFromSaveDir();
 
-    if (!boardService_ || !boardService_->hasPendingItems()) {
+    if (!boardService_) {
         emit itemCountChanged(itemCountForDisplay());
         return;
     }
 
-    boardService_->loadNextBatch(qMin(DEFERRED_LOAD_BATCH_SIZE, INITIAL_LOAD_BATCH_SIZE));
-    if (shouldKeepDeferredLoading()) {
-        boardService_->startDeferredLoad(DEFERRED_LOAD_BATCH_SIZE);
-    } else {
-        boardService_->stopDeferredLoad();
-    }
+    boardService_->startAsyncLoad(qMin(DEFERRED_LOAD_BATCH_SIZE, INITIAL_LOAD_BATCH_SIZE),
+                                  DEFERRED_LOAD_BATCH_SIZE);
 }
 
 QScrollBar *ScrollItemsWidget::horizontalScrollbar() const {
@@ -2347,6 +2342,32 @@ int ScrollItemsWidget::maintainPreviewCache(ClipboardBoardService::PreviewCacheM
         return 0;
     }
     return boardService_->maintainPreviewCache(mode);
+}
+
+QSet<QByteArray> ScrollItemsWidget::loadAllFingerprints() {
+    if (!boardService_) {
+        return {};
+    }
+    return boardService_->loadAllFingerprints();
+}
+
+void ScrollItemsWidget::setFavoriteFingerprints(const QSet<QByteArray> &fingerprints) {
+    favoriteFingerprints_ = fingerprints;
+    if (!boardModel_) {
+        return;
+    }
+
+    const int rowCount = boardModel_->rowCount();
+    for (int row = 0; row < rowCount; ++row) {
+        const ClipboardItem *item = boardModel_->itemPtrAt(row);
+        if (!item) {
+            continue;
+        }
+        const bool favorite = favoriteFingerprints_.contains(item->fingerprint());
+        if (boardModel_->isFavorite(row) != favorite) {
+            boardModel_->setFavoriteByFingerprint(item->fingerprint(), favorite);
+        }
+    }
 }
 
 void ScrollItemsWidget::scrollToFirst() {

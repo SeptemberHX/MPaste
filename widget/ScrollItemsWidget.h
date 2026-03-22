@@ -69,6 +69,8 @@ public:
     int getItemCount();
     void refreshThumbnailCache();
     int maintainPreviewCache(ClipboardBoardService::PreviewCacheMaintenanceMode mode);
+    QSet<QByteArray> loadAllFingerprints();
+    void setFavoriteFingerprints(const QSet<QByteArray> &fingerprints);
 
     void scrollToFirst();
     void scrollToLast();

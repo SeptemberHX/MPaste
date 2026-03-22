@@ -298,10 +298,8 @@ void MPasteWidget::initializeWidget() {
     setupConnections();
     qInfo().noquote() << QStringLiteral("[startup] setupConnections done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     setupSyncWatcher();
-    loadFromSaveDir();
-    qInfo().noquote() << QStringLiteral("[startup] loadFromSaveDir done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
-    clipboard_.monitor->primeCurrentClipboard();
-    qInfo().noquote() << QStringLiteral("[startup] primeCurrentClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
+    scheduleStartupWarmup();
+    qInfo().noquote() << QStringLiteral("[startup] startup warmup scheduled elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
 
     setFocusOnSearch(false);
     misc_.pendingNumKey = 0;
@@ -361,45 +359,6 @@ void MPasteWidget::initStyle() {
 
 void MPasteWidget::initUI() {
     initSearchAnimations();
-
-    ui_.aboutWidget = new AboutWidget(this);
-    ui_.aboutWidget->setWindowFlag(Qt::Tool);
-    ui_.aboutWidget->setWindowTitle("MPaste About");
-    ui_.aboutWidget->hide();
-
-    ui_.detailsDialog = new ClipboardItemDetailsDialog(this);
-    ui_.detailsDialog->setWindowFlag(Qt::Tool);
-    ui_.detailsDialog->hide();
-
-    ui_.previewDialog = new ClipboardItemPreviewDialog(this);
-    ui_.previewDialog->setWindowFlag(Qt::Tool);
-    ui_.previewDialog->hide();
-
-    ui_.settingsWidget = new MPasteSettingsWidget(this);
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
-            this, &MPasteWidget::shortcutChanged);
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
-            this, &MPasteWidget::reloadHistoryBoards);
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::saveDirChanged,
-            this, [this]() {
-                setupSyncWatcher();
-                reloadHistoryBoards();
-            });
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::itemScaleChanged,
-            this, [this](int scale) {
-                applyScale(scale);
-            });
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::previewCacheActionRequested,
-            this, &MPasteWidget::runPreviewCacheAction);
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::thumbnailPrefetchChanged,
-            this, [this](int) {
-                if (ui_.clipboardWidget) {
-                    ui_.clipboardWidget->refreshThumbnailCache();
-                }
-                if (ui_.staredWidget) {
-                    ui_.staredWidget->refreshThumbnailCache();
-                }
-            });
 
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
@@ -481,6 +440,82 @@ void MPasteWidget::initUI() {
 
     applyTheme(ThemeManager::instance()->isDark());
 
+}
+
+AboutWidget *MPasteWidget::ensureAboutWidget() {
+    if (!ui_.aboutWidget) {
+        ui_.aboutWidget = new AboutWidget(this);
+        ui_.aboutWidget->setWindowFlag(Qt::Tool);
+        ui_.aboutWidget->setWindowTitle("MPaste About");
+        ui_.aboutWidget->hide();
+    }
+    return ui_.aboutWidget;
+}
+
+ClipboardItemDetailsDialog *MPasteWidget::ensureDetailsDialog() {
+    if (!ui_.detailsDialog) {
+        ui_.detailsDialog = new ClipboardItemDetailsDialog(this);
+        ui_.detailsDialog->setWindowFlag(Qt::Tool);
+        ui_.detailsDialog->hide();
+    }
+    return ui_.detailsDialog;
+}
+
+ClipboardItemPreviewDialog *MPasteWidget::ensurePreviewDialog() {
+    if (!ui_.previewDialog) {
+        ui_.previewDialog = new ClipboardItemPreviewDialog(this);
+        ui_.previewDialog->setWindowFlag(Qt::Tool);
+        ui_.previewDialog->hide();
+    }
+    return ui_.previewDialog;
+}
+
+MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
+    if (!ui_.settingsWidget) {
+        ui_.settingsWidget = new MPasteSettingsWidget(this);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
+                this, &MPasteWidget::shortcutChanged);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
+                this, &MPasteWidget::reloadHistoryBoards);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::saveDirChanged,
+                this, [this]() {
+                    setupSyncWatcher();
+                    reloadHistoryBoards();
+                });
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::itemScaleChanged,
+                this, [this](int scale) {
+                    applyScale(scale);
+                });
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::previewCacheActionRequested,
+                this, &MPasteWidget::runPreviewCacheAction);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::thumbnailPrefetchChanged,
+                this, [this](int) {
+                    if (ui_.clipboardWidget) {
+                        ui_.clipboardWidget->refreshThumbnailCache();
+                    }
+                    if (ui_.staredWidget) {
+                        ui_.staredWidget->refreshThumbnailCache();
+                    }
+                });
+    }
+    return ui_.settingsWidget;
+}
+
+void MPasteWidget::scheduleStartupWarmup() {
+    if (loading_.startupWarmupScheduled) {
+        return;
+    }
+    loading_.startupWarmupScheduled = true;
+
+    QTimer::singleShot(0, this, [this]() {
+        loadFromSaveDir();
+        qInfo().noquote() << QStringLiteral("[startup] deferred loadFromSaveDir done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
+        QTimer::singleShot(200, this, [this]() {
+            clipboard_.monitor->primeCurrentClipboard();
+            qInfo().noquote() << QStringLiteral("[startup] deferred primeCurrentClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
+            loading_.startupWarmupCompleted = true;
+        });
+    });
 }
 
 void MPasteWidget::applyScale(int scale) {
@@ -681,6 +716,7 @@ void MPasteWidget::initMenu() {
         menuText("About", QString::fromUtf16(u"\u5173\u4E8E")),
         this);
     connect(ui_.aboutAction, &QAction::triggered, this, [this]() {
+        AboutWidget *aboutWidget = ensureAboutWidget();
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
@@ -688,10 +724,10 @@ void MPasteWidget::initMenu() {
             return;
 
         QRect screenGeometry = screen->geometry();
-        int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
-        int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
-        ui_.aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
-        ui_.aboutWidget->show();
+        int x = (screenGeometry.width() - aboutWidget->width()) / 2;
+        int y = (screenGeometry.height() - aboutWidget->height()) / 2;
+        aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
+        aboutWidget->show();
     });
 
     ui_.settingsAction = new QAction(
@@ -699,6 +735,7 @@ void MPasteWidget::initMenu() {
         menuText("Settings", QString::fromUtf16(u"\u8BBE\u7F6E")),
         this);
     connect(ui_.settingsAction, &QAction::triggered, this, [this]() {
+        MPasteSettingsWidget *settingsWidget = ensureSettingsWidget();
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
@@ -706,10 +743,10 @@ void MPasteWidget::initMenu() {
             return;
 
         QRect screenGeometry = screen->geometry();
-        int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
-        int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
-        ui_.settingsWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
-        ui_.settingsWidget->show();
+        int x = (screenGeometry.width() - settingsWidget->width()) / 2;
+        int y = (screenGeometry.height() - settingsWidget->height()) / 2;
+        settingsWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
+        settingsWidget->show();
     });
 
     ui_.quitAction = new QAction(
@@ -791,12 +828,12 @@ void MPasteWidget::setupConnections() {
 
         connect(boardWidget, &ScrollItemsWidget::detailsRequested,
         this, [this](const ClipboardItem &item, int sequence, int totalCount) {
-            ui_.detailsDialog->showItem(item, sequence, totalCount);
+            ensureDetailsDialog()->showItem(item, sequence, totalCount);
         });
         connect(boardWidget, &ScrollItemsWidget::previewRequested,
         this, [this](const ClipboardItem &item) {
             if (ClipboardItemPreviewDialog::supportsPreview(item)) {
-                ui_.previewDialog->showItem(item);
+                ensurePreviewDialog()->showItem(item);
             }
         });
 
@@ -1153,8 +1190,9 @@ void MPasteWidget::handleEnterKey(bool plainText) {
 }
 
 void MPasteWidget::handlePreviewKey() {
-    if (ui_.previewDialog && ui_.previewDialog->isVisible()) {
-        ui_.previewDialog->reject();
+    ClipboardItemPreviewDialog *previewDialog = ensurePreviewDialog();
+    if (previewDialog->isVisible()) {
+        previewDialog->reject();
         return;
     }
 
@@ -1167,7 +1205,7 @@ void MPasteWidget::handlePreviewKey() {
         return;
     }
 
-    ui_.previewDialog->showItem(*selectedItem);
+    previewDialog->showItem(*selectedItem);
 }
 
 bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
@@ -1433,10 +1471,8 @@ void MPasteWidget::scheduleSyncReload() {
 }
 
 void MPasteWidget::loadFromSaveDir() {
-    ui_.staredWidget->loadFromSaveDir();
-    for (const ClipboardItem &item : ui_.staredWidget->allItems()) {
-        ui_.clipboardWidget->setItemFavorite(item, true);
-    }
+    ui_.clipboardWidget->setFavoriteFingerprints(ui_.staredWidget->loadAllFingerprints());
+    ui_.staredWidget->loadFromSaveDirDeferred();
     ui_.clipboardWidget->loadFromSaveDirDeferred();
 }
 
@@ -1482,7 +1518,7 @@ void MPasteWidget::runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheActio
         : (zh
             ? QString::fromUtf16(u"%1 \u4E2D\u6CA1\u6709\u9700\u8981\u66F4\u65B0\u7684\u9884\u89C8\u6761\u76EE\u3002").arg(boardLabel)
             : QStringLiteral("No preview entries needed updates in %1.").arg(boardLabel));
-    QMessageBox::information(ui_.settingsWidget,
+    QMessageBox::information(ensureSettingsWidget(),
                              menuText("Preview Cache", QString::fromUtf16(u"\u9884\u89C8\u7F13\u5B58")),
                              QStringLiteral("%1\n%2").arg(actionLabel, summary));
 }
