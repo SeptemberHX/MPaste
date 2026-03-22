@@ -1,7 +1,7 @@
 // input: Depends on ClipboardBoardModel.h and ClipboardItem metatype support.
 // output: Implements the in-memory clipboard board row model with alias-aware metadata for delegate-based views.
 // pos: Widget-layer model implementation used by ScrollItemsWidget.
-// update: If I change, update this header block and my folder README.md (metadata updates for link previews).
+// update: If I change, update this header block and my folder README.md (metadata updates for link previews + preview kind).
 #include "ClipboardBoardModel.h"
 
 ClipboardBoardModel::ClipboardBoardModel(QObject *parent)
@@ -30,6 +30,8 @@ QVariant ClipboardBoardModel::data(const QModelIndex &index, int role) const {
             return entry.shortcutText;
         case ContentTypeRole:
             return static_cast<int>(entry.item.getContentType());
+        case PreviewKindRole:
+            return static_cast<int>(entry.item.getPreviewKind());
         case IconRole:
             return entry.item.getIcon();
         case ThumbnailRole:
@@ -156,6 +158,7 @@ bool ClipboardBoardModel::updateItem(int row, const ClipboardItem &item) {
         || existing.getUrl() != item.getUrl()
         || existing.getAlias() != item.getAlias()
         || existing.isPinned() != item.isPinned()
+        || existing.getPreviewKind() != item.getPreviewKind()
         || existing.getName() != item.getName()
         || existing.getFavicon().cacheKey() != item.getFavicon().cacheKey()
         || existing.thumbnail().cacheKey() != item.thumbnail().cacheKey();

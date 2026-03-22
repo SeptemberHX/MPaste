@@ -1,7 +1,7 @@
 // input: Depends on ScrollItemsWidget.h, ClipboardBoardService, Qt model/view APIs, and delegate-based card painting.
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
-// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export + multi-select batch actions).
+// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export + multi-select batch actions + data-layer preview kind).
 // note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, and loading overlay.
 #include <QDir>
 #include <QFileDialog>
@@ -1790,7 +1790,7 @@ bool ScrollItemsWidget::shouldManageThumbnail(const ClipboardItem &item) const {
     const ClipboardItem::ContentType type = item.getContentType();
     return type == ClipboardItem::Image
         || type == ClipboardItem::Office
-        || type == ClipboardItem::RichText;
+        || (type == ClipboardItem::RichText && item.getPreviewKind() == ClipboardItem::VisualPreview);
 }
 
 void ScrollItemsWidget::requestThumbnailForItem(const ClipboardItem &item) {
@@ -1985,8 +1985,7 @@ bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const Clipboar
     } else {
         boardModel_->appendItem(item, favorite);
     }
-    if (!item.hasThumbnail()
-        && (item.getContentType() == ClipboardItem::RichText || item.getContentType() == ClipboardItem::Image)) {
+    if (!item.hasThumbnail() && shouldManageThumbnail(item)) {
         if (boardService_) {
             boardService_->processPendingItemAsync(item, item.getName());
         }
