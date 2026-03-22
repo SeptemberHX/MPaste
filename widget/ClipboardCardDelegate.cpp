@@ -1,16 +1,19 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
 // output: Implements the manual card painter for the delegate-based clipboard board.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
-// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer height tweak + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line + pinned badge + rich text fill + data-layer preview kind).
-// note: Adjusted card palette for dark theme.
+// update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer height tweak + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line + pinned badge + rich text fill + data-layer preview kind + async file preview caching).
+// note: Adjusted card palette for dark theme and moved heavy file preview work out of paint.
 #include "ClipboardCardDelegate.h"
 
 #include <cmath>
 
+#include <QAbstractItemView>
+#include <QApplication>
 #include <QCache>
 #include <QDebug>
 #include <QFileInfo>
 #include <QFileIconProvider>
+#include <QFontDatabase>
 #include <QFontMetrics>
 #include <QIcon>
 #include <QImage>
@@ -19,10 +22,14 @@
 #include <QLocale>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPointer>
 #include <QRadialGradient>
+#include <QRunnable>
 #include <QRegularExpression>
 #include <QSet>
 #include <QTextLayout>
+#include <QThread>
+#include <QTimer>
 #include <QUrl>
 
 #include "ClipboardBoardModel.h"
@@ -239,7 +246,86 @@ QString fallbackHeadline(const QString &title, const QUrl &url) {
     return compactHostLabel(url);
 }
 
-QColor dominantHeaderColor(const QPixmap &iconPixmap) {
+QString chooseInstalledFontFamily(const QStringList &preferredFamilies, const QString &fallbackFamily) {
+    const QFontDatabase database;
+    const QStringList availableFamilies = database.families();
+    for (const QString &family : preferredFamilies) {
+        if (availableFamilies.contains(family, Qt::CaseInsensitive)) {
+            return family;
+        }
+    }
+    return fallbackFamily;
+}
+
+const QString &preferredUiFontFamily() {
+    static const QString family = chooseInstalledFontFamily(
+        {
+            QStringLiteral("Microsoft YaHei UI"),
+            QStringLiteral("Microsoft YaHei"),
+            QStringLiteral("Segoe UI"),
+            QStringLiteral("Noto Sans"),
+            QStringLiteral("Arial")
+        },
+        QApplication::font().family());
+    return family;
+}
+
+const QString &preferredMonoFontFamily() {
+    static const QString family = chooseInstalledFontFamily(
+        {
+            QStringLiteral("Cascadia Mono"),
+            QStringLiteral("Consolas"),
+            QStringLiteral("Cascadia Code"),
+            QStringLiteral("Courier New"),
+            QStringLiteral("Microsoft YaHei UI"),
+            QStringLiteral("Segoe UI")
+        },
+        QApplication::font().family());
+    return family;
+}
+
+void applyUiFontDefaults(QFont &font) {
+    font.setFamily(preferredUiFontFamily());
+    font.setStyleHint(QFont::SansSerif, QFont::PreferDefault);
+}
+
+void applyMonoFontDefaults(QFont &font) {
+    font.setFamily(preferredMonoFontFamily());
+    font.setStyleHint(QFont::Monospace, QFont::PreferDefault);
+}
+
+QString scaledPixmapCacheKey(const QPixmap &pixmap, const QSize &targetLogicalSize, qreal targetDpr) {
+    return QStringLiteral("%1:%2x%3@%4")
+        .arg(QString::number(static_cast<qulonglong>(pixmap.cacheKey())))
+        .arg(targetLogicalSize.width())
+        .arg(targetLogicalSize.height())
+        .arg(qRound(targetDpr * 100.0));
+}
+
+QString filePreviewCacheKey(const QString &filePath, const QFileInfo &info, const QSize &targetLogicalSize, qreal targetDpr) {
+    return QStringLiteral("%1:%2:%3x%4@%5")
+        .arg(filePath)
+        .arg(info.lastModified().toMSecsSinceEpoch())
+        .arg(targetLogicalSize.width())
+        .arg(targetLogicalSize.height())
+        .arg(qRound(targetDpr * 100.0));
+}
+
+QString linkFallbackCacheKey(const QUrl &url,
+                             const QString &title,
+                             const QSize &targetSize,
+                             qreal devicePixelRatio,
+                             const QPixmap &favicon) {
+    return QStringLiteral("%1|%2|%3|%4x%5@%6")
+        .arg(url.toString())
+        .arg(title)
+        .arg(QString::number(static_cast<qulonglong>(favicon.cacheKey())))
+        .arg(targetSize.width())
+        .arg(targetSize.height())
+        .arg(qRound(devicePixelRatio * 100.0));
+}
+
+QColor computeDominantHeaderColor(const QPixmap &iconPixmap) {
     QPixmap icon = iconPixmap;
     if (icon.isNull()) {
         icon = QPixmap(":/resources/resources/unknown.svg");
@@ -378,7 +464,7 @@ void drawCoverPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &
         return;
     }
 
-    static QCache<QString, QPixmap> cache(96 * 1024);
+    static QCache<QString, QPixmap> cache(24 * 1024);
     const QString cacheKey = QStringLiteral("%1:%2x%3@%4")
         .arg(QString::number(static_cast<qulonglong>(pixmap.cacheKey())))
         .arg(pixelTargetSize.width())
@@ -427,8 +513,8 @@ void drawContainPixmap(QPainter *painter, const QRect &targetRect, const QPixmap
     painter->drawPixmap(topLeft, scaled);
 }
 
-QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QSize &targetSize, qreal devicePixelRatio,
-                                 const QPixmap &favicon = QPixmap()) {
+QPixmap buildLinkFallbackPreviewUncached(const QUrl &url, const QString &title, const QSize &targetSize, qreal devicePixelRatio,
+                                         const QPixmap &favicon = QPixmap()) {
     if (!targetSize.isValid()) {
         return {};
     }
@@ -485,6 +571,7 @@ QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QS
     }
 
     QFont chipFont = painter.font();
+    applyUiFontDefaults(chipFont);
     chipFont.setBold(true);
     chipFont.setPointSizeF(qMax(8.0, bounds.height() * 0.048));
     painter.setFont(chipFont);
@@ -543,6 +630,7 @@ QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QS
         painter.drawPixmap(iconRect, iconPixmap, QRectF());
     } else {
         QFont monoFont = painter.font();
+        applyMonoFontDefaults(monoFont);
         monoFont.setBold(true);
         monoFont.setPointSizeF(qMax(18.0, badgeSize * 0.26));
         monoFont.setLetterSpacing(QFont::PercentageSpacing, 105);
@@ -553,6 +641,7 @@ QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QS
 
     const QRectF headlineRect(heroRect.left(), badgeRect.bottom() + 16.0, heroRect.width(), 34.0);
     QFont headlineFont = painter.font();
+    applyUiFontDefaults(headlineFont);
     headlineFont.setBold(true);
     headlineFont.setPointSizeF(qMax(11.0, bounds.height() * 0.074));
     painter.setFont(headlineFont);
@@ -578,18 +667,51 @@ QPixmap buildLinkFallbackPreview(const QUrl &url, const QString &title, const QS
 }
 
 QPixmap starPixmap(const QSize &size) {
-    return QIcon(QStringLiteral(":/resources/resources/star_filled.svg")).pixmap(size);
+    static QCache<QString, QPixmap> cache(1024);
+    const QString cacheKey = QStringLiteral("star:%1x%2").arg(size.width()).arg(size.height());
+    if (QPixmap *cached = cache.object(cacheKey)) {
+        return *cached;
+    }
+
+    const QPixmap pixmap = QIcon(QStringLiteral(":/resources/resources/star_filled.svg")).pixmap(size);
+    if (!pixmap.isNull()) {
+        const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
+        cache.insert(cacheKey, new QPixmap(pixmap), cacheCost);
+    }
+    return pixmap;
 }
 
 QPixmap pinPixmap(const QSize &size, bool dark) {
+    static QCache<QString, QPixmap> cache(1024);
     const QString path = dark
         ? QStringLiteral(":/resources/resources/pin_light.svg")
         : QStringLiteral(":/resources/resources/pin.svg");
-    return QIcon(path).pixmap(size);
+    const QString cacheKey = QStringLiteral("pin:%1:%2x%3").arg(path).arg(size.width()).arg(size.height());
+    if (QPixmap *cached = cache.object(cacheKey)) {
+        return *cached;
+    }
+
+    const QPixmap pixmap = QIcon(path).pixmap(size);
+    if (!pixmap.isNull()) {
+        const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
+        cache.insert(cacheKey, new QPixmap(pixmap), cacheCost);
+    }
+    return pixmap;
 }
 
 QPixmap filePixmap(const QSize &size) {
-    return QIcon(QStringLiteral(":/resources/resources/files.svg")).pixmap(size);
+    static QCache<QString, QPixmap> cache(1024);
+    const QString cacheKey = QStringLiteral("file:%1x%2").arg(size.width()).arg(size.height());
+    if (QPixmap *cached = cache.object(cacheKey)) {
+        return *cached;
+    }
+
+    const QPixmap pixmap = QIcon(QStringLiteral(":/resources/resources/files.svg")).pixmap(size);
+    if (!pixmap.isNull()) {
+        const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
+        cache.insert(cacheKey, new QPixmap(pixmap), cacheCost);
+    }
+    return pixmap;
 }
 
 bool isLikelyLinkPreviewImage(const QPixmap &pixmap) {
@@ -623,7 +745,7 @@ bool isLikelyLinkPreviewImage(const QPixmap &pixmap) {
     return maxDim >= 320;
 }
 
-QPixmap loadLocalFileIcon(const QString &filePath, const QSize &targetLogicalSize, qreal targetDpr) {
+QPixmap loadLocalFileIconSync(const QString &filePath, const QSize &targetLogicalSize, qreal targetDpr) {
     if (filePath.isEmpty() || !targetLogicalSize.isValid()) {
         return {};
     }
@@ -638,17 +760,6 @@ QPixmap loadLocalFileIcon(const QString &filePath, const QSize &targetLogicalSiz
         return {};
     }
 
-    static QCache<QString, QPixmap> cache(64 * 1024);
-    const QString cacheKey = QStringLiteral("%1:%2:%3x%4@%5")
-        .arg(filePath)
-        .arg(info.lastModified().toMSecsSinceEpoch())
-        .arg(pixelTargetSize.width())
-        .arg(pixelTargetSize.height())
-        .arg(qRound(targetDpr * 100.0));
-    if (QPixmap *cached = cache.object(cacheKey)) {
-        return *cached;
-    }
-
     QFileIconProvider provider;
     QIcon icon = provider.icon(info);
     QPixmap pixmap = icon.pixmap(pixelTargetSize);
@@ -656,8 +767,6 @@ QPixmap loadLocalFileIcon(const QString &filePath, const QSize &targetLogicalSiz
         return {};
     }
     pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
-    const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
-    cache.insert(cacheKey, new QPixmap(pixmap), cacheCost);
     return pixmap;
 }
 
@@ -756,7 +865,7 @@ bool isLikelyImageFile(const QString &filePath) {
     return supportedSuffixes.contains(suffix);
 }
 
-QPixmap loadLocalImageThumbnail(const QString &filePath, const QSize &targetLogicalSize, qreal targetDpr) {
+QImage loadLocalImageThumbnailImageSync(const QString &filePath, const QSize &targetLogicalSize, qreal targetDpr) {
     if (!isLikelyImageFile(filePath) || !targetLogicalSize.isValid()) {
         return {};
     }
@@ -765,17 +874,6 @@ QPixmap loadLocalImageThumbnail(const QString &filePath, const QSize &targetLogi
     const QSize pixelTargetSize = targetLogicalSize * qMax<qreal>(1.0, targetDpr);
     if (!pixelTargetSize.isValid()) {
         return {};
-    }
-
-    static QCache<QString, QPixmap> cache(128 * 1024);
-    const QString cacheKey = QStringLiteral("%1:%2:%3x%4@%5")
-        .arg(filePath)
-        .arg(info.lastModified().toMSecsSinceEpoch())
-        .arg(pixelTargetSize.width())
-        .arg(pixelTargetSize.height())
-        .arg(qRound(targetDpr * 100.0));
-    if (QPixmap *cached = cache.object(cacheKey)) {
-        return *cached;
     }
 
     QImageReader reader(filePath);
@@ -793,11 +891,7 @@ QPixmap loadLocalImageThumbnail(const QString &filePath, const QSize &targetLogi
         return {};
     }
 
-    QPixmap pixmap = QPixmap::fromImage(image);
-    pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
-    const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
-    cache.insert(cacheKey, new QPixmap(pixmap), cacheCost);
-    return pixmap;
+    return image;
 }
 
 void drawLinkLabel(QPainter *painter, const QRect &rect, const QString &text, const QFont &font,
@@ -817,7 +911,7 @@ void drawLinkLabel(QPainter *painter, const QRect &rect, const QString &text, co
     painter->restore();
 }
 
-QPixmap buildHeaderIconPixmap(const QPixmap &sourcePixmap, const QSize &targetLogicalSize, qreal targetDpr) {
+QPixmap buildHeaderIconPixmapUncached(const QPixmap &sourcePixmap, const QSize &targetLogicalSize, qreal targetDpr) {
     if (!targetLogicalSize.isValid()) {
         return {};
     }
@@ -843,10 +937,210 @@ QPixmap buildHeaderIconPixmap(const QPixmap &sourcePixmap, const QSize &targetLo
 
 ClipboardCardDelegate::ClipboardCardDelegate(const QColor &borderColor, QObject *parent)
     : QStyledItemDelegate(parent),
-      borderColor_(borderColor) {}
+      borderColor_(borderColor),
+      headerIconCache_(2 * 1024),
+      linkFallbackCache_(8 * 1024),
+      localImageThumbnailCache_(24 * 1024),
+      localFileIconCache_(4 * 1024) {
+    previewTaskPool_.setMaxThreadCount(qBound(1, QThread::idealThreadCount() / 2, 4));
+    previewTaskPool_.setExpiryTimeout(15000);
+}
+
+ClipboardCardDelegate::~ClipboardCardDelegate() {
+    previewTaskPool_.waitForDone();
+}
 
 void ClipboardCardDelegate::setLoadingPhase(int phase) {
     loadingPhase_ = phase;
+}
+
+QColor ClipboardCardDelegate::headerColorForIcon(const QPixmap &iconPixmap) const {
+    if (iconPixmap.isNull()) {
+        return QColor(QStringLiteral("#4A5F7A"));
+    }
+
+    const quint64 cacheKey = static_cast<quint64>(iconPixmap.cacheKey());
+    const auto it = headerColorCache_.constFind(cacheKey);
+    if (it != headerColorCache_.cend()) {
+        return it.value();
+    }
+
+    const QColor color = computeDominantHeaderColor(iconPixmap);
+    headerColorCache_.insert(cacheKey, color);
+    return color;
+}
+
+QPixmap ClipboardCardDelegate::headerIconForPixmap(const QPixmap &sourcePixmap,
+                                                   const QSize &targetLogicalSize,
+                                                   qreal targetDpr) const {
+    QPixmap icon = sourcePixmap;
+    if (icon.isNull()) {
+        icon = QPixmap(QStringLiteral(":/resources/resources/unknown.svg"));
+    }
+
+    const QString cacheKey = scaledPixmapCacheKey(icon, targetLogicalSize, targetDpr);
+    if (QPixmap *cached = headerIconCache_.object(cacheKey)) {
+        return *cached;
+    }
+
+    QPixmap result = buildHeaderIconPixmapUncached(icon, targetLogicalSize, targetDpr);
+    if (!result.isNull()) {
+        const int cacheCost = qMax(1, (result.width() * result.height() * 4) / 1024);
+        headerIconCache_.insert(cacheKey, new QPixmap(result), cacheCost);
+    }
+    return result;
+}
+
+QPixmap ClipboardCardDelegate::linkFallbackPreview(const QUrl &url,
+                                                   const QString &title,
+                                                   const QSize &targetSize,
+                                                   qreal devicePixelRatio,
+                                                   const QPixmap &favicon) const {
+    const QString cacheKey = linkFallbackCacheKey(url, title, targetSize, devicePixelRatio, favicon);
+    if (QPixmap *cached = linkFallbackCache_.object(cacheKey)) {
+        return *cached;
+    }
+
+    QPixmap result = buildLinkFallbackPreviewUncached(url, title, targetSize, devicePixelRatio, favicon);
+    if (!result.isNull()) {
+        const int cacheCost = qMax(1, (result.width() * result.height() * 4) / 1024);
+        linkFallbackCache_.insert(cacheKey, new QPixmap(result), cacheCost);
+    }
+    return result;
+}
+
+void ClipboardCardDelegate::scheduleViewportUpdate(const QPersistentModelIndex &index) const {
+    auto *view = qobject_cast<QAbstractItemView *>(parent());
+    if (!view || !view->viewport()) {
+        return;
+    }
+
+    if (index.isValid()) {
+        const QRect rect = view->visualRect(index);
+        if (rect.isValid()) {
+            view->viewport()->update(rect.adjusted(-2, -2, 2, 2));
+            return;
+        }
+    }
+
+    view->viewport()->update();
+}
+
+void ClipboardCardDelegate::ensureFileIconTimer() const {
+    if (fileIconLoadTimer_) {
+        return;
+    }
+
+    auto *self = const_cast<ClipboardCardDelegate *>(this);
+    self->fileIconLoadTimer_ = new QTimer(self);
+    self->fileIconLoadTimer_->setSingleShot(true);
+    connect(self->fileIconLoadTimer_, &QTimer::timeout, self, [self]() {
+        if (self->pendingFileIconRequests_.isEmpty()) {
+            return;
+        }
+
+        const FileIconRequest request = self->pendingFileIconRequests_.dequeue();
+        self->pendingLocalFileIconKeys_.remove(request.cacheKey);
+
+        const QPixmap pixmap = loadLocalFileIconSync(request.filePath, request.targetLogicalSize, request.targetDpr);
+        if (!pixmap.isNull()) {
+            const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
+            self->localFileIconCache_.insert(request.cacheKey, new QPixmap(pixmap), cacheCost);
+            self->failedLocalFileIconKeys_.remove(request.cacheKey);
+        } else {
+            self->failedLocalFileIconKeys_.insert(request.cacheKey);
+        }
+
+        self->scheduleViewportUpdate(request.index);
+        if (!self->pendingFileIconRequests_.isEmpty()) {
+            self->fileIconLoadTimer_->start(0);
+        }
+    });
+}
+
+void ClipboardCardDelegate::enqueueFileIconRequest(const FileIconRequest &request) const {
+    ensureFileIconTimer();
+    pendingFileIconRequests_.enqueue(request);
+    if (fileIconLoadTimer_ && !fileIconLoadTimer_->isActive()) {
+        fileIconLoadTimer_->start(0);
+    }
+}
+
+QPixmap ClipboardCardDelegate::localImageThumbnail(const QString &filePath,
+                                                   const QSize &targetLogicalSize,
+                                                   qreal targetDpr,
+                                                   const QModelIndex &index) const {
+    if (!isLikelyImageFile(filePath) || !targetLogicalSize.isValid()) {
+        return {};
+    }
+
+    const QFileInfo info(filePath);
+    if (!info.exists() || !info.isFile()) {
+        return {};
+    }
+
+    const QString cacheKey = filePreviewCacheKey(filePath, info, targetLogicalSize, targetDpr);
+    if (QPixmap *cached = localImageThumbnailCache_.object(cacheKey)) {
+        return *cached;
+    }
+    if (failedLocalImageThumbnailKeys_.contains(cacheKey) || pendingLocalImageThumbnailKeys_.contains(cacheKey)) {
+        return {};
+    }
+
+    pendingLocalImageThumbnailKeys_.insert(cacheKey);
+    const QPersistentModelIndex persistentIndex(index);
+    QPointer<ClipboardCardDelegate> guard(const_cast<ClipboardCardDelegate *>(this));
+    previewTaskPool_.start(QRunnable::create([guard, cacheKey, filePath, targetLogicalSize, targetDpr, persistentIndex]() {
+        const QImage image = loadLocalImageThumbnailImageSync(filePath, targetLogicalSize, targetDpr);
+        if (!guard) {
+            return;
+        }
+
+        QMetaObject::invokeMethod(guard.data(), [guard, cacheKey, image, targetDpr, persistentIndex]() {
+            if (!guard) {
+                return;
+            }
+
+            guard->pendingLocalImageThumbnailKeys_.remove(cacheKey);
+            if (image.isNull()) {
+                guard->failedLocalImageThumbnailKeys_.insert(cacheKey);
+            } else {
+                QPixmap pixmap = QPixmap::fromImage(image);
+                pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
+                const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
+                guard->localImageThumbnailCache_.insert(cacheKey, new QPixmap(pixmap), cacheCost);
+                guard->failedLocalImageThumbnailKeys_.remove(cacheKey);
+            }
+            guard->scheduleViewportUpdate(persistentIndex);
+        }, Qt::QueuedConnection);
+    }));
+    return {};
+}
+
+QPixmap ClipboardCardDelegate::localFileIcon(const QString &filePath,
+                                             const QSize &targetLogicalSize,
+                                             qreal targetDpr,
+                                             const QModelIndex &index) const {
+    if (filePath.isEmpty() || !targetLogicalSize.isValid()) {
+        return {};
+    }
+
+    const QFileInfo info(filePath);
+    if (!info.exists()) {
+        return {};
+    }
+
+    const QString cacheKey = filePreviewCacheKey(filePath, info, targetLogicalSize, targetDpr);
+    if (QPixmap *cached = localFileIconCache_.object(cacheKey)) {
+        return *cached;
+    }
+    if (failedLocalFileIconKeys_.contains(cacheKey) || pendingLocalFileIconKeys_.contains(cacheKey)) {
+        return {};
+    }
+
+    pendingLocalFileIconKeys_.insert(cacheKey);
+    enqueueFileIconRequest({cacheKey, filePath, targetLogicalSize, targetDpr, QPersistentModelIndex(index)});
+    return {};
 }
 
 void drawLoadingPlaceholder(QPainter *painter,
@@ -876,6 +1170,7 @@ void drawLoadingPlaceholder(QPainter *painter,
     painter->drawRoundedRect(rect.adjusted(4, 4, -4, -4), radius, radius);
 
     QFont font = painter->font();
+    applyUiFontDefaults(font);
     font.setPointSize(qMax(8, 9 * scale / 100));
     painter->setFont(font);
     painter->setPen(darkTheme ? QColor(220, 230, 240, 120) : QColor(90, 100, 115, 120));
@@ -938,7 +1233,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     const QColor linkUrlColor = darkTheme ? QColor(QStringLiteral("#B7C3D4")) : QColor(QStringLiteral("#555555"));
     const QColor footerTextColor = darkTheme ? QColor(QStringLiteral("#93A2B3")) : QColor(QStringLiteral("#556270"));
     const QColor subtleBorderColor = darkTheme ? QColor(255, 255, 255, 24) : QColor(0, 0, 0, 18);
-    const QColor topColor = dominantHeaderColor(card.icon);
+    const QColor topColor = headerColorForIcon(card.icon);
     const QColor bgColor = blendColor(topColor, baseSurface, darkTheme ? 0.86 : 0.975);
     const bool selected = option.state.testFlag(QStyle::State_Selected);
 
@@ -982,29 +1277,17 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                                iconRect.top() + (iconRect.height() - iconPixmapSize) / 2,
                                iconPixmapSize, iconPixmapSize);
     const qreal paintDpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
-    const QPixmap headerIcon = buildHeaderIconPixmap(card.icon, iconPixmapRect.size(), paintDpr);
+    const QPixmap headerIcon = headerIconForPixmap(card.icon, iconPixmapRect.size(), paintDpr);
     painter->drawPixmap(iconPixmapRect.topLeft(), headerIcon);
 
     QFont typeFont = painter->font();
+    applyUiFontDefaults(typeFont);
     typeFont.setPointSize(qMax(10, 12 * scale / 100));
-    typeFont.setFamilies({QStringLiteral("Microsoft YaHei UI"),
-                           QStringLiteral("Microsoft YaHei"),
-                           QStringLiteral("Segoe UI"),
-                           QStringLiteral("Segoe UI Emoji"),
-                           QStringLiteral("Segoe UI Symbol"),
-                           QStringLiteral("Noto Color Emoji"),
-                           QStringLiteral("Noto Emoji")});
     typeFont.setBold(true);
     typeFont.setWeight(QFont::ExtraBold);
     QFont timeFont = painter->font();
+    applyUiFontDefaults(timeFont);
     timeFont.setPointSize(qMax(8, 9 * scale / 100));
-    timeFont.setFamilies({QStringLiteral("Microsoft YaHei UI"),
-                           QStringLiteral("Microsoft YaHei"),
-                           QStringLiteral("Segoe UI"),
-                           QStringLiteral("Segoe UI Emoji"),
-                           QStringLiteral("Segoe UI Symbol"),
-                           QStringLiteral("Noto Color Emoji"),
-                           QStringLiteral("Noto Emoji")});
 
     const int textRightPadding = iconLabelSize + topRightMargin + 12 * scale / 100;
     const QFontMetrics typeMetrics(typeFont);
@@ -1098,6 +1381,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                 drawLoadingPlaceholder(painter, richTextRect, scale, darkTheme, loadingPhase_);
             } else {
                 QFont previewFont = painter->font();
+                applyUiFontDefaults(previewFont);
                 previewFont.setPointSize(qMax(9, 10 * scale / 100));
                 drawWrappedText(painter, richTextRect, previewTextForCard(card), previewFont, bodyTextColor);
             }
@@ -1109,6 +1393,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             painter->setBrush(color);
             painter->drawRoundedRect(previewRect, 10.0, 10.0);
             QFont previewFont = painter->font();
+            applyUiFontDefaults(previewFont);
             previewFont.setPointSize(qMax(10, 12 * scale / 100));
             previewFont.setBold(true);
             const QColor fontColor(255 - color.red(), 255 - color.green(), 255 - color.blue());
@@ -1144,16 +1429,18 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                 drawCoverPixmap(painter, imageRect, linkPreviewImage, card.name, card.imageSize);
             } else {
                 const qreal paintDpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
-                const QPixmap fallbackPreview = buildLinkFallbackPreview(currentUrl, card.title, imageRect.size(), paintDpr, card.favicon);
+                const QPixmap fallbackPreview = linkFallbackPreview(currentUrl, card.title, imageRect.size(), paintDpr, card.favicon);
                 if (!fallbackPreview.isNull()) {
                     painter->drawPixmap(imageRect.topLeft(), fallbackPreview);
                 }
             }
 
             QFont linkTitleFont = painter->font();
+            applyUiFontDefaults(linkTitleFont);
             linkTitleFont.setPointSize(qMax(9, 9 * scale / 100));
             linkTitleFont.setBold(true);
             QFont linkUrlFont = painter->font();
+            applyUiFontDefaults(linkUrlFont);
             linkUrlFont.setPointSize(qMax(8, 9 * scale / 100));
             linkUrlFont.setUnderline(true);
             const int linkPadding = qMax(6, 8 * scale / 100);
@@ -1164,6 +1451,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             bool drawShortcut = false;
             if (!shortcutText.isEmpty()) {
                 shortcutFont = painter->font();
+                applyUiFontDefaults(shortcutFont);
                 shortcutFont.setPointSize(qMax(8, 8 * scale / 100));
                 const QFontMetrics shortcutMetrics(shortcutFont);
                 const int shortcutPadding = qMax(6, 8 * scale / 100);
@@ -1207,7 +1495,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
         case ClipboardItem::File: {
             if (card.normalizedUrls.size() == 1 && card.normalizedUrls.first().isLocalFile()) {
                 const QString filePath = card.normalizedUrls.first().toLocalFile();
-                const QPixmap thumb = loadLocalImageThumbnail(filePath, imagePreviewRect.size(), paintDpr);
+                const QPixmap thumb = localImageThumbnail(filePath, imagePreviewRect.size(), paintDpr, index);
                 if (!thumb.isNull()) {
                     drawCoverPixmap(painter, imagePreviewRect, thumb, card.name, QSize());
                     break;
@@ -1227,7 +1515,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                                      iconSize);
                 QPixmap iconPixmap = filePath.isEmpty()
                     ? QPixmap()
-                    : loadLocalFileIcon(filePath, iconRect.size(), paintDpr);
+                    : localFileIcon(filePath, iconRect.size(), paintDpr, index);
                 if (iconPixmap.isNull()) {
                     iconPixmap = filePixmap(iconRect.size());
                 }
@@ -1245,6 +1533,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
 
             if (card.normalizedUrls.size() > 1) {
                 QFont previewFont = painter->font();
+                applyUiFontDefaults(previewFont);
                 previewFont.setPointSize(qMax(9, 10 * scale / 100));
                 const QFontMetrics metrics(previewFont);
                 const int textHeight = qMax(metrics.height() * 2 + 4, 28 * scale / 100);
@@ -1276,6 +1565,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             const QRect glyphRect(previewRect.left() + 4 * scale / 100, previewRect.top(), glyphSize, glyphSize);
             painter->drawPixmap(glyphRect, filePixmap(glyphRect.size()));
             QFont previewFont = painter->font();
+            applyUiFontDefaults(previewFont);
             previewFont.setPointSize(qMax(9, 10 * scale / 100));
             drawWrappedText(painter, previewRect.adjusted(glyphSize + 12 * scale / 100, 2 * scale / 100, -4 * scale / 100, -2 * scale / 100),
                             previewTextForCard(card), previewFont, bodyTextColor);
@@ -1284,6 +1574,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
         case ClipboardItem::Text:
         case ClipboardItem::All: {
             QFont previewFont = painter->font();
+            applyUiFontDefaults(previewFont);
             previewFont.setPointSize(qMax(9, 10 * scale / 100));
             const int textPadX = qMax(4, 6 * scale / 100);
             const int textPadY = qMax(3, 4 * scale / 100);
@@ -1298,6 +1589,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
 
     if (!hideFooter) {
         QFont footerFont = painter->font();
+        applyUiFontDefaults(footerFont);
         footerFont.setPointSize(qMax(8, 8 * scale / 100));
         const int footerPadding = qMax(6, 8 * scale / 100);
         const QFontMetrics footerMetrics(footerFont);

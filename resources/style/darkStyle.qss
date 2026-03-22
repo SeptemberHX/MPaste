@@ -6,7 +6,7 @@
  * note: Added for dark theme support.
  */
 QWidget#pasteWidget {
-    background: transparent;  /* Background and gradient border are painted in paintEvent */
+    background-color: transparent;  /* Background and gradient border are painted in paintEvent */
 }
 
 QWidget#pasteWidget,
@@ -45,10 +45,6 @@ QLineEdit:focus {
     border-color: {{line_edit_border_focus}};
 }
 
-QLineEdit::placeholder {
-    color: {{text_secondary}};
-}
-
 /* Count badge */
 QToolButton#countArea {
     background-color: {{badge_bg}};
@@ -75,7 +71,6 @@ QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
     background-color: {{tab_checked_bg}};
     border: 2px solid {{accent_blue}};
     color: {{tab_text}};
-    outline: none;
 }
 
 QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
@@ -85,7 +80,6 @@ QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
     background-color: {{tab_checked_bg}};
     border: 2px solid {{accent_orange}};
     color: {{tab_text}};
-    outline: none;
 }
 
 /* Type filter pills */
@@ -102,7 +96,6 @@ QWidget#typeBtnWidget QToolButton:checked {
     background-color: {{type_checked_bg}};
     border: 2px solid {{accent_blue}};
     color: {{tab_text}};
-    outline: none;
 }
 
 /* About window */

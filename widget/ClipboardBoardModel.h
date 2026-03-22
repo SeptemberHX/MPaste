@@ -1,11 +1,12 @@
 // input: Depends on Qt item-model APIs and ClipboardItem value semantics.
 // output: Exposes a lightweight board model that stores clipboard rows, including custom aliases, for delegate painting.
 // pos: Widget-layer model backing clipboard and favorites boards.
-// update: If I change, update this header block and my folder README.md (metadata updates for preview kind).
+// update: If I change, update this header block and my folder README.md (metadata updates for preview kind + row index for thumbnail refreshes).
 #ifndef MPASTE_CLIPBOARDBOARDMODEL_H
 #define MPASTE_CLIPBOARDBOARDMODEL_H
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QVector>
 
 #include "data/ClipboardItem.h"
@@ -71,7 +72,10 @@ public:
     void setShortcutText(int row, const QString &shortcutText);
 
 private:
+    void rebuildNameRowIndex();
+
     QVector<Entry> entries_;
+    QHash<QString, int> nameRowIndex_;
 };
 
 #endif // MPASTE_CLIPBOARDBOARDMODEL_H

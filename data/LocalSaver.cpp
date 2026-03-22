@@ -869,7 +869,7 @@ ClipboardItem LocalSaver::loadFromRawData(const QByteArray &rawData) {
 }
 
 namespace {
-ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath) {
+ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool includeThumbnail) {
     quint32 flags = 0;
     quint32 version = 0;
     if (!readCurrentFormatPrefix(in, flags, version)) {
@@ -898,20 +898,26 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath) {
     item.setAlias(header.alias);
     item.setPinned(header.pinned);
     item.setFavicon(header.favicon);
-    item.setThumbnail(header.thumbnail);
+    item.setThumbnailAvailableHint(!header.thumbnail.isNull());
+    if (includeThumbnail && !header.thumbnail.isNull()) {
+        item.setThumbnail(header.thumbnail);
+    }
     item.setSourceFilePath(filePath);
     item.setMimeDataFileOffset(header.mimeDataOffset);
     item.setFingerprintCache(header.fingerprint);
     item.setLightLoaded(
         effectiveType,
         header.normalizedText,
-        header.normalizedUrls);
+        header.normalizedUrls,
+        !header.thumbnail.isNull());
 
     return item;
 }
 }
 
-ClipboardItem LocalSaver::loadFromRawDataLight(const QByteArray &rawData, const QString &sourceFilePath) {
+ClipboardItem LocalSaver::loadFromRawDataLight(const QByteArray &rawData,
+                                               const QString &sourceFilePath,
+                                               bool includeThumbnail) {
     if (rawData.isEmpty()) {
         return ClipboardItem();
     }
@@ -923,17 +929,17 @@ ClipboardItem LocalSaver::loadFromRawDataLight(const QByteArray &rawData, const 
     }
 
     QDataStream in(&buffer);
-    return loadFromStreamLight(in, sourceFilePath);
+    return loadFromStreamLight(in, sourceFilePath, includeThumbnail);
 }
 
-ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath) {
+ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath, bool includeThumbnail) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         return ClipboardItem();
     }
 
     QDataStream in(&file);
-    ClipboardItem item = loadFromStreamLight(in, filePath);
+    ClipboardItem item = loadFromStreamLight(in, filePath, includeThumbnail);
     file.close();
     return item;
 }

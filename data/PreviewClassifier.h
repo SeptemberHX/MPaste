@@ -38,7 +38,7 @@ inline ClipboardPreviewKind defaultPreviewKindForType(ContentType type) {
 
 inline ClipboardPreviewKind classifyLight(ContentType type,
                                           const QString &normalizedText,
-                                          const QPixmap &thumbnail,
+                                          bool hasThumbnailHint,
                                           const QMimeData *mimeData,
                                           bool hasFastImagePayload) {
     if (type != RichText) {
@@ -49,7 +49,7 @@ inline ClipboardPreviewKind classifyLight(ContentType type,
         return TextPreview;
     }
 
-    if (!thumbnail.isNull()) {
+    if (hasThumbnailHint) {
         return VisualPreview;
     }
 

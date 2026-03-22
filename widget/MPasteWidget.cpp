@@ -123,7 +123,6 @@ void applyMenuTheme(QMenu *menu) {
         pal = qApp->palette();
     }
     menu->setPalette(pal);
-    menu->setStyleSheet(qApp->styleSheet());
     if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
         fusion->setParent(menu);
         menu->setStyle(fusion);

@@ -5,7 +5,7 @@
  * update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
  */
 QWidget#pasteWidget {
-    background: transparent;  /* 背景和渐变边框由 paintEvent 绘制 */
+    background-color: transparent;  /* 背景和渐变边框由 paintEvent 绘制 */
 }
 
 #clipboardBtnWidget {
@@ -68,7 +68,6 @@ QToolButton#countArea {
     padding: 0 7px;
     font-size: 11px;
     font-weight: 600;
-    text-align: center;
 }
 
 /* Clipboard 标签样式 */
@@ -78,7 +77,6 @@ QWidget#clipboardBtnWidget QToolButton
     color: {{tab_text}};
     font-weight: 600;
     font-size: 13px;
-    text-transform: none;
     border-radius: 14px;
 }
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:hover,
@@ -87,7 +85,6 @@ QWidget#clipboardBtnWidget QToolButton#clipboardButton:checked,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
     background-color: {{tab_checked_bg}};
     border: 2px solid {{accent_blue}};
-    outline: none;
 }
 
 QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
@@ -96,7 +93,6 @@ QWidget#clipboardBtnWidget QToolButton#staredButton:checked,
 QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
     background-color: {{tab_checked_bg}};
     border: 2px solid {{accent_orange}};
-    outline: none;
 }
 
 /* 类型过滤药丸样式 */
@@ -118,20 +114,11 @@ QWidget#typeBtnWidget QToolButton:pressed,
 QWidget#typeBtnWidget QToolButton:checked {
     background-color: {{type_checked_bg}};
     border: 2px solid {{accent_blue}};
-    outline: none;
 }
 
 QToolButton#countArea:hover {
     background-color: {{badge_bg_hover}};
     border-color: {{badge_border_hover}};
-}
-
-QToolButton#countArea {
-    qproperty-toolButtonStyle: Qt::ToolButtonTextOnly;
-}
-
-QToolButton#countArea:focus {
-    outline: none;
 }
 
 /* Menu and tooltip */

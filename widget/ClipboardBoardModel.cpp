@@ -1,8 +1,72 @@
 // input: Depends on ClipboardBoardModel.h and ClipboardItem metatype support.
 // output: Implements the in-memory clipboard board row model with alias-aware metadata for delegate-based views.
 // pos: Widget-layer model implementation used by ScrollItemsWidget.
-// update: If I change, update this header block and my folder README.md (metadata updates for link previews + preview kind).
+// update: If I change, update this header block and my folder README.md (metadata updates for link previews + preview kind + row index for thumbnail refreshes).
 #include "ClipboardBoardModel.h"
+
+namespace {
+
+QList<int> changedRolesForItem(const ClipboardItem &existing, const ClipboardItem &item) {
+    QList<int> roles;
+    roles.reserve(16);
+
+    if (!(existing == item)) {
+        roles.append(ClipboardBoardModel::ItemRole);
+    }
+    if (existing.getNormalizedText() != item.getNormalizedText()) {
+        roles.append(Qt::DisplayRole);
+        roles.append(ClipboardBoardModel::NormalizedTextRole);
+    }
+    if (existing.getContentType() != item.getContentType()) {
+        roles.append(ClipboardBoardModel::ContentTypeRole);
+    }
+    if (existing.getPreviewKind() != item.getPreviewKind()) {
+        roles.append(ClipboardBoardModel::PreviewKindRole);
+    }
+    if (existing.getIcon().cacheKey() != item.getIcon().cacheKey()) {
+        roles.append(ClipboardBoardModel::IconRole);
+    }
+    if (existing.thumbnail().cacheKey() != item.thumbnail().cacheKey()) {
+        roles.append(ClipboardBoardModel::ThumbnailRole);
+    }
+    if (existing.getFavicon().cacheKey() != item.getFavicon().cacheKey()) {
+        roles.append(ClipboardBoardModel::FaviconRole);
+    }
+    if (existing.getTitle() != item.getTitle()) {
+        roles.append(ClipboardBoardModel::TitleRole);
+    }
+    if (existing.getUrl() != item.getUrl()) {
+        roles.append(ClipboardBoardModel::UrlRole);
+    }
+    if (existing.getAlias() != item.getAlias()) {
+        roles.append(ClipboardBoardModel::AliasRole);
+    }
+    if (existing.isPinned() != item.isPinned()) {
+        roles.append(ClipboardBoardModel::PinnedRole);
+    }
+    if (existing.getNormalizedUrls() != item.getNormalizedUrls()) {
+        roles.append(ClipboardBoardModel::NormalizedUrlsRole);
+    }
+    if (existing.getTime() != item.getTime()) {
+        roles.append(ClipboardBoardModel::TimeRole);
+    }
+    if (existing.getImagePixelSize() != item.getImagePixelSize()) {
+        roles.append(ClipboardBoardModel::ImageSizeRole);
+    }
+    if (existing.getColor() != item.getColor()) {
+        roles.append(ClipboardBoardModel::ColorRole);
+    }
+    if (existing.getName() != item.getName()) {
+        roles.append(ClipboardBoardModel::NameRole);
+    }
+
+    if (roles.isEmpty()) {
+        roles.append(ClipboardBoardModel::ItemRole);
+    }
+    return roles;
+}
+
+} // namespace
 
 ClipboardBoardModel::ClipboardBoardModel(QObject *parent)
     : QAbstractListModel(parent) {}
@@ -69,42 +133,45 @@ bool ClipboardBoardModel::setData(const QModelIndex &index, const QVariant &valu
     }
 
     Entry &entry = entries_[index.row()];
-    bool changed = false;
     switch (role) {
         case ItemRole: {
             const ClipboardItem item = value.value<ClipboardItem>();
-            if (!(entry.item == item)) {
-                entry.item = item;
-                changed = true;
+            const QList<int> roles = changedRolesForItem(entry.item, item);
+            if (entry.item == item && roles.size() == 1 && roles.first() == ItemRole) {
+                return false;
             }
-            break;
+
+            const QString previousName = entry.item.getName();
+            entry.item = item;
+            if (previousName != item.getName()) {
+                rebuildNameRowIndex();
+            } else if (!item.getName().isEmpty()) {
+                nameRowIndex_.insert(item.getName(), index.row());
+            }
+            emit dataChanged(index, index, roles);
+            return true;
         }
         case FavoriteRole: {
             const bool favorite = value.toBool();
-            if (entry.favorite != favorite) {
-                entry.favorite = favorite;
-                changed = true;
+            if (entry.favorite == favorite) {
+                return false;
             }
-            break;
+            entry.favorite = favorite;
+            emit dataChanged(index, index, {FavoriteRole});
+            return true;
         }
         case ShortcutTextRole: {
             const QString shortcutText = value.toString();
-            if (entry.shortcutText != shortcutText) {
-                entry.shortcutText = shortcutText;
-                changed = true;
+            if (entry.shortcutText == shortcutText) {
+                return false;
             }
-            break;
+            entry.shortcutText = shortcutText;
+            emit dataChanged(index, index, {ShortcutTextRole});
+            return true;
         }
         default:
-            break;
+            return false;
     }
-
-    if (!changed) {
-        return false;
-    }
-
-    emit dataChanged(index, index, {});
-    return true;
 }
 
 Qt::ItemFlags ClipboardBoardModel::flags(const QModelIndex &index) const {
@@ -121,6 +188,7 @@ void ClipboardBoardModel::clear() {
 
     beginResetModel();
     entries_.clear();
+    nameRowIndex_.clear();
     endResetModel();
 }
 
@@ -128,6 +196,7 @@ int ClipboardBoardModel::prependItem(const ClipboardItem &item, bool favorite) {
     beginInsertRows(QModelIndex(), 0, 0);
     entries_.prepend({item, favorite, QString()});
     endInsertRows();
+    rebuildNameRowIndex();
     return 0;
 }
 
@@ -136,6 +205,9 @@ int ClipboardBoardModel::appendItem(const ClipboardItem &item, bool favorite) {
     beginInsertRows(QModelIndex(), row, row);
     entries_.append({item, favorite, QString()});
     endInsertRows();
+    if (!item.getName().isEmpty()) {
+        nameRowIndex_.insert(item.getName(), row);
+    }
     return row;
 }
 
@@ -144,6 +216,7 @@ int ClipboardBoardModel::insertItem(int row, const ClipboardItem &item, bool fav
     beginInsertRows(QModelIndex(), clampedRow, clampedRow);
     entries_.insert(clampedRow, {item, favorite, QString()});
     endInsertRows();
+    rebuildNameRowIndex();
     return clampedRow;
 }
 
@@ -153,23 +226,20 @@ bool ClipboardBoardModel::updateItem(int row, const ClipboardItem &item) {
     }
 
     const ClipboardItem &existing = entries_[row].item;
-    const bool metaChanged =
-        existing.getTitle() != item.getTitle()
-        || existing.getUrl() != item.getUrl()
-        || existing.getAlias() != item.getAlias()
-        || existing.isPinned() != item.isPinned()
-        || existing.getPreviewKind() != item.getPreviewKind()
-        || existing.getName() != item.getName()
-        || existing.getFavicon().cacheKey() != item.getFavicon().cacheKey()
-        || existing.thumbnail().cacheKey() != item.thumbnail().cacheKey();
-
-    if (existing == item && !metaChanged) {
+    const QList<int> roles = changedRolesForItem(existing, item);
+    if (existing == item && roles.size() == 1 && roles.first() == ItemRole) {
         return false;
     }
 
+    const QString previousName = existing.getName();
     entries_[row].item = item;
+    if (previousName != item.getName()) {
+        rebuildNameRowIndex();
+    } else if (!item.getName().isEmpty()) {
+        nameRowIndex_.insert(item.getName(), row);
+    }
     const QModelIndex modelIndex = index(row, 0);
-    emit dataChanged(modelIndex, modelIndex, {});
+    emit dataChanged(modelIndex, modelIndex, roles);
     return true;
 }
 
@@ -181,6 +251,7 @@ bool ClipboardBoardModel::removeItemAt(int row) {
     beginRemoveRows(QModelIndex(), row, row);
     entries_.removeAt(row);
     endRemoveRows();
+    rebuildNameRowIndex();
     return true;
 }
 
@@ -192,6 +263,7 @@ bool ClipboardBoardModel::moveItemToFront(int row) {
     beginMoveRows(QModelIndex(), row, row, QModelIndex(), 0);
     entries_.move(row, 0);
     endMoveRows();
+    rebuildNameRowIndex();
     return true;
 }
 
@@ -207,6 +279,7 @@ bool ClipboardBoardModel::moveItemToRow(int row, int targetRow) {
     beginMoveRows(QModelIndex(), row, row, QModelIndex(), destination);
     entries_.move(row, clampedTarget);
     endMoveRows();
+    rebuildNameRowIndex();
     return true;
 }
 
@@ -225,13 +298,7 @@ int ClipboardBoardModel::rowForName(const QString &name) const {
     if (name.isEmpty()) {
         return -1;
     }
-
-    for (int row = 0; row < entries_.size(); ++row) {
-        if (entries_.at(row).item.getName() == name) {
-            return row;
-        }
-    }
-    return -1;
+    return nameRowIndex_.value(name, -1);
 }
 
 int ClipboardBoardModel::rowForFingerprint(const QByteArray &fingerprint) const {
@@ -319,4 +386,15 @@ void ClipboardBoardModel::setShortcutText(int row, const QString &shortcutText) 
     entries_[row].shortcutText = shortcutText;
     const QModelIndex modelIndex = index(row, 0);
     emit dataChanged(modelIndex, modelIndex, {ShortcutTextRole});
+}
+
+void ClipboardBoardModel::rebuildNameRowIndex() {
+    nameRowIndex_.clear();
+    nameRowIndex_.reserve(entries_.size());
+    for (int row = 0; row < entries_.size(); ++row) {
+        const QString &name = entries_.at(row).item.getName();
+        if (!name.isEmpty()) {
+            nameRowIndex_.insert(name, row);
+        }
+    }
 }

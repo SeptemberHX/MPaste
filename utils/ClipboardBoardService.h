@@ -2,7 +2,7 @@
 // output: Provides board-level persistence, deferred loading, and background processing services.
 // pos: utils layer board service.
 // update: If I change, update this header block and my folder README.md.
-// note: Adds async thumbnail fetch for on-demand UI loading.
+// note: Adds async thumbnail fetch for on-demand UI loading with bounded worker concurrency.
 #ifndef MPASTE_CLIPBOARD_BOARD_SERVICE_H
 #define MPASTE_CLIPBOARD_BOARD_SERVICE_H
 
@@ -24,6 +24,7 @@
 class LocalSaver;
 class QThread;
 class QTimer;
+class QThreadPool;
 
 class ClipboardBoardService : public QObject {
     Q_OBJECT
@@ -90,6 +91,7 @@ private slots:
 
 private:
     QThread *startTrackedThread(const std::function<void()> &task);
+    void startThumbnailTask(const std::function<void()> &task);
     void trackExclusiveThread(QThread *thread, QThread **slot);
     void startRawReadBatch(int batchSize);
     void applyPendingFileIndex(const QStringList &filePaths, int initialBatchSize, int deferredBatchSize, quint64 token);
@@ -108,6 +110,8 @@ private:
     QThread *deferredLoadThread_ = nullptr;
     QThread *keywordSearchThread_ = nullptr;
     QList<QThread *> processingThreads_;
+    std::unique_ptr<QThreadPool> thumbnailTaskPool_;
+    QSet<QString> failedFullLoadPaths_;
     QStringList pendingLoadFilePaths_;
     QList<QPair<QString, QByteArray>> deferredLoadedItems_;
     int totalItemCount_ = 0;

@@ -69,6 +69,7 @@ private:
 
     // Lazy-load support (V4 format)
     QPixmap thumbnail_;
+    bool thumbnailAvailableHint_ = false;
     QString sourceFilePath_;
     quint64 mimeDataFileOffset_ = 0;
     bool mimeDataLoaded_ = true;
@@ -840,7 +841,7 @@ public:
             : item.detectLightContentType();
         item.cachedPreviewKind_ = PreviewClassifier::classifyLight(item.cachedContentType_,
                                                                    item.cachedNormalizedText_,
-                                                                   item.thumbnail_,
+                                                                   item.hasThumbnailHint(),
                                                                    item.mimeData_.data(),
                                                                    item.hasFastImagePayload());
         item.mimeDataLoaded_ = false;
@@ -874,6 +875,7 @@ public:
         imageSizeCache_ = other.imageSizeCache_;
         imageSizeCacheInitialized_ = other.imageSizeCacheInitialized_;
         thumbnail_ = other.thumbnail_;
+        thumbnailAvailableHint_ = other.thumbnailAvailableHint_;
         sourceFilePath_ = other.sourceFilePath_;
         mimeDataFileOffset_ = other.mimeDataFileOffset_;
         mimeDataLoaded_ = other.mimeDataLoaded_;
@@ -904,6 +906,7 @@ public:
             imageSizeCache_ = other.imageSizeCache_;
             imageSizeCacheInitialized_ = other.imageSizeCacheInitialized_;
             thumbnail_ = other.thumbnail_;
+            thumbnailAvailableHint_ = other.thumbnailAvailableHint_;
             sourceFilePath_ = other.sourceFilePath_;
             mimeDataFileOffset_ = other.mimeDataFileOffset_;
             mimeDataLoaded_ = other.mimeDataLoaded_;
@@ -1214,26 +1217,41 @@ public:
     QString getName() const { return name_; }
 
     bool hasThumbnail() const { return !thumbnail_.isNull(); }
+    bool hasThumbnailHint() const { return thumbnailAvailableHint_ || !thumbnail_.isNull(); }
     const QPixmap& thumbnail() const { return thumbnail_; }
-    void setThumbnail(const QPixmap &thumb) { thumbnail_ = thumb; }
+    void setThumbnail(const QPixmap &thumb) {
+        thumbnail_ = thumb;
+        if (!thumb.isNull()) {
+            thumbnailAvailableHint_ = true;
+        }
+    }
+    void clearThumbnail() { thumbnail_ = QPixmap(); }
+    void setThumbnailAvailableHint(bool available) {
+        thumbnailAvailableHint_ = available || !thumbnail_.isNull();
+    }
     void setSourceFilePath(const QString &path) { sourceFilePath_ = path; }
     const QString& sourceFilePath() const { return sourceFilePath_; }
     void setMimeDataFileOffset(quint64 offset) { mimeDataFileOffset_ = offset; }
     quint64 mimeDataFileOffset() const { return mimeDataFileOffset_; }
     bool isMimeDataLoaded() const { return mimeDataLoaded_; }
 
-    void setLightLoaded(ContentType type, const QString &normText, const QList<QUrl> &normUrls) {
+    void setLightLoaded(ContentType type,
+                        const QString &normText,
+                        const QList<QUrl> &normUrls,
+                        bool hasThumbnailHint = false) {
         mimeDataLoaded_ = false;
         cachedContentType_ = type;
         cachedNormalizedText_ = normText;
         cachedNormalizedUrls_ = normUrls;
+        thumbnailAvailableHint_ = hasThumbnailHint || !thumbnail_.isNull();
         cachedPreviewKind_ = PreviewClassifier::classifyLight(cachedContentType_,
                                                               cachedNormalizedText_,
-                                                              thumbnail_,
+                                                              thumbnailAvailableHint_,
                                                               mimeData_.data(),
                                                               hasFastImagePayload());
         if (cachedContentType_ == RichText && cachedPreviewKind_ == TextPreview) {
             thumbnail_ = QPixmap();
+            thumbnailAvailableHint_ = false;
         }
     }
 

@@ -1,8 +1,8 @@
 // input: Depends on Qt Widgets, ClipboardItem data, persistence service, and item widgets.
 // output: Exposes one history board with lazy loading, filtering, dedup indexing, and paste signals.
 // pos: Widget-layer horizontal board declaration for clipboard/favorites views.
-// update: If I change, update this header block and my folder README.md (main-card context menu save/export + multi-select batch actions).
-// note: Added theme application entry point, alias sync hooks, on-demand thumbnail loading with prefetch, and loading overlay.
+// update: If I change, update this header block and my folder README.md (main-card context menu save/export + multi-select batch actions + diff-based thumbnail visibility tracking + hidden-stage light prewarm).
+// note: Added theme application entry point, alias sync hooks, on-demand thumbnail loading with prefetch, loading overlay, diff-based thumbnail visibility tracking, and hidden-stage light prewarm.
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
 
@@ -155,10 +155,14 @@ private:
     QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
     int selectedSourceRow() const;
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;
+    bool isBoardUiVisible() const;
     void scheduleThumbnailUpdate();
     void updateVisibleThumbnails();
     bool shouldManageThumbnail(const ClipboardItem &item) const;
     void requestThumbnailForItem(const ClipboardItem &item);
+    void applyManagedThumbnailNames(const QSet<QString> &desiredNames);
+    void setVisibleLoadingThumbnailNames(const QSet<QString> &names);
+    void updateThumbnailViewport(const QSet<QString> &names);
     void updateLoadingOverlay();
     void updateSelectionState();
 
@@ -189,6 +193,8 @@ private:
     QSet<QString> pendingThumbnailNames_;
     QSet<QString> missingThumbnailNames_;
     QSet<QString> desiredThumbnailNames_;
+    QSet<QString> managedThumbnailNames_;
+    QSet<QString> visibleLoadingThumbnailNames_;
     QTimer *thumbnailUpdateTimer_ = nullptr;
     QTimer *thumbnailPulseTimer_ = nullptr;
     int thumbnailLoadingPhase_ = 0;

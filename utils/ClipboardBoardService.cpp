@@ -2,7 +2,7 @@
 // output: Implements board persistence, deferred loading, thumbnail processing, and keyword search routines.
 // pos: utils layer board service implementation.
 // update: If I change, update this header block and my folder README.md.
-// note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, respects data-layer preview kind for rich text, trims rich-text margins, and backfills missing on-disk thumbnails on demand.
+// note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, respects data-layer preview kind for rich text, trims rich-text margins, backfills missing on-disk thumbnails on demand, and uses bounded worker concurrency.
 #include "ClipboardBoardService.h"
 
 #include <QBuffer>
@@ -24,8 +24,10 @@
 #include <QTextDocument>
 #include <QTextOption>
 #include <QThread>
+#include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
+#include <QRunnable>
 
 #include "data/CardPreviewMetrics.h"
 #include "data/ContentClassifier.h"
@@ -479,10 +481,15 @@ struct PendingItemProcessingResult {
 ClipboardBoardService::ClipboardBoardService(const QString &category, QObject *parent)
     : QObject(parent),
       category_(category),
-      saver_(std::make_unique<LocalSaver>()) {
+      saver_(std::make_unique<LocalSaver>()),
+      thumbnailTaskPool_(std::make_unique<QThreadPool>()) {
     deferredLoadTimer_ = new QTimer(this);
     deferredLoadTimer_->setSingleShot(true);
     connect(deferredLoadTimer_, &QTimer::timeout, this, &ClipboardBoardService::continueDeferredLoad);
+
+    const int idealThreadCount = qMax(1, QThread::idealThreadCount());
+    thumbnailTaskPool_->setMaxThreadCount(qBound(1, idealThreadCount / 2, 4));
+    thumbnailTaskPool_->setExpiryTimeout(15000);
 }
 
 ClipboardBoardService::~ClipboardBoardService() {
@@ -504,6 +511,9 @@ ClipboardBoardService::~ClipboardBoardService() {
             thread->wait();
         }
     }
+    if (thumbnailTaskPool_) {
+        thumbnailTaskPool_->waitForDone();
+    }
 }
 
 QThread *ClipboardBoardService::startTrackedThread(const std::function<void()> &task) {
@@ -518,6 +528,17 @@ QThread *ClipboardBoardService::startTrackedThread(const std::function<void()> &
     connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     thread->start();
     return thread;
+}
+
+void ClipboardBoardService::startThumbnailTask(const std::function<void()> &task) {
+    if (!thumbnailTaskPool_) {
+        task();
+        return;
+    }
+
+    thumbnailTaskPool_->start(QRunnable::create([task]() {
+        task();
+    }));
 }
 
 void ClipboardBoardService::trackExclusiveThread(QThread *thread, QThread **slot) {
@@ -590,6 +611,7 @@ void ClipboardBoardService::refreshIndex() {
     waitForIndexRefresh();
     deferredLoadedItems_.clear();
     pendingLoadFilePaths_.clear();
+    failedFullLoadPaths_.clear();
     updateTotalItemCount(0);
     checkSaveDir();
 
@@ -614,6 +636,7 @@ void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBat
     waitForDeferredRead();
     deferredLoadedItems_.clear();
     pendingLoadFilePaths_.clear();
+    failedFullLoadPaths_.clear();
     updateTotalItemCount(0);
     emit pendingCountChanged(0);
     checkSaveDir();
@@ -848,7 +871,7 @@ int ClipboardBoardService::maintainPreviewCache(PreviewCacheMaintenanceMode mode
                     break;
                 }
 
-                if (!usesVisualPreview(lightItem) || lightItem.hasThumbnail()) {
+                if (!usesVisualPreview(lightItem) || lightItem.hasThumbnailHint()) {
                     break;
                 }
 
@@ -914,7 +937,7 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
     const int itemScale = MPasteSettings::getInst()->getItemScale();
 
     QPointer<ClipboardBoardService> guard(this);
-    startTrackedThread([guard, expectedName, contentType, previewKind, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
+    startThumbnailTask([guard, expectedName, contentType, previewKind, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
         PendingItemProcessingResult result;
         QByteArray resolvedImageBytes = imageBytes;
         QString resolvedHtml = richHtml;
@@ -1005,35 +1028,59 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
     }
 
     QPointer<ClipboardBoardService> guard(this);
-    startTrackedThread([guard, expectedName, filePath]() mutable {
+    startThumbnailTask([guard, expectedName, filePath]() mutable {
         LocalSaver saver;
         ClipboardItem loaded = saver.loadFromFileLight(filePath);
         ClipboardItem preparedItem = loaded;
         bool generatedThumbnail = false;
         bool refreshedRichText = false;
+        bool attemptedRebuild = false;
+        bool rebuildFailed = false;
+        bool loadedPersistedThumbnail = false;
         const QString loadedNormalizedText = loaded.getNormalizedText();
         if (!loaded.getName().isEmpty()) {
             const ClipboardItem::ContentType type = loaded.getContentType();
+            if (loaded.hasThumbnailHint() && loaded.thumbnail().isNull()) {
+                ClipboardItem thumbnailItem = saver.loadFromFileLight(filePath, true);
+                if (!thumbnailItem.getName().isEmpty() && !thumbnailItem.thumbnail().isNull()) {
+                    preparedItem.setThumbnail(thumbnailItem.thumbnail());
+                    loadedPersistedThumbnail = true;
+                }
+            }
+
             const bool shouldRebuild = (type == ClipboardItem::RichText && loaded.getPreviewKind() == ClipboardItem::VisualPreview)
-                || ((type == ClipboardItem::Image || type == ClipboardItem::Office) && loaded.thumbnail().isNull());
-            if (shouldRebuild) {
+                || ((type == ClipboardItem::Image || type == ClipboardItem::Office) && preparedItem.thumbnail().isNull());
+            if (shouldRebuild && !(guard && guard->failedFullLoadPaths_.contains(filePath))) {
+                attemptedRebuild = true;
                 ClipboardItem fullItem = saver.loadFromFile(filePath);
                 if (!fullItem.getName().isEmpty()) {
                     preparedItem = prepareItemForDisplayAndSave(fullItem);
                     generatedThumbnail = !preparedItem.thumbnail().isNull()
                         && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
                     refreshedRichText = type == ClipboardItem::RichText;
+                } else {
+                    rebuildFailed = true;
                 }
+            } else if (shouldRebuild) {
+                rebuildFailed = true;
             }
         }
         const QPixmap thumbnail = preparedItem.thumbnail();
         const bool shouldPersistPreparedItem = generatedThumbnail
             || (refreshedRichText && preparedItem.getNormalizedText() != loadedNormalizedText);
+        const bool noThumbnailProgress = attemptedRebuild
+            && thumbnail.isNull()
+            && !generatedThumbnail
+            && !refreshedRichText
+            && !loadedPersistedThumbnail;
 
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, preparedItem, thumbnail, generatedThumbnail, refreshedRichText, shouldPersistPreparedItem]() {
+            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, filePath, preparedItem, thumbnail, generatedThumbnail, refreshedRichText, shouldPersistPreparedItem, rebuildFailed, noThumbnailProgress]() {
                 if (!guard) {
                     return;
+                }
+                if (rebuildFailed && !filePath.isEmpty()) {
+                    guard->failedFullLoadPaths_.insert(filePath);
                 }
                 if ((generatedThumbnail || refreshedRichText) && !preparedItem.getName().isEmpty()) {
                     if (shouldPersistPreparedItem) {
@@ -1045,6 +1092,10 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                         }
                     }
                     emit guard->pendingItemReady(expectedName, preparedItem);
+                    return;
+                }
+                if (rebuildFailed || noThumbnailProgress) {
+                    emit guard->thumbnailReady(expectedName, QPixmap());
                     return;
                 }
                 if (!thumbnail.isNull()) {

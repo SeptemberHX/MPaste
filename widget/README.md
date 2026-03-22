@@ -51,6 +51,10 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemPreviewDialog` now reuses ContentClassifier helpers for HTML image source detection and image payload decoding.
 - `ClipboardItemPreviewDialog` now supports image zoom with Ctrl+wheel and +/-/0 shortcuts in image previews.
 - Clipboard card typography has been reduced slightly to make list items feel lighter.
+- `ClipboardCardDelegate` 现在会缓存头部主色、头部图标和链接占位预览，并把单文件卡片的本地图预览读取移到后台线程，避免在 `paint` 里同步解码磁盘图片。
+- `ClipboardCardDelegate` 现在把单文件卡片的系统文件图标提取移出 `paint`，改为事件循环中按队列回填，减少滚动时的同步图标提取卡顿。
+- `ClipboardCardDelegate` 现在会给卡片内生成的标题、正文、页脚和占位预览文本显式指定 UI 字体族，减少 Windows 下落到 `Fixedsys`/DirectWrite fallback 时的首帧抖动。
+- `ClipboardCardDelegate` 现在把运行时 pixmap 缓存预算收紧到更保守的范围，并移除了单文件图标的一层重复缓存，避免滚动优化把常驻内存顶到数百 MB。
 - File-type cards now show image thumbnails when they contain a single local image file.
 - File-type cards now show the single file path in the footer info line.
 - Single-file paths in the footer now use middle elide to keep filenames visible.
@@ -63,7 +67,8 @@ update: 修改本目录文件时，同步更新本 README。
 - Link cards now trigger OpenGraph fetches on selection to populate missing thumbnails in delegate mode.
 - New link items now start OpenGraph fetches immediately so thumbnails arrive without needing extra navigation.
 - Delegate mode now uses a single reusable hover action bar to show card tools without per-item widgets.
-- Hover action bar now uses a frosted acrylic-style background (native blur on Windows, translucent fallback elsewhere).
+- Hover action bar now uses a translucent painted background instead of a native acrylic child window, avoiding geometry overflow warnings and reducing scroll-time UI-thread interruptions on Windows.
+- Hover action bar now anchors to the stable board host instead of the scrolling viewport, avoiding coordinate drift on very long horizontal histories.
 - Card headers now use YaHei UI with a larger gap between type and time, and a slightly larger type label.
 - Clipboard board model now refreshes rows when link preview metadata (thumbnail/favicon/title) changes.
 - Arrow-key navigation now keeps the selected card at the edge until it needs to scroll.
@@ -75,6 +80,11 @@ update: 修改本目录文件时，同步更新本 README。
 - `ScrollItemsWidget` 现在会在主窗口卡片右键菜单中开放保存功能：图片导出为图片文件、富文本导出为 HTML、纯文本导出为 TXT，其他类型暂不开放保存。
 - `ScrollItemsWidget` 现在支持 `Ctrl/Shift` 多选，并在右键菜单中提供批量收藏、批量取消收藏和批量删除；多选时会隐藏单卡片悬浮工具条，主窗口计数区会显示“已选/总数”。
 - `ScrollItemsWidget` 现在会在搜索/类型筛选切换后重新触发可见条目的缩略图回补，避免富文本/图片结果一直停留在 loading 占位。
+- `ScrollItemsWidget` 现在在窗口隐藏阶段只做 light-item 预热，不触发缩略图调度、首选中和视口刷新；这些 UI 相关工作会在首次真正显示时再补上。
+- `ClipboardBoardView` 现在会在滚动/重绘期间每秒输出一次 `board-fps` 日志，包含 `fps`、`maxFrameGapMs`、`maxPaintMs` 和长帧计数，方便直接观察列表是否接近 60Hz。
+- `ScrollItemsWidget` 现在按“进入/离开可见区”的差量方式管理缩略图，不再在每次滚动后按总条目数全量扫描整个模型。
+- `ScrollItemsWidget` 的 loading shimmer 现在只重绘当前可见且仍缺缩略图的卡片区域，减少滚动过程中的整视口重绘。
+- `ClipboardBoardModel` 现在维护 `name -> row` 索引，并在缩略图/元数据变更时只发相关 roles，降低回补完成后的查找和重绘成本。
 - 文本型富文本卡片现在优先直接绘制自动换行的文本预览，而不是依赖截图缩略图，避免长句只显示第一行开头或旧缩略图持续发糊。
 - 富文本卡片现在直接消费数据层给出的 `PreviewKind`，由 `ClipboardItem` 统一决定走文本预览还是视觉缩略图，减少界面层重复判断。
 - `ScrollItemsWidget` 现在会先快速插入轻量条目，再在后台线程补做缩略图和保存落盘，减少复制大图时卡住界面。

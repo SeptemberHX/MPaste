@@ -34,6 +34,7 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## Recent Notes
 - ThemeManager now centralizes app-wide theme switching, palette updates, and QSS token resolution.
+- ThemeManager now emits integer-alpha `rgba(...)` tokens for QSS instead of float-alpha forms, reducing Qt stylesheet parse failures on Windows.
 
 - `OpenGraphFetcher` now tracks whether a fetched image is a preview or favicon to preserve link preview thumbnails.
 - `ClipboardMonitor` currently prints detailed clipboard capture diagnostics (`dataChanged`, settle retries, MIME snapshot, duplicate suppression, and app-event emission) to help trace repeated copy handling.
@@ -56,6 +57,9 @@ update: 修改本目录文件时，同步更新本 README。
 - Rich text thumbnail generation now trims transparent margins before scaling to reduce empty borders.
 - Rich text thumbnail rendering now injects wrap-safe CSS so text, tables, and inline blocks are laid out within the card width before capture.
 - ClipboardBoardService now supports async thumbnail reads for visible-only UI loading.
+- ClipboardBoardService now runs thumbnail generation and on-demand thumbnail reloads through a bounded worker pool instead of spawning one thread per request.
+- ClipboardBoardService now treats no-progress / failed full-thumbnail rebuilds as terminal misses, so broken persisted `.mpaste` files do not trigger endless on-demand thumbnail retry loops.
+- ClipboardBoardService now keeps an in-process blacklist for `.mpaste` files that already failed full reload, so visible-range thumbnail work does not keep retrying the same broken history entry.
 - ClipboardBoardService now regenerates and persists visible rich-text thumbnails during on-demand thumbnail fetches, and backfills missing image thumbnails, so filtered/search results do not get stuck on loading placeholders and old single-line rich-text captures can self-heal.
 - Text-only rich-text thumbnails now keep their natural layout instead of trimming-and-cover-scaling a tiny text fragment to fill the whole card.
 - ClipboardBoardService now trusts `ClipboardItem::PreviewKind` when deciding whether rich text needs visual thumbnail work, reducing duplicated preview policy in the service layer.

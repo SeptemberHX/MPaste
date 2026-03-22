@@ -143,4 +143,5 @@ MPaste.exe
 ## Todo
 
 * Use image instead of widget in scroll area to speed up
+* Pin the application default font to an installed UI family and use integer-alpha QSS tokens to avoid DirectWrite fallback noise and stylesheet parse failures on Windows
 * Categories

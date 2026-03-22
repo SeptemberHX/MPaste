@@ -1,8 +1,8 @@
 // input: Depends on ScrollItemsWidget.h, ClipboardBoardService, Qt model/view APIs, and delegate-based card painting.
 // output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
-// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export + multi-select batch actions + data-layer preview kind).
-// note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, and loading overlay.
+// update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export + multi-select batch actions + data-layer preview kind + board paint FPS logging + hidden-stage light prewarm).
+// note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, loading overlay, board paint FPS logging, and hidden-stage light prewarm.
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -11,6 +11,7 @@
 #include <QKeyEvent>
 #include <QListView>
 #include <QLabel>
+#include <QElapsedTimer>
 #include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
@@ -49,8 +50,8 @@
 namespace {
 
 QString hoverButtonStyle(bool dark, int borderRadius, int padding) {
-    const QString hoverColor = dark ? QStringLiteral("rgba(255, 255, 255, 0.12)")
-                                    : QStringLiteral("rgba(0, 0, 0, 0.08)");
+    const QString hoverColor = dark ? QStringLiteral("rgba(255, 255, 255, 31)")
+                                    : QStringLiteral("rgba(0, 0, 0, 20)");
     return QString(R"(
         QToolButton {
             background: transparent;
@@ -84,7 +85,6 @@ void applyMenuTheme(QMenu *menu) {
         pal = qApp->palette();
     }
     menu->setPalette(pal);
-    menu->setStyleSheet(qApp->styleSheet());
     if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
         fusion->setParent(menu);
         menu->setStyle(fusion);
@@ -122,72 +122,6 @@ private:
     QColor background_ = QColor(255, 255, 255, 185);
     QColor border_ = QColor(255, 255, 255, 120);
 };
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#include <dwmapi.h>
-
-enum ACCENT_STATE {
-    ACCENT_DISABLED = 0,
-    ACCENT_ENABLE_BLURBEHIND = 3,
-    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
-};
-
-struct ACCENT_POLICY {
-    ACCENT_STATE AccentState;
-    DWORD AccentFlags;
-    DWORD GradientColor; // AABBGGRR
-    DWORD AnimationId;
-};
-
-enum WINDOWCOMPOSITIONATTRIB {
-    WCA_ACCENT_POLICY = 19
-};
-
-struct WINDOWCOMPOSITIONATTRIBDATA {
-    WINDOWCOMPOSITIONATTRIB Attrib;
-    PVOID pvData;
-    SIZE_T cbData;
-};
-
-typedef BOOL (WINAPI *pfnSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
-
-static DWORD accentColorFromArgb(const QColor &color) {
-    return (static_cast<DWORD>(color.alpha()) << 24)
-        | (static_cast<DWORD>(color.blue()) << 16)
-        | (static_cast<DWORD>(color.green()) << 8)
-        | static_cast<DWORD>(color.red());
-}
-
-static void enableBlurBehindForWidget(HWND hwnd, const QColor &tintColor) {
-    if (!hwnd) {
-        return;
-    }
-
-    auto user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) {
-        return;
-    }
-    auto setWCA = reinterpret_cast<pfnSetWindowCompositionAttribute>(
-        GetProcAddress(user32, "SetWindowCompositionAttribute"));
-    if (!setWCA) {
-        return;
-    }
-
-    DWORD tint = accentColorFromArgb(tintColor);
-
-    ACCENT_POLICY accent{};
-    accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
-    accent.AccentFlags = 2;
-    accent.GradientColor = tint;
-
-    WINDOWCOMPOSITIONATTRIBDATA data{};
-    data.Attrib = WCA_ACCENT_POLICY;
-    data.pvData = &accent;
-    data.cbData = sizeof(accent);
-    setWCA(hwnd, &data);
-}
-#endif
 
 bool looksBrokenTranslation(const QString &text) {
     if (text.isEmpty()) {
@@ -482,8 +416,9 @@ private:
 
 class ClipboardBoardView final : public QListView {
 public:
-    explicit ClipboardBoardView(QWidget *parent = nullptr)
-        : QListView(parent) {}
+    explicit ClipboardBoardView(const QString &debugLabel, QWidget *parent = nullptr)
+        : QListView(parent),
+          debugLabel_(debugLabel) {}
 
     void applyViewportMargins(int left, int top, int right, int bottom) {
         setViewportMargins(left, top, right, bottom);
@@ -492,6 +427,70 @@ public:
     void refreshItemGeometries() {
         updateGeometries();
     }
+
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        if (!fpsWindow_.isValid()) {
+            resetPaintStats();
+            fpsWindow_.start();
+        }
+
+        qint64 frameGapMs = 0;
+        if (frameGapTimer_.isValid()) {
+            frameGapMs = frameGapTimer_.restart();
+        } else {
+            frameGapTimer_.start();
+        }
+
+        QElapsedTimer paintTimer;
+        paintTimer.start();
+        QListView::paintEvent(event);
+        const qint64 paintMs = paintTimer.elapsed();
+
+        ++frameCount_;
+        maxPaintMs_ = qMax(maxPaintMs_, paintMs);
+        if (frameGapMs > 0) {
+            maxFrameGapMs_ = qMax(maxFrameGapMs_, frameGapMs);
+            if (frameGapMs > 20) {
+                ++jank20Count_;
+            }
+            if (frameGapMs > 33) {
+                ++jank33Count_;
+            }
+        }
+
+        if (fpsWindow_.elapsed() >= 1000) {
+            qInfo().noquote()
+                << QStringLiteral("[board-fps] board=%1 fps=%2 maxFrameGapMs=%3 maxPaintMs=%4 jank>20ms=%5 jank>33ms=%6")
+                      .arg(debugLabel_.isEmpty() ? objectName() : debugLabel_)
+                      .arg(frameCount_)
+                      .arg(maxFrameGapMs_)
+                      .arg(maxPaintMs_)
+                      .arg(jank20Count_)
+                      .arg(jank33Count_);
+            resetPaintStats();
+            fpsWindow_.restart();
+        }
+    }
+
+private:
+    void resetPaintStats() {
+        frameCount_ = 0;
+        maxFrameGapMs_ = 0;
+        maxPaintMs_ = 0;
+        jank20Count_ = 0;
+        jank33Count_ = 0;
+        frameGapTimer_.invalidate();
+    }
+
+    QString debugLabel_;
+    QElapsedTimer fpsWindow_;
+    QElapsedTimer frameGapTimer_;
+    int frameCount_ = 0;
+    qint64 maxFrameGapMs_ = 0;
+    qint64 maxPaintMs_ = 0;
+    int jank20Count_ = 0;
+    int jank33Count_ = 0;
 };
 
 }
@@ -512,7 +511,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     hostLayout->setContentsMargins(0, 0, 0, 0);
     hostLayout->setSpacing(0);
 
-    auto *boardView = new ClipboardBoardView(ui->viewHost);
+    auto *boardView = new ClipboardBoardView(category, ui->viewHost);
     listView_ = boardView;
     listView_->setObjectName(QStringLiteral("boardListView"));
     hostLayout->addWidget(listView_);
@@ -630,7 +629,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
         }
         thumbnailLoadingPhase_ = (thumbnailLoadingPhase_ + 7) % 100;
         cardDelegate_->setLoadingPhase(thumbnailLoadingPhase_);
-        listView_->viewport()->update();
+        updateThumbnailViewport(visibleLoadingThumbnailNames_);
     });
 
     applyTheme(ThemeManager::instance()->isDark());
@@ -681,13 +680,6 @@ void ScrollItemsWidget::applyTheme(bool dark) {
     if (hoverDeleteBtn_) {
         hoverDeleteBtn_->setStyleSheet(buttonStyle);
     }
-
-#ifdef Q_OS_WIN
-    if (hoverActionBar_) {
-        const QColor tint = darkTheme_ ? QColor(16, 22, 30, 72) : QColor(255, 255, 255, 28);
-        enableBlurBehindForWidget(reinterpret_cast<HWND>(hoverActionBar_->winId()), tint);
-    }
-#endif
 
     if (leftEdgeFadeOverlay_) {
         auto *overlay = static_cast<EdgeFadeOverlay *>(leftEdgeFadeOverlay_);
@@ -796,7 +788,7 @@ void ScrollItemsWidget::handleCurrentIndexChanged(const QModelIndex &current, co
 }
 
 void ScrollItemsWidget::createHoverActionBar() {
-    if (!listView_) {
+    if (!listView_ || !ui || !ui->viewHost) {
         return;
     }
 
@@ -807,7 +799,7 @@ void ScrollItemsWidget::createHoverActionBar() {
     const int spacing = qMax(2, 4 * scale / 100);
     const bool dark = ThemeManager::instance()->isDark();
 
-    auto *hoverBar = new HoverActionBar(listView_->viewport());
+    auto *hoverBar = new HoverActionBar(ui->viewHost);
     hoverActionBar_ = hoverBar;
     hoverActionBar_->setObjectName(QStringLiteral("cardActionBar"));
     hoverActionBar_->setFixedHeight(barHeight);
@@ -817,12 +809,6 @@ void ScrollItemsWidget::createHoverActionBar() {
     hoverBar->setCornerRadius(borderRadius);
     hoverBar->setColors(dark ? QColor(26, 31, 38, 205) : QColor(255, 255, 255, 185),
                         dark ? QColor(255, 255, 255, 40) : QColor(255, 255, 255, 120));
-
-#ifdef Q_OS_WIN
-    hoverActionBar_->setAttribute(Qt::WA_NativeWindow);
-    const QColor tint = dark ? QColor(16, 22, 30, 72) : QColor(255, 255, 255, 28);
-    enableBlurBehindForWidget(reinterpret_cast<HWND>(hoverActionBar_->winId()), tint);
-#endif
 
     hoverOpacity_ = new QGraphicsOpacityEffect(hoverActionBar_);
     hoverOpacity_->setOpacity(0.0);
@@ -1120,8 +1106,16 @@ void ScrollItemsWidget::updateHoverActionBarPosition() {
         return;
     }
 
+    QWidget *viewport = listView_->viewport();
+    QWidget *overlayHost = hoverActionBar_->parentWidget();
+    if (!viewport || !overlayHost) {
+        hideHoverActionBar(false);
+        return;
+    }
+
     const QRect itemRect = listView_->visualRect(hoverProxyIndex_);
-    if (!itemRect.isValid() || !listView_->viewport()->rect().intersects(itemRect)) {
+    const QRect viewportRect = viewport->rect();
+    if (!itemRect.isValid() || !viewportRect.intersects(itemRect)) {
         hideHoverActionBar();
         return;
     }
@@ -1129,9 +1123,20 @@ void ScrollItemsWidget::updateHoverActionBarPosition() {
     const int scale = MPasteSettings::getInst()->getItemScale();
     const QSize cardSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
     const QRect cardRect(itemRect.topLeft(), cardSize);
+    const QPoint hostTopLeft = viewport->mapTo(overlayHost, cardRect.topLeft());
     hoverActionBar_->adjustSize();
-    const int x = cardRect.left() + (cardRect.width() - hoverActionBar_->width()) / 2;
-    const int y = cardRect.top() + qMax(2, 4 * scale / 100);
+    if (overlayHost->width() <= 0 || overlayHost->height() <= 0
+        || hoverActionBar_->width() <= 0 || hoverActionBar_->height() <= 0) {
+        hideHoverActionBar(false);
+        return;
+    }
+
+    const int desiredX = hostTopLeft.x() + (cardRect.width() - hoverActionBar_->width()) / 2;
+    const int desiredY = hostTopLeft.y() + qMax(2, 4 * scale / 100);
+    const int maxX = qMax(0, overlayHost->width() - hoverActionBar_->width());
+    const int maxY = qMax(0, overlayHost->height() - hoverActionBar_->height());
+    const int x = qBound(0, desiredX, maxX);
+    const int y = qBound(0, desiredY, maxY);
     hoverActionBar_->move(x, y);
 }
 
@@ -1415,10 +1420,12 @@ void ScrollItemsWidget::handleLoadedItems(const QList<QPair<QString, ClipboardIt
         appendLoadedItem(payload.first, payload.second);
     }
 
-    setFirstVisibleItemSelected();
     emit itemCountChanged(itemCountForDisplay());
-    updateContentWidthHint();
-    scheduleThumbnailUpdate();
+    if (isBoardUiVisible()) {
+        setFirstVisibleItemSelected();
+        updateContentWidthHint();
+        scheduleThumbnailUpdate();
+    }
     updateLoadingOverlay();
 }
 
@@ -1464,6 +1471,8 @@ void ScrollItemsWidget::handleThumbnailReady(const QString &expectedName, const 
     } else {
         missingThumbnailNames_.insert(expectedName);
     }
+
+    scheduleThumbnailUpdate();
 }
 
 void ScrollItemsWidget::handleKeywordMatched(const QSet<QString> &matchedNames, quint64 token) {
@@ -1480,8 +1489,10 @@ void ScrollItemsWidget::handleTotalItemCountChanged(int total) {
 }
 
 void ScrollItemsWidget::handleDeferredLoadCompleted() {
-    refreshContentWidthHint();
-    scheduleThumbnailUpdate();
+    if (isBoardUiVisible()) {
+        refreshContentWidthHint();
+        scheduleThumbnailUpdate();
+    }
     updateLoadingOverlay();
 }
 
@@ -1515,9 +1526,11 @@ void ScrollItemsWidget::applyFilters() {
     proxyModel_->setTypeFilter(currentTypeFilter_);
     proxyModel_->setKeyword(currentKeyword_);
     proxyModel_->setAsyncMatchedNames(asyncKeywordMatchedNames_);
-    setFirstVisibleItemSelected();
-    refreshContentWidthHint();
-    scheduleThumbnailUpdate();
+    if (isBoardUiVisible()) {
+        setFirstVisibleItemSelected();
+        refreshContentWidthHint();
+        scheduleThumbnailUpdate();
+    }
     emit itemCountChanged(itemCountForDisplay());
 }
 
@@ -1696,6 +1709,10 @@ void ScrollItemsWidget::scheduleThumbnailUpdate() {
     if (!thumbnailUpdateTimer_) {
         return;
     }
+    if (!isBoardUiVisible()) {
+        setVisibleLoadingThumbnailNames({});
+        return;
+    }
     thumbnailUpdateTimer_->start();
 }
 
@@ -1721,14 +1738,108 @@ void ScrollItemsWidget::requestThumbnailForItem(const ClipboardItem &item) {
     boardService_->requestThumbnailAsync(item.getName(), item.sourceFilePath());
 }
 
+void ScrollItemsWidget::applyManagedThumbnailNames(const QSet<QString> &desiredNames) {
+    if (!boardModel_) {
+        managedThumbnailNames_.clear();
+        return;
+    }
+
+    QSet<QString> leavingNames = managedThumbnailNames_;
+    leavingNames.subtract(desiredNames);
+    for (const QString &name : leavingNames) {
+        const int row = boardModel_->rowForName(name);
+        if (row < 0) {
+            continue;
+        }
+
+        ClipboardItem item = boardModel_->itemAt(row);
+        if (!shouldManageThumbnail(item) || !item.hasThumbnail() || item.sourceFilePath().isEmpty()) {
+            continue;
+        }
+
+        item.setThumbnail(QPixmap());
+        boardModel_->updateItem(row, item);
+    }
+
+    for (const QString &name : desiredNames) {
+        const int row = boardModel_->rowForName(name);
+        if (row < 0) {
+            continue;
+        }
+
+        const ClipboardItem item = boardModel_->itemAt(row);
+        if (shouldManageThumbnail(item) && !item.hasThumbnail()) {
+            requestThumbnailForItem(item);
+        }
+    }
+
+    managedThumbnailNames_ = desiredNames;
+}
+
+void ScrollItemsWidget::setVisibleLoadingThumbnailNames(const QSet<QString> &names) {
+    QSet<QString> changedNames = visibleLoadingThumbnailNames_;
+    changedNames.unite(names);
+    visibleLoadingThumbnailNames_ = names;
+    updateThumbnailViewport(changedNames);
+
+    if (!thumbnailPulseTimer_) {
+        return;
+    }
+
+    if (visibleLoadingThumbnailNames_.isEmpty()) {
+        thumbnailPulseTimer_->stop();
+        return;
+    }
+
+    if (!thumbnailPulseTimer_->isActive()) {
+        thumbnailPulseTimer_->start();
+    }
+}
+
+void ScrollItemsWidget::updateThumbnailViewport(const QSet<QString> &names) {
+    if (!listView_ || !boardModel_ || !proxyModel_ || names.isEmpty()) {
+        return;
+    }
+
+    QWidget *viewport = listView_->viewport();
+    if (!viewport) {
+        return;
+    }
+
+    const QRect viewportRect = viewport->rect();
+    for (const QString &name : names) {
+        const int sourceRow = boardModel_->rowForName(name);
+        if (sourceRow < 0) {
+            continue;
+        }
+
+        const QModelIndex proxyIndex = proxyIndexForSourceRow(sourceRow);
+        if (!proxyIndex.isValid()) {
+            continue;
+        }
+
+        const QRect rect = listView_->visualRect(proxyIndex);
+        if (!rect.isValid() || !viewportRect.intersects(rect)) {
+            continue;
+        }
+        viewport->update(rect.adjusted(-2, -2, 2, 2));
+    }
+}
+
 void ScrollItemsWidget::updateVisibleThumbnails() {
     if (!boardModel_ || !proxyModel_ || !listView_) {
+        return;
+    }
+    if (!isBoardUiVisible()) {
+        setVisibleLoadingThumbnailNames({});
         return;
     }
 
     const int proxyCount = proxyModel_->rowCount();
     if (proxyCount <= 0) {
         desiredThumbnailNames_.clear();
+        applyManagedThumbnailNames({});
+        setVisibleLoadingThumbnailNames({});
         return;
     }
 
@@ -1737,19 +1848,34 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
     const QPoint rightProbe(viewportRect.right() - 1, viewportRect.center().y());
     QModelIndex leftIndex = listView_->indexAt(leftProbe);
     QModelIndex rightIndex = listView_->indexAt(rightProbe);
-    int startRow = leftIndex.isValid() ? leftIndex.row() : 0;
-    int endRow = rightIndex.isValid() ? rightIndex.row() : proxyCount - 1;
-    if (startRow > endRow) {
-        std::swap(startRow, endRow);
+    const int gridWidth = qMax(1, listView_->gridSize().width());
+    const int estimatedVisibleCount = qMax(1, viewportRect.width() / gridWidth + 2);
+    int visibleStartRow = 0;
+    if (leftIndex.isValid()) {
+        visibleStartRow = leftIndex.row();
+    } else if (rightIndex.isValid()) {
+        visibleStartRow = qMax(0, rightIndex.row() - estimatedVisibleCount + 1);
+    } else {
+        const QModelIndex currentIndex = currentProxyIndex();
+        visibleStartRow = currentIndex.isValid() ? currentIndex.row() : 0;
+    }
+
+    int visibleEndRow = 0;
+    if (rightIndex.isValid()) {
+        visibleEndRow = rightIndex.row();
+    } else {
+        visibleEndRow = qMin(proxyCount - 1, visibleStartRow + estimatedVisibleCount - 1);
+    }
+    if (visibleStartRow > visibleEndRow) {
+        std::swap(visibleStartRow, visibleEndRow);
     }
 
     const int prefetch = MPasteSettings::getInst()->getThumbnailPrefetchCount();
-    startRow = qMax(0, startRow - prefetch);
-    endRow = qMin(proxyCount - 1, endRow + prefetch);
+    const int startRow = qMax(0, visibleStartRow - prefetch);
+    const int endRow = qMin(proxyCount - 1, visibleEndRow + prefetch);
 
-    QSet<int> desiredSourceRows;
     QSet<QString> desiredNames;
-    bool wantsPulse = false;
+    QSet<QString> visibleLoadingNames;
     for (int proxyRow = startRow; proxyRow <= endRow; ++proxyRow) {
         const QModelIndex proxyIndex = proxyModel_->index(proxyRow, 0);
         if (!proxyIndex.isValid()) {
@@ -1759,54 +1885,34 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
         if (sourceRow < 0) {
             continue;
         }
-        desiredSourceRows.insert(sourceRow);
         const ClipboardItem item = boardModel_->itemAt(sourceRow);
-        if (!item.getName().isEmpty()) {
-            desiredNames.insert(item.getName());
-            if (item.hasThumbnail()) {
-                missingThumbnailNames_.remove(item.getName());
-            }
-            if (shouldManageThumbnail(item)
-                && item.getContentType() != ClipboardItem::Link
-                && !item.hasThumbnail()) {
-                wantsPulse = true;
-            }
+        const QString name = item.getName();
+        if (name.isEmpty() || !shouldManageThumbnail(item)) {
+            continue;
+        }
+
+        desiredNames.insert(name);
+        if (item.hasThumbnail()) {
+            missingThumbnailNames_.remove(name);
+        }
+
+        if (proxyRow >= visibleStartRow
+            && proxyRow <= visibleEndRow
+            && item.getContentType() != ClipboardItem::Link
+            && !item.hasThumbnail()) {
+            visibleLoadingNames.insert(name);
         }
     }
 
     desiredThumbnailNames_ = desiredNames;
-
-    const int sourceCount = boardModel_->rowCount();
-    for (int row = 0; row < sourceCount; ++row) {
-        ClipboardItem item = boardModel_->itemAt(row);
-        if (!shouldManageThumbnail(item)) {
-            continue;
-        }
-        const bool isDesired = desiredSourceRows.contains(row);
-        if (isDesired) {
-            if (!item.hasThumbnail()) {
-                requestThumbnailForItem(item);
-            }
-        } else {
-            if (item.hasThumbnail() && !item.sourceFilePath().isEmpty()) {
-                item.setThumbnail(QPixmap());
-                boardModel_->updateItem(row, item);
-            }
-        }
-    }
-
-    if (thumbnailPulseTimer_) {
-        if (wantsPulse) {
-            if (!thumbnailPulseTimer_->isActive()) {
-                thumbnailPulseTimer_->start();
-            }
-        } else {
-            thumbnailPulseTimer_->stop();
-        }
-    }
+    applyManagedThumbnailNames(desiredNames);
+    setVisibleLoadingThumbnailNames(visibleLoadingNames);
 }
 
 void ScrollItemsWidget::updateContentWidthHint() {
+    if (!isBoardUiVisible()) {
+        return;
+    }
     if (listView_) {
         if (auto *boardView = dynamic_cast<ClipboardBoardView *>(listView_)) {
             boardView->refreshItemGeometries();
@@ -1950,6 +2056,15 @@ const ClipboardItem *ScrollItemsWidget::cacheSelectedItem(int sourceRow) const {
 
     selectedItemCache_ = boardModel_->itemAt(sourceRow);
     return selectedItemCache_.getName().isEmpty() ? nullptr : &selectedItemCache_;
+}
+
+bool ScrollItemsWidget::isBoardUiVisible() const {
+    return listView_
+        && isVisible()
+        && window()
+        && window()->isVisible()
+        && listView_->viewport()
+        && listView_->viewport()->isVisible();
 }
 
 bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
@@ -2532,10 +2647,12 @@ bool ScrollItemsWidget::handleWheelScroll(QWheelEvent *event) {
 
 void ScrollItemsWidget::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
+    refreshContentWidthHint();
     updateEdgeFadeOverlays();
     if (boardService_) {
         boardService_->setVisibleHint(isVisible() && window() && window()->isVisible());
     }
+    setFirstVisibleItemSelected();
     scheduleThumbnailUpdate();
     updateLoadingOverlay();
 }
@@ -2578,8 +2695,14 @@ bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
 
     if ((watched == listView_ || watched == listView_->viewport()) && event->type() == QEvent::MouseMove) {
         const auto *mouseEvent = static_cast<QMouseEvent *>(event);
-        if (hoverActionBar_ && hoverActionBar_->isVisible() && hoverActionBar_->geometry().contains(mouseEvent->pos())) {
-            return QWidget::eventFilter(watched, event);
+        if (hoverActionBar_ && hoverActionBar_->isVisible()) {
+            auto *watchedWidget = qobject_cast<QWidget *>(watched);
+            const QPoint hoverPoint = watchedWidget && hoverActionBar_->parentWidget()
+                ? watchedWidget->mapTo(hoverActionBar_->parentWidget(), mouseEvent->pos())
+                : mouseEvent->pos();
+            if (hoverActionBar_->geometry().contains(hoverPoint)) {
+                return QWidget::eventFilter(watched, event);
+            }
         }
         const QModelIndex hoverIndex = listView_->indexAt(mouseEvent->pos());
         updateHoverActionBar(hoverIndex);
