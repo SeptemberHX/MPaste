@@ -23,6 +23,13 @@ class MPasteSettingsWidget : public QDialog
     Q_OBJECT
 
 public:
+    enum PreviewCacheAction {
+        RepairBrokenPreviews = 0,
+        RebuildCurrentPreviews,
+        ClearCurrentPreviews
+    };
+    Q_ENUM(PreviewCacheAction)
+
     explicit MPasteSettingsWidget(QWidget *parent = nullptr);
     ~MPasteSettingsWidget();
     void applyTheme(bool dark);
@@ -34,6 +41,7 @@ signals:
     void saveDirChanged();
     void itemScaleChanged(int itemScale);
     void thumbnailPrefetchChanged(int count);
+    void previewCacheActionRequested(PreviewCacheAction action);
 
 public slots:
     void accept() override;
@@ -59,6 +67,10 @@ private:
     QLineEdit *syncPathEdit_ = nullptr;
     QPushButton *syncOpenButton_ = nullptr;
     QPushButton *syncChangeButton_ = nullptr;
+    QLabel *previewCacheLabel_ = nullptr;
+    QPushButton *previewRepairButton_ = nullptr;
+    QPushButton *previewRebuildButton_ = nullptr;
+    QPushButton *previewClearButton_ = nullptr;
     QPoint dragPos_;
     bool darkTheme_ = false;
 };

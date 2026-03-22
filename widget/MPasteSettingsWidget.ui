@@ -12,20 +12,20 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>420</width>
-    <height>560</height>
+    <width>456</width>
+    <height>620</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>420</width>
-    <height>560</height>
+     <width>456</width>
+     <height>0</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>420</width>
-    <height>560</height>
+     <width>456</width>
+     <height>16777215</height>
    </size>
   </property>
   <property name="windowTitle">

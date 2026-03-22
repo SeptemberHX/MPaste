@@ -99,6 +99,60 @@ bool readCurrentFormatPrefix(QDataStream &in, quint32 &flags, quint32 &version) 
             || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4));
 }
 
+struct CurrentFormatHeader {
+    QDateTime time;
+    QString name;
+    QPixmap icon;
+    QPixmap favicon;
+    QString title;
+    QString url;
+    QString alias;
+    bool pinned = false;
+    quint32 contentType = 0;
+    QString normalizedText;
+    QList<QUrl> normalizedUrls;
+    QByteArray fingerprint;
+    QPixmap thumbnail;
+    quint64 mimeDataOffset = 0;
+};
+
+bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHeader &header) {
+    in >> header.time >> header.name >> header.icon >> header.favicon >> header.title >> header.url;
+    if (version >= kLocalSaverVersionV5) {
+        in >> header.alias;
+        if (version >= kLocalSaverVersionV6) {
+            in >> header.pinned;
+        }
+    }
+    quint32 normalizedUrlCount = 0;
+    in >> header.contentType >> header.normalizedText >> normalizedUrlCount;
+    header.normalizedUrls.clear();
+    header.normalizedUrls.reserve(static_cast<int>(normalizedUrlCount));
+    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
+        QString urlStr;
+        in >> urlStr;
+        header.normalizedUrls << QUrl(urlStr);
+    }
+    in >> header.fingerprint >> header.thumbnail >> header.mimeDataOffset;
+    return in.status() == QDataStream::Ok && !header.name.isEmpty();
+}
+
+qint64 writeCurrentFormatHeader(QDataStream &out, const CurrentFormatHeader &header, quint64 mimeDataOffsetPlaceholder = 0) {
+    out << kLocalSaverMagicV6 << kLocalSaverVersionV6 << kLocalSaverFlagsV6;
+    out << header.time << header.name << header.icon << header.favicon << header.title << header.url;
+    out << header.alias << header.pinned;
+    out << header.contentType << header.normalizedText;
+    out << quint32(header.normalizedUrls.size());
+    for (const QUrl &url : header.normalizedUrls) {
+        out << url.toString(QUrl::FullyEncoded);
+    }
+    out << header.fingerprint;
+    out << header.thumbnail;
+    const qint64 mimeOffsetPos = out.device() ? out.device()->pos() : -1;
+    out << mimeDataOffsetPlaceholder;
+    return mimeOffsetPos;
+}
+
 bool isCurrentFormatDevice(QIODevice *device) {
     if (!device || !device->isOpen()) {
         return false;
@@ -492,20 +546,7 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     QDataStream in(&buffer);
     quint32 flags = 0;
     quint32 version = 0;
-    QDateTime time;
-    QString name;
-    QPixmap icon;
-    QPixmap favicon;
-    QString title;
-    QString url;
-    QString alias;
-    bool pinned = false;
-    quint32 contentType = 0;
-    QString normalizedText;
-    quint32 normalizedUrlCount = 0;
-    QByteArray fingerprint;
-    QPixmap thumbnail;
-    quint64 mimeDataOffset = 0;
+    CurrentFormatHeader header;
     quint32 formatCount = 0;
 
     if (!readCurrentFormatPrefix(in, flags, version)) {
@@ -513,28 +554,13 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     }
     Q_UNUSED(flags);
 
-    in >> time >> name >> icon >> favicon >> title >> url;
-    if (version >= kLocalSaverVersionV5) {
-        in >> alias;
-        if (version >= kLocalSaverVersionV6) {
-            in >> pinned;
-        }
+    if (!readCurrentFormatHeader(in, version, header)) {
+        return ClipboardItem();
     }
-    in >> contentType >> normalizedText >> normalizedUrlCount;
-    QList<QUrl> normalizedUrls;
-    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
-        QString urlStr;
-        in >> urlStr;
-        normalizedUrls << QUrl(urlStr);
-    }
-    in >> fingerprint >> thumbnail >> mimeDataOffset >> formatCount;
+    in >> formatCount;
     if (in.status() != QDataStream::Ok) {
         return ClipboardItem();
     }
-    Q_UNUSED(contentType);
-    Q_UNUSED(normalizedText);
-    Q_UNUSED(fingerprint);
-    Q_UNUSED(mimeDataOffset);
 
     QList<QByteArray> uniqueBlobs;
     auto *mimeData = new QMimeData;
@@ -560,17 +586,25 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     }
 
     if (!hasMeaningfulMimeData(mimeData)) {
-        if (!normalizedText.isEmpty()) {
-            mimeData->setText(normalizedText);
+        if (!header.normalizedText.isEmpty()) {
+            mimeData->setText(header.normalizedText);
         }
-        if (!normalizedUrls.isEmpty()) {
-            mimeData->setUrls(normalizedUrls);
+        if (!header.normalizedUrls.isEmpty()) {
+            mimeData->setUrls(header.normalizedUrls);
         }
     }
 
-    ClipboardItem item = finalizeLoadedItem(icon, time, name, favicon, title, url, alias, pinned, mimeData);
+    ClipboardItem item = finalizeLoadedItem(header.icon,
+                                            header.time,
+                                            header.name,
+                                            header.favicon,
+                                            header.title,
+                                            header.url,
+                                            header.alias,
+                                            header.pinned,
+                                            mimeData);
     if (!item.getName().isEmpty()) {
-        item.setThumbnail(thumbnail);
+        item.setThumbnail(header.thumbnail);
     }
     return item;
 }
@@ -582,20 +616,6 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
         return false;
     }
 
-    QDataStream out(&file);
-    out << kLocalSaverMagicV6 << kLocalSaverVersionV6 << kLocalSaverFlagsV6;
-    out << item.getTime() << item.getName() << item.getIcon();
-    out << item.getFavicon() << item.getTitle() << item.getUrl() << item.getAlias() << item.isPinned();
-    out << quint32(item.getContentType()) << item.getNormalizedText();
-
-    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
-    out << quint32(normalizedUrls.size());
-    for (const QUrl &url : normalizedUrls) {
-        out << url.toString(QUrl::FullyEncoded);
-    }
-
-    out << item.fingerprint();
-
     // Generate and write a HiDPI-aware card thumbnail so list loads can avoid full image decode.
     QPixmap thumbnail = item.hasThumbnail() ? item.thumbnail() : QPixmap();
     if (thumbnail.isNull()) {
@@ -604,12 +624,25 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
             thumbnail = buildCardThumbnailPixmap(fullImage);
         }
     }
-    out << thumbnail;
 
-    // Reserve space for mimeDataOffset, write placeholder, then come back
-    const qint64 mimeDataOffsetPos = file.pos();
+    CurrentFormatHeader header;
+    header.time = item.getTime();
+    header.name = item.getName();
+    header.icon = item.getIcon();
+    header.favicon = item.getFavicon();
+    header.title = item.getTitle();
+    header.url = item.getUrl();
+    header.alias = item.getAlias();
+    header.pinned = item.isPinned();
+    header.contentType = quint32(item.getContentType());
+    header.normalizedText = item.getNormalizedText();
+    header.normalizedUrls = item.getNormalizedUrls();
+    header.fingerprint = item.fingerprint();
+    header.thumbnail = thumbnail;
+
+    QDataStream out(&file);
+    const qint64 mimeDataOffsetPos = writeCurrentFormatHeader(out, header);
     quint64 mimeDataOffset = 0;
-    out << mimeDataOffset;
 
     // Record actual MIME data start
     mimeDataOffset = static_cast<quint64>(file.pos());
@@ -663,7 +696,11 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
     return out.status() == QDataStream::Ok;
 }
 
-bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, bool pinned) {
+namespace {
+bool rewriteCurrentFormatHeader(const QString &filePath,
+                                const QString *aliasOverride,
+                                const bool *pinnedOverride,
+                                const QPixmap *thumbnailOverride) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         return false;
@@ -682,45 +719,26 @@ bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, b
     }
     Q_UNUSED(flags);
 
-    QDateTime time;
-    QString name;
-    QPixmap icon;
-    QPixmap favicon;
-    QString title;
-    QString url;
-    quint32 contentType = 0;
-    QString normalizedText;
-    quint32 normalizedUrlCount = 0;
-    QByteArray fingerprint;
-    QPixmap thumbnail;
-    quint64 mimeDataOffset = 0;
-
-    in >> time >> name >> icon >> favicon >> title >> url;
-    if (version >= kLocalSaverVersionV5) {
-        QString ignoredAlias;
-        in >> ignoredAlias;
-        if (version >= kLocalSaverVersionV6) {
-            bool ignoredPinned = false;
-            in >> ignoredPinned;
-        }
-    }
-    in >> contentType >> normalizedText >> normalizedUrlCount;
-    QList<QUrl> normalizedUrls;
-    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
-        QString urlStr;
-        in >> urlStr;
-        normalizedUrls << QUrl(urlStr);
-    }
-    in >> fingerprint >> thumbnail >> mimeDataOffset;
-    if (in.status() != QDataStream::Ok || name.isEmpty()) {
+    CurrentFormatHeader header;
+    if (!readCurrentFormatHeader(in, version, header)) {
         return false;
     }
 
+    if (aliasOverride) {
+        header.alias = *aliasOverride;
+    }
+    if (pinnedOverride) {
+        header.pinned = *pinnedOverride;
+    }
+    if (thumbnailOverride) {
+        header.thumbnail = *thumbnailOverride;
+    }
+
     const qint64 fileSize = file.size();
-    const bool hasBlob = mimeDataOffset > 0 && mimeDataOffset < static_cast<quint64>(fileSize);
+    const bool hasBlob = header.mimeDataOffset > 0 && header.mimeDataOffset < static_cast<quint64>(fileSize);
     bool blobHasPayload = false;
     if (hasBlob) {
-        if (!file.seek(static_cast<qint64>(mimeDataOffset))) {
+        if (!file.seek(static_cast<qint64>(header.mimeDataOffset))) {
             return false;
         }
         QDataStream blobIn(&file);
@@ -750,7 +768,7 @@ bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, b
                 blobHasPayload = true;
             }
         }
-        if (!file.seek(static_cast<qint64>(mimeDataOffset))) {
+        if (!file.seek(static_cast<qint64>(header.mimeDataOffset))) {
             return false;
         }
     }
@@ -761,24 +779,12 @@ bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, b
     }
 
     QDataStream out(&outFile);
-    out << kLocalSaverMagicV6 << kLocalSaverVersionV6 << kLocalSaverFlagsV6;
-    out << time << name << icon << favicon << title << url;
-    out << alias << pinned;
-    out << contentType << normalizedText;
-    out << quint32(normalizedUrls.size());
-    for (const QUrl &u : normalizedUrls) {
-        out << u.toString(QUrl::FullyEncoded);
-    }
-    out << fingerprint;
-    out << thumbnail;
-
-    const qint64 offsetPos = outFile.pos();
+    const qint64 offsetPos = writeCurrentFormatHeader(out, header);
     quint64 newMimeOffset = 0;
-    out << newMimeOffset;
     const qint64 blobStart = outFile.pos();
 
     const bool shouldRepairMime = !blobHasPayload
-        && (!normalizedText.isEmpty() || !normalizedUrls.isEmpty());
+        && (!header.normalizedText.isEmpty() || !header.normalizedUrls.isEmpty());
 
     if (hasBlob && !shouldRepairMime) {
         constexpr qint64 kChunkSize = 64 * 1024;
@@ -794,15 +800,15 @@ bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, b
     } else {
         if (shouldRepairMime) {
             QByteArray urlPayload;
-            if (!normalizedUrls.isEmpty()) {
-                for (const QUrl &u : normalizedUrls) {
+            if (!header.normalizedUrls.isEmpty()) {
+                for (const QUrl &u : header.normalizedUrls) {
                     urlPayload.append(u.toString(QUrl::FullyEncoded).toUtf8());
                     urlPayload.append("\r\n");
                 }
             }
 
             quint32 formatCount = 0;
-            if (!normalizedText.isEmpty()) {
+            if (!header.normalizedText.isEmpty()) {
                 ++formatCount;
             }
             if (!urlPayload.isEmpty()) {
@@ -810,8 +816,8 @@ bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, b
             }
             out << formatCount;
             quint32 dataIndex = 0;
-            if (!normalizedText.isEmpty()) {
-                out << QStringLiteral("text/plain;charset=utf-8") << dataIndex++ << normalizedText.toUtf8();
+            if (!header.normalizedText.isEmpty()) {
+                out << QStringLiteral("text/plain;charset=utf-8") << dataIndex++ << header.normalizedText.toUtf8();
             }
             if (!urlPayload.isEmpty()) {
                 out << QStringLiteral("text/uri-list") << dataIndex++ << urlPayload;
@@ -829,6 +835,15 @@ bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, b
     }
 
     return outFile.commit();
+}
+}
+
+bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, bool pinned) {
+    return rewriteCurrentFormatHeader(filePath, &alias, &pinned, nullptr);
+}
+
+bool LocalSaver::updateThumbnail(const QString &filePath, const QPixmap &thumbnail) {
+    return rewriteCurrentFormatHeader(filePath, nullptr, nullptr, &thumbnail);
 }
 
 ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
@@ -861,67 +876,36 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath) {
         return ClipboardItem();
     }
     Q_UNUSED(flags);
-    QDateTime time;
-    QString name;
-    QPixmap icon;
-    QPixmap favicon;
-    QString title;
-    QString url;
-    QString alias;
-    bool pinned = false;
-    quint32 contentType = 0;
-    QString normalizedText;
-    quint32 normalizedUrlCount = 0;
-    QByteArray fingerprint;
-    QPixmap thumbnail;
-    quint64 mimeDataOffset = 0;
-
-    in >> time >> name >> icon >> favicon >> title >> url;
-    if (version >= kLocalSaverVersionV5) {
-        in >> alias;
-        if (version >= kLocalSaverVersionV6) {
-            in >> pinned;
-        }
-    }
-    in >> contentType >> normalizedText >> normalizedUrlCount;
-
-    QList<QUrl> normalizedUrls;
-    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
-        QString urlStr;
-        in >> urlStr;
-        normalizedUrls << QUrl(urlStr);
-    }
-    in >> fingerprint >> thumbnail >> mimeDataOffset;
-
-    if (in.status() != QDataStream::Ok || name.isEmpty()) {
+    CurrentFormatHeader header;
+    if (!readCurrentFormatHeader(in, version, header)) {
         return ClipboardItem();
     }
 
     // Build a light-loaded ClipboardItem (no MIME data, no full image decode).
     ClipboardItem item;
-    ClipboardItem::ContentType effectiveType = static_cast<ClipboardItem::ContentType>(contentType);
-    if (!thumbnail.isNull()
+    ClipboardItem::ContentType effectiveType = static_cast<ClipboardItem::ContentType>(header.contentType);
+    if (!header.thumbnail.isNull()
         && effectiveType == ClipboardItem::Text
-        && normalizedText.trimmed().isEmpty()
-        && normalizedUrls.isEmpty()) {
+        && header.normalizedText.trimmed().isEmpty()
+        && header.normalizedUrls.isEmpty()) {
         effectiveType = ClipboardItem::Image;
     }
-    item.setIcon(icon);
-    item.setName(name);
-    item.setTime(time);
-    item.setTitle(title);
-    item.setUrl(url);
-    item.setAlias(alias);
-    item.setPinned(pinned);
-    item.setFavicon(favicon);
-    item.setThumbnail(thumbnail);
+    item.setIcon(header.icon);
+    item.setName(header.name);
+    item.setTime(header.time);
+    item.setTitle(header.title);
+    item.setUrl(header.url);
+    item.setAlias(header.alias);
+    item.setPinned(header.pinned);
+    item.setFavicon(header.favicon);
+    item.setThumbnail(header.thumbnail);
     item.setSourceFilePath(filePath);
-    item.setMimeDataFileOffset(mimeDataOffset);
-    item.setFingerprintCache(fingerprint);
+    item.setMimeDataFileOffset(header.mimeDataOffset);
+    item.setFingerprintCache(header.fingerprint);
     item.setLightLoaded(
         effectiveType,
-        normalizedText,
-        normalizedUrls);
+        header.normalizedText,
+        header.normalizedUrls);
 
     return item;
 }

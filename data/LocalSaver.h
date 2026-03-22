@@ -23,6 +23,7 @@ public:
     ClipboardItem loadFromRawDataLight(const QByteArray &rawData, const QString &sourceFilePath);
     ClipboardItem loadFromFileLight(const QString &filePath);
     bool updateMetadata(const QString &filePath, const QString &alias, bool pinned);
+    bool updateThumbnail(const QString &filePath, const QPixmap &thumbnail);
     static bool loadMimeSection(const QString &filePath, quint64 offset, ClipboardItem &item);
     static bool loadMimePayloads(const QString &filePath,
                                  quint64 offset,

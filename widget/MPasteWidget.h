@@ -83,6 +83,7 @@ private:
     void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
     void reloadHistoryBoards();
+    void runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheAction action);
 
     void setFocusOnSearch(bool flag);
     void handleSearchInput(QKeyEvent *event);

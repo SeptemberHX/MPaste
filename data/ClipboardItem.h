@@ -24,6 +24,8 @@
 
 #include "ContentType.h"
 #include "ContentClassifier.h"
+#include "PreviewKind.h"
+#include "PreviewClassifier.h"
 
 #include <algorithm>
 #include <cstring>
@@ -32,6 +34,7 @@ class ClipboardItem {
 public:
     // NOTE: Append new values to preserve on-disk enum compatibility.
     using ContentType = ::ContentType;
+    using PreviewKind = ::ClipboardPreviewKind;
     static constexpr ContentType All = ::All;
     static constexpr ContentType Text = ::Text;
     static constexpr ContentType Link = ::Link;
@@ -40,11 +43,8 @@ public:
     static constexpr ContentType File = ::File;
     static constexpr ContentType Color = ::Color;
     static constexpr ContentType Office = ::Office;
-
-    enum PreviewKind {
-        TextPreview = 0,
-        VisualPreview
-    };
+    static constexpr PreviewKind TextPreview = ::TextPreview;
+    static constexpr PreviewKind VisualPreview = ::VisualPreview;
 
 private:
     QString name_;
@@ -76,76 +76,6 @@ private:
     mutable PreviewKind cachedPreviewKind_ = TextPreview;
     mutable QString cachedNormalizedText_;
     mutable QList<QUrl> cachedNormalizedUrls_;
-
-    static bool hasMeaningfulPreviewText(const QString &text) {
-        const QString trimmed = text.trimmed();
-        return !trimmed.isEmpty() && !ContentClassifier::isImageLikeText(trimmed);
-    }
-
-    static PreviewKind defaultPreviewKindForType(ContentType type) {
-        switch (type) {
-            case Image:
-            case Office:
-            case Color:
-            case Link:
-                return VisualPreview;
-            case RichText:
-            case Text:
-            case File:
-            case All:
-                break;
-        }
-        return TextPreview;
-    }
-
-    PreviewKind detectLightPreviewKind() const {
-        if (cachedContentType_ != RichText) {
-            return defaultPreviewKindForType(cachedContentType_);
-        }
-
-        if (hasMeaningfulPreviewText(cachedNormalizedText_)) {
-            return TextPreview;
-        }
-
-        if (!thumbnail_.isNull()) {
-            return VisualPreview;
-        }
-
-        if (mimeData_ && mimeData_->hasHtml()) {
-            const QString html = mimeData_->html();
-            if (!ContentClassifier::firstHtmlImageSource(html).isEmpty()
-                || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive)
-                || hasFastImagePayload()) {
-                return VisualPreview;
-            }
-        }
-
-        return TextPreview;
-    }
-
-    PreviewKind detectFullPreviewKind() const {
-        const ContentType type = getContentType();
-        if (type != RichText) {
-            return defaultPreviewKindForType(type);
-        }
-
-        const QString normalizedText = getNormalizedText();
-        if (hasMeaningfulPreviewText(normalizedText)) {
-            return TextPreview;
-        }
-
-        if (mimeData_ && mimeData_->hasHtml()) {
-            const QString html = mimeData_->html();
-            if (!ContentClassifier::firstHtmlImageSource(html).isEmpty()
-                || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive)
-                || hasFastImagePayload()
-                || hasDecodableImage()) {
-                return VisualPreview;
-            }
-        }
-
-        return TextPreview;
-    }
 
     static QString windowsDrivePathFromUrl(const QUrl &url) {
         if (!url.isValid() || url.isLocalFile()) {
@@ -908,7 +838,11 @@ public:
         item.cachedContentType_ = mimeData
             ? ContentClassifier::classifyLight(mimeData, item.cachedNormalizedText_, item.cachedNormalizedUrls_)
             : item.detectLightContentType();
-        item.cachedPreviewKind_ = item.detectLightPreviewKind();
+        item.cachedPreviewKind_ = PreviewClassifier::classifyLight(item.cachedContentType_,
+                                                                   item.cachedNormalizedText_,
+                                                                   item.thumbnail_,
+                                                                   item.mimeData_.data(),
+                                                                   item.hasFastImagePayload());
         item.mimeDataLoaded_ = false;
         return item;
     }
@@ -1247,7 +1181,11 @@ public:
         if (!mimeDataLoaded_) {
             return cachedPreviewKind_;
         }
-        return detectFullPreviewKind();
+        return PreviewClassifier::classifyFull(getContentType(),
+                                               getNormalizedText(),
+                                               mimeData_.data(),
+                                               hasFastImagePayload(),
+                                               hasDecodableImage());
     }
     QList<QUrl> getUrls() const { return mimeData_ ? mimeData_->urls() : QList<QUrl>(); }
     QColor getColor() const {
@@ -1289,7 +1227,11 @@ public:
         cachedContentType_ = type;
         cachedNormalizedText_ = normText;
         cachedNormalizedUrls_ = normUrls;
-        cachedPreviewKind_ = detectLightPreviewKind();
+        cachedPreviewKind_ = PreviewClassifier::classifyLight(cachedContentType_,
+                                                              cachedNormalizedText_,
+                                                              thumbnail_,
+                                                              mimeData_.data(),
+                                                              hasFastImagePayload());
         if (cachedContentType_ == RichText && cachedPreviewKind_ == TextPreview) {
             thumbnail_ = QPixmap();
         }

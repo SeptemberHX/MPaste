@@ -28,6 +28,12 @@ class ClipboardBoardService : public QObject {
     Q_OBJECT
 
 public:
+    enum PreviewCacheMaintenanceMode {
+        RepairBrokenPreviews = 0,
+        RebuildAllPreviews,
+        ClearAllPreviews
+    };
+
     explicit ClipboardBoardService(const QString &category, QObject *parent = nullptr);
     ~ClipboardBoardService() override;
 
@@ -57,6 +63,7 @@ public:
     ClipboardItem loadItemLight(const QString &filePath);
     void notifyItemAdded();
     void trimExpiredPendingItems(const QDateTime &cutoff);
+    int maintainPreviewCache(PreviewCacheMaintenanceMode mode);
 
     void processPendingItemAsync(const ClipboardItem &item, const QString &expectedName);
     void requestThumbnailAsync(const QString &expectedName, const QString &filePath);

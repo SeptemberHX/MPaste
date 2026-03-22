@@ -17,7 +17,6 @@
 #include <QPainter>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
-#include <QSaveFile>
 #include <QScrollBar>
 #include <QScroller>
 #include <QShowEvent>
@@ -35,6 +34,7 @@
 
 #include "ClipboardBoardModel.h"
 #include "ClipboardBoardProxyModel.h"
+#include "ClipboardBoardActionService.h"
 #include "ClipboardCardDelegate.h"
 #include "ClipboardItemPreviewDialog.h"
 #include "ClipboardItemRenameDialog.h"
@@ -45,7 +45,6 @@
 #include "utils/PlatformRelated.h"
 #include "utils/ThemeManager.h"
 #include "utils/IconResolver.h"
-#include "data/LocalSaver.h"
 
 namespace {
 
@@ -91,64 +90,6 @@ void applyMenuTheme(QMenu *menu) {
         menu->setStyle(fusion);
     }
 }
-
-void refreshPersistedItem(ClipboardBoardModel *boardModel,
-                          ClipboardBoardService *boardService,
-                          int row);
-
-bool persistItemMetadata(ClipboardBoardService *boardService,
-                         ClipboardBoardModel *boardModel,
-                         int row,
-                         const ClipboardItem &item) {
-    if (!boardService || item.getName().isEmpty()) {
-        return false;
-    }
-
-    const QString filePath = boardService->filePathForItem(item);
-    if (filePath.isEmpty() || !QFileInfo::exists(filePath)) {
-        return false;
-    }
-
-    LocalSaver saver;
-    if (saver.updateMetadata(filePath, item.getAlias(), item.isPinned())) {
-        refreshPersistedItem(boardModel, boardService, row);
-        return true;
-    }
-
-    ClipboardItem fullItem = saver.loadFromFile(filePath);
-    if (fullItem.getName().isEmpty()) {
-        return false;
-    }
-
-    fullItem.setAlias(item.getAlias());
-    fullItem.setPinned(item.isPinned());
-    if (!saver.saveToFile(fullItem, filePath)) {
-        return false;
-    }
-    refreshPersistedItem(boardModel, boardService, row);
-    return true;
-}
-
-void refreshPersistedItem(ClipboardBoardModel *boardModel,
-                          ClipboardBoardService *boardService,
-                          int row) {
-    if (!boardModel || !boardService || row < 0) {
-        return;
-    }
-
-    const ClipboardItem existing = boardModel->itemAt(row);
-    if (existing.getName().isEmpty()) {
-        return;
-    }
-
-    ClipboardItem reloaded = boardService->loadItemLight(boardService->filePathForItem(existing));
-    if (reloaded.getName().isEmpty()) {
-        return;
-    }
-
-    boardModel->updateItem(row, reloaded);
-}
-
 
 class HoverActionBar final : public QWidget {
 public:
@@ -472,32 +413,6 @@ QString defaultImageSuffixForFilter(const QString &selectedFilter) {
         return QStringLiteral(".webp");
     }
     return QStringLiteral(".png");
-}
-
-bool writeUtf8File(const QString &filePath, const QString &contents, QString *errorMessage) {
-    QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        if (errorMessage) {
-            *errorMessage = file.errorString();
-        }
-        return false;
-    }
-
-    const QByteArray payload = contents.toUtf8();
-    if (file.write(payload) != payload.size()) {
-        if (errorMessage) {
-            *errorMessage = file.errorString();
-        }
-        return false;
-    }
-
-    if (!file.commit()) {
-        if (errorMessage) {
-            *errorMessage = file.errorString();
-        }
-        return false;
-    }
-    return true;
 }
 
 class EdgeFadeOverlay final : public QWidget {
@@ -1062,7 +977,7 @@ void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
     updated.setAlias(dialog.alias());
     boardModel_->updateItem(row, updated);
     if (boardService_) {
-        persistItemMetadata(boardService_, boardModel_, row, updated);
+        ClipboardBoardActionService::persistItemMetadata(boardService_, boardModel_, row, updated);
     }
     emit aliasChanged(updated.fingerprint(), updated.getAlias());
 }
@@ -1108,41 +1023,18 @@ void ScrollItemsWidget::saveItemToFile(const ClipboardItem &item) {
     }
 
     QString errorMessage;
-    bool success = false;
-    switch (contentType) {
-        case ClipboardItem::Text:
-            success = writeUtf8File(filePath, item.getNormalizedText(), &errorMessage);
-            break;
-        case ClipboardItem::RichText: {
-            const QMimeData *mimeData = item.getMimeData();
-            const QString html = mimeData ? mimeData->html() : QString();
-            if (mimeData && mimeData->hasHtml()) {
-                success = writeUtf8File(filePath, html, &errorMessage);
-            } else {
-                errorMessage = prefersChineseUi()
-                    ? QString::fromUtf16(u"\u5F53\u524D\u6761\u76EE\u6CA1\u6709\u53EF\u4FDD\u5B58\u7684 HTML \u5185\u5BB9\u3002")
-                    : QStringLiteral("The current item does not contain savable HTML content.");
-            }
-            break;
-        }
-        case ClipboardItem::Image: {
-            item.getMimeData();
-            const QPixmap pixmap = item.getImage();
-            if (!pixmap.isNull()) {
-                success = pixmap.save(filePath);
-            }
-            if (!success && errorMessage.isEmpty()) {
-                errorMessage = prefersChineseUi()
-                    ? QString::fromUtf16(u"\u65E0\u6CD5\u5C06\u56FE\u50CF\u5199\u5165\u76EE\u6807\u6587\u4EF6\u3002")
-                    : QStringLiteral("Unable to write the image to the target file.");
-            }
-            break;
-        }
-        default:
-            break;
-    }
+    const bool success = ClipboardBoardActionService::exportItemToFile(item, filePath, &errorMessage);
 
     if (!success) {
+        if (prefersChineseUi()) {
+            if (errorMessage == QLatin1String("The current item does not contain savable HTML content.")) {
+                errorMessage = QString::fromUtf16(u"\u5F53\u524D\u6761\u76EE\u6CA1\u6709\u53EF\u4FDD\u5B58\u7684 HTML \u5185\u5BB9\u3002");
+            } else if (errorMessage == QLatin1String("Unable to write the image to the target file.")) {
+                errorMessage = QString::fromUtf16(u"\u65E0\u6CD5\u5C06\u56FE\u50CF\u5199\u5165\u76EE\u6807\u6587\u4EF6\u3002");
+            } else if (errorMessage == QLatin1String("The current item does not support export.")) {
+                errorMessage = QString::fromUtf16(u"\u5F53\u524D\u6761\u76EE\u6682\u4E0D\u652F\u6301\u5BFC\u51FA\u3002");
+            }
+        }
         QMessageBox::warning(this, saveFailedTitle(), saveFailedMessage(errorMessage));
     }
 }
@@ -1156,16 +1048,13 @@ void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
         return;
     }
 
-    ClipboardItem updated = boardModel_->itemAt(row);
+    const ClipboardItem updated = boardModel_->itemAt(row);
     if (updated.isPinned() == pinned) {
         return;
     }
     const int targetRow = pinned ? 0 : unpinnedInsertRowForItem(updated, row);
-    updated.setPinned(pinned);
-    boardModel_->updateItem(row, updated);
-    boardModel_->moveItemToRow(row, targetRow);
-    if (boardService_) {
-        persistItemMetadata(boardService_, boardModel_, targetRow, updated);
+    if (!ClipboardBoardActionService::applyPinnedState(boardModel_, boardService_, row, targetRow, pinned)) {
+        return;
     }
     const QModelIndex targetIndex = proxyIndexForSourceRow(targetRow);
     setCurrentProxyIndex(targetIndex);
@@ -1383,121 +1272,138 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
     QMenu menu(this);
     applyMenuTheme(&menu);
     if (multiSelection) {
-        const QList<int> sourceRows = selectedSourceRows();
-        bool hasFavorite = false;
-        bool hasNonFavorite = false;
-        for (const int sourceRow : sourceRows) {
-            const bool favorite = boardModel_ && boardModel_->isFavorite(sourceRow);
-            hasFavorite = hasFavorite || favorite;
-            hasNonFavorite = hasNonFavorite || !favorite;
-        }
-
-        if (hasNonFavorite) {
-            menu.addAction(QIcon(QStringLiteral(":/resources/resources/star.svg")),
-                           favoriteActionLabel(false),
-                           [this, selection]() {
-                               applyFavoriteToItems(selection, true);
-                           });
-        }
-        if (hasFavorite) {
-            menu.addAction(QIcon(QStringLiteral(":/resources/resources/star_filled.svg")),
-                           favoriteActionLabel(true),
-                           [this, selection]() {
-                               applyFavoriteToItems(selection, false);
-                           });
-        }
-        if (category != MPasteSettings::STAR_CATEGORY_NAME) {
-            if (hasFavorite || hasNonFavorite) {
-                menu.addSeparator();
-            }
-            menu.addAction(QIcon(QStringLiteral(":/resources/resources/delete.svg")),
-                           deleteSelectedLabel(),
-                           [this, selection]() {
-                               removeItems(selection);
-                           });
-        }
+        populateMultiSelectionMenu(&menu, selection);
     } else {
-        const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
-        const ClipboardItem::ContentType contentType = item.getContentType();
-        const bool isFavorite = boardModel_->isFavorite(sourceRow);
-        const QList<QUrl> urls = item.getNormalizedUrls();
-        const bool canOpenFolder = contentType == ClipboardItem::File
-            && !urls.isEmpty()
-            && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) { return url.isLocalFile(); });
-        const bool canSaveToFile = supportsSaveToFile(contentType);
-
-        menu.addAction(IconResolver::themedIcon(QStringLiteral("text_plain"), dark), plainTextPasteLabel(), [this]() {
-            const ClipboardItem *selectedItem = selectedByEnter();
-            if (selectedItem) {
-                emit plainTextPasteRequested(*selectedItem);
-            }
-        });
-        menu.addAction(IconResolver::themedIcon(QStringLiteral("details"), dark), detailsLabel(), [this, proxyIndex]() {
-            setCurrentProxyIndex(proxyIndex);
-            const ClipboardItem *selectedItem = currentSelectedItem();
-            if (!selectedItem) {
-                return;
-            }
-            const QPair<int, int> sequenceInfo = displaySequenceForIndex(proxyIndex);
-            emit detailsRequested(*selectedItem, sequenceInfo.first, sequenceInfo.second);
-        });
-        menu.addAction(IconResolver::themedIcon(QStringLiteral("rename"), dark), aliasLabel(), [this, item]() {
-            openAliasDialogForItem(item);
-        });
-        if (ClipboardItemPreviewDialog::supportsPreview(item)) {
-            menu.addAction(IconResolver::themedIcon(QStringLiteral("preview"), dark), tr("Preview"), [this]() {
-                const ClipboardItem *selectedItem = currentSelectedItem();
-                if (selectedItem) {
-                    emit previewRequested(*selectedItem);
-                }
-            });
-        }
-        if (canSaveToFile) {
-            menu.addAction(QIcon(QStringLiteral(":/resources/resources/save_black.svg")), saveItemLabel(), [this, proxyIndex]() {
-                setCurrentProxyIndex(proxyIndex);
-                const ClipboardItem *selectedItem = currentSelectedItem();
-                if (selectedItem) {
-                    saveItemToFile(*selectedItem);
-                }
-            });
-        }
-        if (canOpenFolder) {
-            menu.addAction(QIcon(QStringLiteral(":/resources/resources/files.svg")), openContainingFolderLabel(), [urls]() {
-                PlatformRelated::revealInFileManager(urls);
-            });
-        }
-
-        const bool isPinned = item.isPinned();
-        menu.addAction(IconResolver::themedIcon(QStringLiteral("pin"), dark),
-                       pinActionLabel(isPinned),
-                       [this, item, isPinned]() {
-                           setItemPinned(item, !isPinned);
-                       });
-
-        menu.addSeparator();
-        menu.addAction(QIcon(isFavorite
-                             ? QStringLiteral(":/resources/resources/star_filled.svg")
-                             : QStringLiteral(":/resources/resources/star.svg")),
-                       favoriteActionLabel(isFavorite),
-                       [this, item, isFavorite]() {
-                           if (isFavorite) {
-                               setItemFavorite(item, false);
-                               emit itemUnstared(item);
-                           } else {
-                               setItemFavorite(item, true);
-                               emit itemStared(item);
-                           }
-                       });
-        menu.addAction(QIcon(QStringLiteral(":/resources/resources/delete.svg")), deleteLabel(), [this, item]() {
-            if (category == MPasteSettings::STAR_CATEGORY_NAME) {
-                emit itemUnstared(item);
-                return;
-            }
-            removeItemByContent(item);
-        });
+        populateSingleSelectionMenu(&menu, proxyIndex, item);
     }
 
     menu.exec(listView_->viewport()->mapToGlobal(pos));
+}
+
+void ScrollItemsWidget::populateMultiSelectionMenu(QMenu *menu, const QList<ClipboardItem> &selection) {
+    if (!menu || selection.isEmpty() || !boardModel_) {
+        return;
+    }
+
+    const QList<int> sourceRows = selectedSourceRows();
+    bool hasFavorite = false;
+    bool hasNonFavorite = false;
+    for (const int sourceRow : sourceRows) {
+        const bool favorite = boardModel_->isFavorite(sourceRow);
+        hasFavorite = hasFavorite || favorite;
+        hasNonFavorite = hasNonFavorite || !favorite;
+    }
+
+    if (hasNonFavorite) {
+        menu->addAction(QIcon(QStringLiteral(":/resources/resources/star.svg")),
+                        favoriteActionLabel(false),
+                        [this, selection]() {
+                            applyFavoriteToItems(selection, true);
+                        });
+    }
+    if (hasFavorite) {
+        menu->addAction(QIcon(QStringLiteral(":/resources/resources/star_filled.svg")),
+                        favoriteActionLabel(true),
+                        [this, selection]() {
+                            applyFavoriteToItems(selection, false);
+                        });
+    }
+    if (category != MPasteSettings::STAR_CATEGORY_NAME) {
+        if (hasFavorite || hasNonFavorite) {
+            menu->addSeparator();
+        }
+        menu->addAction(QIcon(QStringLiteral(":/resources/resources/delete.svg")),
+                        deleteSelectedLabel(),
+                        [this, selection]() {
+                            removeItems(selection);
+                        });
+    }
+}
+
+void ScrollItemsWidget::populateSingleSelectionMenu(QMenu *menu, const QModelIndex &proxyIndex, const ClipboardItem &item) {
+    if (!menu || !proxyIndex.isValid() || !proxyModel_ || !boardModel_) {
+        return;
+    }
+
+    const bool dark = darkTheme_;
+    const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+    const ClipboardItem::ContentType contentType = item.getContentType();
+    const bool isFavorite = boardModel_->isFavorite(sourceRow);
+    const QList<QUrl> urls = item.getNormalizedUrls();
+    const bool canOpenFolder = contentType == ClipboardItem::File
+        && !urls.isEmpty()
+        && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) { return url.isLocalFile(); });
+    const bool canSaveToFile = supportsSaveToFile(contentType);
+
+    menu->addAction(IconResolver::themedIcon(QStringLiteral("text_plain"), dark), plainTextPasteLabel(), [this]() {
+        const ClipboardItem *selectedItem = selectedByEnter();
+        if (selectedItem) {
+            emit plainTextPasteRequested(*selectedItem);
+        }
+    });
+    menu->addAction(IconResolver::themedIcon(QStringLiteral("details"), dark), detailsLabel(), [this, proxyIndex]() {
+        setCurrentProxyIndex(proxyIndex);
+        const ClipboardItem *selectedItem = currentSelectedItem();
+        if (!selectedItem) {
+            return;
+        }
+        const QPair<int, int> sequenceInfo = displaySequenceForIndex(proxyIndex);
+        emit detailsRequested(*selectedItem, sequenceInfo.first, sequenceInfo.second);
+    });
+    menu->addAction(IconResolver::themedIcon(QStringLiteral("rename"), dark), aliasLabel(), [this, item]() {
+        openAliasDialogForItem(item);
+    });
+    if (ClipboardItemPreviewDialog::supportsPreview(item)) {
+        menu->addAction(IconResolver::themedIcon(QStringLiteral("preview"), dark), tr("Preview"), [this]() {
+            const ClipboardItem *selectedItem = currentSelectedItem();
+            if (selectedItem) {
+                emit previewRequested(*selectedItem);
+            }
+        });
+    }
+    if (canSaveToFile) {
+        menu->addAction(QIcon(QStringLiteral(":/resources/resources/save_black.svg")), saveItemLabel(), [this, proxyIndex]() {
+            setCurrentProxyIndex(proxyIndex);
+            const ClipboardItem *selectedItem = currentSelectedItem();
+            if (selectedItem) {
+                saveItemToFile(*selectedItem);
+            }
+        });
+    }
+    if (canOpenFolder) {
+        menu->addAction(QIcon(QStringLiteral(":/resources/resources/files.svg")), openContainingFolderLabel(), [urls]() {
+            PlatformRelated::revealInFileManager(urls);
+        });
+    }
+
+    const bool isPinned = item.isPinned();
+    menu->addAction(IconResolver::themedIcon(QStringLiteral("pin"), dark),
+                    pinActionLabel(isPinned),
+                    [this, item, isPinned]() {
+                        setItemPinned(item, !isPinned);
+                    });
+
+    menu->addSeparator();
+    menu->addAction(QIcon(isFavorite
+                          ? QStringLiteral(":/resources/resources/star_filled.svg")
+                          : QStringLiteral(":/resources/resources/star.svg")),
+                    favoriteActionLabel(isFavorite),
+                    [this, item, isFavorite]() {
+                        if (isFavorite) {
+                            setItemFavorite(item, false);
+                            emit itemUnstared(item);
+                        } else {
+                            setItemFavorite(item, true);
+                            emit itemStared(item);
+                        }
+                    });
+    menu->addAction(QIcon(QStringLiteral(":/resources/resources/delete.svg")), deleteLabel(), [this, item]() {
+        if (category == MPasteSettings::STAR_CATEGORY_NAME) {
+            emit itemUnstared(item);
+            return;
+        }
+        removeItemByContent(item);
+    });
 }
 
 void ScrollItemsWidget::handleLoadedItems(const QList<QPair<QString, ClipboardItem>> &items) {
@@ -1522,6 +1428,9 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
     }
 
     pendingThumbnailNames_.remove(expectedName);
+    if (item.hasThumbnail()) {
+        missingThumbnailNames_.remove(expectedName);
+    }
     const int row = boardModel_->rowForName(expectedName);
     if (row >= 0) {
         boardModel_->updateItem(row, item);
@@ -1549,8 +1458,11 @@ void ScrollItemsWidget::handleThumbnailReady(const QString &expectedName, const 
         return;
     }
     if (!thumbnail.isNull()) {
+        missingThumbnailNames_.remove(expectedName);
         item.setThumbnail(thumbnail);
         boardModel_->updateItem(row, item);
+    } else {
+        missingThumbnailNames_.insert(expectedName);
     }
 }
 
@@ -1730,6 +1642,7 @@ void ScrollItemsWidget::prepareLoadFromSaveDir() {
     boardModel_->clear();
     selectedItemCache_ = ClipboardItem();
     asyncKeywordMatchedNames_.clear();
+    missingThumbnailNames_.clear();
     boardService_->refreshIndex();
     updateContentWidthHint();
     updateLoadingOverlay();
@@ -1789,12 +1702,16 @@ void ScrollItemsWidget::scheduleThumbnailUpdate() {
 bool ScrollItemsWidget::shouldManageThumbnail(const ClipboardItem &item) const {
     const ClipboardItem::ContentType type = item.getContentType();
     return type == ClipboardItem::Image
+        || type == ClipboardItem::Link
         || type == ClipboardItem::Office
         || (type == ClipboardItem::RichText && item.getPreviewKind() == ClipboardItem::VisualPreview);
 }
 
 void ScrollItemsWidget::requestThumbnailForItem(const ClipboardItem &item) {
     if (!boardService_ || item.getName().isEmpty() || item.sourceFilePath().isEmpty()) {
+        return;
+    }
+    if (missingThumbnailNames_.contains(item.getName())) {
         return;
     }
     if (pendingThumbnailNames_.contains(item.getName())) {
@@ -1846,7 +1763,12 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
         const ClipboardItem item = boardModel_->itemAt(sourceRow);
         if (!item.getName().isEmpty()) {
             desiredNames.insert(item.getName());
-            if (shouldManageThumbnail(item) && !item.hasThumbnail()) {
+            if (item.hasThumbnail()) {
+                missingThumbnailNames_.remove(item.getName());
+            }
+            if (shouldManageThumbnail(item)
+                && item.getContentType() != ClipboardItem::Link
+                && !item.hasThumbnail()) {
                 wantsPulse = true;
             }
         }
@@ -2420,6 +2342,13 @@ void ScrollItemsWidget::refreshThumbnailCache() {
     updateVisibleThumbnails();
 }
 
+int ScrollItemsWidget::maintainPreviewCache(ClipboardBoardService::PreviewCacheMaintenanceMode mode) {
+    if (!boardService_) {
+        return 0;
+    }
+    return boardService_->maintainPreviewCache(mode);
+}
+
 void ScrollItemsWidget::scrollToFirst() {
     if (!proxyModel_ || proxyModel_->rowCount() <= 0) {
         return;
@@ -2448,27 +2377,18 @@ void ScrollItemsWidget::removeItems(const QList<ClipboardItem> &items) {
         return;
     }
 
-    QList<int> rowsToRemove;
     for (const ClipboardItem &item : items) {
-        int row = boardModel_->rowForMatchingItem(item);
-        if (row < 0) {
-            row = boardModel_->rowForFingerprint(item.fingerprint());
+        if (item.getName().isEmpty()) {
+            continue;
         }
-        if (row >= 0 && !rowsToRemove.contains(row)) {
-            rowsToRemove.append(row);
-        }
+        pendingThumbnailNames_.remove(item.getName());
+        missingThumbnailNames_.remove(item.getName());
+        desiredThumbnailNames_.remove(item.getName());
     }
 
-    if (rowsToRemove.isEmpty()) {
+    const int removedCount = ClipboardBoardActionService::removeItems(boardService_, boardModel_, items);
+    if (removedCount <= 0) {
         return;
-    }
-
-    std::sort(rowsToRemove.begin(), rowsToRemove.end(), std::greater<int>());
-    for (const int row : rowsToRemove) {
-        if (boardService_) {
-            boardService_->deleteItemByPath(boardService_->filePathForItem(boardModel_->itemAt(row)));
-        }
-        boardModel_->removeItemAt(row);
     }
 
     setFirstVisibleItemSelected();
@@ -2483,10 +2403,8 @@ void ScrollItemsWidget::applyFavoriteToItems(const QList<ClipboardItem> &items, 
     }
 
     for (const ClipboardItem &item : items) {
-        int row = boardModel_->rowForMatchingItem(item);
-        if (row < 0) {
-            row = boardModel_->rowForFingerprint(item.fingerprint());
-        }
+        const QList<int> rows = ClipboardBoardActionService::resolveRowsForItems(boardModel_, {item});
+        const int row = rows.isEmpty() ? -1 : rows.first();
         if (row < 0) {
             continue;
         }
@@ -2507,28 +2425,16 @@ void ScrollItemsWidget::applyFavoriteToItems(const QList<ClipboardItem> &items, 
 }
 
 void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
-    int row = boardModel_->rowForMatchingItem(item);
-    if (row < 0) {
-        row = boardModel_->rowForFingerprint(item.fingerprint());
+    if (!item.getName().isEmpty()) {
+        pendingThumbnailNames_.remove(item.getName());
+        missingThumbnailNames_.remove(item.getName());
+        desiredThumbnailNames_.remove(item.getName());
     }
-    if (row >= 0) {
-        if (boardService_) {
-            boardService_->deleteItemByPath(boardService_->filePathForItem(boardModel_->itemAt(row)));
-        }
-        boardModel_->removeItemAt(row);
+    if (ClipboardBoardActionService::removeItem(boardService_, boardModel_, item)) {
         setFirstVisibleItemSelected();
         maybeLoadMoreItems();
         refreshContentWidthHint();
         emit itemCountChanged(itemCountForDisplay());
-        return;
-    }
-
-    if (boardService_) {
-        const QString filePath = boardService_->filePathForItem(item);
-        if (boardService_->deletePendingItemByPath(filePath)) {
-            refreshContentWidthHint();
-            emit itemCountChanged(itemCountForDisplay());
-        }
     }
 }
 
@@ -2538,7 +2444,7 @@ void ScrollItemsWidget::setItemFavorite(const ClipboardItem &item, bool favorite
     } else {
         favoriteFingerprints_.remove(item.fingerprint());
     }
-    boardModel_->setFavoriteByFingerprint(item.fingerprint(), favorite);
+    ClipboardBoardActionService::setFavorite(boardModel_, item, favorite);
 }
 
 void ScrollItemsWidget::syncAlias(const QByteArray &fingerprint, const QString &alias) {
@@ -2559,7 +2465,7 @@ void ScrollItemsWidget::syncAlias(const QByteArray &fingerprint, const QString &
         updated.setAlias(alias);
         boardModel_->updateItem(row, updated);
         if (boardService_) {
-            persistItemMetadata(boardService_, boardModel_, row, updated);
+            ClipboardBoardActionService::persistItemMetadata(boardService_, boardModel_, row, updated);
         }
     }
 }

@@ -2,7 +2,7 @@
 // output: 提供设置窗口的界面初始化、样式和交互逻辑实现。
 // pos: widget 层中的 MPasteSettingsWidget 实现文件。
 // update: 修改本文件时，同步更新文件头注释与 `widget/README.md`。
-// note: Dark theme now uses light spin icons and exposes thumbnail prefetch controls.
+// note: Dark theme now uses light spin icons and the settings layout is grouped into clearer sections with preview cache maintenance actions.
 #include "MPasteSettingsWidget.h"
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"
@@ -20,8 +20,10 @@
 #include <QComboBox>
 #include <QLocale>
 #include <QLineEdit>
+#include <QLayout>
 #include <QPushButton>
 #include <QFileDialog>
+#include <QTabWidget>
 #include <QUrl>
 #include <QDesktopServices>
 
@@ -70,10 +72,48 @@ static QString settingsStyleSheet(bool dark) {
                 background: transparent;
             }
 
+            QLabel#sectionLabel {
+                color: #8FB7E2;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                background: transparent;
+                padding: 8px 0 2px 0;
+                border: none;
+            }
+
             QFrame#generalCard {
                 background-color: #1E232B;
                 border: 1px solid #2B3440;
                 border-radius: 8px;
+            }
+
+            QTabWidget::pane {
+                border: 1px solid #2B3440;
+                border-radius: 8px;
+                background-color: #1E232B;
+                margin-top: 8px;
+            }
+            QTabBar::tab {
+                background: #252B34;
+                color: #B8C5D4;
+                border: 1px solid #2F3945;
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                padding: 7px 14px;
+                min-height: 20px;
+                margin-right: 6px;
+            }
+            QTabBar::tab:selected {
+                background: #2D7FD3;
+                color: #FFFFFF;
+                border-color: #2D7FD3;
+            }
+            QTabBar::tab:!selected:hover {
+                background: #2A313C;
+                color: #E6EDF5;
             }
 
             QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
@@ -250,10 +290,48 @@ static QString settingsStyleSheet(bool dark) {
             background: transparent;
         }
 
+        QLabel#sectionLabel {
+            color: #4A6F95;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            background: transparent;
+            padding: 8px 0 2px 0;
+            border: none;
+        }
+
         QFrame#generalCard {
             background-color: #FFFFFF;
             border: 1px solid #E5E5E5;
             border-radius: 8px;
+        }
+
+        QTabWidget::pane {
+            border: 1px solid #E5E5E5;
+            border-radius: 8px;
+            background-color: #FFFFFF;
+            margin-top: 8px;
+        }
+        QTabBar::tab {
+            background: #F5F7FA;
+            color: #5B6572;
+            border: 1px solid #E2E8F0;
+            border-bottom: none;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+            padding: 7px 14px;
+            min-height: 20px;
+            margin-right: 6px;
+        }
+        QTabBar::tab:selected {
+            background: #0078D4;
+            color: #FFFFFF;
+            border-color: #0078D4;
+        }
+        QTabBar::tab:!selected:hover {
+            background: #EEF3F8;
+            color: #1F2A37;
         }
 
         QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
@@ -425,6 +503,14 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 {
     ui->setupUi(this);
 
+    setMinimumWidth(456);
+    setMaximumWidth(456);
+    setMinimumHeight(0);
+    setMaximumHeight(QWIDGETSIZE_MAX);
+    if (layout()) {
+        layout()->setSizeConstraint(QLayout::SetMinAndMaxSize);
+    }
+
     // Frameless + translucent for custom-painted gradient border
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -533,16 +619,15 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         syncButtonsLayout->addStretch(1);
 
         syncOpenButton_ = new QPushButton(uiText("Open", QStringLiteral("打开")), this);
-        syncOpenButton_->setMinimumSize(QSize(52, 32));
-        syncOpenButton_->setMaximumHeight(32);
+        syncOpenButton_->setMinimumSize(QSize(64, 36));
+        syncOpenButton_->setMaximumHeight(36);
         syncButtonsLayout->addWidget(syncOpenButton_);
 
         syncChangeButton_ = new QPushButton(uiText("Change", QStringLiteral("修改")), this);
-        syncChangeButton_->setMinimumSize(QSize(64, 32));
-        syncChangeButton_->setMaximumHeight(32);
+        syncChangeButton_->setMinimumSize(QSize(76, 36));
+        syncChangeButton_->setMaximumHeight(36);
         syncButtonsLayout->addWidget(syncChangeButton_);
 
-        grid->addWidget(new QWidget(this), 15, 0);
         grid->addWidget(syncButtonsRow, 15, 1, Qt::AlignRight | Qt::AlignVCenter);
 
         // WebDAV sync UI intentionally omitted; external sync tools are recommended.
@@ -565,6 +650,147 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             }
             QDesktopServices::openUrl(QUrl::fromLocalFile(path));
         });
+
+        auto *previewSep = new QFrame(this);
+        previewSep->setMaximumHeight(1);
+        previewSep->setFrameShape(QFrame::HLine);
+        grid->addWidget(previewSep, 16, 0, 1, 2);
+
+        previewCacheLabel_ = new QLabel(uiText("Current category preview cache", QStringLiteral("当前分类预览缓存")), this);
+        previewCacheLabel_->setMinimumHeight(44);
+        grid->addWidget(previewCacheLabel_, 17, 0);
+
+        auto *previewButtonsRow = new QWidget(this);
+        auto *previewButtonsLayout = new QHBoxLayout(previewButtonsRow);
+        previewButtonsLayout->setContentsMargins(0, 0, 0, 0);
+        previewButtonsLayout->setSpacing(6);
+        previewButtonsLayout->addStretch(1);
+
+        previewRepairButton_ = new QPushButton(uiText("Repair broken", QStringLiteral("修复损坏")), this);
+        previewRepairButton_->setMinimumSize(QSize(96, 36));
+        previewRepairButton_->setMaximumHeight(36);
+        previewButtonsLayout->addWidget(previewRepairButton_);
+
+        previewRebuildButton_ = new QPushButton(uiText("Rebuild", QStringLiteral("重建")), this);
+        previewRebuildButton_->setMinimumSize(QSize(84, 36));
+        previewRebuildButton_->setMaximumHeight(36);
+        previewButtonsLayout->addWidget(previewRebuildButton_);
+
+        previewClearButton_ = new QPushButton(uiText("Clear", QStringLiteral("清空")), this);
+        previewClearButton_->setMinimumSize(QSize(84, 36));
+        previewClearButton_->setMaximumHeight(36);
+        previewButtonsLayout->addWidget(previewClearButton_);
+
+        grid->addWidget(previewButtonsRow, 18, 1, Qt::AlignRight | Qt::AlignVCenter);
+
+        connect(previewRepairButton_, &QPushButton::clicked, this, [this]() {
+            emit previewCacheActionRequested(RepairBrokenPreviews);
+        });
+        connect(previewRebuildButton_, &QPushButton::clicked, this, [this]() {
+            emit previewCacheActionRequested(RebuildCurrentPreviews);
+        });
+        connect(previewClearButton_, &QPushButton::clicked, this, [this]() {
+            emit previewCacheActionRequested(ClearCurrentPreviews);
+        });
+
+        grid->setContentsMargins(18, 14, 18, 14);
+        grid->setHorizontalSpacing(14);
+        grid->setVerticalSpacing(8);
+        grid->setColumnStretch(0, 0);
+        grid->setColumnStretch(1, 1);
+
+        ui->sep1->hide();
+        ui->sep2->hide();
+        ui->sep_autostart->hide();
+        ui->sep3->hide();
+        ui->sep4->hide();
+        syncSep->hide();
+        previewSep->hide();
+
+        syncLabel_->setMinimumHeight(24);
+        previewCacheLabel_->setMinimumHeight(24);
+        syncPathEdit_->setMinimumHeight(36);
+        themeCombo_->setMinimumHeight(36);
+        themeCombo_->setMaximumHeight(36);
+        pasteShortcutCombo_->setMinimumHeight(36);
+        pasteShortcutCombo_->setMaximumHeight(36);
+        retentionUnitCombo_->setMinimumHeight(36);
+        retentionUnitCombo_->setMaximumHeight(36);
+        ui->daySpinBox->setMinimumHeight(36);
+        ui->daySpinBox->setMaximumHeight(36);
+        ui->shortcutEdit->setMinimumHeight(36);
+        ui->shortcutEdit->setMaximumHeight(36);
+        ui->thumbnailPrefetchSpin->setMinimumHeight(36);
+        ui->thumbnailPrefetchSpin->setMaximumHeight(36);
+
+        previewRepairButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        previewRebuildButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        previewClearButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        previewButtonsLayout->setSpacing(8);
+        if (QLayoutItem *leadingStretch = previewButtonsLayout->takeAt(0)) {
+            delete leadingStretch;
+        }
+        previewButtonsLayout->setStretch(0, 1);
+        previewButtonsLayout->setStretch(1, 1);
+        previewButtonsLayout->setStretch(2, 1);
+        syncButtonsLayout->setSpacing(8);
+
+        auto createTabGrid = [this](QWidget *parent) {
+            auto *layout = new QGridLayout(parent);
+            layout->setContentsMargins(12, 12, 12, 12);
+            layout->setHorizontalSpacing(14);
+            layout->setVerticalSpacing(8);
+            layout->setColumnStretch(0, 0);
+            layout->setColumnStretch(1, 1);
+            return layout;
+        };
+
+        auto *tabs = new QTabWidget(ui->generalCard);
+        tabs->setObjectName(QStringLiteral("settingsTabs"));
+        auto *generalPage = new QWidget(tabs);
+        auto *shortcutsPage = new QWidget(tabs);
+        auto *maintenancePage = new QWidget(tabs);
+        auto *generalLayout = createTabGrid(generalPage);
+        auto *shortcutsLayout = createTabGrid(shortcutsPage);
+        auto *maintenanceLayout = createTabGrid(maintenancePage);
+
+        tabs->addTab(generalPage, uiText("General", QStringLiteral("常用设置")));
+        tabs->addTab(shortcutsPage, uiText("Shortcuts", QStringLiteral("快捷与预览")));
+        tabs->addTab(maintenancePage, uiText("Maintenance", QStringLiteral("同步与维护")));
+
+        generalLayout->addWidget(themeLabel_, 0, 0);
+        generalLayout->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+        generalLayout->addWidget(ui->label_autostart, 1, 0);
+        generalLayout->addWidget(autoStartSwitch_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+        generalLayout->addWidget(ui->label_3, 2, 0);
+        generalLayout->addWidget(toggleSwitch_, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
+        generalLayout->addWidget(ui->label_2, 3, 0);
+        generalLayout->addWidget(retentionWidget, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
+        generalLayout->addWidget(ui->label_5, 4, 0);
+        generalLayout->addWidget(ui->scaleWidget, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
+        generalLayout->addWidget(ui->label_preview_cache, 5, 0);
+        generalLayout->addWidget(ui->thumbnailPrefetchSpin, 5, 1, Qt::AlignRight | Qt::AlignVCenter);
+        generalLayout->setRowStretch(6, 1);
+
+        shortcutsLayout->addWidget(ui->label_4, 0, 0);
+        shortcutsLayout->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+        shortcutsLayout->addWidget(pasteShortcutLabel_, 1, 0);
+        shortcutsLayout->addWidget(pasteShortcutCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+        shortcutsLayout->setRowStretch(2, 1);
+
+        maintenanceLayout->addWidget(syncLabel_, 0, 0, 1, 2);
+        maintenanceLayout->addWidget(syncPathEdit_, 1, 0, 1, 2);
+        maintenanceLayout->addWidget(syncButtonsRow, 2, 0, 1, 2);
+        maintenanceLayout->addWidget(previewCacheLabel_, 3, 0, 1, 2);
+        maintenanceLayout->addWidget(previewButtonsRow, 4, 0, 1, 2);
+        maintenanceLayout->setRowStretch(5, 1);
+
+        grid->setContentsMargins(18, 14, 18, 14);
+        grid->setHorizontalSpacing(0);
+        grid->setVerticalSpacing(0);
+        grid->setColumnStretch(0, 1);
+        grid->setColumnStretch(1, 1);
+        grid->addWidget(tabs, 0, 0, 1, 2);
     }
 
 #ifndef Q_OS_WIN
@@ -589,6 +815,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     ui->generalCard->setGraphicsEffect(shadow);
 
     loadSettings();
+    adjustSize();
 }
 
 MPasteSettingsWidget::~MPasteSettingsWidget()
@@ -638,6 +865,8 @@ void MPasteSettingsWidget::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
     loadSettings();
+    adjustSize();
+    resize(width(), sizeHint().height());
 }
 
 void MPasteSettingsWidget::loadSettings()

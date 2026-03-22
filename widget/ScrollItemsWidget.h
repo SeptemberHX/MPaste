@@ -68,6 +68,7 @@ public:
     void focusMoveRight();
     int getItemCount();
     void refreshThumbnailCache();
+    int maintainPreviewCache(ClipboardBoardService::PreviewCacheMaintenanceMode mode);
 
     void scrollToFirst();
     void scrollToLast();
@@ -132,6 +133,8 @@ private:
     void updateEdgeFadeOverlays();
     void ensureLinkPreviewForIndex(const QModelIndex &proxyIndex);
     void createHoverActionBar();
+    void populateSingleSelectionMenu(QMenu *menu, const QModelIndex &proxyIndex, const ClipboardItem &item);
+    void populateMultiSelectionMenu(QMenu *menu, const QList<ClipboardItem> &selection);
     void updateHoverActionBar(const QModelIndex &proxyIndex);
     void updateHoverActionBarPosition();
     void hideHoverActionBar(bool animated = true);
@@ -182,6 +185,7 @@ private:
     QSet<QByteArray> favoriteFingerprints_;
     QSet<QString> pendingLinkPreviewUrls_;
     QSet<QString> pendingThumbnailNames_;
+    QSet<QString> missingThumbnailNames_;
     QSet<QString> desiredThumbnailNames_;
     QTimer *thumbnailUpdateTimer_ = nullptr;
     QTimer *thumbnailPulseTimer_ = nullptr;

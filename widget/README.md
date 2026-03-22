@@ -18,6 +18,7 @@ update: 修改本目录文件时，同步更新本 README。
 ## 组件说明
 
 - `AboutWidget.*`：关于窗口。
+- `ClipboardBoardActionService.*`：板块条目操作 helper，承接模型/持久化层的非视觉动作。
 - `ClipboardItemDetailsDialog.*`：条目详情与检查器弹窗。
 - `MPasteSettingsWidget.*`：设置窗口。
 - `MPasteWidget.*`：主窗口与主要交互入口。
@@ -90,6 +91,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `MPasteWidget` 现在会在每次播放提示音前按当前默认输出设备重建播放链路，减少运行中切换耳机后提示音仍走旧设备的问题，同时避免设备变化回调触发的重复重建。
 - `MPasteWidget` 现在会把提示音播放器指针初始化为 `nullptr`，避免重建播放链路时因未初始化指针导致的启动崩溃。
 - `MPasteSettingsWidget` 现在会在快捷键输入框里主动记录 `Win`/`Meta` 组合键，避免 `QKeySequenceEdit` 在 Windows 下录不进 `Win+...`。
+- `MPasteSettingsWidget` 现在将设置页重构为“常用设置 / 快捷与预览 / 同步与维护”三页签布局，提升操作按钮高度，并改为固定宽度 + 按内容自适应高度，避免底部空白和按钮裁切。
 - `MPasteWidget` 现在会在设置窗口打开期间临时停用全局唤起热键，避免编辑快捷键时被当前热键立即抢走。
 - `ScrollItemsWidget` 现在会在列表左右预留呼吸边距，并在视口边缘绘制接近主窗口淡灰玻璃底色的轻雾渐变遮罩，让横向滚动时更接近贴边淡出的效果。
 - 文件类卡片现在也会像链接卡片一样隐藏底部 `infoWidget`，让缩略图区域更完整。
@@ -100,10 +102,12 @@ update: 修改本目录文件时，同步更新本 README。
 - 列表现在按可见范围按需加载缩略图，离屏条目会释放缩略图以降低内存占用。
 - 列表加载中会显示居中 loading 提示，加载完成后自动隐藏。
 - 缩略图在滚动过程中按可见范围附近约 50 个条目动态加载与释放，避免全量常驻。
+- 链接预览缩略图现在也会像图片/富文本一样在离屏后释放，并在重新进入可见范围时按需从磁盘恢复，减少滚动到末尾后的常驻内存。
 - 图片/富文本在缩略图未就绪时显示加载占位，避免文字与图片闪烁切换。
 - 设置里新增了预览缓存数量配置，可调整缩略图预取数量。
 
 - ScrollItemsWidget now delegates persistence, deferred loading, and background item completion to ClipboardBoardService.
+- ScrollItemsWidget now routes item metadata persistence, export, favorite toggles, and delete mutations through ClipboardBoardActionService instead of directly mutating model/persistence code everywhere.
 
 - Card headers now show custom aliases above the type/time line when provided.
 
@@ -111,6 +115,7 @@ update: 修改本目录文件时，同步更新本 README。
 - ClipboardItemRenameDialog now activates the window and focuses the input on show.
 
 - Settings now expose the sync folder path for external sync tools.
+- Settings now expose current-category preview cache maintenance actions for repairing broken previews, rebuilding preview cache, and clearing persisted previews.
 
 - The main window now watches the save folder for external sync changes and reloads history with a debounce.
 

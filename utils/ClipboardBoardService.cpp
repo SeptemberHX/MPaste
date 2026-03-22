@@ -152,6 +152,20 @@ bool richTextHtmlHasImageContent(const QString &html) {
         || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive);
 }
 
+bool isPreviewCacheManagedContent(const ClipboardItem &item) {
+    const ClipboardItem::ContentType type = item.getContentType();
+    return type == ClipboardItem::Image
+        || type == ClipboardItem::Office
+        || type == ClipboardItem::RichText;
+}
+
+bool usesVisualPreview(const ClipboardItem &item) {
+    const ClipboardItem::ContentType type = item.getContentType();
+    return type == ClipboardItem::Image
+        || type == ClipboardItem::Office
+        || (type == ClipboardItem::RichText && item.getPreviewKind() == ClipboardItem::VisualPreview);
+}
+
 QImage trimTransparentPadding(const QImage &source, int paddingPx) {
     if (source.isNull()) {
         return {};
@@ -677,6 +691,92 @@ void ClipboardBoardService::trimExpiredPendingItems(const QDateTime &cutoff) {
 
         deleteItemByPath(pendingLoadFilePaths_.last());
     }
+}
+
+int ClipboardBoardService::maintainPreviewCache(PreviewCacheMaintenanceMode mode) {
+    checkSaveDir();
+
+    QDir dir(saveDir());
+    const QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files, QDir::Name);
+    if (fileInfos.isEmpty()) {
+        return 0;
+    }
+
+    LocalSaver saver;
+    int changedCount = 0;
+
+    for (const QFileInfo &info : fileInfos) {
+        const QString filePath = info.filePath();
+        if (!LocalSaver::isCurrentFormatFile(filePath)) {
+            continue;
+        }
+
+        const ClipboardItem lightItem = saver.loadFromFileLight(filePath);
+        if (lightItem.getName().isEmpty() || !isPreviewCacheManagedContent(lightItem)) {
+            continue;
+        }
+
+        switch (mode) {
+            case ClearAllPreviews: {
+                const ClipboardItem fullItem = saver.loadFromFile(filePath);
+                if (fullItem.getName().isEmpty() || !fullItem.hasThumbnail()) {
+                    break;
+                }
+                if (saver.updateThumbnail(filePath, QPixmap())) {
+                    ++changedCount;
+                }
+                break;
+            }
+            case RepairBrokenPreviews: {
+                if (lightItem.getContentType() == ClipboardItem::RichText
+                    && lightItem.getPreviewKind() == ClipboardItem::TextPreview) {
+                    const ClipboardItem fullItem = saver.loadFromFile(filePath);
+                    if (!fullItem.getName().isEmpty()
+                        && fullItem.hasThumbnail()
+                        && saver.updateThumbnail(filePath, QPixmap())) {
+                        ++changedCount;
+                    }
+                    break;
+                }
+
+                if (!usesVisualPreview(lightItem) || lightItem.hasThumbnail()) {
+                    break;
+                }
+
+                const ClipboardItem fullItem = saver.loadFromFile(filePath);
+                if (fullItem.getName().isEmpty()) {
+                    break;
+                }
+
+                const ClipboardItem preparedItem = prepareItemForDisplayAndSave(fullItem);
+                if (!preparedItem.thumbnail().isNull()
+                    && saver.updateThumbnail(filePath, preparedItem.thumbnail())) {
+                    ++changedCount;
+                }
+                break;
+            }
+            case RebuildAllPreviews: {
+                const ClipboardItem fullItem = saver.loadFromFile(filePath);
+                if (fullItem.getName().isEmpty()) {
+                    break;
+                }
+
+                const ClipboardItem preparedItem = prepareItemForDisplayAndSave(fullItem);
+                if (preparedItem.thumbnail().cacheKey() == fullItem.thumbnail().cacheKey()) {
+                    break;
+                }
+                if (saver.updateThumbnail(filePath, preparedItem.thumbnail())) {
+                    ++changedCount;
+                }
+                break;
+            }
+        }
+    }
+
+    if (changedCount > 0) {
+        emit localPersistenceChanged();
+    }
+    return changedCount;
 }
 
 void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, const QString &expectedName) {
