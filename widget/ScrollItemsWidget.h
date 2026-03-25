@@ -1,13 +1,14 @@
 // input: Depends on Qt Widgets, ClipboardItem data, persistence service, and item widgets.
-// output: Exposes one history board with lazy loading, filtering, dedup indexing, and paste signals.
+// output: Exposes one history board with lazy loading, filtering, fixed-page browsing, dedup indexing, and paste signals.
 // pos: Widget-layer horizontal board declaration for clipboard/favorites views.
 // update: If I change, update this header block and my folder README.md (main-card context menu save/export + multi-select batch actions + diff-based thumbnail visibility tracking + hidden-stage light prewarm).
-// note: Added theme application entry point, alias sync hooks, on-demand thumbnail loading with prefetch, loading overlay, diff-based thumbnail visibility tracking, and hidden-stage light prewarm.
+// note: Added theme application entry point, alias sync hooks, on-demand thumbnail loading with prefetch, loading overlay, diff-based thumbnail visibility tracking, hidden-stage light prewarm, and switchable paged-vs-continuous history loading.
 #ifndef SCROLLITEMSWIDGET_H
 #define SCROLLITEMSWIDGET_H
 
 #include <QByteArray>
 #include <QList>
+#include <QMap>
 #include <QModelIndex>
 #include <QPair>
 #include <QPersistentModelIndex>
@@ -17,6 +18,7 @@
 #include "utils/ClipboardBoardService.h"
 
 #include "data/ClipboardItem.h"
+#include "ClipboardBoardModel.h"
 
 class QPropertyAnimation;
 class QModelIndex;
@@ -31,7 +33,6 @@ class QGraphicsOpacityEffect;
 class QToolButton;
 class QLabel;
 
-class ClipboardBoardModel;
 class ClipboardBoardProxyModel;
 class ClipboardCardDelegate;
 
@@ -49,6 +50,7 @@ public:
 
     bool addOneItem(const ClipboardItem &item);
     bool addAndSaveItem(const ClipboardItem &item);
+    void mergeDeferredMimeFormats(const QString &itemName, const QMap<QString, QByteArray> &extraFormats);
     void filterByKeyword(const QString &keyword);
     void filterByType(ClipboardItem::ContentType type);
     void setShortcutInfo();
@@ -67,11 +69,15 @@ public:
     void focusMoveLeft();
     void focusMoveRight();
     int getItemCount();
+    void setCurrentPageNumber(int pageNumber);
+    int currentPageNumber() const;
+    int totalPageCount() const;
     void refreshThumbnailCache();
     int maintainPreviewCache(ClipboardBoardService::PreviewCacheMaintenanceMode mode);
     QSet<QByteArray> loadAllFingerprints();
     void setFavoriteFingerprints(const QSet<QByteArray> &fingerprints);
 
+    void moveSelectedToFirst();
     void scrollToFirst();
     void scrollToLast();
     QString getCategory() const;
@@ -81,6 +87,7 @@ public:
     QList<ClipboardItem> allItems();
     bool handleWheelScroll(QWheelEvent *event);
     void applyTheme(bool dark);
+    ClipboardBoardService *boardServiceRef() const { return boardService_; }
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -100,6 +107,7 @@ signals:
     void aliasChanged(const QByteArray &fingerprint, const QString &alias);
     void localPersistenceChanged();
     void selectionStateChanged();
+    void pageStateChanged(int currentPage, int totalPages);
 
 private slots:
     void handleCurrentIndexChanged(const QModelIndex &current, const QModelIndex &previous);
@@ -115,12 +123,27 @@ private slots:
 private:
     QModelIndex currentProxyIndex() const;
     QModelIndex proxyIndexForSourceRow(int sourceRow) const;
+    int sourceRowForProxyIndex(const QModelIndex &proxyIndex) const;
     QList<QModelIndex> selectedProxyIndexes() const;
     QList<int> selectedSourceRows() const;
     QList<ClipboardItem> selectedItems() const;
     void setCurrentProxyIndex(const QModelIndex &index);
     void setFirstVisibleItemSelected();
     void applyFilters();
+    int totalItemCountForPagination() const;
+    bool paginationEnabled() const;
+    bool shouldEvictPages() const;
+    bool filterShowsVisualPreviewCards() const;
+    bool usesManagedVisualPreviewCard(const ClipboardItem &item) const;
+    ClipboardBoardModel::PreviewState previewStateForItem(const ClipboardItem &item) const;
+    void syncPreviewStateForRow(int row);
+    void syncPreviewStateForName(const QString &name);
+    void releaseManagedVisualThumbnailsFromModel();
+    void reloadAllIndexedItems();
+    void reloadCurrentPageItems(bool resetSelection);
+    bool shouldReloadCurrentPage(int totalItems) const;
+    void ensureCurrentPageLoaded(bool resetSelection);
+    void syncPageWindow(bool resetSelection = false);
     int moveItemToFirst(int sourceRow);
     void animateScrollTo(int targetValue);
     int wheelStepPixels() const;
@@ -144,6 +167,7 @@ private:
     void updateHoverPinButton(bool pinned);
     void openAliasDialogForItem(const ClipboardItem &item);
     void startAsyncKeywordSearch();
+    void appendModelItem(const ClipboardItem &item);
     bool appendLoadedItem(const QString &filePath, const ClipboardItem &item);
     void removeItems(const QList<ClipboardItem> &items);
     void applyFavoriteToItems(const QList<ClipboardItem> &items, bool favorite);
@@ -157,6 +181,7 @@ private:
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;
     bool isBoardUiVisible() const;
     void scheduleThumbnailUpdate();
+    void primeVisibleThumbnailsSync();
     void updateVisibleThumbnails();
     bool shouldManageThumbnail(const ClipboardItem &item) const;
     void requestThumbnailForItem(const ClipboardItem &item);
@@ -173,6 +198,7 @@ private:
     ClipboardBoardService *boardService_ = nullptr;
     QListView *listView_ = nullptr;
     ClipboardBoardModel *boardModel_ = nullptr;
+    ClipboardBoardProxyModel *filterProxyModel_ = nullptr;
     ClipboardBoardProxyModel *proxyModel_ = nullptr;
     ClipboardCardDelegate *cardDelegate_ = nullptr;
     QPropertyAnimation *scrollAnimation;
@@ -207,10 +233,21 @@ private:
     QString currentKeyword_;
     ClipboardItem::ContentType currentTypeFilter_ = ClipboardItem::All;
     bool darkTheme_ = false;
+    int currentPage_ = 0;
+    int pageBaseOffset_ = 0;
+    int loadedPage_ = -1;
+    int loadedPageBaseOffset_ = -1;
+    int loadedPageTotalItems_ = -1;
+    ClipboardItem::ContentType loadedPageTypeFilter_ = ClipboardItem::All;
+    QString loadedPageKeyword_;
+    QSet<QString> loadedPageMatchedNames_;
 
-    static constexpr int INITIAL_LOAD_BATCH_SIZE = 24;
+    static constexpr int PAGE_SIZE = 50;
+    static constexpr int PAGED_INITIAL_LOAD_BATCH_SIZE = PAGE_SIZE;
+    static constexpr int CONTINUOUS_INITIAL_LOAD_BATCH_SIZE = 24;
     static constexpr int LOAD_BATCH_SIZE = 16;
-    static constexpr int DEFERRED_LOAD_BATCH_SIZE = 6;
+    static constexpr int PAGE_LOAD_BATCH_SIZE = PAGE_SIZE;
+    static constexpr int CONTINUOUS_DEFERRED_LOAD_BATCH_SIZE = 6;
     static constexpr int LOAD_MORE_THRESHOLD_PX = 640;
 };
 

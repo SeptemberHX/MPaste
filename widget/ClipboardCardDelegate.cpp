@@ -11,6 +11,7 @@
 #include <QApplication>
 #include <QCache>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFileIconProvider>
 #include <QFontDatabase>
@@ -23,6 +24,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPointer>
+#include <QPixmapCache>
 #include <QRadialGradient>
 #include <QRunnable>
 #include <QRegularExpression>
@@ -39,6 +41,11 @@
 
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
+
+QCache<QString, QPixmap> &coverPixmapCache() {
+    static QCache<QString, QPixmap> cache(6 * 1024);
+    return cache;
+}
 
 bool isVeryTallImage(const QSize &size) {
     return size.isValid() && size.height() >= qMax(4000, size.width() * 4);
@@ -80,25 +87,7 @@ void logTallImageCoverEvent(const QString &name,
         .arg(targetDpr, 0, 'f', 2);
 }
 
-struct CardData {
-    ClipboardItem::ContentType contentType = ClipboardItem::All;
-    ClipboardItem::PreviewKind previewKind = ClipboardItem::TextPreview;
-    QPixmap icon;
-    QPixmap thumbnail;
-    QPixmap favicon;
-    QString title;
-    QString url;
-    QString alias;
-    QString normalizedText;
-    QList<QUrl> normalizedUrls;
-    QDateTime time;
-    QSize imageSize;
-    QColor color;
-    bool favorite = false;
-    bool pinned = false;
-    QString shortcutText;
-    QString name;
-};
+// CardData is defined in ClipboardCardDelegate.h
 
 QColor blendColor(const QColor &from, const QColor &to, qreal factor) {
     const qreal t = qBound(0.0, factor, 1.0);
@@ -143,14 +132,14 @@ QString countLabelForCard(const CardData &card) {
         case ClipboardItem::RichText:
         case ClipboardItem::Text:
         case ClipboardItem::Link:
-            return QStringLiteral("%1 %2").arg(card.normalizedText.size()).arg(QObject::tr("Characters"));
+            return QStringLiteral("%1 %2").arg(card.textLength).arg(QObject::tr("Characters"));
         case ClipboardItem::File:
             if (card.normalizedUrls.size() > 1) {
                 return QStringLiteral("%1 %2").arg(card.normalizedUrls.size()).arg(QObject::tr("Files"));
             }
             if (card.normalizedUrls.size() == 1) {
                 const QUrl url = card.normalizedUrls.front();
-                return url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyDecoded);
+                return url.isLocalFile() ? url.toLocalFile() : url.toDisplayString(QUrl::PreferLocalFile);
             }
             return QString();
         case ClipboardItem::Color:
@@ -171,16 +160,27 @@ QString previewTextForCard(const CardData &card) {
             }
             return lines.join(QLatin1Char('\n'));
         }
-        case ClipboardItem::Link:
-            if (!card.title.trimmed().isEmpty()) {
-                return card.title.trimmed() + QLatin1Char('\n')
-                    + (card.url.isEmpty() ? card.normalizedText.trimmed() : card.url);
+        case ClipboardItem::Link: {
+            QString linkUrl;
+            if (!card.url.isEmpty()) {
+                linkUrl = card.url;
+            } else if (!card.normalizedUrls.isEmpty()) {
+                const QUrl &first = card.normalizedUrls.first();
+                linkUrl = first.isLocalFile() ? first.toLocalFile() : first.toDisplayString(QUrl::PreferLocalFile);
+            } else {
+                linkUrl = card.normalizedText.left(512).trimmed();
             }
-            return card.normalizedText.trimmed();
+            if (!card.title.trimmed().isEmpty()) {
+                return card.title.trimmed() + QLatin1Char('\n') + linkUrl;
+            }
+            return linkUrl;
+        }
         case ClipboardItem::Color:
             return card.color.name(QColor::HexRgb);
         case ClipboardItem::RichText:
-            return card.normalizedText.trimmed().isEmpty() ? QObject::tr("Rich text preview") : card.normalizedText.trimmed();
+            return card.normalizedText.trimmed().isEmpty()
+                ? QObject::tr("Rich text preview")
+                : card.normalizedText.trimmed();
         case ClipboardItem::Image:
             return QObject::tr("Image preview");
         case ClipboardItem::Office:
@@ -458,19 +458,20 @@ void drawCoverPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &
     const qreal sourceDpr = qMax<qreal>(1.0, pixmap.devicePixelRatio());
     const QSize sourceLogicalSize(qRound(pixmap.width() / sourceDpr),
                                   qRound(pixmap.height() / sourceDpr));
-    if (qFuzzyCompare(sourceDpr, targetDpr) && sourceLogicalSize == targetRect.size()) {
+    if (sourceLogicalSize == targetRect.size()) {
         logTallImageCoverEvent(debugName, debugImageSize, targetRect.size(), targetDpr, pixmap, "direct");
         painter->drawPixmap(targetRect.topLeft(), pixmap);
         return;
     }
 
-    static QCache<QString, QPixmap> cache(24 * 1024);
+    // Use the item name (stable) as cache key instead of pixmap.cacheKey()
+    // which changes every time the item is reloaded from disk.
     const QString cacheKey = QStringLiteral("%1:%2x%3@%4")
-        .arg(QString::number(static_cast<qulonglong>(pixmap.cacheKey())))
+        .arg(debugName.isEmpty() ? QString::number(static_cast<qulonglong>(pixmap.cacheKey())) : debugName)
         .arg(pixelTargetSize.width())
         .arg(pixelTargetSize.height())
         .arg(qRound(targetDpr * 100.0));
-    if (QPixmap *cached = cache.object(cacheKey)) {
+    if (QPixmap *cached = coverPixmapCache().object(cacheKey)) {
         logTallImageCoverEvent(debugName, debugImageSize, targetRect.size(), targetDpr, *cached, "cache-hit");
         painter->drawPixmap(targetRect.topLeft(), *cached);
         return;
@@ -486,7 +487,7 @@ void drawCoverPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &
     QPixmap cropped = scaled.copy(cropRect);
     cropped.setDevicePixelRatio(targetDpr);
     const int cacheCost = qMax(1, (cropped.width() * cropped.height() * 4) / 1024);
-    cache.insert(cacheKey, new QPixmap(cropped), cacheCost);
+    coverPixmapCache().insert(cacheKey, new QPixmap(cropped), cacheCost);
     painter->drawPixmap(targetRect.topLeft(), cropped);
 }
 
@@ -782,7 +783,7 @@ QString joinFileNames(const QList<QUrl> &urls) {
             name = url.fileName();
         }
         if (name.isEmpty()) {
-            name = url.toString(QUrl::FullyDecoded);
+            name = url.toDisplayString(QUrl::PreferLocalFile);
         }
         if (!name.isEmpty()) {
             names.append(name);
@@ -938,10 +939,11 @@ QPixmap buildHeaderIconPixmapUncached(const QPixmap &sourcePixmap, const QSize &
 ClipboardCardDelegate::ClipboardCardDelegate(const QColor &borderColor, QObject *parent)
     : QStyledItemDelegate(parent),
       borderColor_(borderColor),
-      headerIconCache_(2 * 1024),
-      linkFallbackCache_(8 * 1024),
-      localImageThumbnailCache_(24 * 1024),
-      localFileIconCache_(4 * 1024) {
+      headerIconCache_(512),
+      linkFallbackCache_(2 * 1024),
+      cardPixmapCache_(16 * 1024),
+      localImageThumbnailCache_(8 * 1024),
+      localFileIconCache_(1024) {
     previewTaskPool_.setMaxThreadCount(qBound(1, QThread::idealThreadCount() / 2, 4));
     previewTaskPool_.setExpiryTimeout(15000);
 }
@@ -952,6 +954,23 @@ ClipboardCardDelegate::~ClipboardCardDelegate() {
 
 void ClipboardCardDelegate::setLoadingPhase(int phase) {
     loadingPhase_ = phase;
+}
+
+void ClipboardCardDelegate::clearVisualCaches() {
+    headerColorCache_.clear();
+    headerIconCache_.clear();
+    linkFallbackCache_.clear();
+    coverPixmapCache().clear();
+    cardPixmapCache_.clear();
+    localImageThumbnailCache_.clear();
+    localFileIconCache_.clear();
+    pendingLocalImageThumbnailKeys_.clear();
+    failedLocalImageThumbnailKeys_.clear();
+    pendingLocalFileIconKeys_.clear();
+    failedLocalFileIconKeys_.clear();
+    pendingFileIconRequests_.clear();
+    coverPixmapCache().clear();
+    QPixmapCache::clear();
 }
 
 QColor ClipboardCardDelegate::headerColorForIcon(const QPixmap &iconPixmap) const {
@@ -1182,14 +1201,108 @@ void drawLoadingPlaceholder(QPainter *painter,
     painter->restore();
 }
 
+void drawUnavailablePlaceholder(QPainter *painter,
+                                const QRect &rect,
+                                int scale,
+                                bool darkTheme) {
+    if (!painter || !rect.isValid()) {
+        return;
+    }
+
+    painter->save();
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(darkTheme ? QColor(255, 255, 255, 14) : QColor(0, 0, 0, 12));
+    const qreal radius = qMax(10.0, 12 * scale / 100.0);
+    painter->drawRoundedRect(rect.adjusted(4, 4, -4, -4), radius, radius);
+
+    QFont font = painter->font();
+    applyUiFontDefaults(font);
+    font.setPointSize(qMax(8, 9 * scale / 100));
+    painter->setFont(font);
+    painter->setPen(darkTheme ? QColor(220, 230, 240, 110) : QColor(90, 100, 115, 110));
+    painter->drawText(rect, Qt::AlignCenter, QObject::tr("Preview unavailable"));
+    painter->restore();
+}
+
+void drawManagedVisualPreview(QPainter *painter,
+                              const QRect &rect,
+                              const CardData &card,
+                              int scale,
+                              bool darkTheme,
+                              int loadingPhase,
+                              bool containMode) {
+    if (!painter || !rect.isValid()) {
+        return;
+    }
+
+    switch (card.previewState) {
+        case ClipboardBoardModel::PreviewReady:
+            if (!card.thumbnail.isNull()) {
+                if (containMode) {
+                    drawContainPixmap(painter, rect, card.thumbnail);
+                } else {
+                    drawCoverPixmap(painter, rect, card.thumbnail, card.name, card.imageSize);
+                }
+                return;
+            }
+            [[fallthrough]];
+        case ClipboardBoardModel::PreviewLoading:
+            drawLoadingPlaceholder(painter, rect, scale, darkTheme, loadingPhase);
+            return;
+        case ClipboardBoardModel::PreviewUnavailable:
+            drawUnavailablePlaceholder(painter, rect, scale, darkTheme);
+            return;
+        case ClipboardBoardModel::PreviewNotApplicable:
+            break;
+    }
+
+    if (!card.thumbnail.isNull()) {
+        if (containMode) {
+            drawContainPixmap(painter, rect, card.thumbnail);
+        } else {
+            drawCoverPixmap(painter, rect, card.thumbnail, card.name, card.imageSize);
+        }
+    } else {
+        drawUnavailablePlaceholder(painter, rect, scale, darkTheme);
+    }
+}
+
 void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     if (!painter || !index.isValid()) {
         return;
     }
 
+    // --- Fast path: check card pixmap cache before fetching model data ---
+    const QString name = index.data(ClipboardBoardModel::NameRole).toString();
+    if (name.isEmpty()) {
+        return;
+    }
+    const bool isSelected = option.state & QStyle::State_Selected;
+    const QString shortcutText = index.data(ClipboardBoardModel::ShortcutTextRole).toString();
+    const int previewState = index.data(ClipboardBoardModel::PreviewStateRole).toInt();
+    const qreal paintDpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
+    const int scale = MPasteSettings::getInst()->getItemScale();
+    const QSize outerSize = cardOuterSizeForScale(scale);
+
+    // Cache key: name + state that affects visual output.
+    // loadingPhase_ is included for animated loading indicators.
+    const QString cardCacheKey = QStringLiteral("%1|%2|%3|%4|%5")
+        .arg(name)
+        .arg(isSelected ? 1 : 0)
+        .arg(shortcutText)
+        .arg(previewState)
+        .arg(loadingPhase_);
+
+    if (const QPixmap *cached = cardPixmapCache_.object(cardCacheKey)) {
+        painter->drawPixmap(option.rect.topLeft(), *cached);
+        return;
+    }
+
+    // --- Cache miss: fetch full card data and render to pixmap ---
     CardData card;
     card.contentType = static_cast<ClipboardItem::ContentType>(index.data(ClipboardBoardModel::ContentTypeRole).toInt());
     card.previewKind = static_cast<ClipboardItem::PreviewKind>(index.data(ClipboardBoardModel::PreviewKindRole).toInt());
+    card.previewState = static_cast<ClipboardBoardModel::PreviewState>(previewState);
     card.icon = qvariant_cast<QPixmap>(index.data(ClipboardBoardModel::IconRole));
     card.thumbnail = qvariant_cast<QPixmap>(index.data(ClipboardBoardModel::ThumbnailRole));
     card.favicon = qvariant_cast<QPixmap>(index.data(ClipboardBoardModel::FaviconRole));
@@ -1197,20 +1310,42 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     card.url = index.data(ClipboardBoardModel::UrlRole).toString();
     card.alias = index.data(ClipboardBoardModel::AliasRole).toString();
     card.pinned = index.data(ClipboardBoardModel::PinnedRole).toBool();
-    card.normalizedText = index.data(ClipboardBoardModel::NormalizedTextRole).toString();
-    card.normalizedUrls = qvariant_cast<QList<QUrl>>(index.data(ClipboardBoardModel::NormalizedUrlsRole));
     card.time = index.data(ClipboardBoardModel::TimeRole).toDateTime();
     card.imageSize = index.data(ClipboardBoardModel::ImageSizeRole).toSize();
     card.color = qvariant_cast<QColor>(index.data(ClipboardBoardModel::ColorRole));
     card.favorite = index.data(ClipboardBoardModel::FavoriteRole).toBool();
-    card.shortcutText = index.data(ClipboardBoardModel::ShortcutTextRole).toString();
-    card.name = index.data(ClipboardBoardModel::NameRole).toString();
+    card.shortcutText = shortcutText;
+    card.name = name;
 
-    if (card.name.isEmpty()) {
-        return;
+    card.normalizedText = index.data(ClipboardBoardModel::NormalizedTextRole).toString();
+    card.textLength = index.data(ClipboardBoardModel::TextLengthRole).toInt();
+    card.normalizedUrls = qvariant_cast<QList<QUrl>>(index.data(ClipboardBoardModel::NormalizedUrlsRole));
+
+    // Render the card to an offscreen pixmap, cache it, then blit.
+    const QSize pixelSize = outerSize * paintDpr;
+    QPixmap cardPixmap(pixelSize);
+    cardPixmap.fill(Qt::transparent);
+    cardPixmap.setDevicePixelRatio(paintDpr);
+    {
+        QPainter offscreen(&cardPixmap);
+        offscreen.setRenderHints(painter->renderHints());
+
+        // Temporarily adjust option rect to start at (0,0) for offscreen painting.
+        QStyleOptionViewItem offscreenOption = option;
+        offscreenOption.rect = QRect(QPoint(0, 0), outerSize);
+
+        // The rest of this function renders into offscreen painter.
+        // We call a helper that contains the original paint logic.
+        paintCardContent(&offscreen, offscreenOption, index, card, scale);
     }
 
-    const int scale = MPasteSettings::getInst()->getItemScale();
+    const int cacheCost = qMax(1, (pixelSize.width() * pixelSize.height() * 4) / 1024);
+    cardPixmapCache_.insert(cardCacheKey, new QPixmap(cardPixmap), cacheCost);
+    painter->drawPixmap(option.rect.topLeft(), cardPixmap);
+}
+
+void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOptionViewItem &option,
+                                              const QModelIndex &index, const CardData &card, int scale) const {
     const QSize outerSize = cardOuterSizeForScale(scale);
     const QSize innerSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
     const int topHeight = kCardHeaderHeight * scale / 100;
@@ -1355,35 +1490,35 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     const QRect imagePreviewRect = bodyRect;
     switch (card.contentType) {
         case ClipboardItem::Image:
-            if (!card.thumbnail.isNull()) {
-                drawCoverPixmap(painter, imagePreviewRect, card.thumbnail, card.name, card.imageSize);
-            } else {
-                drawLoadingPlaceholder(painter, imagePreviewRect, scale, darkTheme, loadingPhase_);
-            }
+            drawManagedVisualPreview(painter, imagePreviewRect, card, scale, darkTheme, loadingPhase_, false);
             break;
         case ClipboardItem::Office:
-            if (!card.thumbnail.isNull()) {
-                drawContainPixmap(painter, imagePreviewRect, card.thumbnail);
-            } else {
-                drawLoadingPlaceholder(painter, imagePreviewRect, scale, darkTheme, loadingPhase_);
-            }
+            drawManagedVisualPreview(painter, imagePreviewRect, card, scale, darkTheme, loadingPhase_, true);
             break;
         case ClipboardItem::RichText: {
-            const int richPadX = qMax(4, 6 * scale / 100);
-            const int richPadY = qMax(3, 4 * scale / 100);
-            QRect richTextRect = bodyRect.adjusted(richPadX, richPadY, -richPadX, -richPadY);
-            if (richTextRect.width() <= 0 || richTextRect.height() <= 0) {
-                richTextRect = bodyRect;
-            }
-            if (card.previewKind == ClipboardItem::VisualPreview && !card.thumbnail.isNull()) {
-                drawCoverPixmap(painter, richTextRect, card.thumbnail, card.name, card.imageSize);
-            } else if (card.previewKind == ClipboardItem::VisualPreview) {
-                drawLoadingPlaceholder(painter, richTextRect, scale, darkTheme, loadingPhase_);
+            const bool shouldFallbackToText = card.previewKind != ClipboardItem::VisualPreview
+                || (card.previewState == ClipboardBoardModel::PreviewUnavailable
+                    && card.thumbnail.isNull()
+                    && !card.normalizedText.trimmed().isEmpty());
+            if (!shouldFallbackToText) {
+                const int richPadX = qMax(4, 6 * scale / 100);
+                const int richPadY = qMax(3, 4 * scale / 100);
+                QRect richTextRect = bodyRect.adjusted(richPadX, richPadY, -richPadX, -richPadY);
+                if (richTextRect.width() <= 0 || richTextRect.height() <= 0) {
+                    richTextRect = bodyRect;
+                }
+                drawManagedVisualPreview(painter, richTextRect, card, scale, darkTheme, loadingPhase_, false);
             } else {
                 QFont previewFont = painter->font();
                 applyUiFontDefaults(previewFont);
                 previewFont.setPointSize(qMax(9, 10 * scale / 100));
-                drawWrappedText(painter, richTextRect, previewTextForCard(card), previewFont, bodyTextColor);
+                const int textPadX = qMax(4, 6 * scale / 100);
+                const int textPadY = qMax(3, 4 * scale / 100);
+                QRect textRect = bodyRect.adjusted(textPadX, textPadY, -textPadX, -textPadY);
+                if (textRect.width() <= 0 || textRect.height() <= 0) {
+                    textRect = bodyRect;
+                }
+                drawWrappedText(painter, textRect, previewTextForCard(card), previewFont, bodyTextColor);
             }
             break;
         }
@@ -1416,8 +1551,24 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
                                 titleRect.bottom() + 1 + rowSpacing,
                                 bodyRect.width(),
                                 urlHeight);
-            const QString linkText = card.url.isEmpty() ? card.normalizedText.trimmed() : card.url;
-            const QUrl currentUrl(linkText);
+
+            // Derive the display URL from normalizedUrls (cheap, cached)
+            // instead of parsing the full normalizedText (can be 70KB+) as
+            // a QUrl on every paint frame.
+            QString linkDisplayText;
+            QUrl currentUrl;
+            if (!card.url.isEmpty()) {
+                linkDisplayText = card.url;
+                currentUrl = QUrl(card.url);
+            } else if (!card.normalizedUrls.isEmpty()) {
+                const QUrl &first = card.normalizedUrls.first();
+                linkDisplayText = first.isLocalFile() ? first.toLocalFile() : first.toDisplayString(QUrl::PreferLocalFile);
+                currentUrl = first;
+            } else {
+                linkDisplayText = card.normalizedText.left(512).trimmed();
+                currentUrl = QUrl(linkDisplayText);
+            }
+
             QPixmap linkPreviewImage;
             if (!card.thumbnail.isNull()) {
                 linkPreviewImage = card.thumbnail;
@@ -1426,69 +1577,74 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
             }
 
             if (!linkPreviewImage.isNull()) {
-                drawCoverPixmap(painter, imageRect, linkPreviewImage, card.name, card.imageSize);
+                // Has preview image — draw it over the entire body area.
+                // The thumbnail already contains the link visual (badge,
+                // hostname, gradient), so skip the font/drawLinkLabel
+                // work that costs 6-10ms per frame.
+                drawCoverPixmap(painter, bodyRect, linkPreviewImage, card.name, card.imageSize);
             } else {
+                // No thumbnail — use the QCache fallback preview + text labels.
                 const qreal paintDpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
                 const QPixmap fallbackPreview = linkFallbackPreview(currentUrl, card.title, imageRect.size(), paintDpr, card.favicon);
                 if (!fallbackPreview.isNull()) {
                     painter->drawPixmap(imageRect.topLeft(), fallbackPreview);
                 }
-            }
 
-            QFont linkTitleFont = painter->font();
-            applyUiFontDefaults(linkTitleFont);
-            linkTitleFont.setPointSize(qMax(9, 9 * scale / 100));
-            linkTitleFont.setBold(true);
-            QFont linkUrlFont = painter->font();
-            applyUiFontDefaults(linkUrlFont);
-            linkUrlFont.setPointSize(qMax(8, 9 * scale / 100));
-            linkUrlFont.setUnderline(true);
-            const int linkPadding = qMax(6, 8 * scale / 100);
-            QRect adjustedUrlRect = urlRect;
-            QRect shortcutRect;
-            QFont shortcutFont;
-            const QString shortcutText = card.shortcutText;
-            bool drawShortcut = false;
-            if (!shortcutText.isEmpty()) {
-                shortcutFont = painter->font();
-                applyUiFontDefaults(shortcutFont);
-                shortcutFont.setPointSize(qMax(8, 8 * scale / 100));
-                const QFontMetrics shortcutMetrics(shortcutFont);
-                const int shortcutPadding = qMax(6, 8 * scale / 100);
-                const int shortcutTextWidth = shortcutMetrics.horizontalAdvance(shortcutText) + shortcutPadding;
-                const int shortcutMinWidth = qMax(48, 56 * scale / 100);
-                int shortcutWidth = qMax(shortcutMinWidth, shortcutTextWidth);
-                const int maxShortcutWidth = qMax(0, urlRect.width() - linkPadding * 2);
-                shortcutWidth = qMin(shortcutWidth, maxShortcutWidth);
-                if (shortcutWidth > 0) {
-                    adjustedUrlRect = urlRect.adjusted(0, 0, -(shortcutWidth + linkPadding), 0);
-                    shortcutRect = QRect(
-                        urlRect.right() - linkPadding - shortcutWidth + 1,
-                        urlRect.top(),
-                        shortcutWidth,
-                        urlRect.height());
-                    drawShortcut = true;
+                QFont linkTitleFont = painter->font();
+                applyUiFontDefaults(linkTitleFont);
+                linkTitleFont.setPointSize(qMax(9, 9 * scale / 100));
+                linkTitleFont.setBold(true);
+                QFont linkUrlFont = painter->font();
+                applyUiFontDefaults(linkUrlFont);
+                linkUrlFont.setPointSize(qMax(8, 9 * scale / 100));
+                linkUrlFont.setUnderline(true);
+                const int linkPadding = qMax(6, 8 * scale / 100);
+                QRect adjustedUrlRect = urlRect;
+                QRect shortcutRect;
+                QFont shortcutFont;
+                const QString shortcutText = card.shortcutText;
+                bool drawShortcut = false;
+                if (!shortcutText.isEmpty()) {
+                    shortcutFont = painter->font();
+                    applyUiFontDefaults(shortcutFont);
+                    shortcutFont.setPointSize(qMax(8, 8 * scale / 100));
+                    const QFontMetrics shortcutMetrics(shortcutFont);
+                    const int shortcutPadding = qMax(6, 8 * scale / 100);
+                    const int shortcutTextWidth = shortcutMetrics.horizontalAdvance(shortcutText) + shortcutPadding;
+                    const int shortcutMinWidth = qMax(48, 56 * scale / 100);
+                    int shortcutWidth = qMax(shortcutMinWidth, shortcutTextWidth);
+                    const int maxShortcutWidth = qMax(0, urlRect.width() - linkPadding * 2);
+                    shortcutWidth = qMin(shortcutWidth, maxShortcutWidth);
+                    if (shortcutWidth > 0) {
+                        adjustedUrlRect = urlRect.adjusted(0, 0, -(shortcutWidth + linkPadding), 0);
+                        shortcutRect = QRect(
+                            urlRect.right() - linkPadding - shortcutWidth + 1,
+                            urlRect.top(),
+                            shortcutWidth,
+                            urlRect.height());
+                        drawShortcut = true;
+                    }
                 }
-            }
-            drawLinkLabel(painter,
-                          titleRect,
-                          card.title.isEmpty() ? fallbackHeadline(QString(), currentUrl) : card.title,
-                          linkTitleFont,
-                          linkTitleColor,
-                          linkPadding);
-            drawLinkLabel(painter,
-                          adjustedUrlRect,
-                          linkText,
-                          linkUrlFont,
-                          linkUrlColor,
-                          linkPadding);
-            if (drawShortcut) {
-                drawElidedText(painter,
-                               shortcutRect,
-                               shortcutText,
-                               shortcutFont,
-                               footerTextColor,
-                               Qt::AlignRight | Qt::AlignVCenter);
+                drawLinkLabel(painter,
+                              titleRect,
+                              card.title.isEmpty() ? fallbackHeadline(QString(), currentUrl) : card.title,
+                              linkTitleFont,
+                              linkTitleColor,
+                              linkPadding);
+                drawLinkLabel(painter,
+                              adjustedUrlRect,
+                              linkDisplayText,
+                              linkUrlFont,
+                              linkUrlColor,
+                              linkPadding);
+                if (drawShortcut) {
+                    drawElidedText(painter,
+                                   shortcutRect,
+                                   shortcutText,
+                                   shortcutFont,
+                                   footerTextColor,
+                                   Qt::AlignRight | Qt::AlignVCenter);
+                }
             }
             break;
         }
@@ -1637,6 +1793,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     painter->drawRoundedRect(QRectF(cardRect).adjusted(0.5, 0.5, -0.5, -0.5), cardRadius, cardRadius);
 
     painter->restore();
+
 }
 
 QSize ClipboardCardDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const {

@@ -15,12 +15,20 @@ class ClipboardBoardModel : public QAbstractListModel {
     Q_OBJECT
 
 public:
+    enum PreviewState {
+        PreviewNotApplicable = 0,
+        PreviewReady,
+        PreviewLoading,
+        PreviewUnavailable
+    };
+
     enum Roles {
         ItemRole = Qt::UserRole + 1,
         FavoriteRole,
         ShortcutTextRole,
         ContentTypeRole,
         PreviewKindRole,
+        PreviewStateRole,
         IconRole,
         ThumbnailRole,
         FaviconRole,
@@ -29,6 +37,7 @@ public:
         AliasRole,
         PinnedRole,
         NormalizedTextRole,
+        TextLengthRole,
         NormalizedUrlsRole,
         TimeRole,
         ImageSizeRole,
@@ -40,6 +49,7 @@ public:
         ClipboardItem item;
         bool favorite = false;
         QString shortcutText;
+        PreviewState previewState = PreviewNotApplicable;
     };
 
     explicit ClipboardBoardModel(QObject *parent = nullptr);
@@ -67,6 +77,8 @@ public:
     QList<ClipboardItem> items() const;
 
     bool isFavorite(int row) const;
+    bool setPreviewState(int row, PreviewState state);
+    PreviewState previewState(int row) const;
     void setFavoriteByFingerprint(const QByteArray &fingerprint, bool favorite);
     void clearShortcutTexts();
     void setShortcutText(int row, const QString &shortcutText);

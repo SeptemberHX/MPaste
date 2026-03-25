@@ -32,6 +32,40 @@ update: 修改本目录文件时，同步更新本 README。
 - 修改卡片尺寸、滚动策略或窗口结构时，同时检查主窗口布局与交互体验。
 - 若本目录结构或职责发生变化，请同步更新本 README。
 
+## 卡片渲染逻辑（ClipboardCardDelegate）
+
+### 各类型绘制对比
+
+| 类型 | 有 thumbnail 时 | 无 thumbnail 时（首次/生成中） | thumbnail 生成方式 | 持久化 | 每帧数据开销 |
+|------|----------------|-------------------------------|-------------------|--------|-------------|
+| **Image** | `drawManagedVisualPreview` → blit | loading 占位动画 | `buildCardThumbnailImageFromBytes` — 图片缩放裁剪 | ✅ | 轻量（pixmap 引用） |
+| **Office** | `drawManagedVisualPreview` → blit（contain 模式） | loading 占位动画 | 同 Image | ✅ | 轻量 |
+| **RichText-VisualPreview** | `drawManagedVisualPreview` → blit | loading 占位动画 | `buildRichTextThumbnailImageFromHtml` — HTML 渲染截图 | ✅ | 轻量 |
+| **RichText-TextPreview** | `drawCoverPixmap` → blit | `drawWrappedText(text.left(500))` | `buildTextPreviewImage` — 白底+前500字渲染 | ✅ | 有 thumb: int 长度；无 thumb: 500 字符串 |
+| **Text** | `drawCoverPixmap` → blit | `drawWrappedText(text.left(500))` | `buildTextPreviewImage` — 同上 | ✅ | 同上 |
+| **Link** | `drawCoverPixmap` → blit + `drawLinkLabel`×2（短 URL） | `linkFallbackPreview`（渐变+badge，QCache）+ `drawLinkLabel`×2 | `buildLinkPreviewImage` — 渐变背景+badge+域名 | ✅ | 有 thumb: URL 列表；无 thumb: 同+QCache |
+| **Color** | — | `drawRoundedRect` + `drawElidedText(色值)` | 不生成（渲染极轻） | ❌ | 轻量 |
+| **File（单文件图片）** | — | `localImageThumbnail`（QCache）→ blit | 内存 QCache，首次解码 | 内存缓存 | QCache 查找 |
+| **File（单文件非图片）** | — | `localFileIcon`（系统图标，QCache） | 内存 QCache | 内存缓存 | QCache 查找 |
+| **File（多文件）** | `drawCoverPixmap` → blit | 文件图标 + `joinFileNames` + 两行文本 | `buildFileListPreviewImage` — 白底+文件名列表 | ✅ | 有 thumb: URL 列表；无 thumb: 文本布局 |
+
+### paint() 数据获取策略
+
+| 数据字段 | 获取条件 | 开销 |
+|----------|---------|------|
+| `normalizedTextLength` | 总是获取 | O(1)，int |
+| `normalizedText` | 仅当 `thumbnail.isNull()` 且非 Image/Office/Color | 字符串拷贝（Qt 隐式共享） |
+| `normalizedUrls` | 仅当需要 text data，或类型为 Link/File | QList\<QUrl\> 拷贝 |
+| 其他字段 | 总是获取 | 轻量（隐式共享/int/bool） |
+
+### 设计原则
+
+- 所有类型的预览都生成 thumbnail 并持久化到 `.mpaste` 文件（Color 除外，渲染本身极轻）。
+- `paint()` 有 thumbnail 时只做 pixmap blit（~0.1ms），不做文本布局、渐变渲染或 URL 解析。
+- thumbnail 在 `processPendingItemAsync` 后台线程生成，不阻塞 GUI。
+- 下次启动时 `loadFromFileLight(path, true)` 从磁盘加载 thumbnail，无需重新生成。
+- `previewTextForCard()` 对所有文本类型截断到前 500 字符，即使走 fallback 渲染也快。
+
 ## Recent Notes
 - UI components now listen to ThemeManager for theme updates instead of coordinating via the main window.
 - System tray context menus now receive the themed dark palette and stylesheet to keep text/icon contrast consistent.
@@ -77,6 +111,13 @@ update: 修改本目录文件时，同步更新本 README。
 - `MPasteWidget` 和 `ScrollItemsWidget` 现在会输出启动、窗口 show、延迟历史加载和后台条目补全的阶段耗时日志，方便定位卡顿发生在哪一步。
 - `MPasteWidget` 现在会在监控器首次观察到有效复制动作时立即播放提示音，不再等待后续 WPS settle / 抓图完成。
 - `ScrollItemsWidget` 会把纯文本粘贴请求继续转发给主窗口。
+- `ScrollItemsWidget` 现在支持“分页 / 连续列表”两种历史浏览模式：默认按固定 50 条做页窗口显示，只加载当前页所需的历史条目；切到连续列表模式后恢复按滚动延迟补载，主窗口只在分页模式下显示手动页码选择。
+- `ScrollItemsWidget` now uses the service-layer light-item index cache for page reloads and filter switches, so pagination does not need to re-read every history file just to rebuild the visible slice.
+- In paged mode, type/keyword switches now slice directly from the service-layer light-item index instead of repopulating the full board model and letting proxy filters trim it afterward, reducing rich-text category switch stalls.
+- Managed visual-preview cards (image / office / rich-text snapshot) now expose a unified preview state through the board model, so the delegate renders one consistent ready/loading/unavailable state machine instead of inferring behavior separately per card type.
+- Paged mode now keeps delegate-side visual caches on a much tighter budget and clears them on page/filter boundary changes, so off-page image previews do not linger as aggressively in memory.
+- Switching to non-visual filters (for example plain text) now also strips visual thumbnails out of the current board model, so hidden image/rich-text previews stop retaining pixmaps even before the next page rebuild.
+- `ScrollItemsWidget` no longer performs automatic on-disk deletion while loading, filtering, replacing richer duplicates, or applying retention cleanup; only explicit user delete actions should remove persisted `.mpaste` files.
 - `ScrollItemsWidget` 现在会在主窗口卡片右键菜单中开放保存功能：图片导出为图片文件、富文本导出为 HTML、纯文本导出为 TXT，其他类型暂不开放保存。
 - `ScrollItemsWidget` 现在支持 `Ctrl/Shift` 多选，并在右键菜单中提供批量收藏、批量取消收藏和批量删除；多选时会隐藏单卡片悬浮工具条，主窗口计数区会显示“已选/总数”。
 - `ScrollItemsWidget` 现在会在搜索/类型筛选切换后重新触发可见条目的缩略图回补，避免富文本/图片结果一直停留在 loading 占位。
@@ -85,8 +126,8 @@ update: 修改本目录文件时，同步更新本 README。
 - `ScrollItemsWidget` 现在按“进入/离开可见区”的差量方式管理缩略图，不再在每次滚动后按总条目数全量扫描整个模型。
 - `ScrollItemsWidget` 的 loading shimmer 现在只重绘当前可见且仍缺缩略图的卡片区域，减少滚动过程中的整视口重绘。
 - `ClipboardBoardModel` 现在维护 `name -> row` 索引，并在缩略图/元数据变更时只发相关 roles，降低回补完成后的查找和重绘成本。
-- 文本型富文本卡片现在优先直接绘制自动换行的文本预览，而不是依赖截图缩略图，避免长句只显示第一行开头或旧缩略图持续发糊。
-- 富文本卡片现在直接消费数据层给出的 `PreviewKind`，由 `ClipboardItem` 统一决定走文本预览还是视觉缩略图，减少界面层重复判断。
+- 富文本卡片现在统一回到截图缩略图预览，避免 `QTextBrowser` / 文字预览在卡片区域内出现排版和观感问题。
+- 富文本卡片继续消费数据层给出的 `PreviewKind`，但当前策略固定为视觉缩略图，界面层不再走文字预览分支；新复制条目若首次缩略图未及时生成，会自动补做异步快照而不是长期停留在 loading。
 - `ScrollItemsWidget` 现在会先快速插入轻量条目，再在后台线程补做缩略图和保存落盘，减少复制大图时卡住界面。
 - `ClipboardItemDetailsDialog` 现在提供更完整的条目检查视图，可查看归一化结果与原始 MIME 数据。
 - `ClipboardItemDetailsDialog` 现在锁定了检查器宽度，并让概览页长链接/长标题优先在窗口内换行，避免详情窗口被内容横向撑开。

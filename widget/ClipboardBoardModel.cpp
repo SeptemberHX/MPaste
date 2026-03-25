@@ -96,6 +96,8 @@ QVariant ClipboardBoardModel::data(const QModelIndex &index, int role) const {
             return static_cast<int>(entry.item.getContentType());
         case PreviewKindRole:
             return static_cast<int>(entry.item.getPreviewKind());
+        case PreviewStateRole:
+            return static_cast<int>(entry.previewState);
         case IconRole:
             return entry.item.getIcon();
         case ThumbnailRole:
@@ -110,8 +112,14 @@ QVariant ClipboardBoardModel::data(const QModelIndex &index, int role) const {
             return entry.item.getAlias();
         case PinnedRole:
             return entry.item.isPinned();
-        case NormalizedTextRole:
-            return entry.item.getNormalizedText();
+        case NormalizedTextRole: {
+            // Return only enough chars for the card preview area (~3-5
+            // lines).  Full text is read on demand for paste/preview.
+            const QString &text = entry.item.getNormalizedText();
+            return text.size() > 200 ? text.left(200) : text;
+        }
+        case TextLengthRole:
+            return entry.item.getNormalizedText().size();
         case NormalizedUrlsRole:
             return QVariant::fromValue(entry.item.getNormalizedUrls());
         case TimeRole:
@@ -194,7 +202,7 @@ void ClipboardBoardModel::clear() {
 
 int ClipboardBoardModel::prependItem(const ClipboardItem &item, bool favorite) {
     beginInsertRows(QModelIndex(), 0, 0);
-    entries_.prepend({item, favorite, QString()});
+    entries_.prepend({item, favorite, QString(), PreviewNotApplicable});
     endInsertRows();
     rebuildNameRowIndex();
     return 0;
@@ -203,7 +211,7 @@ int ClipboardBoardModel::prependItem(const ClipboardItem &item, bool favorite) {
 int ClipboardBoardModel::appendItem(const ClipboardItem &item, bool favorite) {
     const int row = entries_.size();
     beginInsertRows(QModelIndex(), row, row);
-    entries_.append({item, favorite, QString()});
+    entries_.append({item, favorite, QString(), PreviewNotApplicable});
     endInsertRows();
     if (!item.getName().isEmpty()) {
         nameRowIndex_.insert(item.getName(), row);
@@ -214,7 +222,7 @@ int ClipboardBoardModel::appendItem(const ClipboardItem &item, bool favorite) {
 int ClipboardBoardModel::insertItem(int row, const ClipboardItem &item, bool favorite) {
     const int clampedRow = qBound(0, row, entries_.size());
     beginInsertRows(QModelIndex(), clampedRow, clampedRow);
-    entries_.insert(clampedRow, {item, favorite, QString()});
+    entries_.insert(clampedRow, {item, favorite, QString(), PreviewNotApplicable});
     endInsertRows();
     rebuildNameRowIndex();
     return clampedRow;
@@ -339,6 +347,27 @@ QList<ClipboardItem> ClipboardBoardModel::items() const {
 
 bool ClipboardBoardModel::isFavorite(int row) const {
     return row >= 0 && row < entries_.size() ? entries_.at(row).favorite : false;
+}
+
+bool ClipboardBoardModel::setPreviewState(int row, PreviewState state) {
+    if (row < 0 || row >= entries_.size()) {
+        return false;
+    }
+    Entry &entry = entries_[row];
+    if (entry.previewState == state) {
+        return false;
+    }
+    entry.previewState = state;
+    const QModelIndex modelIndex = index(row, 0);
+    emit dataChanged(modelIndex, modelIndex, {PreviewStateRole});
+    return true;
+}
+
+ClipboardBoardModel::PreviewState ClipboardBoardModel::previewState(int row) const {
+    if (row < 0 || row >= entries_.size()) {
+        return PreviewNotApplicable;
+    }
+    return entries_.at(row).previewState;
 }
 
 void ClipboardBoardModel::setFavoriteByFingerprint(const QByteArray &fingerprint, bool favorite) {

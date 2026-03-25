@@ -29,9 +29,12 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QMessageBox>
+#include <QLabel>
+#include <QComboBox>
 #include <QStyle>
 #include <QStyleFactory>
 #include "utils/MPasteSettings.h"
+#include "utils/ClipboardExportService.h"
 #include "utils/ThemeManager.h"
 #include "utils/IconResolver.h"
 #include "MPasteWidget.h"
@@ -67,9 +70,81 @@ QString menuText(const char *source, const QString &zhFallback) {
     return translated;
 }
 
+class PageSelectorPill final : public QWidget {
+public:
+    explicit PageSelectorPill(QWidget *parent = nullptr)
+        : QWidget(parent) {}
+
+    void setColors(const QColor &background, const QColor &border, const QColor &divider) {
+        background_ = background;
+        border_ = border;
+        divider_ = divider;
+        update();
+    }
+
+    void setCornerRadius(int radius) {
+        cornerRadius_ = radius;
+        update();
+    }
+
+    void setDividerPosition(int x) {
+        dividerX_ = x;
+        update();
+    }
+
+    void setDividerInset(int inset) {
+        dividerInset_ = inset;
+        update();
+    }
+
+    void setPaintFrame(bool paintFrame) {
+        paintFrame_ = paintFrame;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        if (!paintFrame_) {
+            return;
+        }
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        const QRectF rectF = QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0);
+        painter.setPen(QPen(border_, 2));
+        painter.setBrush(background_);
+        painter.drawRoundedRect(rectF, cornerRadius_, cornerRadius_);
+
+        if (dividerX_ > 0) {
+            painter.setPen(QPen(divider_, 1));
+            const int top = qBound(2, dividerInset_, height() / 2);
+            const int bottom = qMax(top, height() - dividerInset_ - 1);
+            painter.drawLine(QPointF(dividerX_, top), QPointF(dividerX_, bottom));
+        }
+    }
+
+private:
+    QColor background_ = QColor(Qt::white);
+    QColor border_ = QColor(Qt::black);
+    QColor divider_ = QColor(Qt::black);
+    int cornerRadius_ = 14;
+    int dividerX_ = 0;
+    int dividerInset_ = 3;
+    bool paintFrame_ = true;
+};
+
 ClipboardItem rehydrateClipboardItem(const ClipboardItem &item) {
     if (item.getName().isEmpty()) {
         return {};
+    }
+
+    LocalSaver saver;
+    const QString sourceFilePath = item.sourceFilePath();
+    if (!sourceFilePath.isEmpty() && QFileInfo::exists(sourceFilePath)) {
+        ClipboardItem loaded = saver.loadFromFile(sourceFilePath);
+        if (!loaded.getName().isEmpty()) {
+            return loaded;
+        }
     }
 
     const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
@@ -77,7 +152,6 @@ ClipboardItem rehydrateClipboardItem(const ClipboardItem &item) {
         return {};
     }
 
-    LocalSaver saver;
     const QStringList categories = {
         MPasteSettings::STAR_CATEGORY_NAME,
         MPasteSettings::CLIPBOARD_CATEGORY_NAME
@@ -401,6 +475,46 @@ void MPasteWidget::initUI() {
     ui_.ui->menuButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     ui_.ui->menuButton->setToolTip(menuText("More", QStringLiteral("更多")));
 
+    ui_.pageSelectorWidget = new PageSelectorPill(this);
+    auto *pageLayout = new QHBoxLayout(ui_.pageSelectorWidget);
+    pageLayout->setContentsMargins(8, 0, 8, 0);
+    pageLayout->setSpacing(3);
+
+    ui_.pagePrefixLabel = new QLabel(QStringLiteral("第"), ui_.pageSelectorWidget);
+    ui_.pagePrefixLabel->setAlignment(Qt::AlignCenter);
+    ui_.pagePrefixLabel->setFixedWidth(14);
+
+    ui_.pageComboBox = new QComboBox(ui_.pageSelectorWidget);
+    ui_.pageComboBox->setEditable(false);
+    ui_.pageComboBox->setInsertPolicy(QComboBox::NoInsert);
+    ui_.pageComboBox->setMaxVisibleItems(18);
+    ui_.pageComboBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    ui_.pageComboBox->setMinimumContentsLength(2);
+    ui_.pageComboBox->addItem(QStringLiteral("1"), 1);
+    ui_.pageComboBox->setCurrentIndex(0);
+    ui_.pageComboBox->setFixedWidth(38);
+
+    ui_.pageTotalLabel = new QLabel(QStringLiteral("/ 1"), ui_.pageSelectorWidget);
+    ui_.pageTotalLabel->setAlignment(Qt::AlignCenter);
+    ui_.pageTotalLabel->setFixedWidth(36);
+
+    ui_.pageSuffixLabel = new QLabel(QStringLiteral("页"), ui_.pageSelectorWidget);
+    ui_.pageSuffixLabel->setAlignment(Qt::AlignCenter);
+    ui_.pageSuffixLabel->setFixedWidth(14);
+
+    pageLayout->addWidget(ui_.pagePrefixLabel);
+    pageLayout->addWidget(ui_.pageComboBox);
+    pageLayout->addWidget(ui_.pageTotalLabel);
+    pageLayout->addWidget(ui_.pageSuffixLabel);
+    ui_.pageSelectorWidget->setFixedWidth(110);
+
+    if (ui_.ui->horizontalLayout) {
+        const int countIndex = ui_.ui->horizontalLayout->indexOf(ui_.ui->countArea);
+        ui_.ui->horizontalLayout->insertWidget(countIndex >= 0 ? countIndex : ui_.ui->horizontalLayout->count(),
+                                               ui_.pageSelectorWidget);
+    }
+    ui_.ui->countArea->setFixedWidth(72);
+
     applyScale(MPasteSettings::getInst()->getItemScale());
 
     ui_.buttonGroup = new QButtonGroup(this);
@@ -438,7 +552,8 @@ void MPasteWidget::initUI() {
     ui_.ui->typeBtnWidget->installEventFilter(this);
 
     applyTheme(ThemeManager::instance()->isDark());
-
+    updatePageSelector();
+    updatePageSelectorStyle();
 }
 
 AboutWidget *MPasteWidget::ensureAboutWidget() {
@@ -475,6 +590,8 @@ MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
         connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
                 this, &MPasteWidget::shortcutChanged);
         connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
+                this, &MPasteWidget::reloadHistoryBoards);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::historyViewModeChanged,
                 this, &MPasteWidget::reloadHistoryBoards);
         connect(ui_.settingsWidget, &MPasteSettingsWidget::saveDirChanged,
                 this, [this]() {
@@ -608,6 +725,31 @@ void MPasteWidget::applyScale(int scale) {
     if (ui_.ui->lastButton) {
         scaleHeight(ui_.ui->lastButton, tabButtonHeight);
     }
+    if (ui_.pageComboBox) {
+        scaleHeight(ui_.pageComboBox, tabButtonHeight);
+        scaleFont(ui_.pageComboBox);
+    }
+    if (ui_.pagePrefixLabel) {
+        scaleFont(ui_.pagePrefixLabel);
+        ui_.pagePrefixLabel->setFixedWidth(qMax(12, 14 * scale / 100));
+    }
+    if (ui_.pageTotalLabel) {
+        scaleFont(ui_.pageTotalLabel);
+        ui_.pageTotalLabel->setFixedWidth(qMax(32, 36 * scale / 100));
+    }
+    if (ui_.pageSuffixLabel) {
+        scaleFont(ui_.pageSuffixLabel);
+        ui_.pageSuffixLabel->setFixedWidth(qMax(12, 14 * scale / 100));
+    }
+    if (ui_.pageSelectorWidget) {
+        ui_.pageSelectorWidget->setFixedHeight(tabButtonHeight);
+        ui_.pageSelectorWidget->setFixedWidth(qMax(96, 110 * scale / 100));
+    }
+    if (ui_.ui->countArea) {
+        ui_.ui->countArea->setFixedWidth(qMax(64, 72 * scale / 100));
+    }
+    updatePageSelector();
+    updatePageSelectorStyle();
 
     if (ui_.layout) {
         ui_.layout->setContentsMargins(0, qMax(6, 10 * scale / 100), 0, 0);
@@ -800,6 +942,7 @@ void MPasteWidget::applyTheme(bool dark) {
     if (ui_.quitAction) {
         ui_.quitAction->setIcon(QIcon(QStringLiteral(":/resources/resources/quit.svg")));
     }
+    updatePageSelectorStyle();
     applyMenuTheme(ui_.menu);
     applyMenuTheme(ui_.trayMenu);
     update();
@@ -810,6 +953,10 @@ void MPasteWidget::setupConnections() {
             this, &MPasteWidget::clipboardActivityObserved);
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardUpdated,
             this, &MPasteWidget::clipboardUpdated);
+    connect(clipboard_.monitor, &ClipboardMonitor::clipboardMimeCompleted,
+            this, [this](const QString &itemName, const QMap<QString, QByteArray> &extraFormats) {
+        ui_.clipboardWidget->mergeDeferredMimeFormats(itemName, extraFormats);
+    });
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
         connect(boardWidget, &ScrollItemsWidget::doubleClicked,
         this, [this](const ClipboardItem &item) {
@@ -844,6 +991,11 @@ void MPasteWidget::setupConnections() {
         connect(boardWidget, &ScrollItemsWidget::selectionStateChanged, this, [this, boardWidget]() {
             if (ui_.buttonGroup->checkedButton()->property("category").toString() == boardWidget->getCategory()) {
                 this->updateItemCount(boardWidget->getItemCount());
+            }
+        });
+        connect(boardWidget, &ScrollItemsWidget::pageStateChanged, this, [this, boardWidget](int, int) {
+            if (ui_.buttonGroup->checkedButton()->property("category").toString() == boardWidget->getCategory()) {
+                this->updatePageSelector();
             }
         });
 
@@ -887,6 +1039,14 @@ void MPasteWidget::setupConnections() {
     connect(ui_.ui->searchButton, &QToolButton::clicked, this, [this](bool flag) {
         this->setFocusOnSearch(flag);
     });
+    connect(ui_.pageComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        if (ScrollItemsWidget *board = currItemsWidget()) {
+            board->setCurrentPageNumber(index + 1);
+        }
+    });
 
     connect(ui_.ui->firstButton, &QPushButton::clicked, this, [this]() {
         this->currItemsWidget()->scrollToFirst();
@@ -922,6 +1082,8 @@ void MPasteWidget::setupConnections() {
                     boardWidget->filterByKeyword(ui_.ui->searchEdit->text());
                 }
             }
+            updateItemCount(currItemsWidget()->getItemCount());
+            updatePageSelector();
         });
 }
 
@@ -961,7 +1123,7 @@ void MPasteWidget::clipboardActivityObserved(int wId) {
     playCopySoundIfNeeded(wId);
 }
 
-void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
+void MPasteWidget::clipboardUpdated(const ClipboardItem &nItem, int wId) {
     if (!clipboard_.isPasting) {
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
@@ -1028,11 +1190,12 @@ bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
         .arg(widgetItemSummary(item));
     clipboard_.monitor->disconnectMonitor();
 
-    QMimeData *mimeData = plainText ? createPlainTextMimeData(item) : item.createMimeData();
+    QMimeData *mimeData = plainText ? createPlainTextMimeData(item)
+                                    : ClipboardExportService::buildMimeData(item);
     if (!mimeData && !plainText) {
         const ClipboardItem rehydrated = rehydrateClipboardItem(item);
         if (!rehydrated.getName().isEmpty()) {
-            mimeData = rehydrated.createMimeData();
+            mimeData = ClipboardExportService::buildMimeData(rehydrated);
             if (!mimeData) {
                 mimeData = createPlainTextMimeData(rehydrated);
             }
@@ -1182,9 +1345,11 @@ void MPasteWidget::handleEnterKey(bool plainText) {
         return;
     }
 
-    const ClipboardItem *selectedItem = currItemsWidget()->selectedByEnter();
+    auto *board = currItemsWidget();
+    const ClipboardItem *selectedItem = board->selectedByEnter();
     if (selectedItem && setClipboard(*selectedItem, plainText)) {
         hideAndPaste();
+        board->moveSelectedToFirst();
     }
 }
 
@@ -1212,13 +1377,15 @@ bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
         return false;
     }
 
-    const ClipboardItem *selectedItem = currItemsWidget()->selectedByShortcut(shortcutIndex);
+    auto *board = currItemsWidget();
+    const ClipboardItem *selectedItem = board->selectedByShortcut(shortcutIndex);
     if (!selectedItem || !setClipboard(*selectedItem, plainText)) {
         return false;
     }
 
-    QTimer::singleShot(50, this, [this]() {
+    QTimer::singleShot(50, this, [this, board]() {
         hideAndPaste();
+        board->moveSelectedToFirst();
         currItemsWidget()->cleanShortCutInfo();
     });
     return true;
@@ -1458,8 +1625,13 @@ void MPasteWidget::scheduleSyncReload() {
     if (!sync_.reloadTimer) {
         return;
     }
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (sync_.suppressReloadUntilMs > now) {
+    // Ignore directory changes caused by our own file writes.  Each board
+    // service tracks its last write timestamp; if any service wrote recently,
+    // this change is internal, not an external sync event.
+    if ((ui_.clipboardWidget && ui_.clipboardWidget->boardServiceRef()
+            && ui_.clipboardWidget->boardServiceRef()->hasRecentInternalWrite())
+        || (ui_.staredWidget && ui_.staredWidget->boardServiceRef()
+            && ui_.staredWidget->boardServiceRef()->hasRecentInternalWrite())) {
         return;
     }
     if (!isVisible()) {
@@ -1535,6 +1707,7 @@ void MPasteWidget::reloadHistoryBoards() {
     ui_.staredWidget->filterByType(type);
     ui_.staredWidget->filterByKeyword(keyword);
     updateItemCount(currItemsWidget()->getItemCount());
+    updatePageSelector();
 }
 
 void MPasteWidget::setFocusOnSearch(bool flag) {
@@ -1550,6 +1723,10 @@ void MPasteWidget::setFocusOnSearch(bool flag) {
 }
 
 ScrollItemsWidget *MPasteWidget::currItemsWidget() {
+    if (!ui_.buttonGroup) {
+        return ui_.clipboardWidget;
+    }
+
     QAbstractButton* currentBtn = ui_.buttonGroup->checkedButton();
     if (currentBtn) {
         QString category = currentBtn->property("category").toString();
@@ -1559,13 +1736,129 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
     return ui_.clipboardWidget;
 }
 
+void MPasteWidget::updatePageSelectorStyle() {
+    if (!ui_.pageSelectorWidget || !ui_.pagePrefixLabel || !ui_.pageComboBox || !ui_.pageTotalLabel || !ui_.pageSuffixLabel) {
+        return;
+    }
+
+    const int height = qMax(24, ui_.pageSelectorWidget->height());
+    const int radius = qMax(12, height / 2);
+    const QString background = darkTheme_
+        ? QStringLiteral("rgba(28, 34, 44, 235)")
+        : QStringLiteral("rgba(255, 255, 255, 242)");
+    const QString border = QStringLiteral("#4A90E2");
+    const QString text = darkTheme_ ? QStringLiteral("#F2F6FB") : QStringLiteral("#2C3E50");
+    const QString divider = darkTheme_ ? QStringLiteral("rgba(242, 246, 251, 110)")
+                                       : QStringLiteral("rgba(44, 62, 80, 96)");
+    const QString arrow = darkTheme_
+        ? QStringLiteral(":/resources/resources/page_chevron_light.svg")
+        : QStringLiteral(":/resources/resources/page_chevron.svg");
+    if (auto *pill = static_cast<PageSelectorPill *>(ui_.pageSelectorWidget)) {
+        ui_.pageSelectorWidget->layout()->activate();
+        pill->setColors(QColor(background), QColor(border), QColor(divider));
+        pill->setCornerRadius(radius);
+        pill->setDividerInset(3);
+        pill->setDividerPosition(ui_.pageComboBox->geometry().right() + 4);
+        pill->setPaintFrame(false);
+    }
+    ui_.pageComboBox->setStyleSheet(QStringLiteral(
+        "QComboBox {"
+        " background: transparent;"
+        " border: none;"
+        " color: %1;"
+        " padding: 0;"
+        " font-size: 13px;"
+        " font-weight: 700;"
+        "}"
+        "QComboBox::drop-down {"
+        " subcontrol-origin: padding;"
+        " subcontrol-position: top right;"
+        " width: 6px;"
+        " border: none;"
+        " background: transparent;"
+        "}"
+        "QComboBox::down-arrow {"
+        " width: 5px;"
+        " height: 3px;"
+        " image: url(%2);"
+        "}"
+        "QComboBox QAbstractItemView {"
+        " background-color: %3;"
+        " border: 1px solid %4;"
+        " color: %5;"
+        " selection-background-color: %6;"
+        " selection-color: %5;"
+        "}").arg(text, arrow,
+                 darkTheme_ ? QStringLiteral("#1E232B") : QStringLiteral("#FFFFFF"),
+                 darkTheme_ ? QStringLiteral("#2C3440") : QStringLiteral("#E5E5E5"),
+                 darkTheme_ ? QStringLiteral("#F2F6FB") : QStringLiteral("#1A1A1A"),
+                 darkTheme_ ? QStringLiteral("rgba(28, 34, 44, 235)") : QStringLiteral("#E5E5E5")));
+    const QString secondary = darkTheme_ ? QStringLiteral("rgba(242, 246, 251, 185)")
+                                         : QStringLiteral("rgba(44, 62, 80, 185)");
+    ui_.pagePrefixLabel->setStyleSheet(QStringLiteral(
+        "QLabel { color: %1; font-size: 13px; font-weight: 600; background: transparent; }").arg(secondary));
+    ui_.pageTotalLabel->setStyleSheet(QStringLiteral(
+        "QLabel { color: %1; font-size: 13px; font-weight: 700; background: transparent; }").arg(secondary));
+    ui_.pageSuffixLabel->setStyleSheet(QStringLiteral(
+        "QLabel { color: %1; font-size: 13px; font-weight: 600; background: transparent; }").arg(secondary));
+}
+
+void MPasteWidget::updatePageSelector() {
+    if (!ui_.pageSelectorWidget || !ui_.pagePrefixLabel || !ui_.pageComboBox || !ui_.pageTotalLabel || !ui_.pageSuffixLabel) {
+        return;
+    }
+
+    const bool pagedMode = MPasteSettings::getInst()->getHistoryViewMode() == MPasteSettings::ViewModePaged;
+    ui_.pageSelectorWidget->setVisible(pagedMode);
+    if (!pagedMode) {
+        return;
+    }
+
+    ScrollItemsWidget *board = currItemsWidget();
+    const int totalPages = board ? board->totalPageCount() : 0;
+    const int currentPage = board ? board->currentPageNumber() : 0;
+
+    const int clampedTotalPages = qMax(1, totalPages);
+    ui_.pageComboBox->blockSignals(true);
+    if (ui_.pageComboBox->count() != clampedTotalPages) {
+        ui_.pageComboBox->clear();
+        for (int page = 1; page <= clampedTotalPages; ++page) {
+            ui_.pageComboBox->addItem(QString::number(page), page);
+        }
+    }
+    ui_.pageComboBox->setCurrentIndex(qBound(0, (currentPage > 0 ? currentPage : 1) - 1, clampedTotalPages - 1));
+    ui_.pageComboBox->blockSignals(false);
+    ui_.pageTotalLabel->setText(QStringLiteral("/ %1").arg(totalPages));
+
+    const QFontMetrics comboMetrics(ui_.pageComboBox->font());
+    const int comboTextWidth = comboMetrics.horizontalAdvance(QString::number(clampedTotalPages));
+    const int comboWidth = qMax(24, comboTextWidth + 12);
+    ui_.pageComboBox->setFixedWidth(comboWidth);
+
+    const QFontMetrics totalMetrics(ui_.pageTotalLabel->font());
+    const int totalWidth = qMax(26, totalMetrics.horizontalAdvance(QStringLiteral("/ %1").arg(totalPages)) + 4);
+    ui_.pageTotalLabel->setFixedWidth(totalWidth);
+
+    if (ui_.pageSelectorWidget && ui_.pageSelectorWidget->layout()) {
+        const QMargins margins = ui_.pageSelectorWidget->layout()->contentsMargins();
+        const int spacing = ui_.pageSelectorWidget->layout()->spacing();
+        ui_.pageSelectorWidget->setFixedWidth(margins.left()
+                                              + ui_.pagePrefixLabel->width()
+                                              + spacing
+                                              + comboWidth
+                                              + spacing
+                                              + totalWidth
+                                              + spacing
+                                              + ui_.pageSuffixLabel->width()
+                                              + margins.right());
+    }
+}
+
 void MPasteWidget::updateItemCount(int itemCount) {
     const int selectedCount = currItemsWidget() ? currItemsWidget()->selectedItemCount() : 0;
     ui_.ui->countArea->setText(selectedCount > 1
         ? QStringLiteral("%1/%2").arg(selectedCount).arg(itemCount)
         : QString::number(itemCount));
-    ui_.ui->countArea->adjustSize();
-    ui_.ui->countArea->setFixedWidth(qMax(30, ui_.ui->countArea->sizeHint().width()));
     ui_.ui->countArea->updateGeometry();
 }
 

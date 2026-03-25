@@ -12,6 +12,7 @@
 
 #include <QObject>
 #include <QByteArray>
+#include <QMap>
 #include <QTimer>
 #include <QPointer>
 #include "data/ClipboardItem.h"
@@ -33,7 +34,8 @@ public:
 
 signals:
     void clipboardActivityObserved(int wId);
-    void clipboardUpdated(ClipboardItem item, int wId);
+    void clipboardUpdated(const ClipboardItem &item, int wId);
+    void clipboardMimeCompleted(const QString &itemName, const QMap<QString, QByteArray> &extraFormats);
 
 public slots:
     void clipboardChanged();
@@ -47,6 +49,7 @@ private:
     bool isDuplicateRecentCapture(const ClipboardItem &item, int wId) const;
     void rememberCapturedItem(const ClipboardItem &item, int wId);
     void fetchWpsImageAndEmit(const QMimeData *mimeData, const QUrl &url, int wId, quint64 captureToken);
+    void scheduleDeferredMimeCapture(const QString &itemName);
 
     static bool hasMeaningfulContent(const QMimeData *mimeData);
     static bool looksLikeWpsStagedClipboard(const QMimeData *mimeData);

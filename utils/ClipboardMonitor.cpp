@@ -287,19 +287,23 @@ void ClipboardMonitor::captureClipboard() {
         return;
     }
     if (!immediateItem.imagePayloadBytesFast().isEmpty()) {
-        qInfo().noquote() << QStringLiteral("[clipboard-monitor] immediate image item token=%1 %2")
+        qInfo().noquote() << QStringLiteral("[clipboard-monitor] immediate image item token=%1 type=%2 name=%3")
             .arg(captureToken_)
-            .arg(itemSummary(immediateItem));
+            .arg(QString::fromLatin1(contentTypeName(immediateItem.getContentType())))
+            .arg(immediateItem.getName());
         emitCapturedItem(immediateItem, pendingWId_);
+        scheduleDeferredMimeCapture(immediateItem.getName());
         return;
     }
 
     const QUrl wpsImageUrl = extractWpsSingleImageUrl(mimeData);
     if (!wpsImageUrl.isValid()) {
-        qInfo().noquote() << QStringLiteral("[clipboard-monitor] immediate non-image item token=%1 %2")
+        qInfo().noquote() << QStringLiteral("[clipboard-monitor] immediate non-image item token=%1 type=%2 name=%3")
             .arg(captureToken_)
-            .arg(itemSummary(immediateItem));
+            .arg(QString::fromLatin1(contentTypeName(immediateItem.getContentType())))
+            .arg(immediateItem.getName());
         emitCapturedItem(immediateItem, pendingWId_);
+        scheduleDeferredMimeCapture(immediateItem.getName());
         return;
     }
 
@@ -489,18 +493,76 @@ void ClipboardMonitor::rememberCapturedItem(const ClipboardItem &item, int wId) 
 }
 
 void ClipboardMonitor::emitCapturedItem(const ClipboardItem &item, int wId) {
-    if (isDuplicateRecentCapture(item, wId)) {
-        qInfo().noquote() << QStringLiteral("[clipboard-monitor] suppress duplicate app event wId=%1 %2")
-            .arg(wId)
-            .arg(itemSummary(item));
-        return;
+    // Compute captureKey once and reuse for dup-check, remember, and logging.
+    const QByteArray key = captureKeyForItem(item);
+
+    if (lastCaptureAtMs_ > 0) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (now - lastCaptureAtMs_ <= DUPLICATE_CAPTURE_WINDOW_MS
+            && !(wId != 0 && lastCaptureWindowId_ != 0 && wId != lastCaptureWindowId_)
+            && key == lastCaptureKey_) {
+            qInfo().noquote() << QStringLiteral("[clipboard-monitor] suppress duplicate app event wId=%1 key=%2")
+                .arg(wId)
+                .arg(shortHex(key));
+            return;
+        }
     }
 
-    rememberCapturedItem(item, wId);
-    qInfo().noquote() << QStringLiteral("[clipboard-monitor] emit app event wId=%1 %2")
+    lastCaptureKey_ = key;
+    lastCaptureWindowId_ = wId;
+    lastCaptureAtMs_ = QDateTime::currentMSecsSinceEpoch();
+
+    qInfo().noquote() << QStringLiteral("[clipboard-monitor] emit app event wId=%1 type=%2 fp=%3 key=%4")
         .arg(wId)
-        .arg(itemSummary(item));
+        .arg(QString::fromLatin1(contentTypeName(item.getContentType())))
+        .arg(shortHex(item.fingerprint()))
+        .arg(shortHex(key));
     Q_EMIT clipboardUpdated(item, wId);
+}
+
+void ClipboardMonitor::scheduleDeferredMimeCapture(const QString &itemName) {
+    const quint64 token = captureToken_;
+    const quint32 seq = lastSeqNumber_;
+    QTimer::singleShot(0, this, [this, token, seq, itemName]() {
+        if (captureToken_ != token) {
+            return;
+        }
+#ifdef Q_OS_WIN
+        if (getClipboardSeqNumber() != seq) {
+            return;
+        }
+#endif
+        const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
+        if (!mimeData) {
+            return;
+        }
+
+        QMap<QString, QByteArray> extraFormats;
+        const QStringList alreadyCaptured = {
+            QStringLiteral("text/plain"),
+            QStringLiteral("text/html"),
+            QStringLiteral("text/uri-list"),
+        };
+        for (const QString &format : mimeData->formats()) {
+            if (alreadyCaptured.contains(format)) {
+                continue;
+            }
+            if (!ClipboardItem::shouldCopyExtraMimeFormat(format)) {
+                continue;
+            }
+            const QByteArray data = mimeData->data(format);
+            if (!data.isEmpty()) {
+                extraFormats.insert(format, data);
+            }
+        }
+
+        if (!extraFormats.isEmpty()) {
+            qInfo().noquote() << QStringLiteral("[clipboard-monitor] deferred mime capture name=%1 formatCount=%2")
+                .arg(itemName)
+                .arg(extraFormats.size());
+            Q_EMIT clipboardMimeCompleted(itemName, extraFormats);
+        }
+    });
 }
 
 void ClipboardMonitor::fetchWpsImageAndEmit(const QMimeData *mimeData, const QUrl &url, int wId, quint64 captureToken) {

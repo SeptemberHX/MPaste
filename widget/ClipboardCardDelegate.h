@@ -7,7 +7,9 @@
 
 #include <QCache>
 #include <QColor>
+#include <QDateTime>
 #include <QHash>
+#include <QList>
 #include <QPersistentModelIndex>
 #include <QPixmap>
 #include <QQueue>
@@ -16,10 +18,36 @@
 #include <QStyledItemDelegate>
 #include <QString>
 #include <QThreadPool>
+#include <QUrl>
+
+#include "data/ClipboardItem.h"
+#include "ClipboardBoardModel.h"
 
 class QModelIndex;
 class QTimer;
 class QUrl;
+
+struct CardData {
+    ClipboardItem::ContentType contentType = ClipboardItem::All;
+    ClipboardItem::PreviewKind previewKind = ClipboardItem::TextPreview;
+    ClipboardBoardModel::PreviewState previewState = ClipboardBoardModel::PreviewNotApplicable;
+    QPixmap icon;
+    QPixmap thumbnail;
+    QPixmap favicon;
+    QString title;
+    QString url;
+    QString alias;
+    QString normalizedText;
+    int textLength = 0;
+    QList<QUrl> normalizedUrls;
+    QDateTime time;
+    QSize imageSize;
+    QColor color;
+    bool favorite = false;
+    bool pinned = false;
+    QString shortcutText;
+    QString name;
+};
 
 class ClipboardCardDelegate : public QStyledItemDelegate {
 public:
@@ -27,6 +55,7 @@ public:
     ~ClipboardCardDelegate() override;
 
     void setLoadingPhase(int phase);
+    void clearVisualCaches();
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
@@ -54,6 +83,8 @@ private:
                           const QSize &targetLogicalSize,
                           qreal targetDpr,
                           const QModelIndex &index) const;
+    void paintCardContent(QPainter *painter, const QStyleOptionViewItem &option,
+                          const QModelIndex &index, const CardData &card, int scale) const;
     void ensureFileIconTimer() const;
     void enqueueFileIconRequest(const FileIconRequest &request) const;
     void scheduleViewportUpdate(const QPersistentModelIndex &index) const;
@@ -63,6 +94,7 @@ private:
     mutable QHash<quint64, QColor> headerColorCache_;
     mutable QCache<QString, QPixmap> headerIconCache_;
     mutable QCache<QString, QPixmap> linkFallbackCache_;
+    mutable QCache<QString, QPixmap> cardPixmapCache_;
     mutable QCache<QString, QPixmap> localImageThumbnailCache_;
     mutable QCache<QString, QPixmap> localFileIconCache_;
     mutable QSet<QString> pendingLocalImageThumbnailKeys_;

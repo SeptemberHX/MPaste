@@ -2,7 +2,7 @@
 // output: 对外提供 MPasteWidget 的声明接口。
 // pos: widget 层中的 MPasteWidget 接口定义。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
-// note: Added theme application hooks for dark mode and multi-select count handling.
+// note: Added theme application hooks for dark mode, multi-select count handling, and a manual page-number selector for board browsing.
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
 
@@ -20,6 +20,8 @@
 #include <QHideEvent>
 #include <QFileSystemWatcher>
 #include <QTimer>
+#include <QLabel>
+#include <QComboBox>
 
 #include "utils/ClipboardMonitor.h"
 #include "data/ClipboardItem.h"
@@ -57,7 +59,7 @@ signals:
 
 private slots:
     void clipboardActivityObserved(int wId);
-    void clipboardUpdated(ClipboardItem item, int wId);
+    void clipboardUpdated(const ClipboardItem &item, int wId);
     void updateItemCount(int itemCount);
     void hideAndPaste();
     void debugKeyState();
@@ -89,6 +91,8 @@ private:
     void scheduleStartupWarmup();
     void reloadHistoryBoards();
     void runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheAction action);
+    void updatePageSelector();
+    void updatePageSelectorStyle();
 
     void setFocusOnSearch(bool flag);
     void handleSearchInput(QKeyEvent *event);
@@ -117,6 +121,11 @@ private:
         MPasteSettingsWidget *settingsWidget = nullptr;
 
         QMap<QString, ScrollItemsWidget*> boardWidgetMap;
+        QWidget *pageSelectorWidget = nullptr;
+        QLabel *pagePrefixLabel = nullptr;
+        QComboBox *pageComboBox = nullptr;
+        QLabel *pageTotalLabel = nullptr;
+        QLabel *pageSuffixLabel = nullptr;
 
         QButtonGroup *buttonGroup = nullptr;
 

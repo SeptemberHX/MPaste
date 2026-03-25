@@ -89,7 +89,7 @@ private:
             return QDir::fromNativeSeparators(scheme.toUpper() + QStringLiteral(":") + path);
         }
 
-        const QString asText = url.toString(QUrl::FullyDecoded);
+        const QString asText = url.toDisplayString(QUrl::PreferLocalFile);
         if (asText.size() > 2
             && asText[1] == QLatin1Char(':')
             && (asText[2] == QLatin1Char('/') || asText[2] == QLatin1Char('\\'))) {
@@ -584,6 +584,14 @@ private:
     static bool shouldCopyLightMimeFormat(const QString &format) {
         const QString lower = format.toLower();
         if (lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
+            // Skip JVM clipboard formats — extracting them triggers expensive
+            // cross-process IPC (COM/OLE → JVM serialization) and the data is
+            // editor-internal state (IntelliJ folding, paste options) that is
+            // not useful for later paste.
+            if (lower.contains(QStringLiteral("java_dataflavor"))
+                || lower.contains(QStringLiteral("x-java-"))) {
+                return false;
+            }
             // Preserve Windows clipboard formats (EMF/OLE/Office) so Office shapes remain editable.
             return true;
         }
@@ -774,6 +782,10 @@ private:
     }
 
 public:
+    static bool shouldCopyExtraMimeFormat(const QString &format) {
+        return shouldCopyLightMimeFormat(format);
+    }
+
     ClipboardItem(const QPixmap &icon, const QMimeData *mimeData) : icon_(icon) {
         if (mimeData) {
             mimeData_.reset(new QMimeData);
@@ -809,17 +821,26 @@ public:
                 item.mimeData_->setColorData(mimeData->colorData());
             }
 
+            // Copy additional MIME formats needed for paste fidelity
+            // (RTF, Office shapes, etc.).  Skip formats already captured
+            // above and JVM formats that trigger expensive cross-process IPC.
             for (const QString &format : mimeData->formats()) {
+                if (format == QStringLiteral("text/plain")
+                    || format == QStringLiteral("text/html")
+                    || format == QStringLiteral("text/uri-list")) {
+                    continue;
+                }
                 if (!shouldCopyLightMimeFormat(format)) {
                     continue;
                 }
-
                 const QByteArray data = mimeData->data(format);
                 if (!data.isEmpty()) {
                     item.mimeData_->setData(format, data);
                 }
             }
 
+            // Capture image payload: try fast raw bytes first, fall back
+            // to QVariant image decoding for screenshots.
             QString imageFormat;
             const QByteArray imageBytes = extractFastImagePayloadBytes(mimeData, &imageFormat);
             if (!imageBytes.isEmpty()) {
@@ -1215,6 +1236,13 @@ public:
 
     void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }
+
+    void setMimeFormat(const QString &format, const QByteArray &data) {
+        if (!mimeData_) {
+            mimeData_.reset(new QMimeData);
+        }
+        mimeData_->setData(format, data);
+    }
 
     bool hasThumbnail() const { return !thumbnail_.isNull(); }
     bool hasThumbnailHint() const { return thumbnailAvailableHint_ || !thumbnail_.isNull(); }

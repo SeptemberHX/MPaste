@@ -356,9 +356,28 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
         }
         case ClipboardItem::Color:
         case ClipboardItem::All:
-            payload.kind = PreviewKind::PlainText;
-            payload.text = unavailableText();
+        default: {
+            // Fallback for unknown/corrupt content types (e.g. items synced
+            // from a remote machine): try image → text → unavailable.
+            QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
+            if (image.isNull() && !fallbackImage.isNull()) {
+                image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
+            }
+            if (!image.isNull()) {
+                payload.kind = PreviewKind::Image;
+                payload.image = image;
+            } else if (!normalizedText.isEmpty()) {
+                payload.kind = PreviewKind::PlainText;
+                payload.text = normalizedText;
+            } else if (!html.isEmpty()) {
+                payload.kind = PreviewKind::Html;
+                payload.html = html;
+            } else {
+                payload.kind = PreviewKind::PlainText;
+                payload.text = unavailableText();
+            }
             break;
+        }
     }
 
     return payload;
@@ -574,55 +593,70 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
         QImage resolvedFallbackImage = fallbackImage;
         QString resolvedFilePath = filePath;
 
+        // Load only what each content type needs — avoid loading the full
+        // ClipboardItem which pulls all MIME data into memory.
         if (preferFullItem && !sourceFilePath.isEmpty()) {
             LocalSaver saver;
-            ClipboardItem fullItem = saver.loadFromFile(sourceFilePath);
-            if (!fullItem.getName().isEmpty()) {
-                resolvedType = fullItem.getContentType();
-                resolvedText = fullItem.getNormalizedText();
-                resolvedUrls = fullItem.getNormalizedUrls();
-                resolvedHtml = resolvedType == ClipboardItem::RichText ? fullItem.getHtml() : QString();
-                if (resolvedType == ClipboardItem::Image
-                    || resolvedType == ClipboardItem::Office
-                    || resolvedType == ClipboardItem::RichText) {
-                    resolvedImageBytes = fullItem.imagePayloadBytesFast();
-                }
-                const QPixmap fullPixmap = fullItem.getImage();
-                if (!fullPixmap.isNull()) {
-                    resolvedFallbackImage = fullPixmap.toImage();
-                    resolvedFallbackImage.setDevicePixelRatio(fullPixmap.devicePixelRatio());
-                } else if (fullItem.hasThumbnail()) {
-                    resolvedFallbackImage = fullItem.thumbnail().toImage();
-                }
+            // Light load: metadata + text + urls, no MIME blobs.
+            ClipboardItem lightItem = saver.loadFromFileLight(sourceFilePath, true);
+            if (!lightItem.getName().isEmpty()) {
+                resolvedType = lightItem.getContentType();
+                resolvedText = lightItem.getNormalizedText();
+                resolvedUrls = lightItem.getNormalizedUrls();
                 if (resolvedType == ClipboardItem::File && resolvedUrls.size() == 1 && resolvedUrls.front().isLocalFile()) {
                     resolvedFilePath = resolvedUrls.front().toLocalFile();
                 }
-            } else {
-                QByteArray imagePayload;
-                LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset, nullptr, &imagePayload);
-                if (!imagePayload.isEmpty()
-                    && (resolvedImageBytes.isEmpty() || imagePayload.size() > resolvedImageBytes.size())) {
-                    resolvedImageBytes = imagePayload;
+                if (lightItem.hasThumbnail()) {
+                    resolvedFallbackImage = lightItem.thumbnail().toImage();
                 }
             }
-        }
-        if ((resolvedHtml.isEmpty() || resolvedImageBytes.isEmpty())
-            && !sourceFilePath.isEmpty()
-            && (resolvedType == ClipboardItem::Image
+
+            // For types that need image/html payloads, read ONLY those
+            // sections from disk — not the full MIME blob.
+            // Also try for All/unknown types (e.g. items from remote sync).
+            if (resolvedType == ClipboardItem::RichText
+                || resolvedType == ClipboardItem::Image
                 || resolvedType == ClipboardItem::Office
-                || resolvedType == ClipboardItem::RichText)) {
+                || resolvedType == ClipboardItem::All) {
+                QString htmlPayload;
+                QByteArray imagePayload;
+                LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset,
+                    resolvedType == ClipboardItem::RichText ? &htmlPayload : nullptr,
+                    &imagePayload);
+                if (!htmlPayload.isEmpty()) {
+                    resolvedHtml = htmlPayload;
+                }
+                if (!imagePayload.isEmpty()) {
+                    resolvedImageBytes = imagePayload;
+                }
+            } else if (resolvedType == ClipboardItem::Text
+                       || resolvedType == ClipboardItem::Link) {
+                // lightItem.getNormalizedText() already has the full cached
+                // text from disk.  For rich HTML preview (e.g. RichText
+                // fallback-to-text), load the HTML payload only.
+                if (resolvedText.isEmpty() || resolvedType == ClipboardItem::Link) {
+                    QString htmlPayload;
+                    LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset, &htmlPayload, nullptr);
+                    if (!htmlPayload.isEmpty()) {
+                        resolvedHtml = htmlPayload;
+                    }
+                }
+            }
+        } else if (!sourceFilePath.isEmpty()
+                   && (resolvedType == ClipboardItem::Image
+                       || resolvedType == ClipboardItem::Office
+                       || resolvedType == ClipboardItem::RichText)) {
+            // Fallback: load image/html payloads for items without
+            // preferFullItem (e.g. freshly copied, not yet on disk).
             QString htmlPayload;
             QByteArray imagePayload;
-            LocalSaver::loadMimePayloads(sourceFilePath,
-                                         mimeOffset,
-                                         resolvedType == ClipboardItem::RichText ? &htmlPayload : nullptr,
-                                         (resolvedType == ClipboardItem::Image
-                                             || resolvedType == ClipboardItem::Office
-                                             || resolvedType == ClipboardItem::RichText) ? &imagePayload : nullptr);
-            if (resolvedHtml.isEmpty()) {
+            LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset,
+                resolvedType == ClipboardItem::RichText ? &htmlPayload : nullptr,
+                &imagePayload);
+            if (resolvedHtml.isEmpty() && !htmlPayload.isEmpty()) {
                 resolvedHtml = htmlPayload;
             }
-            if (resolvedImageBytes.isEmpty()) {
+            if (resolvedImageBytes.isEmpty() && !imagePayload.isEmpty()) {
                 resolvedImageBytes = imagePayload;
             }
         }

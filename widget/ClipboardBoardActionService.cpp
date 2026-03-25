@@ -78,6 +78,7 @@ bool persistItemMetadata(ClipboardBoardService *boardService,
 
     LocalSaver saver;
     if (saver.updateMetadata(filePath, item.getAlias(), item.isPinned())) {
+        boardService->refreshIndexedItemForPath(filePath);
         refreshPersistedItem(boardModel, boardService, row);
         return true;
     }
@@ -92,6 +93,7 @@ bool persistItemMetadata(ClipboardBoardService *boardService,
     if (!saver.saveToFile(fullItem, filePath)) {
         return false;
     }
+    boardService->refreshIndexedItemForPath(filePath);
     refreshPersistedItem(boardModel, boardService, row);
     return true;
 }
@@ -130,7 +132,9 @@ int removeItems(ClipboardBoardService *boardService,
     std::sort(rowsToRemove.begin(), rowsToRemove.end(), std::greater<int>());
     for (const int row : rowsToRemove) {
         if (boardService) {
-            boardService->deleteItemByPath(boardService->filePathForItem(boardModel->itemAt(row)));
+            // Use quiet delete: the model row is removed directly below,
+            // no need for localPersistenceChanged → full page reload.
+            boardService->deleteItemByPathQuiet(boardService->filePathForItem(boardModel->itemAt(row)));
         }
         boardModel->removeItemAt(row);
     }

@@ -36,6 +36,23 @@ public:
         ClearAllPreviews
     };
 
+    struct IndexedItemMeta {
+        QString filePath;
+        QString name;
+        QString title;
+        QString url;
+        QString alias;
+        QString searchableText;
+        QList<QUrl> normalizedUrls;
+        QByteArray fingerprint;
+        QDateTime time;
+        ClipboardItem::ContentType contentType = ClipboardItem::Text;
+        ClipboardItem::PreviewKind previewKind = ClipboardItem::TextPreview;
+        quint64 mimeDataOffset = 0;
+        bool pinned = false;
+        bool hasThumbnailHint = false;
+    };
+
     explicit ClipboardBoardService(const QString &category, QObject *parent = nullptr);
     ~ClipboardBoardService() override;
 
@@ -46,6 +63,7 @@ public:
     int pendingCount() const;
     bool hasPendingItems() const;
     bool deferredLoadActive() const;
+    bool hasRecentInternalWrite() const;
 
     void refreshIndex();
     void startAsyncLoad(int initialBatchSize, int deferredBatchSize);
@@ -58,14 +76,29 @@ public:
 
     ClipboardItem prepareItemForSave(const ClipboardItem &source) const;
     void saveItem(const ClipboardItem &item);
+    void saveItemQuiet(const ClipboardItem &item);
+    void scheduleDeferredSave(const ClipboardItem &item);
     void removeItemFile(const QString &filePath);
     void deleteItemByPath(const QString &filePath);
+    void deleteItemByPathQuiet(const QString &filePath);
     bool deletePendingItemByPath(const QString &filePath);
     QString filePathForItem(const ClipboardItem &item) const;
     QString filePathForName(const QString &name) const;
-    ClipboardItem loadItemLight(const QString &filePath);
+    ClipboardItem loadItemLight(const QString &filePath, bool includeThumbnail = false);
+    void refreshIndexedItemForPath(const QString &filePath);
+    int filteredItemCount(ClipboardItem::ContentType type,
+                          const QString &keyword,
+                          const QSet<QString> &matchedNames) const;
+    QList<QPair<QString, ClipboardItem>> loadIndexedSlice(int offset, int count, bool includeThumbnail = false);
+    QList<QPair<QString, ClipboardItem>> loadFilteredIndexedSlice(ClipboardItem::ContentType type,
+                                                                  const QString &keyword,
+                                                                  const QSet<QString> &matchedNames,
+                                                                  int offset,
+                                                                  int count,
+                                                                  bool includeThumbnail = false);
     QSet<QByteArray> loadAllFingerprints();
     void notifyItemAdded();
+    bool moveIndexedItemToFront(const QString &name);
     void trimExpiredPendingItems(const QDateTime &cutoff);
     int maintainPreviewCache(PreviewCacheMaintenanceMode mode);
 
@@ -95,6 +128,8 @@ private:
     void trackExclusiveThread(QThread *thread, QThread **slot);
     void startRawReadBatch(int batchSize);
     void applyPendingFileIndex(const QStringList &filePaths, int initialBatchSize, int deferredBatchSize, quint64 token);
+    bool saveItemInternal(const ClipboardItem &item);
+    void deleteItemByPathInternal(const QString &filePath);
     void checkSaveDir();
     void updateTotalItemCount(int total);
     void decrementTotalItemCount();
@@ -112,6 +147,8 @@ private:
     QList<QThread *> processingThreads_;
     std::unique_ptr<QThreadPool> thumbnailTaskPool_;
     QSet<QString> failedFullLoadPaths_;
+    QList<IndexedItemMeta> indexedItems_;
+    QStringList indexedFilePaths_;
     QStringList pendingLoadFilePaths_;
     QList<QPair<QString, QByteArray>> deferredLoadedItems_;
     int totalItemCount_ = 0;
@@ -119,6 +156,9 @@ private:
     quint64 asyncLoadToken_ = 0;
     bool deferredLoadActive_ = false;
     bool visibleHint_ = false;
+    qint64 lastInternalWriteMs_ = 0;
+    QList<ClipboardItem> pendingSaveQueue_;
+    QTimer *deferredSaveTimer_ = nullptr;
 };
 
 #endif // MPASTE_CLIPBOARD_BOARD_SERVICE_H

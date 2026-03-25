@@ -690,6 +690,25 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
             }
             break;
         }
+        case ClipboardItem::Link:
+        case ClipboardItem::Text:
+        case ClipboardItem::File:
+            if (item.hasThumbnail()) {
+                previewPixmap = item.thumbnail();
+                thumbnailPixmap = item.thumbnail();
+                summary = QStringLiteral("%1 | %2: %3 × %4 px")
+                              .arg(contentTypeLabel(item.getContentType()))
+                              .arg(uiText(QStringLiteral("Thumbnail"), zh(u"缩略图")))
+                              .arg(thumbnailPixmap.width())
+                              .arg(thumbnailPixmap.height());
+            } else if (!item.getFavicon().isNull()) {
+                previewPixmap = item.getFavicon();
+                summary = uiText(QStringLiteral("Favicon Preview"), zh(u"站点图标预览"));
+            } else {
+                previewPixmap = item.getIcon();
+                summary = uiText(QStringLiteral("Item Icon"), zh(u"条目标识"));
+            }
+            break;
         default:
             if (!item.getFavicon().isNull()) {
                 previewPixmap = item.getFavicon();

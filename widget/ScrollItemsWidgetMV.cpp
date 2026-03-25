@@ -1,8 +1,8 @@
 // input: Depends on ScrollItemsWidget.h, ClipboardBoardService, Qt model/view APIs, and delegate-based card painting.
-// output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
+// output: Implements lazy-loaded boards, fixed-page browsing, proxy filtering, async thumbnail completion, and list-view item interaction.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
 // update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export + multi-select batch actions + data-layer preview kind + board paint FPS logging + hidden-stage light prewarm).
-// note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, loading overlay, board paint FPS logging, and hidden-stage light prewarm.
+// note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, loading overlay, board paint FPS logging, hidden-stage light prewarm, and switchable paged-vs-continuous history loading.
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -517,8 +517,11 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     hostLayout->addWidget(listView_);
 
     boardModel_ = new ClipboardBoardModel(this);
+    filterProxyModel_ = new ClipboardBoardProxyModel(this);
+    filterProxyModel_->setSourceModel(boardModel_);
     proxyModel_ = new ClipboardBoardProxyModel(this);
-    proxyModel_->setSourceModel(boardModel_);
+    proxyModel_->setSourceModel(filterProxyModel_);
+    proxyModel_->setPageSize(PAGE_SIZE);
     cardDelegate_ = new ClipboardCardDelegate(QColor::fromString(this->borderColor), listView_);
 
     listView_->setModel(proxyModel_);
@@ -586,7 +589,23 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     connect(boardService_, &ClipboardBoardService::keywordMatched, this, &ScrollItemsWidget::handleKeywordMatched);
     connect(boardService_, &ClipboardBoardService::totalItemCountChanged, this, &ScrollItemsWidget::handleTotalItemCountChanged);
     connect(boardService_, &ClipboardBoardService::deferredLoadCompleted, this, &ScrollItemsWidget::handleDeferredLoadCompleted);
-    connect(boardService_, &ClipboardBoardService::localPersistenceChanged, this, &ScrollItemsWidget::localPersistenceChanged);
+    connect(boardService_, &ClipboardBoardService::localPersistenceChanged, this, [this]() {
+        emit localPersistenceChanged();
+        if (!paginationEnabled()) {
+            return;
+        }
+        loadedPage_ = -1;
+        loadedPageBaseOffset_ = -1;
+        loadedPageTotalItems_ = -1;
+        if (boardService_) {
+            syncPageWindow(false);
+        }
+        if (isBoardUiVisible()) {
+            refreshContentWidthHint();
+            primeVisibleThumbnailsSync();
+            scheduleThumbnailUpdate();
+        }
+    });
 
     connect(listView_->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &ScrollItemsWidget::handleCurrentIndexChanged);
@@ -618,7 +637,10 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
 
     thumbnailUpdateTimer_ = new QTimer(this);
     thumbnailUpdateTimer_->setSingleShot(true);
-    thumbnailUpdateTimer_->setInterval(80);
+    // Delay thumbnail load/unload until scrolling settles.  During
+    // active scrolling the card pixmap cache provides smooth rendering;
+    // doing thumbnail management mid-scroll invalidates that cache.
+    thumbnailUpdateTimer_->setInterval(300);
     connect(thumbnailUpdateTimer_, &QTimer::timeout, this, &ScrollItemsWidget::updateVisibleThumbnails);
 
     thumbnailPulseTimer_ = new QTimer(this);
@@ -672,7 +694,7 @@ void ScrollItemsWidget::applyTheme(bool dark) {
         hoverFavoriteBtn_->setStyleSheet(buttonStyle);
         bool favorite = false;
         if (hoverProxyIndex_.isValid() && proxyModel_ && boardModel_) {
-            const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+            const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
             favorite = boardModel_->isFavorite(sourceRow);
         }
         updateHoverFavoriteButton(favorite);
@@ -701,10 +723,28 @@ QModelIndex ScrollItemsWidget::currentProxyIndex() const {
 }
 
 QModelIndex ScrollItemsWidget::proxyIndexForSourceRow(int sourceRow) const {
-    if (!proxyModel_ || !boardModel_ || sourceRow < 0) {
+    if (!proxyModel_ || !filterProxyModel_ || !boardModel_ || sourceRow < 0) {
         return {};
     }
-    return proxyModel_->mapFromSource(boardModel_->index(sourceRow, 0));
+
+    const QModelIndex filterIndex = filterProxyModel_->mapFromSource(boardModel_->index(sourceRow, 0));
+    if (!filterIndex.isValid()) {
+        return {};
+    }
+    return proxyModel_->mapFromSource(filterIndex);
+}
+
+int ScrollItemsWidget::sourceRowForProxyIndex(const QModelIndex &proxyIndex) const {
+    if (!proxyModel_ || !filterProxyModel_ || !proxyIndex.isValid()) {
+        return -1;
+    }
+
+    const QModelIndex filterIndex = proxyModel_->mapToSource(proxyIndex);
+    if (!filterIndex.isValid()) {
+        return -1;
+    }
+
+    return filterProxyModel_->mapToSource(filterIndex).row();
 }
 
 QList<QModelIndex> ScrollItemsWidget::selectedProxyIndexes() const {
@@ -739,7 +779,7 @@ QList<int> ScrollItemsWidget::selectedSourceRows() const {
         if (!proxyIndex.isValid()) {
             continue;
         }
-        const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+        const int sourceRow = sourceRowForProxyIndex(proxyIndex);
         if (sourceRow >= 0 && !result.contains(sourceRow)) {
             result.append(sourceRow);
         }
@@ -806,6 +846,8 @@ void ScrollItemsWidget::createHoverActionBar() {
     hoverActionBar_->setFocusPolicy(Qt::NoFocus);
     hoverActionBar_->setAttribute(Qt::WA_TransparentForMouseEvents, false);
     hoverActionBar_->setAttribute(Qt::WA_TranslucentBackground);
+    hoverActionBar_->setMouseTracking(true);
+    hoverActionBar_->installEventFilter(this);
     hoverBar->setCornerRadius(borderRadius);
     hoverBar->setColors(dark ? QColor(26, 31, 38, 205) : QColor(255, 255, 255, 185),
                         dark ? QColor(255, 255, 255, 40) : QColor(255, 255, 255, 120));
@@ -818,7 +860,7 @@ void ScrollItemsWidget::createHoverActionBar() {
     layout->setContentsMargins(margin, 0, margin, 0);
     layout->setSpacing(spacing);
 
-    auto createButton = [scale, dark](const QString &iconPath, const QString &tooltip) {
+    auto createButton = [this, scale, dark](const QString &iconPath, const QString &tooltip) {
         const int iconSz = qMax(12, 14 * scale / 100);
         const int btnSz = qMax(18, 22 * scale / 100);
         const int borderR = qMax(4, 6 * scale / 100);
@@ -832,6 +874,8 @@ void ScrollItemsWidget::createHoverActionBar() {
         button->setCursor(Qt::PointingHandCursor);
         button->setToolTip(tooltip);
         button->setFocusPolicy(Qt::NoFocus);
+        button->setMouseTracking(true);
+        button->installEventFilter(this);
         return button;
     };
 
@@ -851,7 +895,7 @@ void ScrollItemsWidget::createHoverActionBar() {
         if (!proxyModel_ || !boardModel_ || !hoverProxyIndex_.isValid()) {
             return;
         }
-        const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+        const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
         const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
         if (!item) {
             return;
@@ -864,7 +908,7 @@ void ScrollItemsWidget::createHoverActionBar() {
         if (!proxyModel_ || !boardModel_ || !hoverProxyIndex_.isValid()) {
             return;
         }
-        const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+        const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
         const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
         if (!item) {
             return;
@@ -877,7 +921,7 @@ void ScrollItemsWidget::createHoverActionBar() {
         if (!proxyModel_ || !boardModel_ || !hoverProxyIndex_.isValid()) {
             return;
         }
-        const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+        const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
         const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
         if (!item) {
             return;
@@ -890,7 +934,7 @@ void ScrollItemsWidget::createHoverActionBar() {
         if (!proxyModel_ || !boardModel_ || !hoverProxyIndex_.isValid()) {
             return;
         }
-        const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+        const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
         const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
         if (!item) {
             return;
@@ -909,7 +953,7 @@ void ScrollItemsWidget::createHoverActionBar() {
         if (!proxyModel_ || !boardModel_ || !hoverProxyIndex_.isValid()) {
             return;
         }
-        const int sourceRow = proxyModel_->mapToSource(hoverProxyIndex_).row();
+        const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
         const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
         if (!item) {
             return;
@@ -1038,6 +1082,23 @@ void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
     if (updated.isPinned() == pinned) {
         return;
     }
+
+    if (shouldEvictPages()) {
+        ClipboardItem persisted = updated;
+        persisted.setPinned(pinned);
+        boardModel_->updateItem(row, persisted);
+        if (!ClipboardBoardActionService::persistItemMetadata(boardService_, boardModel_, row, persisted)) {
+            return;
+        }
+        loadedPage_ = -1;
+        loadedPageBaseOffset_ = -1;
+        loadedPageTotalItems_ = -1;
+        syncPageWindow(false);
+        refreshContentWidthHint();
+        updateHoverActionBar(currentProxyIndex());
+        return;
+    }
+
     const int targetRow = pinned ? 0 : unpinnedInsertRowForItem(updated, row);
     if (!ClipboardBoardActionService::applyPinnedState(boardModel_, boardService_, row, targetRow, pinned)) {
         return;
@@ -1069,7 +1130,7 @@ void ScrollItemsWidget::updateHoverActionBar(const QModelIndex &proxyIndex) {
         hoverHideTimer_->stop();
     }
 
-    const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+    const int sourceRow = sourceRowForProxyIndex(proxyIndex);
     const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
     if (!item || item->getName().isEmpty()) {
         if (hoverHideTimer_ && !hoverHideTimer_->isActive()) {
@@ -1164,19 +1225,26 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
         return;
     }
 
-    const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+    const int sourceRow = sourceRowForProxyIndex(proxyIndex);
     if (sourceRow < 0) {
         return;
     }
 
     ClipboardItem item = boardModel_->itemAt(sourceRow);
-    if (item.getContentType() != ClipboardItem::Link || item.hasThumbnail()) {
+    if (item.getContentType() != ClipboardItem::Link) {
         return;
     }
 
     QString linkText = item.getUrl().trimmed();
     if (linkText.isEmpty()) {
-        linkText = item.getNormalizedText().trimmed();
+        const QList<QUrl> urls = item.getNormalizedUrls();
+        if (!urls.isEmpty()) {
+            const QUrl &first = urls.first();
+            linkText = first.isLocalFile() ? first.toLocalFile() : first.toString();
+        }
+    }
+    if (linkText.isEmpty()) {
+        linkText = item.getNormalizedText().left(512).trimmed();
     }
     if (linkText.isEmpty()) {
         return;
@@ -1232,9 +1300,16 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
 
 void ScrollItemsWidget::handleActivatedIndex(const QModelIndex &index) {
     setCurrentProxyIndex(index);
+    const int sourceRow = sourceRowForProxyIndex(index);
     const ClipboardItem *selectedItem = selectedByEnter();
     if (selectedItem) {
+        // Emit first so the handler can read the item before moveItemToFirst
+        // (which reloads the model in evict mode and clears the cache).
         emit doubleClicked(*selectedItem);
+        const bool alreadyFirst = (sourceRow == 0) && (currentPage_ == 0);
+        if (!alreadyFirst) {
+            moveItemToFirst(sourceRow);
+        }
     }
 }
 
@@ -1271,7 +1346,6 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
         return;
     }
 
-    const bool dark = darkTheme_;
     const bool multiSelection = selection.size() > 1;
 
     QMenu menu(this);
@@ -1331,7 +1405,7 @@ void ScrollItemsWidget::populateSingleSelectionMenu(QMenu *menu, const QModelInd
     }
 
     const bool dark = darkTheme_;
-    const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+    const int sourceRow = sourceRowForProxyIndex(proxyIndex);
     const ClipboardItem::ContentType contentType = item.getContentType();
     const bool isFavorite = boardModel_->isFavorite(sourceRow);
     const QList<QUrl> urls = item.getNormalizedUrls();
@@ -1420,6 +1494,10 @@ void ScrollItemsWidget::handleLoadedItems(const QList<QPair<QString, ClipboardIt
         appendLoadedItem(payload.first, payload.second);
     }
 
+    if (shouldEvictPages()) {
+        reloadCurrentPageItems(false);
+    }
+
     emit itemCountChanged(itemCountForDisplay());
     if (isBoardUiVisible()) {
         setFirstVisibleItemSelected();
@@ -1440,7 +1518,17 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
     }
     const int row = boardModel_->rowForName(expectedName);
     if (row >= 0) {
-        boardModel_->updateItem(row, item);
+        ClipboardItem updated = item;
+        if (!filterShowsVisualPreviewCards() && usesManagedVisualPreviewCard(updated)) {
+            updated.setThumbnail(QPixmap());
+        }
+        boardModel_->updateItem(row, updated);
+        syncPreviewStateForRow(row);
+    }
+    // The async save may have changed the service index count; keep
+    // bookkeeping in sync to avoid a spurious full page reload.
+    if (paginationEnabled() && loadedPageTotalItems_ >= 0) {
+        loadedPageTotalItems_ = totalItemCountForPagination();
     }
     scheduleThumbnailUpdate();
     updateLoadingOverlay();
@@ -1460,17 +1548,24 @@ void ScrollItemsWidget::handleThumbnailReady(const QString &expectedName, const 
         return;
     }
 
-    ClipboardItem item = boardModel_->itemAt(row);
-    if (!shouldManageThumbnail(item)) {
+    const ClipboardItem *itemPtr = boardModel_->itemPtrAt(row);
+    if (!itemPtr || !shouldManageThumbnail(*itemPtr)) {
+        return;
+    }
+    if (!filterShowsVisualPreviewCards()) {
+        syncPreviewStateForRow(row);
         return;
     }
     if (!thumbnail.isNull()) {
         missingThumbnailNames_.remove(expectedName);
-        item.setThumbnail(thumbnail);
-        boardModel_->updateItem(row, item);
+        // Update thumbnail in-place, single dataChanged signal.
+        ClipboardItem updated = *itemPtr;
+        updated.setThumbnail(thumbnail);
+        boardModel_->updateItem(row, updated);
     } else {
         missingThumbnailNames_.insert(expectedName);
     }
+    syncPreviewStateForRow(row);
 
     scheduleThumbnailUpdate();
 }
@@ -1485,6 +1580,7 @@ void ScrollItemsWidget::handleKeywordMatched(const QSet<QString> &matchedNames, 
 
 void ScrollItemsWidget::handleTotalItemCountChanged(int total) {
     Q_UNUSED(total);
+    syncPageWindow(false);
     emit itemCountChanged(itemCountForDisplay());
 }
 
@@ -1517,18 +1613,313 @@ void ScrollItemsWidget::setFirstVisibleItemSelected() {
     }
 }
 
-void ScrollItemsWidget::applyFilters() {
-    if ((!currentKeyword_.isEmpty() || currentTypeFilter_ != ClipboardItem::All)
-        && boardService_ && boardService_->hasPendingItems()) {
-        ensureAllItemsLoaded();
+int ScrollItemsWidget::totalItemCountForPagination() const {
+    if (paginationEnabled()) {
+        return boardService_
+            ? boardService_->filteredItemCount(currentTypeFilter_, currentKeyword_, asyncKeywordMatchedNames_)
+            : 0;
+    }
+    if (!currentKeyword_.isEmpty() || currentTypeFilter_ != ClipboardItem::All) {
+        return filterProxyModel_ ? filterProxyModel_->rowCount() : 0;
+    }
+    return boardService_ ? boardService_->totalItemCount()
+                         : (filterProxyModel_ ? filterProxyModel_->rowCount() : 0);
+}
+
+bool ScrollItemsWidget::paginationEnabled() const {
+    return MPasteSettings::getInst()->getHistoryViewMode() == MPasteSettings::ViewModePaged;
+}
+
+bool ScrollItemsWidget::shouldEvictPages() const {
+    return paginationEnabled();
+}
+
+bool ScrollItemsWidget::filterShowsVisualPreviewCards() const {
+    return currentTypeFilter_ == ClipboardItem::All
+        || currentTypeFilter_ == ClipboardItem::Image
+        || currentTypeFilter_ == ClipboardItem::Link
+        || currentTypeFilter_ == ClipboardItem::Office
+        || currentTypeFilter_ == ClipboardItem::RichText;
+}
+
+bool ScrollItemsWidget::usesManagedVisualPreviewCard(const ClipboardItem &item) const {
+    const ClipboardItem::ContentType type = item.getContentType();
+    return type == ClipboardItem::Image
+        || type == ClipboardItem::Office
+        || (type == ClipboardItem::RichText && item.getPreviewKind() == ClipboardItem::VisualPreview);
+}
+
+ClipboardBoardModel::PreviewState ScrollItemsWidget::previewStateForItem(const ClipboardItem &item) const {
+    if (!usesManagedVisualPreviewCard(item)) {
+        return ClipboardBoardModel::PreviewNotApplicable;
+    }
+    if (item.hasThumbnail()) {
+        return ClipboardBoardModel::PreviewReady;
+    }
+    if (missingThumbnailNames_.contains(item.getName())) {
+        return ClipboardBoardModel::PreviewUnavailable;
+    }
+    return ClipboardBoardModel::PreviewLoading;
+}
+
+void ScrollItemsWidget::syncPreviewStateForRow(int row) {
+    if (!boardModel_ || row < 0) {
+        return;
+    }
+    boardModel_->setPreviewState(row, previewStateForItem(boardModel_->itemAt(row)));
+}
+
+void ScrollItemsWidget::syncPreviewStateForName(const QString &name) {
+    if (!boardModel_ || name.isEmpty()) {
+        return;
+    }
+    syncPreviewStateForRow(boardModel_->rowForName(name));
+}
+
+void ScrollItemsWidget::releaseManagedVisualThumbnailsFromModel() {
+    if (!boardModel_) {
+        return;
     }
 
-    proxyModel_->setTypeFilter(currentTypeFilter_);
-    proxyModel_->setKeyword(currentKeyword_);
-    proxyModel_->setAsyncMatchedNames(asyncKeywordMatchedNames_);
-    if (isBoardUiVisible()) {
+    pendingThumbnailNames_.clear();
+    desiredThumbnailNames_.clear();
+    managedThumbnailNames_.clear();
+    visibleLoadingThumbnailNames_.clear();
+
+    const int rowCount = boardModel_->rowCount();
+    for (int row = 0; row < rowCount; ++row) {
+        ClipboardItem item = boardModel_->itemAt(row);
+        if (!usesManagedVisualPreviewCard(item)) {
+            continue;
+        }
+        if (item.hasThumbnail()) {
+            item.setThumbnail(QPixmap());
+            boardModel_->updateItem(row, item);
+        }
+        syncPreviewStateForRow(row);
+    }
+}
+
+void ScrollItemsWidget::reloadAllIndexedItems() {
+    if (!boardService_ || !boardModel_) {
+        return;
+    }
+
+    if (paginationEnabled() && cardDelegate_) {
+        cardDelegate_->clearVisualCaches();
+    }
+
+    const QList<QPair<QString, ClipboardItem>> items =
+        boardService_->loadIndexedSlice(0, boardService_->totalItemCount());
+
+    pendingThumbnailNames_.clear();
+    missingThumbnailNames_.clear();
+    desiredThumbnailNames_.clear();
+    managedThumbnailNames_.clear();
+    visibleLoadingThumbnailNames_.clear();
+    selectedItemCache_ = ClipboardItem();
+    pageBaseOffset_ = 0;
+    loadedPage_ = -1;
+    loadedPageBaseOffset_ = -1;
+    loadedPageTotalItems_ = -1;
+    loadedPageTypeFilter_ = ClipboardItem::All;
+    loadedPageKeyword_.clear();
+    loadedPageMatchedNames_.clear();
+    boardModel_->clear();
+
+    for (const auto &payload : items) {
+        appendModelItem(payload.second);
+    }
+}
+
+void ScrollItemsWidget::reloadCurrentPageItems(bool resetSelection) {
+    if (!boardService_ || !boardModel_) {
+        return;
+    }
+
+    QString previousSelectedName;
+    if (!resetSelection) {
+        if (const ClipboardItem *selectedItem = currentSelectedItem()) {
+            previousSelectedName = selectedItem->getName();
+        }
+    }
+
+    if (cardDelegate_) {
+        cardDelegate_->clearVisualCaches();
+    }
+
+    const int totalItems = totalItemCountForPagination();
+    const int totalPages = totalItems > 0 ? ((totalItems + PAGE_SIZE - 1) / PAGE_SIZE) : 0;
+    const int clampedPage = totalPages > 0 ? qBound(0, currentPage_, totalPages - 1) : 0;
+    currentPage_ = clampedPage;
+    pageBaseOffset_ = totalPages > 0 ? currentPage_ * PAGE_SIZE : 0;
+
+    // Load with thumbnails so cards can render immediately without
+    // waiting for the async thumbnail management cycle.
+    const QList<QPair<QString, ClipboardItem>> items =
+        boardService_->loadFilteredIndexedSlice(currentTypeFilter_,
+                                                currentKeyword_,
+                                                asyncKeywordMatchedNames_,
+                                                pageBaseOffset_,
+                                                PAGE_SIZE,
+                                                true);
+
+    pendingThumbnailNames_.clear();
+    missingThumbnailNames_.clear();
+    desiredThumbnailNames_.clear();
+    managedThumbnailNames_.clear();
+    visibleLoadingThumbnailNames_.clear();
+    selectedItemCache_ = ClipboardItem();
+    boardModel_->clear();
+
+    for (const auto &payload : items) {
+        appendModelItem(payload.second);
+    }
+
+    loadedPage_ = currentPage_;
+    loadedPageBaseOffset_ = pageBaseOffset_;
+    loadedPageTotalItems_ = totalItems;
+    loadedPageTypeFilter_ = currentTypeFilter_;
+    loadedPageKeyword_ = currentKeyword_;
+    loadedPageMatchedNames_ = asyncKeywordMatchedNames_;
+
+    if (listView_) {
+        if (!resetSelection && !previousSelectedName.isEmpty()) {
+            const int selectedRow = boardModel_->rowForName(previousSelectedName);
+            if (selectedRow >= 0) {
+                setCurrentProxyIndex(proxyIndexForSourceRow(selectedRow));
+                return;
+            }
+        }
+
+        if (resetSelection) {
+            setFirstVisibleItemSelected();
+            QScrollBar *scrollBar = horizontalScrollbar();
+            if (scrollBar) {
+                scrollBar->setValue(scrollBar->minimum());
+            }
+        } else if (listView_->selectionModel()) {
+            listView_->selectionModel()->clearCurrentIndex();
+        }
+    }
+}
+
+bool ScrollItemsWidget::shouldReloadCurrentPage(int totalItems) const {
+    if (!paginationEnabled() || !boardModel_) {
+        return false;
+    }
+
+    const int totalPages = totalItems > 0 ? ((totalItems + PAGE_SIZE - 1) / PAGE_SIZE) : 0;
+    const int clampedPage = totalPages > 0 ? qBound(0, currentPage_, totalPages - 1) : 0;
+    const int targetOffset = totalPages > 0 ? clampedPage * PAGE_SIZE : 0;
+    const int targetCount = qMin(PAGE_SIZE, qMax(0, totalItems - targetOffset));
+
+    const bool reload = loadedPage_ != clampedPage
+        || loadedPageBaseOffset_ != targetOffset
+        || loadedPageTotalItems_ != totalItems
+        || loadedPageTypeFilter_ != currentTypeFilter_
+        || loadedPageKeyword_ != currentKeyword_
+        || loadedPageMatchedNames_ != asyncKeywordMatchedNames_
+        || boardModel_->rowCount() != targetCount;
+    return reload;
+}
+
+void ScrollItemsWidget::ensureCurrentPageLoaded(bool resetSelection) {
+    if (!paginationEnabled() || !boardService_ || !boardModel_) {
+        return;
+    }
+
+    if (shouldEvictPages()) {
+        const int totalItems = totalItemCountForPagination();
+        if (shouldReloadCurrentPage(totalItems)) {
+            reloadCurrentPageItems(resetSelection);
+        }
+        return;
+    }
+
+    const int totalItems = totalItemCountForPagination();
+    const int requiredCount = qMin(totalItems, (currentPage_ + 1) * PAGE_SIZE);
+    while (boardModel_->rowCount() < requiredCount && boardService_->hasPendingItems()) {
+        boardService_->loadNextBatch(PAGE_LOAD_BATCH_SIZE);
+    }
+}
+
+void ScrollItemsWidget::syncPageWindow(bool resetSelection) {
+    if (!proxyModel_) {
+        return;
+    }
+
+    if (!paginationEnabled()) {
+        currentPage_ = 0;
+        pageBaseOffset_ = 0;
+        loadedPage_ = -1;
+        loadedPageBaseOffset_ = -1;
+        loadedPageTotalItems_ = -1;
+        loadedPageTypeFilter_ = ClipboardItem::All;
+        loadedPageKeyword_.clear();
+        loadedPageMatchedNames_.clear();
+        proxyModel_->setPageSize(0);
+        proxyModel_->setPageIndex(0);
+        if (listView_ && resetSelection) {
+            setFirstVisibleItemSelected();
+        }
+        emit pageStateChanged(0, 0);
+        return;
+    }
+
+    const int totalItems = totalItemCountForPagination();
+    const int totalPages = totalItems > 0 ? ((totalItems + PAGE_SIZE - 1) / PAGE_SIZE) : 0;
+    const int clampedPage = totalPages > 0 ? qBound(0, currentPage_, totalPages - 1) : 0;
+    if (currentPage_ != clampedPage) {
+        currentPage_ = clampedPage;
+    }
+
+    if (!shouldEvictPages()) {
+        pageBaseOffset_ = 0;
+    }
+
+    proxyModel_->setPageSize(shouldEvictPages() ? 0 : PAGE_SIZE);
+    ensureCurrentPageLoaded(resetSelection);
+    proxyModel_->setPageIndex(shouldEvictPages() ? 0 : currentPage_);
+
+    if (listView_ && resetSelection) {
         setFirstVisibleItemSelected();
+        QScrollBar *scrollBar = horizontalScrollbar();
+        if (scrollBar) {
+            scrollBar->setValue(scrollBar->minimum());
+        }
+    }
+
+    emit pageStateChanged(currentPageNumber(), totalPages);
+}
+
+void ScrollItemsWidget::applyFilters() {
+    if (!filterShowsVisualPreviewCards()) {
+        releaseManagedVisualThumbnailsFromModel();
+    }
+    if (!filterShowsVisualPreviewCards() && cardDelegate_) {
+        cardDelegate_->clearVisualCaches();
+    }
+
+    if (!paginationEnabled()
+        && (!currentKeyword_.isEmpty() || currentTypeFilter_ != ClipboardItem::All)
+        && boardService_) {
+        if (boardService_->hasPendingItems()) {
+            ensureAllItemsLoaded();
+        }
+    }
+
+    if (filterProxyModel_) {
+        filterProxyModel_->setTypeFilter(paginationEnabled() ? ClipboardItem::All : currentTypeFilter_);
+        filterProxyModel_->setKeyword(paginationEnabled() ? QString() : currentKeyword_);
+        filterProxyModel_->setAsyncMatchedNames(paginationEnabled() ? QSet<QString>() : asyncKeywordMatchedNames_);
+    }
+
+    currentPage_ = 0;
+    syncPageWindow(true);
+    if (isBoardUiVisible()) {
         refreshContentWidthHint();
+        primeVisibleThumbnailsSync();
         scheduleThumbnailUpdate();
     }
     emit itemCountChanged(itemCountForDisplay());
@@ -1551,10 +1942,37 @@ int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
         return sourceRow;
     }
 
+    if (shouldEvictPages()) {
+        // In evict mode the model only holds the current page.  Move the
+        // entry to the front of the service index.  If we are already on
+        // page 0 the item is in the model so we can just move the row;
+        // otherwise switch to page 1 which triggers a reload.
+        if (boardService_) {
+            boardService_->moveIndexedItemToFront(item.getName());
+        }
+        if (currentPage_ == 0) {
+            const int targetRow = item.isPinned() ? 0 : pinnedInsertRow();
+            if (targetRow != sourceRow) {
+                boardModel_->moveItemToRow(sourceRow, targetRow);
+            }
+            setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+            return targetRow;
+        }
+        currentPage_ = 0;
+        reloadCurrentPageItems(true);
+        syncPageWindow(true);
+        return 0;
+    }
+
     const int targetRow = item.isPinned() ? 0 : pinnedInsertRow();
     if (targetRow != sourceRow) {
         boardModel_->moveItemToRow(sourceRow, targetRow);
     }
+
+    if (paginationEnabled() && currentPage_ != 0) {
+        setCurrentPageNumber(1);
+    }
+
     setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
     return targetRow;
 }
@@ -1595,7 +2013,7 @@ void ScrollItemsWidget::ensureAllItemsLoaded() {
 }
 
 void ScrollItemsWidget::maybeLoadMoreItems() {
-    if (!boardService_ || boardService_->deferredLoadActive() || !boardService_->hasPendingItems()
+    if (paginationEnabled() || !boardService_ || boardService_->deferredLoadActive() || !boardService_->hasPendingItems()
         || !currentKeyword_.isEmpty() || currentTypeFilter_ != ClipboardItem::All) {
         return;
     }
@@ -1620,30 +2038,13 @@ void ScrollItemsWidget::maybeLoadMoreItems() {
 }
 
 int ScrollItemsWidget::itemCountForDisplay() const {
-    if (currentKeyword_.isEmpty() && currentTypeFilter_ == ClipboardItem::All) {
-        return boardService_ ? boardService_->totalItemCount() : 0;
-    }
-    return proxyModel_ ? proxyModel_->rowCount() : 0;
+    return totalItemCountForPagination();
 }
 
 void ScrollItemsWidget::trimExpiredItems() {
     if (category == MPasteSettings::STAR_CATEGORY_NAME || !boardService_) {
         return;
     }
-
-    const QDateTime cutoff = MPasteSettings::getInst()->historyRetentionCutoff();
-    boardService_->trimExpiredPendingItems(cutoff);
-
-    while (boardModel_ && boardModel_->rowCount() > 0) {
-        const ClipboardItem lastItem = boardModel_->itemAt(boardModel_->rowCount() - 1);
-        if (lastItem.getName().isEmpty() || lastItem.getTime() >= cutoff) {
-            break;
-        }
-
-        boardService_->deleteItemByPath(boardService_->filePathForItem(lastItem));
-        boardModel_->removeItemAt(boardModel_->rowCount() - 1);
-    }
-
     setFirstVisibleItemSelected();
 }
 
@@ -1656,9 +2057,21 @@ void ScrollItemsWidget::prepareLoadFromSaveDir() {
     selectedItemCache_ = ClipboardItem();
     asyncKeywordMatchedNames_.clear();
     missingThumbnailNames_.clear();
+    currentPage_ = 0;
+    pageBaseOffset_ = 0;
+    loadedPage_ = -1;
+    loadedPageBaseOffset_ = -1;
+    loadedPageTotalItems_ = -1;
+    loadedPageTypeFilter_ = ClipboardItem::All;
+    loadedPageKeyword_.clear();
+    loadedPageMatchedNames_.clear();
+    if (proxyModel_) {
+        proxyModel_->setPageIndex(0);
+    }
     boardService_->refreshIndex();
     updateContentWidthHint();
     updateLoadingOverlay();
+    emit pageStateChanged(currentPageNumber(), totalPageCount());
 }
 
 bool ScrollItemsWidget::shouldKeepDeferredLoading() const {
@@ -1716,6 +2129,50 @@ void ScrollItemsWidget::scheduleThumbnailUpdate() {
     thumbnailUpdateTimer_->start();
 }
 
+void ScrollItemsWidget::primeVisibleThumbnailsSync() {
+    if (!boardService_ || !boardModel_ || !proxyModel_ || !listView_ || !isBoardUiVisible()) {
+        return;
+    }
+
+    const int proxyCount = proxyModel_->rowCount();
+    if (proxyCount <= 0) {
+        return;
+    }
+
+    const QRect viewportRect = listView_->viewport()->rect();
+    const int gridWidth = qMax(1, listView_->gridSize().width());
+    const int visibleCount = qMax(1, viewportRect.width() / gridWidth + 2);
+    const QModelIndex leftIndex = listView_->indexAt(QPoint(viewportRect.left() + 1, viewportRect.center().y()));
+    const int startRow = leftIndex.isValid() ? leftIndex.row() : 0;
+    const int endRow = qMin(proxyCount - 1, startRow + visibleCount - 1);
+
+    for (int proxyRow = startRow; proxyRow <= endRow; ++proxyRow) {
+        const QModelIndex proxyIndex = proxyModel_->index(proxyRow, 0);
+        const int sourceRow = sourceRowForProxyIndex(proxyIndex);
+        if (sourceRow < 0) {
+            continue;
+        }
+
+        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
+        if (!item || !shouldManageThumbnail(*item) || item->hasThumbnail() || !item->hasThumbnailHint()) {
+            continue;
+        }
+
+        const QString filePath = item->sourceFilePath().isEmpty()
+            ? boardService_->filePathForName(item->getName())
+            : item->sourceFilePath();
+        if (filePath.isEmpty()) {
+            continue;
+        }
+
+        const ClipboardItem loaded = boardService_->loadItemLight(filePath, true);
+        if (!loaded.getName().isEmpty() && loaded.hasThumbnail()) {
+            boardModel_->updateItem(sourceRow, loaded);
+            syncPreviewStateForRow(sourceRow);
+        }
+    }
+}
+
 bool ScrollItemsWidget::shouldManageThumbnail(const ClipboardItem &item) const {
     const ClipboardItem::ContentType type = item.getContentType();
     return type == ClipboardItem::Image
@@ -1735,6 +2192,7 @@ void ScrollItemsWidget::requestThumbnailForItem(const ClipboardItem &item) {
         return;
     }
     pendingThumbnailNames_.insert(item.getName());
+    syncPreviewStateForName(item.getName());
     boardService_->requestThumbnailAsync(item.getName(), item.sourceFilePath());
 }
 
@@ -1746,19 +2204,25 @@ void ScrollItemsWidget::applyManagedThumbnailNames(const QSet<QString> &desiredN
 
     QSet<QString> leavingNames = managedThumbnailNames_;
     leavingNames.subtract(desiredNames);
+
     for (const QString &name : leavingNames) {
         const int row = boardModel_->rowForName(name);
         if (row < 0) {
             continue;
         }
-
-        ClipboardItem item = boardModel_->itemAt(row);
-        if (!shouldManageThumbnail(item) || !item.hasThumbnail() || item.sourceFilePath().isEmpty()) {
+        const ClipboardItem *item = boardModel_->itemPtrAt(row);
+        if (!item || !shouldManageThumbnail(*item) || !item->hasThumbnail() || item->sourceFilePath().isEmpty()) {
             continue;
         }
-
-        item.setThumbnail(QPixmap());
-        boardModel_->updateItem(row, item);
+        // Keep Link thumbnails in memory — their fallback rendering
+        // (linkFallbackPreview) costs 4-5ms per frame, far more expensive
+        // than the ~20KB memory cost of keeping the pixmap.
+        if (item->getContentType() == ClipboardItem::Link) {
+            continue;
+        }
+        ClipboardItem updated = *item;
+        updated.setThumbnail(QPixmap());
+        boardModel_->updateItem(row, updated);
     }
 
     for (const QString &name : desiredNames) {
@@ -1766,10 +2230,9 @@ void ScrollItemsWidget::applyManagedThumbnailNames(const QSet<QString> &desiredN
         if (row < 0) {
             continue;
         }
-
-        const ClipboardItem item = boardModel_->itemAt(row);
-        if (shouldManageThumbnail(item) && !item.hasThumbnail()) {
-            requestThumbnailForItem(item);
+        const ClipboardItem *item = boardModel_->itemPtrAt(row);
+        if (item && shouldManageThumbnail(*item) && !item->hasThumbnail()) {
+            requestThumbnailForItem(*item);
         }
     }
 
@@ -1881,25 +2344,29 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
         if (!proxyIndex.isValid()) {
             continue;
         }
-        const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+        const int sourceRow = sourceRowForProxyIndex(proxyIndex);
         if (sourceRow < 0) {
             continue;
         }
-        const ClipboardItem item = boardModel_->itemAt(sourceRow);
-        const QString name = item.getName();
-        if (name.isEmpty() || !shouldManageThumbnail(item)) {
+        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
+        if (!item) {
+            continue;
+        }
+        const QString name = item->getName();
+        if (name.isEmpty() || !shouldManageThumbnail(*item)) {
             continue;
         }
 
         desiredNames.insert(name);
-        if (item.hasThumbnail()) {
+        if (item->hasThumbnail()) {
             missingThumbnailNames_.remove(name);
         }
 
         if (proxyRow >= visibleStartRow
             && proxyRow <= visibleEndRow
-            && item.getContentType() != ClipboardItem::Link
-            && !item.hasThumbnail()) {
+            && item->getContentType() != ClipboardItem::Link
+            && !item->hasThumbnail()
+            && !missingThumbnailNames_.contains(name)) {
             visibleLoadingNames.insert(name);
         }
     }
@@ -1907,6 +2374,7 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
     desiredThumbnailNames_ = desiredNames;
     applyManagedThumbnailNames(desiredNames);
     setVisibleLoadingThumbnailNames(visibleLoadingNames);
+
 }
 
 void ScrollItemsWidget::updateContentWidthHint() {
@@ -1993,16 +2461,9 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
     boardService_->startAsyncKeywordSearch(candidates, currentKeyword_, token);
 }
 
-bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const ClipboardItem &item) {
-    int existingRow = boardModel_->rowForMatchingItem(item);
-    if (existingRow < 0) {
-        existingRow = boardModel_->rowForFingerprint(item.fingerprint());
-    }
-    if (existingRow >= 0) {
-        if (boardService_) {
-            boardService_->deleteItemByPath(filePath);
-        }
-        return false;
+void ScrollItemsWidget::appendModelItem(const ClipboardItem &item) {
+    if (!boardModel_ || item.getName().isEmpty()) {
+        return;
     }
 
     const bool favorite = category == MPasteSettings::STAR_CATEGORY_NAME
@@ -2013,6 +2474,21 @@ bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const Clipboar
     } else {
         boardModel_->appendItem(item, favorite);
     }
+    syncPreviewStateForName(item.getName());
+}
+
+bool ScrollItemsWidget::appendLoadedItem(const QString &filePath, const ClipboardItem &item) {
+    Q_UNUSED(filePath);
+
+    if (!boardModel_ || item.getName().isEmpty()) {
+        return false;
+    }
+
+    if (boardModel_->rowForName(item.getName()) >= 0) {
+        return false;
+    }
+
+    appendModelItem(item);
     if (!item.hasThumbnail() && shouldManageThumbnail(item)) {
         if (boardService_) {
             boardService_->processPendingItemAsync(item, item.getName());
@@ -2025,7 +2501,16 @@ QPair<int, int> ScrollItemsWidget::displaySequenceForIndex(const QModelIndex &pr
     if (!proxyIndex.isValid() || !proxyModel_) {
         return qMakePair(-1, itemCountForDisplay());
     }
-    return qMakePair(proxyIndex.row() + 1, proxyModel_->rowCount());
+
+    if (shouldEvictPages()) {
+        const int sourceRow = sourceRowForProxyIndex(proxyIndex);
+        return qMakePair(sourceRow >= 0 ? (pageBaseOffset_ + sourceRow + 1) : -1,
+                         itemCountForDisplay());
+    }
+
+    const QModelIndex filterIndex = proxyModel_->mapToSource(proxyIndex);
+    return qMakePair(filterIndex.isValid() ? (filterIndex.row() + 1) : -1,
+                     itemCountForDisplay());
 }
 
 int ScrollItemsWidget::selectedItemCount() const {
@@ -2039,7 +2524,7 @@ bool ScrollItemsWidget::hasMultipleSelectedItems() const {
 int ScrollItemsWidget::selectedSourceRow() const {
     const QModelIndex proxyIndex = currentProxyIndex();
     if (proxyIndex.isValid() && proxyModel_) {
-        return proxyModel_->mapToSource(proxyIndex).row();
+        return sourceRowForProxyIndex(proxyIndex);
     }
 
     const QList<int> selectedRows = selectedSourceRows();
@@ -2075,28 +2560,33 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
 
     if (row >= 0) {
         const ClipboardItem existingItem = boardModel_->itemAt(row);
-        const QMimeData *incomingMimeData = nItem.isMimeDataLoaded() ? nItem.getMimeData() : nullptr;
-        const QMimeData *existingMimeData = existingItem.isMimeDataLoaded() ? existingItem.getMimeData() : nullptr;
-        if (incomingMimeData && existingMimeData
-            && incomingMimeData->hasHtml() && existingMimeData->hasHtml()
-            && incomingMimeData->html().length() > existingMimeData->html().length()) {
-            if (boardService_) {
-                boardService_->removeItemFile(boardService_->filePathForItem(existingItem));
-            }
+
+        // Detect whether the incoming copy carries better data than what
+        // is already stored (e.g. the existing item was saved with a bug
+        // that dropped MIME content, or the new copy has richer rich-text).
+        const bool richerIncomingRichText = nItem.getContentType() == ClipboardItem::RichText
+            && existingItem.getContentType() == ClipboardItem::RichText
+            && nItem.getNormalizedText().size() > existingItem.getNormalizedText().size();
+        const bool contentTypeUpgrade = nItem.getContentType() != existingItem.getContentType()
+            && existingItem.getContentType() == ClipboardItem::Text
+            && nItem.getContentType() != ClipboardItem::Text;
+        // Detect corrupted items: correct type but missing actual content
+        // (e.g. Image item saved without image data due to earlier bug).
+        const bool existingLacksContent = !existingItem.hasThumbnail()
+            && existingItem.getNormalizedText().trimmed().isEmpty()
+            && existingItem.getContentType() != ClipboardItem::Color;
+
+        if (richerIncomingRichText || contentTypeUpgrade || existingLacksContent) {
             ClipboardItem updated = nItem;
             updated.setPinned(existingItem.isPinned());
             boardModel_->updateItem(row, updated);
-            if (!nItem.isMimeDataLoaded() && nItem.sourceFilePath().isEmpty()) {
-                if (boardService_) {
-                    boardService_->processPendingItemAsync(updated, updated.getName());
-                }
-            } else {
-                if (boardService_) {
-                    boardService_->saveItem(updated);
-                }
+            syncPreviewStateForRow(row);
+            if (boardService_) {
+                boardService_->processPendingItemAsync(updated, updated.getName());
             }
         }
-        if (row > 0) {
+        const bool alreadyFirst = (row == 0) && (currentPage_ == 0);
+        if (!alreadyFirst) {
             moveItemToFirst(row);
         }
         return false;
@@ -2112,7 +2602,9 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     scheduleThumbnailUpdate();
 
     if (boardService_) {
-        boardService_->notifyItemAdded();
+        if (!shouldEvictPages()) {
+            boardService_->notifyItemAdded();
+        }
     }
     trimExpiredItems();
     refreshContentWidthHint();
@@ -2121,24 +2613,74 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
 }
 
 bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
-    const bool isPendingClipboardSnapshot = !nItem.isMimeDataLoaded() && nItem.sourceFilePath().isEmpty();
-    ClipboardItem preparedItem = isPendingClipboardSnapshot
-        ? nItem
-        : (boardService_ ? boardService_->prepareItemForSave(nItem) : nItem);
-    const bool added = addOneItem(preparedItem);
+    // Fast duplicate check before any expensive preparation.
+    if (boardModel_) {
+        int existingRow = boardModel_->rowForMatchingItem(nItem);
+        if (existingRow < 0) {
+            existingRow = boardModel_->rowForFingerprint(nItem.fingerprint());
+        }
+        if (existingRow >= 0) {
+            // Delegate to addOneItem which handles update + moveToFirst.
+            addOneItem(nItem);
+            return false;
+        }
+    }
+
+    // Add item to model immediately so the UI can display it right away.
+    const bool added = addOneItem(nItem);
     ensureLinkPreviewForIndex(proxyIndexForSourceRow(0));
-    if (added) {
-        if (isPendingClipboardSnapshot) {
-            if (boardService_) {
-                boardService_->processPendingItemAsync(preparedItem, preparedItem.getName());
-            }
-        } else {
-            if (boardService_) {
-                boardService_->saveItem(preparedItem);
-            }
+    if (added && boardService_) {
+        // Save the lightweight item to disk synchronously (saveItemQuiet
+        // does NOT emit signals, so no page-reload cascade).  This ensures
+        // the file exists in the service index BEFORE any deferred-loading
+        // batch triggers reloadCurrentPageItems — otherwise the reload
+        // would clear the model and the newly added item would vanish.
+        boardService_->saveItemQuiet(nItem);
+
+        // Thumbnail generation + full MIME save happen asynchronously.
+        boardService_->processPendingItemAsync(nItem, nItem.getName());
+
+        // Keep loaded-page bookkeeping in sync.
+        if (paginationEnabled() && loadedPageTotalItems_ >= 0) {
+            loadedPageTotalItems_ = totalItemCountForPagination();
         }
     }
     return added;
+}
+
+void ScrollItemsWidget::mergeDeferredMimeFormats(const QString &itemName, const QMap<QString, QByteArray> &extraFormats) {
+    if (!boardModel_ || itemName.isEmpty() || extraFormats.isEmpty()) {
+        return;
+    }
+
+    const int row = boardModel_->rowForName(itemName);
+    if (row < 0) {
+        // Item not in current model page — just save the extra formats to
+        // the item on disk via the board service so they are available when
+        // the user pastes.
+        if (boardService_) {
+            const QString filePath = boardService_->filePathForName(itemName);
+            ClipboardItem item = boardService_->loadItemLight(filePath, false);
+            if (!item.getName().isEmpty()) {
+                item.ensureMimeDataLoaded();
+                for (auto it = extraFormats.cbegin(); it != extraFormats.cend(); ++it) {
+                    item.setMimeFormat(it.key(), it.value());
+                }
+                boardService_->saveItemQuiet(item);
+            }
+        }
+        return;
+    }
+
+    ClipboardItem item = boardModel_->itemAt(row);
+    for (auto it = extraFormats.cbegin(); it != extraFormats.cend(); ++it) {
+        item.setMimeFormat(it.key(), it.value());
+    }
+    boardModel_->updateItem(row, item);
+
+    if (boardService_) {
+        boardService_->saveItemQuiet(item);
+    }
 }
 
 void ScrollItemsWidget::filterByKeyword(const QString &keyword) {
@@ -2281,7 +2823,7 @@ void ScrollItemsWidget::setShortcutInfo() {
         if (!proxyIndex.isValid()) {
             continue;
         }
-        const int sourceRow = proxyModel_->mapToSource(proxyIndex).row();
+        const int sourceRow = sourceRowForProxyIndex(proxyIndex);
         if (sourceRow < 0) {
             continue;
         }
@@ -2301,7 +2843,9 @@ void ScrollItemsWidget::loadFromSaveDir() {
     }
     prepareLoadFromSaveDir();
     if (boardService_) {
-        boardService_->startAsyncLoad(INITIAL_LOAD_BATCH_SIZE, 0);
+        const int initialBatchSize = paginationEnabled() ? PAGED_INITIAL_LOAD_BATCH_SIZE
+                                                         : CONTINUOUS_INITIAL_LOAD_BATCH_SIZE;
+        boardService_->startAsyncLoad(initialBatchSize, 0);
     }
 }
 
@@ -2359,8 +2903,12 @@ void ScrollItemsWidget::loadFromSaveDirDeferred() {
         return;
     }
 
-    boardService_->startAsyncLoad(qMin(DEFERRED_LOAD_BATCH_SIZE, INITIAL_LOAD_BATCH_SIZE),
-                                  DEFERRED_LOAD_BATCH_SIZE);
+    if (paginationEnabled()) {
+        boardService_->startAsyncLoad(PAGED_INITIAL_LOAD_BATCH_SIZE, 0);
+    } else {
+        boardService_->startAsyncLoad(CONTINUOUS_INITIAL_LOAD_BATCH_SIZE,
+                                      CONTINUOUS_DEFERRED_LOAD_BATCH_SIZE);
+    }
 }
 
 QScrollBar *ScrollItemsWidget::horizontalScrollbar() const {
@@ -2393,18 +2941,11 @@ const ClipboardItem *ScrollItemsWidget::selectedByShortcut(int keyIndex) {
         return currentSelectedItem();
     }
     setCurrentProxyIndex(proxyIndex);
-    const int row = moveItemToFirst(proxyModel_->mapToSource(proxyIndex).row());
-    return cacheSelectedItem(row);
+    return cacheSelectedItem(sourceRowForProxyIndex(proxyIndex));
 }
 
 const ClipboardItem *ScrollItemsWidget::selectedByEnter() {
-    const int sourceRow = selectedSourceRow();
-    if (sourceRow < 0) {
-        return nullptr;
-    }
-
-    const int row = moveItemToFirst(sourceRow);
-    return cacheSelectedItem(row);
+    return currentSelectedItem();
 }
 
 void ScrollItemsWidget::hideHoverTools() {
@@ -2448,6 +2989,43 @@ int ScrollItemsWidget::getItemCount() {
     return itemCountForDisplay();
 }
 
+void ScrollItemsWidget::setCurrentPageNumber(int pageNumber) {
+    if (!paginationEnabled()) {
+        return;
+    }
+
+    const int totalPages = totalPageCount();
+    const int requestedPage = qMax(1, pageNumber);
+    const int clampedPage = totalPages > 0 ? qBound(1, requestedPage, totalPages) : 1;
+    const int newPageIndex = qMax(0, clampedPage - 1);
+    if (currentPage_ == newPageIndex && proxyModel_ && proxyModel_->pageIndex() == newPageIndex) {
+        return;
+    }
+
+    currentPage_ = newPageIndex;
+    syncPageWindow(true);
+    if (isBoardUiVisible()) {
+        refreshContentWidthHint();
+        primeVisibleThumbnailsSync();
+        scheduleThumbnailUpdate();
+    }
+}
+
+int ScrollItemsWidget::currentPageNumber() const {
+    if (!paginationEnabled()) {
+        return 0;
+    }
+    return totalPageCount() > 0 ? (currentPage_ + 1) : 0;
+}
+
+int ScrollItemsWidget::totalPageCount() const {
+    if (!paginationEnabled()) {
+        return 0;
+    }
+    const int totalItems = totalItemCountForPagination();
+    return totalItems > 0 ? ((totalItems + PAGE_SIZE - 1) / PAGE_SIZE) : 0;
+}
+
 void ScrollItemsWidget::refreshThumbnailCache() {
     updateVisibleThumbnails();
 }
@@ -2485,8 +3063,24 @@ void ScrollItemsWidget::setFavoriteFingerprints(const QSet<QByteArray> &fingerpr
     }
 }
 
+void ScrollItemsWidget::moveSelectedToFirst() {
+    const int sourceRow = selectedSourceRow();
+    const bool alreadyFirst = (sourceRow == 0) && (currentPage_ == 0);
+    if (sourceRow >= 0 && !alreadyFirst) {
+        moveItemToFirst(sourceRow);
+    }
+}
+
 void ScrollItemsWidget::scrollToFirst() {
-    if (!proxyModel_ || proxyModel_->rowCount() <= 0) {
+    if (!proxyModel_) {
+        return;
+    }
+
+    if (paginationEnabled() && currentPage_ != 0) {
+        setCurrentPageNumber(1);
+    }
+
+    if (proxyModel_->rowCount() <= 0) {
         return;
     }
 
@@ -2495,7 +3089,6 @@ void ScrollItemsWidget::scrollToFirst() {
 }
 
 void ScrollItemsWidget::scrollToLast() {
-    ensureAllItemsLoaded();
     if (!proxyModel_ || proxyModel_->rowCount() <= 0) {
         return;
     }
@@ -2527,8 +3120,7 @@ void ScrollItemsWidget::removeItems(const QList<ClipboardItem> &items) {
         return;
     }
 
-    setFirstVisibleItemSelected();
-    maybeLoadMoreItems();
+    syncPageWindow(true);
     refreshContentWidthHint();
     emit itemCountChanged(itemCountForDisplay());
 }
@@ -2566,11 +3158,26 @@ void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
         missingThumbnailNames_.remove(item.getName());
         desiredThumbnailNames_.remove(item.getName());
     }
+
+    // Remember the position so we can select the next item after removal.
+    const int rowBefore = boardModel_ ? boardModel_->rowForName(item.getName()) : -1;
+
     if (ClipboardBoardActionService::removeItem(boardService_, boardModel_, item)) {
-        setFirstVisibleItemSelected();
-        maybeLoadMoreItems();
+        // Select the item that now occupies the deleted position (i.e. the
+        // next item), or the last item if we deleted the tail.
+        if (boardModel_ && rowBefore >= 0) {
+            const int nextRow = qMin(rowBefore, boardModel_->rowCount() - 1);
+            if (nextRow >= 0) {
+                setCurrentProxyIndex(proxyIndexForSourceRow(nextRow));
+            }
+        }
+
+        if (paginationEnabled() && loadedPageTotalItems_ > 0) {
+            loadedPageTotalItems_ = totalItemCountForPagination();
+        }
         refreshContentWidthHint();
         emit itemCountChanged(itemCountForDisplay());
+        emit pageStateChanged(currentPageNumber(), totalPageCount());
     }
 }
 
@@ -2675,6 +3282,35 @@ void ScrollItemsWidget::resizeEvent(QResizeEvent *event) {
 bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
     if (!listView_) {
         return QWidget::eventFilter(watched, event);
+    }
+
+    const bool watchingHoverBar = hoverActionBar_
+        && (watched == hoverActionBar_
+            || watched == hoverDetailsBtn_
+            || watched == hoverAliasBtn_
+            || watched == hoverPinBtn_
+            || watched == hoverFavoriteBtn_
+            || watched == hoverDeleteBtn_);
+
+    if (watchingHoverBar) {
+        if (event->type() == QEvent::Enter
+            || event->type() == QEvent::HoverEnter
+            || event->type() == QEvent::MouseMove) {
+            if (hoverHideTimer_ && hoverHideTimer_->isActive()) {
+                hoverHideTimer_->stop();
+            }
+            return QWidget::eventFilter(watched, event);
+        }
+
+        if (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave) {
+            if (hoverActionBar_ && hoverHideTimer_) {
+                const QPoint hoverPoint = hoverActionBar_->mapFromGlobal(QCursor::pos());
+                if (!hoverActionBar_->rect().contains(hoverPoint)) {
+                    hoverHideTimer_->start();
+                }
+            }
+            return QWidget::eventFilter(watched, event);
+        }
     }
 
     if (event->type() == QEvent::Wheel && (watched == listView_ || watched == listView_->viewport())) {
