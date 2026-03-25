@@ -24,6 +24,11 @@ public:
 
     void setAsyncMatchedNames(const QSet<QString> &names);
 
+    void setPageSize(int pageSize);
+    int pageSize() const;
+    void setPageIndex(int pageIndex);
+    int pageIndex() const;
+
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
 
@@ -31,6 +36,8 @@ private:
     QString keyword_;
     ClipboardItem::ContentType typeFilter_ = ClipboardItem::All;
     QSet<QString> asyncMatchedNames_;
+    int pageSize_ = 0;
+    int pageIndex_ = 0;
 };
 
 #endif // MPASTE_CLIPBOARDBOARDPROXYMODEL_H

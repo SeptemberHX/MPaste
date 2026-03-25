@@ -55,7 +55,11 @@ public:
     ~ClipboardCardDelegate() override;
 
     void setLoadingPhase(int phase);
+    void clearIntermediateCaches();
     void clearVisualCaches();
+    bool isCardCached(const QString &name) const;
+    void drawSelectionBorder(QPainter *painter, const QStyleOptionViewItem &option,
+                             bool selected, int scale) const;
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 

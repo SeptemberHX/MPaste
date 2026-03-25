@@ -9,7 +9,7 @@
 
 constexpr int kCardBaseWidth = 275;
 constexpr int kCardBaseHeight = 300;
-constexpr int kCardHeaderHeight = 64;
+constexpr int kCardHeaderHeight = 56;
 constexpr int kCardFooterHeight = 20;
 constexpr int kCardPreviewWidth = kCardBaseWidth;
 constexpr int kCardPreviewHeight = kCardBaseHeight - kCardHeaderHeight - kCardFooterHeight;

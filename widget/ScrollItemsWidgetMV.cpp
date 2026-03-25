@@ -753,7 +753,17 @@ QList<QModelIndex> ScrollItemsWidget::selectedProxyIndexes() const {
         return result;
     }
 
+    // selectedRows() requires all columns to be selected; under SelectItems
+    // mode this may return empty even when items are visually selected.
+    // Fall back to selectedIndexes() filtered to column 0.
     result = listView_->selectionModel()->selectedRows();
+    if (result.isEmpty()) {
+        for (const QModelIndex &idx : listView_->selectionModel()->selectedIndexes()) {
+            if (idx.column() == 0) {
+                result.append(idx);
+            }
+        }
+    }
     std::sort(result.begin(), result.end(), [](const QModelIndex &lhs, const QModelIndex &rhs) {
         return lhs.row() < rhs.row();
     });
@@ -1745,7 +1755,7 @@ void ScrollItemsWidget::reloadCurrentPageItems(bool resetSelection) {
     }
 
     if (cardDelegate_) {
-        cardDelegate_->clearVisualCaches();
+        cardDelegate_->clearIntermediateCaches();
     }
 
     const int totalItems = totalItemCountForPagination();
@@ -1774,6 +1784,11 @@ void ScrollItemsWidget::reloadCurrentPageItems(bool resetSelection) {
 
     for (const auto &payload : items) {
         appendModelItem(payload.second);
+        // Register loaded thumbnails so updateVisibleThumbnails can
+        // properly compute the leaving set and unload distant ones.
+        if (payload.second.hasThumbnail() && shouldManageThumbnail(payload.second)) {
+            managedThumbnailNames_.insert(payload.second.getName());
+        }
     }
 
     loadedPage_ = currentPage_;
@@ -1814,14 +1829,12 @@ bool ScrollItemsWidget::shouldReloadCurrentPage(int totalItems) const {
     const int targetOffset = totalPages > 0 ? clampedPage * PAGE_SIZE : 0;
     const int targetCount = qMin(PAGE_SIZE, qMax(0, totalItems - targetOffset));
 
-    const bool reload = loadedPage_ != clampedPage
+    return loadedPage_ != clampedPage
         || loadedPageBaseOffset_ != targetOffset
-        || loadedPageTotalItems_ != totalItems
         || loadedPageTypeFilter_ != currentTypeFilter_
         || loadedPageKeyword_ != currentKeyword_
         || loadedPageMatchedNames_ != asyncKeywordMatchedNames_
         || boardModel_->rowCount() != targetCount;
-    return reload;
 }
 
 void ScrollItemsWidget::ensureCurrentPageLoaded(bool resetSelection) {
@@ -1833,6 +1846,10 @@ void ScrollItemsWidget::ensureCurrentPageLoaded(bool resetSelection) {
         const int totalItems = totalItemCountForPagination();
         if (shouldReloadCurrentPage(totalItems)) {
             reloadCurrentPageItems(resetSelection);
+        } else if (loadedPageTotalItems_ != totalItems) {
+            // Total count changed but current page content is identical —
+            // just update the cached count to avoid a full reload.
+            loadedPageTotalItems_ = totalItems;
         }
         return;
     }
@@ -2214,12 +2231,6 @@ void ScrollItemsWidget::applyManagedThumbnailNames(const QSet<QString> &desiredN
         if (!item || !shouldManageThumbnail(*item) || !item->hasThumbnail() || item->sourceFilePath().isEmpty()) {
             continue;
         }
-        // Keep Link thumbnails in memory — their fallback rendering
-        // (linkFallbackPreview) costs 4-5ms per frame, far more expensive
-        // than the ~20KB memory cost of keeping the pixmap.
-        if (item->getContentType() == ClipboardItem::Link) {
-            continue;
-        }
         ClipboardItem updated = *item;
         updated.setThumbnail(QPixmap());
         boardModel_->updateItem(row, updated);
@@ -2333,47 +2344,38 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
         std::swap(visibleStartRow, visibleEndRow);
     }
 
-    const int prefetch = MPasteSettings::getInst()->getThumbnailPrefetchCount();
-    const int startRow = qMax(0, visibleStartRow - prefetch);
-    const int endRow = qMin(proxyCount - 1, visibleEndRow + prefetch);
-
-    QSet<QString> desiredNames;
-    QSet<QString> visibleLoadingNames;
-    for (int proxyRow = startRow; proxyRow <= endRow; ++proxyRow) {
-        const QModelIndex proxyIndex = proxyModel_->index(proxyRow, 0);
-        if (!proxyIndex.isValid()) {
-            continue;
+    // Once a card is rendered into cardPixmapCache_, all per-item pixmaps
+    // (thumbnail, icon, favicon) and delegate intermediate caches are
+    // redundant.  Release them.
+    if (boardModel_ && cardDelegate_) {
+        const int rowCount = boardModel_->rowCount();
+        for (int row = 0; row < rowCount; ++row) {
+            const ClipboardItem *item = boardModel_->itemPtrAt(row);
+            if (!item || !cardDelegate_->isCardCached(item->getName())) {
+                continue;
+            }
+            bool needsUpdate = false;
+            ClipboardItem updated = *item;
+            if (item->hasThumbnail()) {
+                updated.setThumbnail(QPixmap());
+                needsUpdate = true;
+            }
+            if (!item->getIcon().isNull()) {
+                updated.setIcon(QPixmap());
+                needsUpdate = true;
+            }
+            if (!item->getFavicon().isNull()) {
+                updated.setFavicon(QPixmap());
+                needsUpdate = true;
+            }
+            if (needsUpdate) {
+                boardModel_->updateItem(row, updated);
+            }
         }
-        const int sourceRow = sourceRowForProxyIndex(proxyIndex);
-        if (sourceRow < 0) {
-            continue;
-        }
-        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
-        if (!item) {
-            continue;
-        }
-        const QString name = item->getName();
-        if (name.isEmpty() || !shouldManageThumbnail(*item)) {
-            continue;
-        }
-
-        desiredNames.insert(name);
-        if (item->hasThumbnail()) {
-            missingThumbnailNames_.remove(name);
-        }
-
-        if (proxyRow >= visibleStartRow
-            && proxyRow <= visibleEndRow
-            && item->getContentType() != ClipboardItem::Link
-            && !item->hasThumbnail()
-            && !missingThumbnailNames_.contains(name)) {
-            visibleLoadingNames.insert(name);
-        }
+        managedThumbnailNames_.clear();
+        cardDelegate_->clearIntermediateCaches();
     }
-
-    desiredThumbnailNames_ = desiredNames;
-    applyManagedThumbnailNames(desiredNames);
-    setVisibleLoadingThumbnailNames(visibleLoadingNames);
+    setVisibleLoadingThumbnailNames({});
 
 }
 

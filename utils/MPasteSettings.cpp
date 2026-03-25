@@ -56,6 +56,7 @@ MPasteSettings::MPasteSettings()
     this->thumbnailPrefetchCount = 50;
     this->playSound = true;
     this->themeMode = ThemeSystem;
+    this->historyViewMode = ViewModePaged;
 
     this->terminalNames << tr("Terminal");
 
@@ -118,6 +119,8 @@ void MPasteSettings::loadSettings() {
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
     this->themeMode = static_cast<ThemeMode>(
         settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
+    this->historyViewMode = static_cast<HistoryViewMode>(
+        settings.value("main/historyViewMode", static_cast<int>(this->historyViewMode)).toInt());
 }
 
 void MPasteSettings::saveSettings() {
@@ -134,6 +137,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/thumbnailPrefetchCount", this->thumbnailPrefetchCount);
     settings.setValue("main/playSound", this->playSound);
     settings.setValue("main/themeMode", static_cast<int>(this->themeMode));
+    settings.setValue("main/historyViewMode", static_cast<int>(this->historyViewMode));
 }
 
 bool MPasteSettings::isAutoPaste() const {
@@ -222,6 +226,18 @@ void MPasteSettings::setThemeMode(MPasteSettings::ThemeMode mode) {
     }
     themeMode = mode;
     emit themeModeChanged(themeMode);
+}
+
+MPasteSettings::HistoryViewMode MPasteSettings::getHistoryViewMode() const {
+    return historyViewMode;
+}
+
+void MPasteSettings::setHistoryViewMode(HistoryViewMode mode) {
+    if (historyViewMode == mode) {
+        return;
+    }
+    historyViewMode = mode;
+    saveSettings();
 }
 
 bool MPasteSettings::isDarkTheme() const {

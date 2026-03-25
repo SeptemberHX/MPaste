@@ -890,14 +890,29 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
         && header.normalizedUrls.isEmpty()) {
         effectiveType = ClipboardItem::Image;
     }
-    item.setIcon(header.icon);
+    {
+        // Downscale icon to save memory — card header displays at ~40px.
+        constexpr int kMaxIconSize = 64;
+        QPixmap icon = header.icon;
+        if (!icon.isNull() && (icon.width() > kMaxIconSize || icon.height() > kMaxIconSize)) {
+            icon = icon.scaled(kMaxIconSize, kMaxIconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        item.setIcon(icon);
+    }
     item.setName(header.name);
     item.setTime(header.time);
     item.setTitle(header.title);
     item.setUrl(header.url);
     item.setAlias(header.alias);
     item.setPinned(header.pinned);
-    item.setFavicon(header.favicon);
+    {
+        constexpr int kMaxFaviconSize = 64;
+        QPixmap fav = header.favicon;
+        if (!fav.isNull() && (fav.width() > kMaxFaviconSize || fav.height() > kMaxFaviconSize)) {
+            fav = fav.scaled(kMaxFaviconSize, kMaxFaviconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        item.setFavicon(fav);
+    }
     item.setThumbnailAvailableHint(!header.thumbnail.isNull());
     if (includeThumbnail && !header.thumbnail.isNull()) {
         item.setThumbnail(header.thumbnail);

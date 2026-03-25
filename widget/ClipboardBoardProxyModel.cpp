@@ -36,8 +36,37 @@ ClipboardItem::ContentType ClipboardBoardProxyModel::typeFilter() const {
 }
 
 void ClipboardBoardProxyModel::setAsyncMatchedNames(const QSet<QString> &names) {
+    if (asyncMatchedNames_ == names) {
+        return;
+    }
     asyncMatchedNames_ = names;
     invalidateFilter();
+}
+
+void ClipboardBoardProxyModel::setPageSize(int pageSize) {
+    const int clamped = qMax(0, pageSize);
+    if (pageSize_ == clamped) {
+        return;
+    }
+    pageSize_ = clamped;
+    invalidateFilter();
+}
+
+int ClipboardBoardProxyModel::pageSize() const {
+    return pageSize_;
+}
+
+void ClipboardBoardProxyModel::setPageIndex(int pageIndex) {
+    const int clamped = qMax(0, pageIndex);
+    if (pageIndex_ == clamped) {
+        return;
+    }
+    pageIndex_ = clamped;
+    invalidateFilter();
+}
+
+int ClipboardBoardProxyModel::pageIndex() const {
+    return pageIndex_;
 }
 
 bool ClipboardBoardProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const {
@@ -55,9 +84,18 @@ bool ClipboardBoardProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex
         return false;
     }
 
-    if (keyword_.isEmpty()) {
+    const bool keywordAccepted = keyword_.isEmpty()
+        || item.contains(keyword_)
+        || asyncMatchedNames_.contains(item.getName());
+    if (!keywordAccepted) {
+        return false;
+    }
+
+    if (pageSize_ <= 0) {
         return true;
     }
 
-    return item.contains(keyword_) || asyncMatchedNames_.contains(item.getName());
+    const qint64 startRow = static_cast<qint64>(pageIndex_) * static_cast<qint64>(pageSize_);
+    const qint64 endRow = startRow + static_cast<qint64>(pageSize_);
+    return sourceRow >= startRow && static_cast<qint64>(sourceRow) < endRow;
 }

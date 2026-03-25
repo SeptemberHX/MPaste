@@ -351,7 +351,12 @@ inline ContentType classifyLight(const QMimeData *mimeData,
             if (allFiles) {
                 return File;
             }
-            if (!mimeData->hasHtml()) {
+            bool allWebLinks = std::all_of(normalizedUrls.begin(), normalizedUrls.end(),
+                [](const QUrl &url) {
+                    const QString scheme = url.scheme().toLower();
+                    return scheme == QLatin1String("http") || scheme == QLatin1String("https");
+                });
+            if (allWebLinks && !mimeData->hasHtml()) {
                 return Link;
             }
         }
@@ -406,7 +411,12 @@ inline ContentType classifyFull(const QMimeData *mimeData,
             if (allFiles) {
                 return File;
             }
-            if (!mimeData->hasHtml()) {
+            bool allWebLinks = std::all_of(normalizedUrls.begin(), normalizedUrls.end(),
+                [](const QUrl &url) {
+                    const QString scheme = url.scheme().toLower();
+                    return scheme == QLatin1String("http") || scheme == QLatin1String("https");
+                });
+            if (allWebLinks && !mimeData->hasHtml()) {
                 return Link;
             }
         }

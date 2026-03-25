@@ -20,6 +20,7 @@ public:
     enum PasteShortcutMode { AutoPasteShortcut = 0, CtrlVShortcut, ShiftInsertShortcut, CtrlShiftVShortcut, AltInsertShortcut };
     enum HistoryRetentionUnit { RetentionDays = 0, RetentionWeeks, RetentionMonths };
     enum ThemeMode { ThemeSystem = 0, ThemeLight, ThemeDark };
+    enum HistoryViewMode { ViewModePaged = 0, ViewModeContinuous };
 
     static MPasteSettings* getInst();
 
@@ -68,6 +69,9 @@ public:
 
     ThemeMode getThemeMode() const;
     void setThemeMode(ThemeMode mode);
+
+    HistoryViewMode getHistoryViewMode() const;
+    void setHistoryViewMode(HistoryViewMode mode);
     bool isDarkTheme() const;
 
     bool isTerminalTitle(const QString &title);
@@ -103,6 +107,7 @@ private:
     int thumbnailPrefetchCount;
     bool playSound;
     ThemeMode themeMode;
+    HistoryViewMode historyViewMode;
 
     int currFocusWinId;
 

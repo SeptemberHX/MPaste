@@ -43,7 +43,7 @@ namespace {
 constexpr float kPi = 3.14159265358979323846f;
 
 QCache<QString, QPixmap> &coverPixmapCache() {
-    static QCache<QString, QPixmap> cache(6 * 1024);
+    static QCache<QString, QPixmap> cache(60);
     return cache;
 }
 
@@ -131,8 +131,17 @@ QString countLabelForCard(const CardData &card) {
                 : QString();
         case ClipboardItem::RichText:
         case ClipboardItem::Text:
-        case ClipboardItem::Link:
             return QStringLiteral("%1 %2").arg(card.textLength).arg(QObject::tr("Characters"));
+        case ClipboardItem::Link: {
+            if (!card.url.isEmpty()) {
+                return card.url;
+            }
+            if (!card.normalizedUrls.isEmpty()) {
+                const QUrl &first = card.normalizedUrls.first();
+                return first.isLocalFile() ? first.toLocalFile() : first.toDisplayString(QUrl::PreferLocalFile);
+            }
+            return card.normalizedText.left(256).trimmed();
+        }
         case ClipboardItem::File:
             if (card.normalizedUrls.size() > 1) {
                 return QStringLiteral("%1 %2").arg(card.normalizedUrls.size()).arg(QObject::tr("Files"));
@@ -486,8 +495,7 @@ void drawCoverPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &
                          qMin(pixelTargetSize.height(), scaled.height()));
     QPixmap cropped = scaled.copy(cropRect);
     cropped.setDevicePixelRatio(targetDpr);
-    const int cacheCost = qMax(1, (cropped.width() * cropped.height() * 4) / 1024);
-    coverPixmapCache().insert(cacheKey, new QPixmap(cropped), cacheCost);
+    coverPixmapCache().insert(cacheKey, new QPixmap(cropped), 1);
     painter->drawPixmap(targetRect.topLeft(), cropped);
 }
 
@@ -939,11 +947,11 @@ QPixmap buildHeaderIconPixmapUncached(const QPixmap &sourcePixmap, const QSize &
 ClipboardCardDelegate::ClipboardCardDelegate(const QColor &borderColor, QObject *parent)
     : QStyledItemDelegate(parent),
       borderColor_(borderColor),
-      headerIconCache_(512),
-      linkFallbackCache_(2 * 1024),
-      cardPixmapCache_(16 * 1024),
-      localImageThumbnailCache_(8 * 1024),
-      localFileIconCache_(1024) {
+      headerIconCache_(60),
+      linkFallbackCache_(60),
+      cardPixmapCache_(60),
+      localImageThumbnailCache_(60),
+      localFileIconCache_(60) {
     previewTaskPool_.setMaxThreadCount(qBound(1, QThread::idealThreadCount() / 2, 4));
     previewTaskPool_.setExpiryTimeout(15000);
 }
@@ -956,12 +964,11 @@ void ClipboardCardDelegate::setLoadingPhase(int phase) {
     loadingPhase_ = phase;
 }
 
-void ClipboardCardDelegate::clearVisualCaches() {
+void ClipboardCardDelegate::clearIntermediateCaches() {
     headerColorCache_.clear();
     headerIconCache_.clear();
     linkFallbackCache_.clear();
     coverPixmapCache().clear();
-    cardPixmapCache_.clear();
     localImageThumbnailCache_.clear();
     localFileIconCache_.clear();
     pendingLocalImageThumbnailKeys_.clear();
@@ -969,8 +976,17 @@ void ClipboardCardDelegate::clearVisualCaches() {
     pendingLocalFileIconKeys_.clear();
     failedLocalFileIconKeys_.clear();
     pendingFileIconRequests_.clear();
-    coverPixmapCache().clear();
+}
+
+void ClipboardCardDelegate::clearVisualCaches() {
+    clearIntermediateCaches();
+    cardPixmapCache_.clear();
     QPixmapCache::clear();
+}
+
+bool ClipboardCardDelegate::isCardCached(const QString &name) const {
+    const QString key = QStringLiteral("%1|").arg(name);
+    return cardPixmapCache_.contains(key);
 }
 
 QColor ClipboardCardDelegate::headerColorForIcon(const QPixmap &iconPixmap) const {
@@ -1004,8 +1020,7 @@ QPixmap ClipboardCardDelegate::headerIconForPixmap(const QPixmap &sourcePixmap,
 
     QPixmap result = buildHeaderIconPixmapUncached(icon, targetLogicalSize, targetDpr);
     if (!result.isNull()) {
-        const int cacheCost = qMax(1, (result.width() * result.height() * 4) / 1024);
-        headerIconCache_.insert(cacheKey, new QPixmap(result), cacheCost);
+        headerIconCache_.insert(cacheKey, new QPixmap(result), 1);
     }
     return result;
 }
@@ -1022,8 +1037,7 @@ QPixmap ClipboardCardDelegate::linkFallbackPreview(const QUrl &url,
 
     QPixmap result = buildLinkFallbackPreviewUncached(url, title, targetSize, devicePixelRatio, favicon);
     if (!result.isNull()) {
-        const int cacheCost = qMax(1, (result.width() * result.height() * 4) / 1024);
-        linkFallbackCache_.insert(cacheKey, new QPixmap(result), cacheCost);
+        linkFallbackCache_.insert(cacheKey, new QPixmap(result), 1);
     }
     return result;
 }
@@ -1063,8 +1077,7 @@ void ClipboardCardDelegate::ensureFileIconTimer() const {
 
         const QPixmap pixmap = loadLocalFileIconSync(request.filePath, request.targetLogicalSize, request.targetDpr);
         if (!pixmap.isNull()) {
-            const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
-            self->localFileIconCache_.insert(request.cacheKey, new QPixmap(pixmap), cacheCost);
+            self->localFileIconCache_.insert(request.cacheKey, new QPixmap(pixmap), 1);
             self->failedLocalFileIconKeys_.remove(request.cacheKey);
         } else {
             self->failedLocalFileIconKeys_.insert(request.cacheKey);
@@ -1126,8 +1139,7 @@ QPixmap ClipboardCardDelegate::localImageThumbnail(const QString &filePath,
             } else {
                 QPixmap pixmap = QPixmap::fromImage(image);
                 pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
-                const int cacheCost = qMax(1, (pixmap.width() * pixmap.height() * 4) / 1024);
-                guard->localImageThumbnailCache_.insert(cacheKey, new QPixmap(pixmap), cacheCost);
+                guard->localImageThumbnailCache_.insert(cacheKey, new QPixmap(pixmap), 1);
                 guard->failedLocalImageThumbnailKeys_.remove(cacheKey);
             }
             guard->scheduleViewportUpdate(persistentIndex);
@@ -1267,6 +1279,23 @@ void drawManagedVisualPreview(QPainter *painter,
     }
 }
 
+void ClipboardCardDelegate::drawSelectionBorder(QPainter *painter, const QStyleOptionViewItem &option,
+                                                bool selected, int scale) const {
+    if (!selected) {
+        return;
+    }
+    const QRect cardRect(option.rect.topLeft(),
+                         QSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100));
+    const int cardRadius = qMax(8, 12 * scale / 100);
+    const int borderWidth = qMax(2, 3 * scale / 100);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(QPen(borderColor_, borderWidth));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawRoundedRect(QRectF(cardRect).adjusted(0.5, 0.5, -0.5, -0.5), cardRadius, cardRadius);
+    painter->restore();
+}
+
 void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     if (!painter || !index.isValid()) {
         return;
@@ -1284,17 +1313,15 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     const int scale = MPasteSettings::getInst()->getItemScale();
     const QSize outerSize = cardOuterSizeForScale(scale);
 
-    // Cache key: name + state that affects visual output.
-    // loadingPhase_ is included for animated loading indicators.
-    const QString cardCacheKey = QStringLiteral("%1|%2|%3|%4|%5")
+    // Cache key excludes selection state — the selection border is drawn
+    // as an overlay after blitting the cached card.
+    const QString cardCacheKey = QStringLiteral("%1|%2")
         .arg(name)
-        .arg(isSelected ? 1 : 0)
-        .arg(shortcutText)
-        .arg(previewState)
-        .arg(loadingPhase_);
+        .arg(shortcutText);
 
     if (const QPixmap *cached = cardPixmapCache_.object(cardCacheKey)) {
         painter->drawPixmap(option.rect.topLeft(), *cached);
+        drawSelectionBorder(painter, option, isSelected, scale);
         return;
     }
 
@@ -1330,18 +1357,15 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
         QPainter offscreen(&cardPixmap);
         offscreen.setRenderHints(painter->renderHints());
 
-        // Temporarily adjust option rect to start at (0,0) for offscreen painting.
         QStyleOptionViewItem offscreenOption = option;
         offscreenOption.rect = QRect(QPoint(0, 0), outerSize);
 
-        // The rest of this function renders into offscreen painter.
-        // We call a helper that contains the original paint logic.
         paintCardContent(&offscreen, offscreenOption, index, card, scale);
     }
 
-    const int cacheCost = qMax(1, (pixelSize.width() * pixelSize.height() * 4) / 1024);
-    cardPixmapCache_.insert(cardCacheKey, new QPixmap(cardPixmap), cacheCost);
+    cardPixmapCache_.insert(cardCacheKey, new QPixmap(cardPixmap), 1);
     painter->drawPixmap(option.rect.topLeft(), cardPixmap);
+    drawSelectionBorder(painter, option, isSelected, scale);
 }
 
 void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOptionViewItem &option,
@@ -1350,10 +1374,10 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     const QSize innerSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
     const int topHeight = kCardHeaderHeight * scale / 100;
     const int footerHeight = kCardFooterHeight * scale / 100;
-    const bool hideFooter = card.contentType == ClipboardItem::Link;
+    const bool hideFooter = false;
     const int effectiveFooterHeight = hideFooter ? 0 : footerHeight;
     const int iconLabelSize = 48 * scale / 100;
-    const int iconPixmapSize = 32 * scale / 100;
+    const int iconPixmapSize = 40 * scale / 100;
     const qreal cardRadius = qMax(10, 12 * scale / 100);
     const QRect outerRect(option.rect.topLeft(), outerSize);
     const QRect cardRect(outerRect.topLeft(), innerSize);
@@ -1370,7 +1394,9 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     const QColor subtleBorderColor = darkTheme ? QColor(255, 255, 255, 24) : QColor(0, 0, 0, 18);
     const QColor topColor = headerColorForIcon(card.icon);
     const QColor bgColor = blendColor(topColor, baseSurface, darkTheme ? 0.86 : 0.975);
-    const bool selected = option.state.testFlag(QStyle::State_Selected);
+    // Selection border is drawn as overlay after cache blit — always
+    // render the cached card in the unselected state.
+    const bool selected = false;
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
@@ -1413,6 +1439,12 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
                                iconPixmapSize, iconPixmapSize);
     const qreal paintDpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
     const QPixmap headerIcon = headerIconForPixmap(card.icon, iconPixmapRect.size(), paintDpr);
+    {
+        painter->save();
+        painter->setOpacity(0.25);
+        painter->drawPixmap(iconPixmapRect.topLeft() + QPoint(1, 2), headerIcon);
+        painter->restore();
+    }
     painter->drawPixmap(iconPixmapRect.topLeft(), headerIcon);
 
     QFont typeFont = painter->font();
@@ -1768,10 +1800,11 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
             footerRect.top(),
             footerRect.width() - footerPadding * 2 - shortcutWidth,
             footerRect.height());
-        const bool isSingleFilePath = card.contentType == ClipboardItem::File && card.normalizedUrls.size() == 1;
+        const bool useMiddleElide = card.contentType == ClipboardItem::Link
+            || (card.contentType == ClipboardItem::File && card.normalizedUrls.size() == 1);
         drawElidedText(painter, countRect, countLabelForCard(card), footerFont, footerTextColor,
                        Qt::AlignLeft | Qt::AlignVCenter,
-                       isSingleFilePath ? Qt::ElideMiddle : Qt::ElideRight);
+                       useMiddleElide ? Qt::ElideMiddle : Qt::ElideRight);
         if (!shortcutText.isEmpty()) {
             drawElidedText(painter, shortcutRect, shortcutText, footerFont, footerTextColor,
                            Qt::AlignRight | Qt::AlignVCenter);

@@ -42,6 +42,7 @@ signals:
     void itemScaleChanged(int itemScale);
     void thumbnailPrefetchChanged(int count);
     void previewCacheActionRequested(PreviewCacheAction action);
+    void historyViewModeChanged();
 
 public slots:
     void accept() override;

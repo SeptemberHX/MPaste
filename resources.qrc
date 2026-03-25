@@ -49,6 +49,8 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
         <file>resources/spin_down.svg</file>
         <file>resources/spin_up_light.svg</file>
         <file>resources/spin_down_light.svg</file>
+        <file>resources/page_chevron.svg</file>
+        <file>resources/page_chevron_light.svg</file>
 
         <file>resources/style/defaultStyle.qss</file>
         <file>resources/style/darkStyle.qss</file>

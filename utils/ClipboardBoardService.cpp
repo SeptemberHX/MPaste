@@ -184,7 +184,9 @@ ClipboardBoardService::IndexedItemMeta buildIndexedItemMeta(const QString &fileP
     }
     const QString normalizedText = item.getNormalizedText();
     if (!normalizedText.isEmpty()) {
-        searchParts << normalizedText;
+        // Keep only enough text for typical keyword matching in the index;
+        // full-text search falls back to async file-based matching.
+        searchParts << normalizedText.left(512);
     }
     for (const QUrl &url : meta.normalizedUrls) {
         searchParts << (url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyEncoded));
