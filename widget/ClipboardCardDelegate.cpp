@@ -985,8 +985,7 @@ void ClipboardCardDelegate::clearVisualCaches() {
 }
 
 bool ClipboardCardDelegate::isCardCached(const QString &name) const {
-    const QString key = QStringLiteral("%1|").arg(name);
-    return cardPixmapCache_.contains(key);
+    return cardPixmapCache_.contains(name);
 }
 
 QColor ClipboardCardDelegate::headerColorForIcon(const QPixmap &iconPixmap) const {
@@ -1296,6 +1295,36 @@ void ClipboardCardDelegate::drawSelectionBorder(QPainter *painter, const QStyleO
     painter->restore();
 }
 
+void ClipboardCardDelegate::drawShortcutOverlay(QPainter *painter, const QStyleOptionViewItem &option,
+                                                const QString &shortcutText, int scale) const {
+    if (shortcutText.isEmpty()) {
+        return;
+    }
+    const QRect cardRect(option.rect.topLeft(),
+                         QSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100));
+    const int footerHeight = kCardFooterHeight * scale / 100;
+    const QRect footerRect(cardRect.left(), cardRect.bottom() - footerHeight + 1, cardRect.width(), footerHeight);
+    const int footerPadding = qMax(6, 8 * scale / 100);
+
+    QFont footerFont = painter->font();
+    applyUiFontDefaults(footerFont);
+    footerFont.setPointSize(qMax(8, 8 * scale / 100));
+    const QFontMetrics fm(footerFont);
+    const int shortcutPadding = qMax(6, 8 * scale / 100);
+    const int shortcutMinWidth = qMax(48, 56 * scale / 100);
+    const int shortcutWidth = qMax(shortcutMinWidth, fm.horizontalAdvance(shortcutText) + shortcutPadding);
+    const QRect shortcutRect(
+        footerRect.right() - footerPadding - shortcutWidth + 1,
+        footerRect.top(),
+        shortcutWidth,
+        footerRect.height());
+
+    const bool darkTheme = ThemeManager::instance()->isDark();
+    const QColor textColor = darkTheme ? QColor(200, 210, 225, 180) : QColor(80, 95, 110, 180);
+    drawElidedText(painter, shortcutRect, shortcutText, footerFont, textColor,
+                   Qt::AlignRight | Qt::AlignVCenter);
+}
+
 void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     if (!painter || !index.isValid()) {
         return;
@@ -1313,15 +1342,14 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     const int scale = MPasteSettings::getInst()->getItemScale();
     const QSize outerSize = cardOuterSizeForScale(scale);
 
-    // Cache key excludes selection state — the selection border is drawn
-    // as an overlay after blitting the cached card.
-    const QString cardCacheKey = QStringLiteral("%1|%2")
-        .arg(name)
-        .arg(shortcutText);
+    // Cache key is name only — selection border and shortcut text are
+    // drawn as overlays after blitting the cached card.
+    const QString &cardCacheKey = name;
 
     if (const QPixmap *cached = cardPixmapCache_.object(cardCacheKey)) {
         painter->drawPixmap(option.rect.topLeft(), *cached);
         drawSelectionBorder(painter, option, isSelected, scale);
+        drawShortcutOverlay(painter, option, shortcutText, scale);
         return;
     }
 
@@ -1366,6 +1394,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     cardPixmapCache_.insert(cardCacheKey, new QPixmap(cardPixmap), 1);
     painter->drawPixmap(option.rect.topLeft(), cardPixmap);
     drawSelectionBorder(painter, option, isSelected, scale);
+    drawShortcutOverlay(painter, option, shortcutText, scale);
 }
 
 void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOptionViewItem &option,
@@ -1781,34 +1810,17 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         footerFont.setPointSize(qMax(8, 8 * scale / 100));
         const int footerPadding = qMax(6, 8 * scale / 100);
         const QFontMetrics footerMetrics(footerFont);
-        const QString shortcutText = card.shortcutText;
-        const int shortcutPadding = qMax(6, 8 * scale / 100);
-        const int shortcutTextWidth = shortcutText.isEmpty()
-            ? 0
-            : footerMetrics.horizontalAdvance(shortcutText) + shortcutPadding;
-        const int shortcutMinWidth = qMax(48, 56 * scale / 100);
-        const int shortcutWidth = shortcutText.isEmpty()
-            ? 0
-            : qMax(shortcutMinWidth, shortcutTextWidth);
-        const QRect shortcutRect(
-            footerRect.right() - footerPadding - shortcutWidth + 1,
-            footerRect.top(),
-            shortcutWidth,
-            footerRect.height());
+        // Shortcut text is drawn as overlay after cache blit, not baked in.
         const QRect countRect(
             footerRect.left() + footerPadding,
             footerRect.top(),
-            footerRect.width() - footerPadding * 2 - shortcutWidth,
+            footerRect.width() - footerPadding * 2,
             footerRect.height());
         const bool useMiddleElide = card.contentType == ClipboardItem::Link
             || (card.contentType == ClipboardItem::File && card.normalizedUrls.size() == 1);
         drawElidedText(painter, countRect, countLabelForCard(card), footerFont, footerTextColor,
                        Qt::AlignLeft | Qt::AlignVCenter,
                        useMiddleElide ? Qt::ElideMiddle : Qt::ElideRight);
-        if (!shortcutText.isEmpty()) {
-            drawElidedText(painter, shortcutRect, shortcutText, footerFont, footerTextColor,
-                           Qt::AlignRight | Qt::AlignVCenter);
-        }
     }
 
     if (card.favorite) {

@@ -60,6 +60,8 @@ public:
     bool isCardCached(const QString &name) const;
     void drawSelectionBorder(QPainter *painter, const QStyleOptionViewItem &option,
                              bool selected, int scale) const;
+    void drawShortcutOverlay(QPainter *painter, const QStyleOptionViewItem &option,
+                             const QString &shortcutText, int scale) const;
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
