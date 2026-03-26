@@ -338,6 +338,9 @@ inline ContentType classifyLight(const QMimeData *mimeData,
     }
 
     const ContentTraits traits = analyze(mimeData);
+    qInfo().noquote() << QStringLiteral("[classifyLight] hasVector=%1 hasOle=%2 hasOleNative=%3 hasBitmap=%4 hasImage=%5 hasHtml=%6 formats=%7")
+        .arg(traits.hasVector).arg(traits.hasOle).arg(traits.hasOleNative).arg(traits.hasBitmap).arg(traits.hasImage).arg(traits.hasHtml)
+        .arg(mimeData->formats().join(QStringLiteral(", ")));
     if (traits.hasColor) {
         return Color;
     }

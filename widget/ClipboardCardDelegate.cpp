@@ -854,11 +854,8 @@ bool isLikelyImageFile(const QString &filePath) {
         return false;
     }
 
+    // Check suffix BEFORE stat to avoid blocking on network/virtual paths.
     const QFileInfo info(filePath);
-    if (!info.exists() || !info.isFile()) {
-        return false;
-    }
-
     const QString suffix = info.suffix().toLower();
     if (suffix.isEmpty()) {
         return false;
@@ -1203,10 +1200,6 @@ QPixmap ClipboardCardDelegate::localImageThumbnail(const QString &filePath,
     }
 
     const QFileInfo info(filePath);
-    if (!info.exists() || !info.isFile()) {
-        return {};
-    }
-
     const QString cacheKey = filePreviewCacheKey(filePath, info, targetLogicalSize, targetDpr);
     if (QPixmap *cached = localImageThumbnailCache_.object(cacheKey)) {
         return *cached;
@@ -1260,10 +1253,6 @@ QPixmap ClipboardCardDelegate::localFileIcon(const QString &filePath,
     }
 
     const QFileInfo info(filePath);
-    if (!info.exists()) {
-        return {};
-    }
-
     const QString cacheKey = filePreviewCacheKey(filePath, info, targetLogicalSize, targetDpr);
     if (QPixmap *cached = localFileIconCache_.object(cacheKey)) {
         return *cached;
@@ -1358,9 +1347,11 @@ void drawManagedVisualPreview(QPainter *painter,
                 } else {
                     drawCoverPixmap(painter, rect, card.thumbnail, card.name, card.imageSize);
                 }
-                return;
             }
-            [[fallthrough]];
+            // Thumbnail may have been released after card caching.
+            // Don't fall through to Loading — the cached card pixmap
+            // already has the rendered preview.
+            return;
         case ClipboardBoardModel::PreviewLoading:
             drawLoadingPlaceholder(painter, rect, scale, darkTheme, loadingPhase);
             return;
@@ -1776,7 +1767,7 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
                                      iconSize, iconSize);
                 QPixmap iconPixmap = filePath.isEmpty()
                     ? QPixmap()
-                    : loadLocalFileIconSync(filePath, iconRect.size(), paintDpr);
+                    : localFileIcon(filePath, iconRect.size(), paintDpr, index);
                 if (iconPixmap.isNull()) {
                     iconPixmap = filePixmap(iconRect.size());
                 }

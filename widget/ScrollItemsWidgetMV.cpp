@@ -4,6 +4,7 @@
 // update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export + multi-select batch actions + data-layer preview kind + board paint FPS logging + hidden-stage light prewarm).
 // note: Added dark theme rendering hooks, metadata-save rehydrate fixes, alias sync, loading overlay, board paint FPS logging, hidden-stage light prewarm, and switchable paged-vs-continuous history loading.
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -1557,26 +1558,21 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
     if (item.hasThumbnail()) {
         missingThumbnailNames_.remove(expectedName);
     }
+    qInfo().noquote() << QStringLiteral("[pendingItemReady] name=%1 hasThumbnail=%2 type=%3")
+        .arg(expectedName).arg(item.hasThumbnail()).arg(item.getContentType());
     const int row = boardModel_->rowForName(expectedName);
     if (row >= 0) {
         ClipboardItem updated = item;
         if (!filterShowsVisualPreviewCards() && usesManagedVisualPreviewCard(updated)) {
             updated.setThumbnail(QPixmap());
         }
+        // Invalidate the cached card so it re-renders with the new
+        // thumbnail instead of showing the stale loading/unavailable state.
+        if (cardDelegate_) {
+            cardDelegate_->invalidateCard(expectedName);
+        }
         boardModel_->updateItem(row, updated);
         syncPreviewStateForRow(row);
-
-        // The updateItem triggers a repaint which renders the card into
-        // cardPixmapCache_.  Once cached, the thumbnail/icon/favicon in
-        // the model item are redundant — release them to save memory.
-        // Defer to the next event loop iteration so paint has finished.
-        QTimer::singleShot(0, this, [this, expectedName]() {
-            if (!boardModel_) return;
-            const int r = boardModel_->rowForName(expectedName);
-            if (r >= 0) {
-                releaseItemPixmaps(r);
-            }
-        });
     }
     // The async save may have changed the service index count; keep
     // bookkeeping in sync to avoid a spurious full page reload.
@@ -1610,19 +1606,12 @@ void ScrollItemsWidget::handleThumbnailReady(const QString &expectedName, const 
     }
     if (!thumbnail.isNull()) {
         missingThumbnailNames_.remove(expectedName);
-        // Update thumbnail in-place, single dataChanged signal.
+        if (cardDelegate_) {
+            cardDelegate_->invalidateCard(expectedName);
+        }
         ClipboardItem updated = *itemPtr;
         updated.setThumbnail(thumbnail);
         boardModel_->updateItem(row, updated);
-
-        // Release pixmaps once the card is cached.
-        QTimer::singleShot(0, this, [this, expectedName]() {
-            if (!boardModel_) return;
-            const int r = boardModel_->rowForName(expectedName);
-            if (r >= 0) {
-                releaseItemPixmaps(r);
-            }
-        });
     } else {
         missingThumbnailNames_.insert(expectedName);
     }
@@ -2009,6 +1998,30 @@ int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
     ClipboardItem item = boardModel_->itemAt(sourceRow);
     if (item.getName().isEmpty()) {
         return sourceRow;
+    }
+
+    // Rename the file with a fresh timestamp so it sorts first on
+    // restart (files are sorted by name = timestamp).  We rename
+    // rather than re-save because the item's mimeData_ may have been
+    // released — a re-save would lose the MIME payload.
+    if (boardService_ && !item.isPinned()) {
+        const QString oldName = item.getName();
+        const QString newName = QString::number(QDateTime::currentMSecsSinceEpoch());
+        if (oldName != newName) {
+            const QString oldPath = boardService_->filePathForName(oldName);
+            const QString newPath = boardService_->filePathForName(newName);
+            if (QFile::rename(oldPath, newPath)) {
+                item.setName(newName);
+                item.setTime(QDateTime::currentDateTime());
+                item.setSourceFilePath(newPath);
+                boardModel_->updateItem(sourceRow, item);
+                if (cardDelegate_) {
+                    cardDelegate_->invalidateCard(oldName);
+                }
+                boardService_->refreshIndexedItemForPath(oldPath);
+                boardService_->refreshIndexedItemForPath(newPath);
+            }
+        }
     }
 
     if (shouldEvictPages()) {

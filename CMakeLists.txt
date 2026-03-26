@@ -183,6 +183,9 @@ if(WIN32)
                 )
             endif()
 
+            # Find strip for removing debug symbols.
+            find_program(STRIP_EXECUTABLE strip HINTS "${MPASTE_MINGW_BIN_DIR}" "${_qt_bin_dir}/../../../Tools/mingw*/bin")
+
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
                     COMMAND "${WINDEPLOYQT_EXECUTABLE}"
                     --no-translations
@@ -200,6 +203,42 @@ if(WIN32)
                     "${PACKAGE_DIR}/${PROJECT_NAME}.exe"
                     COMMENT "Running windeployqt..."
             )
+
+            # Strip debug symbols from the exe in the package directory
+            # and remove FFmpeg DLLs pulled in by Qt6Multimedia (only
+            # audio playback is used, which does not need FFmpeg).
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E echo "Stripping and cleaning package..."
+                    COMMAND ${CMAKE_COMMAND} -E rm -f
+                        "${PACKAGE_DIR}/avcodec-61.dll"
+                        "${PACKAGE_DIR}/avformat-61.dll"
+                        "${PACKAGE_DIR}/avutil-59.dll"
+                        "${PACKAGE_DIR}/swscale-8.dll"
+                        "${PACKAGE_DIR}/swresample-5.dll"
+                        "${DEPLOY_DIR}/avcodec-61.dll"
+                        "${DEPLOY_DIR}/avformat-61.dll"
+                        "${DEPLOY_DIR}/avutil-59.dll"
+                        "${DEPLOY_DIR}/swscale-8.dll"
+                        "${DEPLOY_DIR}/swresample-5.dll"
+                    COMMAND ${CMAKE_COMMAND} -E rm -rf
+                        "${PACKAGE_DIR}/multimedia/ffmpegmediaplugin.dll"
+                        "${PACKAGE_DIR}/generic"
+                        "${PACKAGE_DIR}/networkinformation"
+                        "${DEPLOY_DIR}/multimedia/ffmpegmediaplugin.dll"
+                        "${DEPLOY_DIR}/generic"
+                        "${DEPLOY_DIR}/networkinformation"
+                    COMMENT "Removing unused DLLs and plugins..."
+            )
+            if(STRIP_EXECUTABLE)
+                add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                        COMMAND "${STRIP_EXECUTABLE}" --strip-all "${PACKAGE_DIR}/${PROJECT_NAME}.exe"
+                        COMMAND "${STRIP_EXECUTABLE}" --strip-unneeded
+                            "${PACKAGE_DIR}/libstdc++-6.dll"
+                            "${PACKAGE_DIR}/libgcc_s_seh-1.dll"
+                            "${PACKAGE_DIR}/libwinpthread-1.dll"
+                        COMMENT "Stripping debug symbols..."
+                )
+            endif()
 
             add_custom_target(package
                     COMMAND ${CMAKE_COMMAND} -E tar "cfv" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-${VERSION}-win64.zip" --format=zip "${PROJECT_NAME}"
