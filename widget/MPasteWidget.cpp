@@ -41,6 +41,10 @@
 #include "ui_MPasteWidget.h"
 #include "utils/PlatformRelated.h"
 #include "data/LocalSaver.h"
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <psapi.h>
+#endif
 
 namespace {
 bool looksBrokenTranslation(const QString &text) {
@@ -1324,6 +1328,13 @@ void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
         case Qt::Key_Tab:
             handleTabKey();
             break;
+        case Qt::Key_M:
+            if (event->modifiers().testFlag(Qt::ControlModifier)) {
+                dumpMemoryStats();
+                return;
+            }
+            handleSearchInput(event);
+            break;
         default:
             handleSearchInput(event);
             break;
@@ -1572,7 +1583,11 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     setFocus();
     if (sync_.pendingReload) {
         sync_.pendingReload = false;
-        scheduleSyncReload();
+        // If write generations changed since the pending flag was set,
+        // the directory change was caused by our own async saves — skip.
+        if (currentWriteGeneration() == sync_.pendingWriteGen) {
+            syncHistoryBoardsIncremental();
+        }
     }
 }
 
@@ -1607,7 +1622,7 @@ void MPasteWidget::setupSyncWatcher() {
                 sync_.pendingReload = true;
                 return;
             }
-            reloadHistoryBoards();
+            syncHistoryBoardsIncremental();
         });
     }
 
@@ -1628,6 +1643,17 @@ void MPasteWidget::setupSyncWatcher() {
     sync_.watcher->addPaths(watchDirs);
 }
 
+quint64 MPasteWidget::currentWriteGeneration() const {
+    quint64 gen = 0;
+    if (ui_.clipboardWidget && ui_.clipboardWidget->boardServiceRef()) {
+        gen += ui_.clipboardWidget->boardServiceRef()->internalWriteGeneration();
+    }
+    if (ui_.staredWidget && ui_.staredWidget->boardServiceRef()) {
+        gen += ui_.staredWidget->boardServiceRef()->internalWriteGeneration();
+    }
+    return gen;
+}
+
 void MPasteWidget::scheduleSyncReload() {
     if (!sync_.reloadTimer) {
         return;
@@ -1642,7 +1668,11 @@ void MPasteWidget::scheduleSyncReload() {
         return;
     }
     if (!isVisible()) {
+        // Only mark pending when the change is genuinely external.
+        // Snapshot current write generations so we can tell on show
+        // whether this was actually caused by our own async writes.
         sync_.pendingReload = true;
+        sync_.pendingWriteGen = currentWriteGeneration();
         return;
     }
     sync_.reloadTimer->start();
@@ -1713,6 +1743,13 @@ void MPasteWidget::reloadHistoryBoards() {
     ui_.clipboardWidget->filterByKeyword(keyword);
     ui_.staredWidget->filterByType(type);
     ui_.staredWidget->filterByKeyword(keyword);
+    updateItemCount(currItemsWidget()->getItemCount());
+    updatePageSelector();
+}
+
+void MPasteWidget::syncHistoryBoardsIncremental() {
+    ui_.clipboardWidget->syncFromDiskIncremental();
+    ui_.staredWidget->syncFromDiskIncremental();
     updateItemCount(currItemsWidget()->getItemCount());
     updatePageSelector();
 }
@@ -1966,6 +2003,26 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
 
         animation->start(QAbstractAnimation::DeleteWhenStopped);
     }
+}
+
+void MPasteWidget::dumpMemoryStats() {
+    qInfo().noquote() << QStringLiteral("===== MPaste Memory Stats =====");
+    if (ui_.clipboardWidget) {
+        qInfo().noquote() << ui_.clipboardWidget->memoryStats();
+    }
+    if (ui_.staredWidget) {
+        qInfo().noquote() << ui_.staredWidget->memoryStats();
+    }
+#ifdef Q_OS_WIN
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        qInfo().noquote() << QStringLiteral("[process] workingSet: %1 MB, peakWorkingSet: %2 MB, pagefile: %3 MB")
+                                .arg(pmc.WorkingSetSize / (1024 * 1024))
+                                .arg(pmc.PeakWorkingSetSize / (1024 * 1024))
+                                .arg(pmc.PagefileUsage / (1024 * 1024));
+    }
+#endif
+    qInfo().noquote() << QStringLiteral("===============================");
 }
 
 void MPasteWidget::debugKeyState() {

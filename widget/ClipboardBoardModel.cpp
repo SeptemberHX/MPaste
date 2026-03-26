@@ -337,6 +337,18 @@ const ClipboardItem *ClipboardBoardModel::itemPtrAt(int row) const {
     return &entries_.at(row).item;
 }
 
+void ClipboardBoardModel::releaseItemPixmaps(int row) {
+    if (row < 0 || row >= entries_.size()) {
+        return;
+    }
+    ClipboardItem &item = entries_[row].item;
+    // Only release the thumbnail (the large preview image).
+    // Keep icon and favicon — they are small and needed when the
+    // card cache is invalidated (theme/scale change).
+    item.setThumbnail(QPixmap());
+    // No dataChanged — the card is already cached in cardPixmapCache_.
+}
+
 QList<ClipboardItem> ClipboardBoardModel::items() const {
     QList<ClipboardItem> result;
     result.reserve(entries_.size());

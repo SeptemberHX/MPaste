@@ -63,6 +63,7 @@ private slots:
     void updateItemCount(int itemCount);
     void hideAndPaste();
     void debugKeyState();
+    void dumpMemoryStats();
 
 private:
     void initializeWidget();
@@ -90,6 +91,7 @@ private:
     void loadFromSaveDir();
     void scheduleStartupWarmup();
     void reloadHistoryBoards();
+    void syncHistoryBoardsIncremental();
     void runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheAction action);
     void updatePageSelector();
     void updatePageSelectorStyle();
@@ -109,6 +111,7 @@ private:
     ScrollItemsWidget* currItemsWidget();
     void setupSyncWatcher();
     void scheduleSyncReload();
+    quint64 currentWriteGeneration() const;
     void applyScale(int scale);
 
 private:
@@ -156,6 +159,7 @@ private:
         QTimer *reloadTimer = nullptr;
         bool pendingReload = false;
         qint64 suppressReloadUntilMs = 0;
+        quint64 pendingWriteGen = 0;   // snapshot of write generations when pendingReload was set
     } sync_;
 
     struct {

@@ -59,6 +59,9 @@ public:
     void clearVisualCaches();
     bool isCardCached(const QString &name) const;
     void invalidateCard(const QString &name);
+    int cachedCardCount() const { return cardPixmapCache_.size(); }
+    int cachedCardMaxCost() const { return cardPixmapCache_.maxCost(); }
+    QString cacheMemoryStats() const;
     void preRenderAll(QAbstractItemModel *model, const QStyleOptionViewItem &baseOption);
     void drawSelectionBorder(QPainter *painter, const QStyleOptionViewItem &option,
                              bool selected, int scale) const;

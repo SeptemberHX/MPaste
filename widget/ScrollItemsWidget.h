@@ -57,6 +57,7 @@ public:
     void cleanShortCutInfo();
     void loadFromSaveDir();
     void loadFromSaveDirDeferred();
+    void syncFromDiskIncremental();
     void applyScale(int scale);
     QScrollBar* horizontalScrollbar() const;
     void setAllItemVisible();
@@ -88,6 +89,7 @@ public:
     bool handleWheelScroll(QWheelEvent *event);
     void applyTheme(bool dark);
     ClipboardBoardService *boardServiceRef() const { return boardService_; }
+    QString memoryStats() const;
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -191,6 +193,7 @@ private:
     void updateThumbnailViewport(const QSet<QString> &names);
     void updateLoadingOverlay();
     void updateSelectionState();
+    void releaseItemPixmaps(int row);
 
     Ui::ScrollItemsWidget *ui;
     QString category;

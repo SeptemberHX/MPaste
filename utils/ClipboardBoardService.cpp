@@ -868,6 +868,64 @@ void ClipboardBoardService::refreshIndex() {
     emit pendingCountChanged(0);
 }
 
+ClipboardBoardService::IncrementalSyncResult ClipboardBoardService::syncIndexIncremental() {
+    IncrementalSyncResult result;
+    checkSaveDir();
+    QDir dir(saveDir());
+    const QFileInfoList fileInfos = dir.entryInfoList(
+        QStringList() << QStringLiteral("*.mpaste"), QDir::Files, QDir::Name | QDir::Reversed);
+
+    QSet<QString> diskPaths;
+    diskPaths.reserve(fileInfos.size());
+    for (const QFileInfo &info : fileInfos) {
+        if (LocalSaver::isCurrentFormatFile(info.filePath())) {
+            diskPaths.insert(info.filePath());
+        }
+    }
+
+    // Find removed: in index but not on disk.
+    const QSet<QString> indexedSet(indexedFilePaths_.begin(), indexedFilePaths_.end());
+    for (const QString &path : indexedSet) {
+        if (!diskPaths.contains(path)) {
+            result.removedPaths.append(path);
+        }
+    }
+
+    // Find added: on disk but not in index.
+    for (const QString &path : diskPaths) {
+        if (!indexedSet.contains(path)) {
+            result.addedPaths.append(path);
+        }
+    }
+
+    // Apply removals to the index.
+    for (const QString &path : result.removedPaths) {
+        const int idx = indexedFilePaths_.indexOf(path);
+        if (idx >= 0) {
+            indexedFilePaths_.removeAt(idx);
+            if (idx < indexedItems_.size()) {
+                indexedItems_.removeAt(idx);
+            }
+        }
+    }
+
+    // Apply additions to the index.
+    for (const QString &path : result.addedPaths) {
+        ClipboardItem lightItem = saver_->loadFromFileLight(path);
+        if (lightItem.getName().isEmpty()) {
+            continue;
+        }
+        const IndexedItemMeta meta = buildIndexedItemMeta(path, lightItem);
+        indexedFilePaths_.prepend(path);
+        indexedItems_.prepend(meta);
+    }
+
+    if (!result.addedPaths.isEmpty() || !result.removedPaths.isEmpty()) {
+        updateTotalItemCount(indexedItems_.size());
+    }
+    return result;
+}
+
 void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBatchSize) {
     if (deferredLoadTimer_) {
         deferredLoadTimer_->stop();
@@ -1055,8 +1113,13 @@ bool ClipboardBoardService::hasRecentInternalWrite() const {
     return (QDateTime::currentMSecsSinceEpoch() - lastInternalWriteMs_) < 2000;
 }
 
+quint64 ClipboardBoardService::internalWriteGeneration() const {
+    return internalWriteGen_;
+}
+
 bool ClipboardBoardService::saveItemInternal(const ClipboardItem &item) {
     lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
+    ++internalWriteGen_;
     checkSaveDir();
     const QString filePath = filePathForItem(item);
     const bool knownPath = indexedFilePaths_.contains(filePath);
@@ -1106,6 +1169,7 @@ void ClipboardBoardService::deleteItemByPathInternal(const QString &filePath) {
     }
 
     lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
+    ++internalWriteGen_;
     saver_->removeItem(filePath);
     const int index = indexedFilePaths_.indexOf(filePath);
     if (index >= 0) {
@@ -1503,8 +1567,24 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             result.thumbnailImage = buildLinkPreviewImage(linkUrl, baseItem.getTitle(), thumbnailDpr, itemScale);
         }
 
+        // Save to disk in the worker thread to avoid blocking the UI.
+        QString savedFilePath;
+        {
+            ClipboardItem saveItem = baseItem;
+            if (!result.thumbnailImage.isNull()) {
+                QPixmap thumbnail = QPixmap::fromImage(result.thumbnailImage);
+                thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
+                saveItem.setThumbnail(thumbnail);
+            }
+            if (guard) {
+                savedFilePath = guard->filePathForItem(saveItem);
+                LocalSaver saver;
+                saver.saveToFile(saveItem, savedFilePath);
+            }
+        }
+
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, baseItem, result, thumbnailDpr]() mutable {
+            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, baseItem, result, thumbnailDpr, savedFilePath]() mutable {
                 if (!guard) {
                     return;
                 }
@@ -1532,8 +1612,30 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                     }
                 }
 
+                // Update the service index from the saved file (lightweight)
+                // and propagate sourceFilePath/mimeDataFileOffset so that
+                // preview can read image data from disk after mimeData_ is
+                // released.
+                if (!savedFilePath.isEmpty()) {
+                    LocalSaver indexSaver;
+                    ClipboardItem lightItem = indexSaver.loadFromFileLight(savedFilePath);
+                    if (!lightItem.getName().isEmpty()) {
+                        const IndexedItemMeta meta = buildIndexedItemMeta(savedFilePath, lightItem);
+                        const int existingIndex = guard->indexedFilePaths_.indexOf(savedFilePath);
+                        if (existingIndex >= 0 && existingIndex < guard->indexedItems_.size()) {
+                            guard->indexedItems_[existingIndex] = meta;
+                        } else {
+                            guard->indexedFilePaths_.prepend(savedFilePath);
+                            guard->indexedItems_.prepend(meta);
+                        }
+                        preparedItem.setSourceFilePath(savedFilePath);
+                        preparedItem.setMimeDataFileOffset(lightItem.mimeDataFileOffset());
+                    }
+                    guard->lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
+                    ++guard->internalWriteGen_;
+                }
+
                 emit guard->pendingItemReady(expectedName, preparedItem);
-                guard->saveItemQuiet(preparedItem);
             }, Qt::QueuedConnection);
         }
     });

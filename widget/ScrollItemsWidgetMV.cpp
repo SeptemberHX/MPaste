@@ -428,6 +428,20 @@ public:
         updateGeometries();
     }
 
+    // Allow the next scrollTo call to go through.
+    void setExplicitScrollTo(bool allow) { explicitScrollTo_ = allow; }
+
+    void scrollTo(const QModelIndex &index, ScrollHint hint = EnsureVisible) override {
+        // Block auto-scrollTo triggered internally by QListView (e.g.
+        // after setCurrentIndex / dataChanged) which yanks the viewport
+        // back while the user is browsing.  Only honour calls that our
+        // code explicitly requested.
+        if (explicitScrollTo_) {
+            explicitScrollTo_ = false;
+            QListView::scrollTo(index, hint);
+        }
+    }
+
 protected:
     void paintEvent(QPaintEvent *event) override {
         if (!fpsWindow_.isValid()) {
@@ -491,6 +505,7 @@ private:
     qint64 maxPaintMs_ = 0;
     int jank20Count_ = 0;
     int jank33Count_ = 0;
+    bool explicitScrollTo_ = false;
 };
 
 }
@@ -635,14 +650,6 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
         updateHoverActionBarPosition();
     });
 
-    thumbnailUpdateTimer_ = new QTimer(this);
-    thumbnailUpdateTimer_->setSingleShot(true);
-    // Delay thumbnail load/unload until scrolling settles.  During
-    // active scrolling the card pixmap cache provides smooth rendering;
-    // doing thumbnail management mid-scroll invalidates that cache.
-    thumbnailUpdateTimer_->setInterval(300);
-    connect(thumbnailUpdateTimer_, &QTimer::timeout, this, &ScrollItemsWidget::updateVisibleThumbnails);
-
     thumbnailPulseTimer_ = new QTimer(this);
     thumbnailPulseTimer_->setInterval(220);
     connect(thumbnailPulseTimer_, &QTimer::timeout, this, [this]() {
@@ -713,6 +720,9 @@ void ScrollItemsWidget::applyTheme(bool dark) {
     }
 
     updateEdgeFadeOverlays();
+    if (cardDelegate_) {
+        cardDelegate_->clearVisualCaches();
+    }
     if (listView_) {
         listView_->viewport()->update();
     }
@@ -1555,13 +1565,24 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
         }
         boardModel_->updateItem(row, updated);
         syncPreviewStateForRow(row);
+
+        // The updateItem triggers a repaint which renders the card into
+        // cardPixmapCache_.  Once cached, the thumbnail/icon/favicon in
+        // the model item are redundant — release them to save memory.
+        // Defer to the next event loop iteration so paint has finished.
+        QTimer::singleShot(0, this, [this, expectedName]() {
+            if (!boardModel_) return;
+            const int r = boardModel_->rowForName(expectedName);
+            if (r >= 0) {
+                releaseItemPixmaps(r);
+            }
+        });
     }
     // The async save may have changed the service index count; keep
     // bookkeeping in sync to avoid a spurious full page reload.
     if (paginationEnabled() && loadedPageTotalItems_ >= 0) {
         loadedPageTotalItems_ = totalItemCountForPagination();
     }
-    scheduleThumbnailUpdate();
     updateLoadingOverlay();
 }
 
@@ -1593,12 +1614,19 @@ void ScrollItemsWidget::handleThumbnailReady(const QString &expectedName, const 
         ClipboardItem updated = *itemPtr;
         updated.setThumbnail(thumbnail);
         boardModel_->updateItem(row, updated);
+
+        // Release pixmaps once the card is cached.
+        QTimer::singleShot(0, this, [this, expectedName]() {
+            if (!boardModel_) return;
+            const int r = boardModel_->rowForName(expectedName);
+            if (r >= 0) {
+                releaseItemPixmaps(r);
+            }
+        });
     } else {
         missingThumbnailNames_.insert(expectedName);
     }
     syncPreviewStateForRow(row);
-
-    scheduleThumbnailUpdate();
 }
 
 void ScrollItemsWidget::handleKeywordMatched(const QSet<QString> &matchedNames, quint64 token) {
@@ -1996,7 +2024,10 @@ int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
             if (targetRow != sourceRow) {
                 boardModel_->moveItemToRow(sourceRow, targetRow);
             }
-            setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+            const QScrollBar *sb = horizontalScrollbar();
+            if (!sb || sb->value() <= sb->minimum()) {
+                setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+            }
             return targetRow;
         }
         currentPage_ = 0;
@@ -2014,7 +2045,10 @@ int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
         setCurrentPageNumber(1);
     }
 
-    setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+    const QScrollBar *sb = horizontalScrollbar();
+    if (!sb || sb->value() <= sb->minimum()) {
+        setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+    }
     return targetRow;
 }
 
@@ -2160,14 +2194,7 @@ void ScrollItemsWidget::updateLoadingOverlay() {
 }
 
 void ScrollItemsWidget::scheduleThumbnailUpdate() {
-    if (!thumbnailUpdateTimer_) {
-        return;
-    }
-    if (!isBoardUiVisible()) {
-        setVisibleLoadingThumbnailNames({});
-        return;
-    }
-    thumbnailUpdateTimer_->start();
+    // No-op: cardPixmapCache_ manages all rendering.
 }
 
 void ScrollItemsWidget::primeVisibleThumbnailsSync() {
@@ -2324,6 +2351,12 @@ void ScrollItemsWidget::updateThumbnailViewport(const QSet<QString> &names) {
     }
 }
 
+void ScrollItemsWidget::releaseItemPixmaps(int row) {
+    if (boardModel_) {
+        boardModel_->releaseItemPixmaps(row);
+    }
+}
+
 void ScrollItemsWidget::preRenderAndCleanup() {
     if (!boardModel_ || !cardDelegate_ || !listView_ || !proxyModel_) {
         return;
@@ -2336,30 +2369,10 @@ void ScrollItemsWidget::preRenderAndCleanup() {
     baseOption.decorationSize = QSize(qRound(dpr), qRound(dpr));
     cardDelegate_->preRenderAll(proxyModel_, baseOption);
 
-    // Release all per-item pixmaps and intermediate caches.
+    // Release all per-item pixmaps now that cards are cached.
     const int rowCount = boardModel_->rowCount();
     for (int row = 0; row < rowCount; ++row) {
-        const ClipboardItem *item = boardModel_->itemPtrAt(row);
-        if (!item) {
-            continue;
-        }
-        bool needsUpdate = false;
-        ClipboardItem updated = *item;
-        if (item->hasThumbnail()) {
-            updated.setThumbnail(QPixmap());
-            needsUpdate = true;
-        }
-        if (!item->getIcon().isNull()) {
-            updated.setIcon(QPixmap());
-            needsUpdate = true;
-        }
-        if (!item->getFavicon().isNull()) {
-            updated.setFavicon(QPixmap());
-            needsUpdate = true;
-        }
-        if (needsUpdate) {
-            boardModel_->updateItem(row, updated);
-        }
+        releaseItemPixmaps(row);
     }
     managedThumbnailNames_.clear();
     cardDelegate_->clearIntermediateCaches();
@@ -2367,85 +2380,8 @@ void ScrollItemsWidget::preRenderAndCleanup() {
 }
 
 void ScrollItemsWidget::updateVisibleThumbnails() {
-    if (!boardModel_ || !proxyModel_ || !listView_) {
-        return;
-    }
-    if (!isBoardUiVisible()) {
-        setVisibleLoadingThumbnailNames({});
-        return;
-    }
-
-    const int proxyCount = proxyModel_->rowCount();
-    if (proxyCount <= 0) {
-        desiredThumbnailNames_.clear();
-        applyManagedThumbnailNames({});
-        setVisibleLoadingThumbnailNames({});
-        return;
-    }
-
-    const QRect viewportRect = listView_->viewport()->rect();
-    const QPoint leftProbe(viewportRect.left() + 1, viewportRect.center().y());
-    const QPoint rightProbe(viewportRect.right() - 1, viewportRect.center().y());
-    QModelIndex leftIndex = listView_->indexAt(leftProbe);
-    QModelIndex rightIndex = listView_->indexAt(rightProbe);
-    const int gridWidth = qMax(1, listView_->gridSize().width());
-    const int estimatedVisibleCount = qMax(1, viewportRect.width() / gridWidth + 2);
-    int visibleStartRow = 0;
-    if (leftIndex.isValid()) {
-        visibleStartRow = leftIndex.row();
-    } else if (rightIndex.isValid()) {
-        visibleStartRow = qMax(0, rightIndex.row() - estimatedVisibleCount + 1);
-    } else {
-        const QModelIndex currentIndex = currentProxyIndex();
-        visibleStartRow = currentIndex.isValid() ? currentIndex.row() : 0;
-    }
-
-    int visibleEndRow = 0;
-    if (rightIndex.isValid()) {
-        visibleEndRow = rightIndex.row();
-    } else {
-        visibleEndRow = qMin(proxyCount - 1, visibleStartRow + estimatedVisibleCount - 1);
-    }
-    if (visibleStartRow > visibleEndRow) {
-        std::swap(visibleStartRow, visibleEndRow);
-    }
-
-    // Release per-item pixmaps (thumbnail, icon, favicon) for cards that
-    // have already been rendered into cardPixmapCache_.  Cards not yet
-    // cached keep their data so they can render correctly when scrolled to.
-    if (boardModel_ && cardDelegate_) {
-        bool anyCleaned = false;
-        const int rowCount = boardModel_->rowCount();
-        for (int row = 0; row < rowCount; ++row) {
-            const ClipboardItem *item = boardModel_->itemPtrAt(row);
-            if (!item || !cardDelegate_->isCardCached(item->getName())) {
-                continue;
-            }
-            bool needsUpdate = false;
-            ClipboardItem updated = *item;
-            if (item->hasThumbnail()) {
-                updated.setThumbnail(QPixmap());
-                needsUpdate = true;
-            }
-            if (!item->getIcon().isNull()) {
-                updated.setIcon(QPixmap());
-                needsUpdate = true;
-            }
-            if (!item->getFavicon().isNull()) {
-                updated.setFavicon(QPixmap());
-                needsUpdate = true;
-            }
-            if (needsUpdate) {
-                boardModel_->updateItem(row, updated);
-                anyCleaned = true;
-            }
-        }
-        managedThumbnailNames_.clear();
-        if (anyCleaned) {
-            cardDelegate_->clearIntermediateCaches();
-        }
-    }
-    setVisibleLoadingThumbnailNames({});
+    // No-op: cardPixmapCache_ holds all rendered cards.
+    // Intermediate data cleanup happens in preRenderAndCleanup().
 
 }
 
@@ -2675,7 +2611,14 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     }
 
     const QModelIndex firstProxyIndex = proxyIndexForSourceRow(insertRow);
-    setCurrentProxyIndex(firstProxyIndex);
+    // Only auto-select the new item if the user is already at the
+    // beginning.  Otherwise scrolling would jump back to the start
+    // every time a clipboard capture arrives.
+    const QScrollBar *sb = horizontalScrollbar();
+    const bool atStart = !sb || sb->value() <= sb->minimum();
+    if (atStart) {
+        setCurrentProxyIndex(firstProxyIndex);
+    }
     ensureLinkPreviewForIndex(firstProxyIndex);
     scheduleThumbnailUpdate();
 
@@ -2989,6 +2932,99 @@ void ScrollItemsWidget::loadFromSaveDirDeferred() {
     }
 }
 
+void ScrollItemsWidget::syncFromDiskIncremental() {
+    if (!boardService_ || !boardModel_) {
+        return;
+    }
+
+    const auto syncResult = boardService_->syncIndexIncremental();
+    if (syncResult.addedPaths.isEmpty() && syncResult.removedPaths.isEmpty()) {
+        return;
+    }
+
+    // Remove items that no longer exist on disk.
+    for (const QString &path : syncResult.removedPaths) {
+        // Extract name from filename: "name.mpaste" → "name"
+        const QString name = QFileInfo(path).completeBaseName();
+        const int row = boardModel_->rowForName(name);
+        if (row >= 0) {
+            if (cardDelegate_) {
+                cardDelegate_->invalidateCard(name);
+            }
+            boardModel_->removeItemAt(row);
+        }
+    }
+
+    // Add new items from disk.
+    for (const QString &path : syncResult.addedPaths) {
+        ClipboardItem item = boardService_->loadItemLight(path, true);
+        if (item.getName().isEmpty()) {
+            continue;
+        }
+        if (boardModel_->rowForName(item.getName()) >= 0) {
+            continue;
+        }
+        appendModelItem(item);
+    }
+
+    applyFilters();
+    emit itemCountChanged(itemCountForDisplay());
+}
+
+QString ScrollItemsWidget::memoryStats() const {
+    QStringList lines;
+    const QString cat = category;
+
+    // Model items
+    int modelRows = 0;
+    int mimeLoadedCount = 0;
+    qint64 thumbnailBytes = 0;
+    qint64 iconBytes = 0;
+    qint64 faviconBytes = 0;
+    int thumbnailCount = 0;
+    if (boardModel_) {
+        modelRows = boardModel_->rowCount();
+        for (int i = 0; i < modelRows; ++i) {
+            const ClipboardItem *item = boardModel_->itemPtrAt(i);
+            if (!item) continue;
+            if (item->isMimeDataLoaded()) ++mimeLoadedCount;
+            if (item->hasThumbnail()) {
+                const QPixmap t = item->thumbnail();
+                thumbnailBytes += static_cast<qint64>(t.width()) * t.height() * 4;
+                ++thumbnailCount;
+            }
+            if (!item->getIcon().isNull()) {
+                const QPixmap ic = item->getIcon();
+                iconBytes += static_cast<qint64>(ic.width()) * ic.height() * 4;
+            }
+            if (!item->getFavicon().isNull()) {
+                const QPixmap fv = item->getFavicon();
+                faviconBytes += static_cast<qint64>(fv.width()) * fv.height() * 4;
+            }
+        }
+    }
+
+    // Card pixmap cache
+    int cacheCount = 0;
+    int cacheMaxCost = 0;
+    if (cardDelegate_) {
+        cacheCount = cardDelegate_->cachedCardCount();
+        cacheMaxCost = cardDelegate_->cachedCardMaxCost();
+    }
+
+    lines << QStringLiteral("[%1] model: %2 items, mimeData loaded: %3")
+                 .arg(cat).arg(modelRows).arg(mimeLoadedCount);
+    lines << QStringLiteral("[%1] thumbnails: %2 (%3 KB), icons: %4 KB, favicons: %5 KB")
+                 .arg(cat).arg(thumbnailCount).arg(thumbnailBytes / 1024).arg(iconBytes / 1024).arg(faviconBytes / 1024);
+    lines << QStringLiteral("[%1] cardCache: %2 / %3")
+                 .arg(cat).arg(cacheCount).arg(cacheMaxCost);
+    if (cardDelegate_) {
+        lines << cardDelegate_->cacheMemoryStats();
+    }
+
+    return lines.join(QLatin1Char('\n'));
+}
+
 QScrollBar *ScrollItemsWidget::horizontalScrollbar() const {
     return listView_ ? listView_->horizontalScrollBar() : nullptr;
 }
@@ -3044,6 +3080,7 @@ void ScrollItemsWidget::focusMoveLeft() {
 
     const QModelIndex nextIndex = proxyModel_->index(qMax(0, current.row() - 1), 0);
     setCurrentProxyIndex(nextIndex);
+    if (auto *bv = dynamic_cast<ClipboardBoardView *>(listView_)) bv->setExplicitScrollTo(true);
     listView_->scrollTo(nextIndex, QAbstractItemView::EnsureVisible);
 }
 
@@ -3060,6 +3097,7 @@ void ScrollItemsWidget::focusMoveRight() {
 
     const QModelIndex nextIndex = proxyModel_->index(qMin(proxyModel_->rowCount() - 1, current.row() + 1), 0);
     setCurrentProxyIndex(nextIndex);
+    if (auto *bv = dynamic_cast<ClipboardBoardView *>(listView_)) bv->setExplicitScrollTo(true);
     listView_->scrollTo(nextIndex, QAbstractItemView::EnsureVisible);
 }
 

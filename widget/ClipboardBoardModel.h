@@ -74,6 +74,7 @@ public:
 
     ClipboardItem itemAt(int row) const;
     const ClipboardItem *itemPtrAt(int row) const;
+    void releaseItemPixmaps(int row);
     QList<ClipboardItem> items() const;
 
     bool isFavorite(int row) const;

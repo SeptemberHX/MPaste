@@ -653,9 +653,9 @@ QPixmap buildLinkFallbackPreviewUncached(const QUrl &url, const QString &title, 
 
     const QRectF headlineRect(heroRect.left(), badgeRect.bottom() + 16.0, heroRect.width(), 34.0);
     QFont headlineFont = painter.font();
-    applyUiFontDefaults(headlineFont);
+    headlineFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
     headlineFont.setBold(true);
-    headlineFont.setPointSizeF(qMax(11.0, bounds.height() * 0.074));
+    headlineFont.setPointSizeF(qMax(9.0, bounds.height() * 0.048));
     painter.setFont(headlineFont);
     painter.setPen(QColor(255, 255, 255, 235));
     const QFontMetricsF headlineMetrics(headlineFont);
@@ -994,6 +994,34 @@ bool ClipboardCardDelegate::isCardCached(const QString &name) const {
 
 void ClipboardCardDelegate::invalidateCard(const QString &name) {
     cardPixmapCache_.remove(name);
+}
+
+QString ClipboardCardDelegate::cacheMemoryStats() const {
+    // Estimate bytes for a QCache<QString, QPixmap>.
+    auto estimateCache = [](const QCache<QString, QPixmap> &cache) -> qint64 {
+        qint64 bytes = 0;
+        const auto keys = cache.keys();
+        for (const QString &key : keys) {
+            if (const QPixmap *pm = cache.object(key)) {
+                bytes += static_cast<qint64>(pm->width()) * pm->height() * 4;
+            }
+        }
+        return bytes;
+    };
+
+    QStringList lines;
+    lines << QStringLiteral("  cardPixmapCache: %1 items, %2 KB")
+                 .arg(cardPixmapCache_.size()).arg(estimateCache(cardPixmapCache_) / 1024);
+    lines << QStringLiteral("  headerIconCache: %1 items, %2 KB")
+                 .arg(headerIconCache_.size()).arg(estimateCache(headerIconCache_) / 1024);
+    lines << QStringLiteral("  linkFallbackCache: %1 items, %2 KB")
+                 .arg(linkFallbackCache_.size()).arg(estimateCache(linkFallbackCache_) / 1024);
+    lines << QStringLiteral("  localImageThumbCache: %1 items, %2 KB")
+                 .arg(localImageThumbnailCache_.size()).arg(estimateCache(localImageThumbnailCache_) / 1024);
+    lines << QStringLiteral("  localFileIconCache: %1 items, %2 KB")
+                 .arg(localFileIconCache_.size()).arg(estimateCache(localFileIconCache_) / 1024);
+    lines << QStringLiteral("  QPixmapCache limit: %1 KB").arg(QPixmapCache::cacheLimit());
+    return lines.join(QLatin1Char('\n'));
 }
 
 void ClipboardCardDelegate::preRenderAll(QAbstractItemModel *model, const QStyleOptionViewItem &baseOption) {
@@ -1396,9 +1424,17 @@ void ClipboardCardDelegate::drawShortcutOverlay(QPainter *painter, const QStyleO
         footerRect.height());
 
     const bool darkTheme = ThemeManager::instance()->isDark();
-    const QColor textColor = darkTheme ? QColor(200, 210, 225, 180) : QColor(80, 95, 110, 180);
+    const QColor bgColor = darkTheme ? QColor(28, 35, 44, 210) : QColor(245, 247, 250, 220);
+    const QColor textColor = darkTheme ? QColor(200, 210, 225, 220) : QColor(80, 95, 110, 220);
+    const qreal pillRadius = qMax(4.0, 5.0 * scale / 100);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(bgColor);
+    painter->drawRoundedRect(QRectF(shortcutRect).adjusted(1, 2, -1, -2), pillRadius, pillRadius);
+    painter->restore();
     drawElidedText(painter, shortcutRect, shortcutText, footerFont, textColor,
-                   Qt::AlignRight | Qt::AlignVCenter);
+                   Qt::AlignCenter);
 }
 
 void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
@@ -1498,7 +1534,7 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     const QColor footerTextColor = darkTheme ? QColor(QStringLiteral("#93A2B3")) : QColor(QStringLiteral("#556270"));
     const QColor subtleBorderColor = darkTheme ? QColor(255, 255, 255, 24) : QColor(0, 0, 0, 18);
     const QColor topColor = headerColorForIcon(card.icon);
-    const QColor bgColor = blendColor(topColor, baseSurface, darkTheme ? 0.86 : 0.975);
+    const QColor bgColor = blendColor(topColor, baseSurface, darkTheme ? 0.86 : 0.93);
     // Selection border is drawn as overlay after cache blit — always
     // render the cached card in the unselected state.
     const bool selected = false;
