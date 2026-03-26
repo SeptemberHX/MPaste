@@ -356,7 +356,7 @@ inline ContentType classifyLight(const QMimeData *mimeData,
                     const QString scheme = url.scheme().toLower();
                     return scheme == QLatin1String("http") || scheme == QLatin1String("https");
                 });
-            if (allWebLinks && !mimeData->hasHtml()) {
+            if (allWebLinks) {
                 return Link;
             }
         }
@@ -371,8 +371,7 @@ inline ContentType classifyLight(const QMimeData *mimeData,
             return shouldTreatOfficePayloadAsType(traits) ? Office : Image;
         }
         QString text = normalizedText.trimmed();
-        if (!mimeData->formats().contains(QStringLiteral("Rich Text Format"))
-            && !text.contains(QLatin1Char('\n'))
+        if (!text.contains(QLatin1Char('\n'))
             && (text.startsWith(QStringLiteral("http://")) || text.startsWith(QStringLiteral("https://")))) {
             return Link;
         }
@@ -416,7 +415,7 @@ inline ContentType classifyFull(const QMimeData *mimeData,
                     const QString scheme = url.scheme().toLower();
                     return scheme == QLatin1String("http") || scheme == QLatin1String("https");
                 });
-            if (allWebLinks && !mimeData->hasHtml()) {
+            if (allWebLinks) {
                 return Link;
             }
         }
@@ -431,8 +430,7 @@ inline ContentType classifyFull(const QMimeData *mimeData,
             return shouldTreatOfficePayloadAsType(traits) ? Office : Image;
         }
         QString text = normalizedText.trimmed();
-        if (!mimeData->formats().contains(QStringLiteral("Rich Text Format"))
-            && !text.contains(QLatin1Char('\n'))
+        if (!text.contains(QLatin1Char('\n'))
             && (text.startsWith(QStringLiteral("http://")) || text.startsWith(QStringLiteral("https://")))) {
             return Link;
         }

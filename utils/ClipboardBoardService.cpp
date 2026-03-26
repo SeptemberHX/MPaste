@@ -1503,8 +1503,24 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             result.thumbnailImage = buildLinkPreviewImage(linkUrl, baseItem.getTitle(), thumbnailDpr, itemScale);
         }
 
+        // Save to disk in the worker thread to avoid blocking the UI.
+        QString savedFilePath;
+        {
+            ClipboardItem saveItem = baseItem;
+            if (!result.thumbnailImage.isNull()) {
+                QPixmap thumbnail = QPixmap::fromImage(result.thumbnailImage);
+                thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
+                saveItem.setThumbnail(thumbnail);
+            }
+            if (guard) {
+                savedFilePath = guard->filePathForItem(saveItem);
+                LocalSaver saver;
+                saver.saveToFile(saveItem, savedFilePath);
+            }
+        }
+
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, baseItem, result, thumbnailDpr]() mutable {
+            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, baseItem, result, thumbnailDpr, savedFilePath]() mutable {
                 if (!guard) {
                     return;
                 }
@@ -1532,8 +1548,24 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                     }
                 }
 
+                // Update the service index from the saved file (lightweight).
+                if (!savedFilePath.isEmpty()) {
+                    LocalSaver indexSaver;
+                    ClipboardItem lightItem = indexSaver.loadFromFileLight(savedFilePath);
+                    if (!lightItem.getName().isEmpty()) {
+                        const IndexedItemMeta meta = buildIndexedItemMeta(savedFilePath, lightItem);
+                        const int existingIndex = guard->indexedFilePaths_.indexOf(savedFilePath);
+                        if (existingIndex >= 0 && existingIndex < guard->indexedItems_.size()) {
+                            guard->indexedItems_[existingIndex] = meta;
+                        } else {
+                            guard->indexedFilePaths_.prepend(savedFilePath);
+                            guard->indexedItems_.prepend(meta);
+                        }
+                    }
+                    guard->lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
+                }
+
                 emit guard->pendingItemReady(expectedName, preparedItem);
-                guard->saveItemQuiet(preparedItem);
             }, Qt::QueuedConnection);
         }
     });

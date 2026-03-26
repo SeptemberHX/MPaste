@@ -635,14 +635,6 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
         updateHoverActionBarPosition();
     });
 
-    thumbnailUpdateTimer_ = new QTimer(this);
-    thumbnailUpdateTimer_->setSingleShot(true);
-    // Delay thumbnail load/unload until scrolling settles.  During
-    // active scrolling the card pixmap cache provides smooth rendering;
-    // doing thumbnail management mid-scroll invalidates that cache.
-    thumbnailUpdateTimer_->setInterval(300);
-    connect(thumbnailUpdateTimer_, &QTimer::timeout, this, &ScrollItemsWidget::updateVisibleThumbnails);
-
     thumbnailPulseTimer_ = new QTimer(this);
     thumbnailPulseTimer_->setInterval(220);
     connect(thumbnailPulseTimer_, &QTimer::timeout, this, [this]() {
@@ -2160,14 +2152,7 @@ void ScrollItemsWidget::updateLoadingOverlay() {
 }
 
 void ScrollItemsWidget::scheduleThumbnailUpdate() {
-    if (!thumbnailUpdateTimer_) {
-        return;
-    }
-    if (!isBoardUiVisible()) {
-        setVisibleLoadingThumbnailNames({});
-        return;
-    }
-    thumbnailUpdateTimer_->start();
+    // No-op: cardPixmapCache_ manages all rendering.
 }
 
 void ScrollItemsWidget::primeVisibleThumbnailsSync() {
@@ -2367,85 +2352,8 @@ void ScrollItemsWidget::preRenderAndCleanup() {
 }
 
 void ScrollItemsWidget::updateVisibleThumbnails() {
-    if (!boardModel_ || !proxyModel_ || !listView_) {
-        return;
-    }
-    if (!isBoardUiVisible()) {
-        setVisibleLoadingThumbnailNames({});
-        return;
-    }
-
-    const int proxyCount = proxyModel_->rowCount();
-    if (proxyCount <= 0) {
-        desiredThumbnailNames_.clear();
-        applyManagedThumbnailNames({});
-        setVisibleLoadingThumbnailNames({});
-        return;
-    }
-
-    const QRect viewportRect = listView_->viewport()->rect();
-    const QPoint leftProbe(viewportRect.left() + 1, viewportRect.center().y());
-    const QPoint rightProbe(viewportRect.right() - 1, viewportRect.center().y());
-    QModelIndex leftIndex = listView_->indexAt(leftProbe);
-    QModelIndex rightIndex = listView_->indexAt(rightProbe);
-    const int gridWidth = qMax(1, listView_->gridSize().width());
-    const int estimatedVisibleCount = qMax(1, viewportRect.width() / gridWidth + 2);
-    int visibleStartRow = 0;
-    if (leftIndex.isValid()) {
-        visibleStartRow = leftIndex.row();
-    } else if (rightIndex.isValid()) {
-        visibleStartRow = qMax(0, rightIndex.row() - estimatedVisibleCount + 1);
-    } else {
-        const QModelIndex currentIndex = currentProxyIndex();
-        visibleStartRow = currentIndex.isValid() ? currentIndex.row() : 0;
-    }
-
-    int visibleEndRow = 0;
-    if (rightIndex.isValid()) {
-        visibleEndRow = rightIndex.row();
-    } else {
-        visibleEndRow = qMin(proxyCount - 1, visibleStartRow + estimatedVisibleCount - 1);
-    }
-    if (visibleStartRow > visibleEndRow) {
-        std::swap(visibleStartRow, visibleEndRow);
-    }
-
-    // Release per-item pixmaps (thumbnail, icon, favicon) for cards that
-    // have already been rendered into cardPixmapCache_.  Cards not yet
-    // cached keep their data so they can render correctly when scrolled to.
-    if (boardModel_ && cardDelegate_) {
-        bool anyCleaned = false;
-        const int rowCount = boardModel_->rowCount();
-        for (int row = 0; row < rowCount; ++row) {
-            const ClipboardItem *item = boardModel_->itemPtrAt(row);
-            if (!item || !cardDelegate_->isCardCached(item->getName())) {
-                continue;
-            }
-            bool needsUpdate = false;
-            ClipboardItem updated = *item;
-            if (item->hasThumbnail()) {
-                updated.setThumbnail(QPixmap());
-                needsUpdate = true;
-            }
-            if (!item->getIcon().isNull()) {
-                updated.setIcon(QPixmap());
-                needsUpdate = true;
-            }
-            if (!item->getFavicon().isNull()) {
-                updated.setFavicon(QPixmap());
-                needsUpdate = true;
-            }
-            if (needsUpdate) {
-                boardModel_->updateItem(row, updated);
-                anyCleaned = true;
-            }
-        }
-        managedThumbnailNames_.clear();
-        if (anyCleaned) {
-            cardDelegate_->clearIntermediateCaches();
-        }
-    }
-    setVisibleLoadingThumbnailNames({});
+    // No-op: cardPixmapCache_ holds all rendered cards.
+    // Intermediate data cleanup happens in preRenderAndCleanup().
 
 }
 
