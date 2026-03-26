@@ -1498,7 +1498,7 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     const QColor footerTextColor = darkTheme ? QColor(QStringLiteral("#93A2B3")) : QColor(QStringLiteral("#556270"));
     const QColor subtleBorderColor = darkTheme ? QColor(255, 255, 255, 24) : QColor(0, 0, 0, 18);
     const QColor topColor = headerColorForIcon(card.icon);
-    const QColor bgColor = blendColor(topColor, baseSurface, darkTheme ? 0.86 : 0.975);
+    const QColor bgColor = blendColor(topColor, baseSurface, darkTheme ? 0.86 : 0.93);
     // Selection border is drawn as overlay after cache blit — always
     // render the cached card in the unselected state.
     const bool selected = false;

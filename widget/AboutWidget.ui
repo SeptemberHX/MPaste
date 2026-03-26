@@ -1,10 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-input: 依赖 Qt UIC 与对应 QWidget/QDialog 类。
-output: 对外提供 AboutWidget 的界面布局描述。
-pos: widget 层中的 AboutWidget 视图定义。
-update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
--->
 <ui version="4.0">
  <class>AboutWidget</class>
  <widget class="QWidget" name="AboutWidget">
@@ -86,7 +80,7 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
       </font>
      </property>
      <property name="text">
-      <string notr="true">MPaste V0.5.0</string>
+      <string notr="true">MPaste V0.7.0</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignmentFlag::AlignCenter</set>

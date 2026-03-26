@@ -705,6 +705,9 @@ void ScrollItemsWidget::applyTheme(bool dark) {
     }
 
     updateEdgeFadeOverlays();
+    if (cardDelegate_) {
+        cardDelegate_->clearVisualCaches();
+    }
     if (listView_) {
         listView_->viewport()->update();
     }

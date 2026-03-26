@@ -1548,7 +1548,10 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                     }
                 }
 
-                // Update the service index from the saved file (lightweight).
+                // Update the service index from the saved file (lightweight)
+                // and propagate sourceFilePath/mimeDataFileOffset so that
+                // preview can read image data from disk after mimeData_ is
+                // released.
                 if (!savedFilePath.isEmpty()) {
                     LocalSaver indexSaver;
                     ClipboardItem lightItem = indexSaver.loadFromFileLight(savedFilePath);
@@ -1561,6 +1564,8 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                             guard->indexedFilePaths_.prepend(savedFilePath);
                             guard->indexedItems_.prepend(meta);
                         }
+                        preparedItem.setSourceFilePath(savedFilePath);
+                        preparedItem.setMimeDataFileOffset(lightItem.mimeDataFileOffset());
                     }
                     guard->lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
                 }
