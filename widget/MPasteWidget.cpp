@@ -629,17 +629,14 @@ void MPasteWidget::scheduleStartupWarmup() {
 
         // Wait for the clipboard board to finish loading before priming
         // the clipboard, so duplicate detection has the full history.
+        // Always wait — hasPendingItems() is unreliable during async scan.
         auto *boardService = ui_.clipboardWidget->boardServiceRef();
-        if (boardService && boardService->hasPendingItems()) {
+        if (boardService) {
             connect(boardService, &ClipboardBoardService::deferredLoadCompleted, this, [this]() {
                 clipboard_.monitor->primeCurrentClipboard();
                 qInfo().noquote() << QStringLiteral("[startup] deferred primeCurrentClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
                 loading_.startupWarmupCompleted = true;
             }, Qt::SingleShotConnection);
-        } else {
-            clipboard_.monitor->primeCurrentClipboard();
-            qInfo().noquote() << QStringLiteral("[startup] deferred primeCurrentClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
-            loading_.startupWarmupCompleted = true;
         }
     });
 }

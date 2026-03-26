@@ -24,6 +24,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `IconResolver.h` / `IconResolver.cpp`???????/???????
 - `OpenGraphFetcher.h` / `OpenGraphFetcher.cpp`：抓取网页 Open Graph 元数据，供链接卡片预览使用。
 - `PlatformRelated.h` / `PlatformRelated.cpp`：平台相关辅助能力，例如粘贴注入、窗口行为和系统交互。
+- `ClipboardExportService.h` / `ClipboardExportService.cpp`：剪贴板导出服务，提供 `buildMimeData()` 用于从条目构建导出载荷。
 - `SingleApplication.h` / `SingleApplication.cpp`：单实例启动控制。
 
 ## 维护约定
@@ -70,3 +71,6 @@ update: 修改本目录文件时，同步更新本 README。
 - Thumbnail prefetch count is now configurable via settings.
 
 - MPasteSettings now persists a configurable save directory for external sync tools.
+- `ClipboardBoardService` now exposes `containsFingerprint()` for fast duplicate lookup and `indexedItemsMeta()` for accessing the light-item index; `searchableText` in `IndexedItemMeta` is truncated to 512 characters.
+- `MPasteSettings` now provides a `HistoryViewMode` enum (`ViewModePaged` / `ViewModeContinuous`) with getter, setter, and persistence support.
+- New `ClipboardExportService` namespace (`ClipboardExportService.h/.cpp`) provides `buildMimeData()` for constructing clipboard export payloads from items.

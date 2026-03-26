@@ -38,3 +38,5 @@ update: 修改本目录文件时，同步更新本 README。
 - 新增了 `menu_more.svg`、`settings.svg`、`info.svg` 和 `quit.svg`，用于主窗口溢出菜单与图标按钮。
 
 - Added rename icon variants (ename.svg, ename_light.svg) for context menu actions.
+
+- Added `page_chevron.svg` and `page_chevron_light.svg` for pagination controls.

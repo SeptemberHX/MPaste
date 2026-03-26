@@ -119,6 +119,7 @@ private slots:
     void handleKeywordMatched(const QSet<QString> &matchedNames, quint64 token);
     void handleTotalItemCountChanged(int total);
     void handleDeferredLoadCompleted();
+    void preRenderAndCleanup();
 
 private:
     QModelIndex currentProxyIndex() const;

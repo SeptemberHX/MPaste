@@ -171,3 +171,16 @@ update: 修改本目录文件时，同步更新本 README。
 - The main window now watches the save folder for external sync changes and reloads history with a debounce.
 
 - Cards can be pinned to the top via the hover bar or context menu.
+
+- `ClipboardBoardProxyModel` now supports pagination with `setPageSize`/`setPageIndex`/`pageSize`/`pageIndex` methods.
+- `ClipboardCardDelegate` cache overhaul: `cardPixmapCache` now uses a count-based `QCache` (60 entries, cost=1 each) instead of byte-size budgeting; cache key simplified to just item name, with selection border and shortcut text drawn as overlays.
+- `ClipboardCardDelegate` now provides `preRenderAll()` to eagerly cache all visible cards, then release intermediate data (thumbnails, icons, favicons); separate `clearIntermediateCaches()` preserves `cardPixmapCache` across page reloads.
+- `ClipboardCardDelegate` now provides `invalidateCard()` for targeted cache invalidation (e.g., after og:image fetch) and `isCardCached()` / `drawSelectionBorder()` / `drawShortcutOverlay()` query/draw helpers.
+- Link cards now use a unified browser-window fallback style, favicon badge enlarged (0.56 scale), og:image checked via `isLikelyLinkPreviewImage`; link card footer now shows the URL (was hidden before).
+- Icon shadow now rendered as a black silhouette with alpha mask; header type text uses Microsoft YaHei font; app icon enlarged to 40px (downscaled to max 64px on load).
+- `ScrollItemsWidgetMV`: after `preRenderAll`, releases thumbnail/icon/favicon from model items and clears intermediate caches; pagination enforces `PAGE_SIZE` when new items arrive.
+- `ScrollItemsWidgetMV`: duplicate detection now checks `boardService` index with content-based fallback when the model is not fully loaded.
+- `ScrollItemsWidgetMV`: multi-select delete fix falls back to `selectedIndexes()` when `selectedRows()` returns empty.
+- `ScrollItemsWidgetMV`: scroll performance improved by using `loadingPhase` only in cache key for loading cards and avoiding unnecessary page reloads.
+- `MPasteSettingsWidget` now emits `historyViewModeChanged` signal.
+- `MPasteWidget` now defers `primeCurrentClipboard` until board loading completes.

@@ -1616,9 +1616,12 @@ void ScrollItemsWidget::handleTotalItemCountChanged(int total) {
 }
 
 void ScrollItemsWidget::handleDeferredLoadCompleted() {
+    // Pre-render all cards into cardPixmapCache_ immediately so the first
+    // window show is instant.  Then release intermediate data.
+    preRenderAndCleanup();
+
     if (isBoardUiVisible()) {
         refreshContentWidthHint();
-        scheduleThumbnailUpdate();
     }
     updateLoadingOverlay();
 }
@@ -2321,6 +2324,48 @@ void ScrollItemsWidget::updateThumbnailViewport(const QSet<QString> &names) {
     }
 }
 
+void ScrollItemsWidget::preRenderAndCleanup() {
+    if (!boardModel_ || !cardDelegate_ || !listView_ || !proxyModel_) {
+        return;
+    }
+
+    // Pre-render all cards into cardPixmapCache_.
+    QStyleOptionViewItem baseOption;
+    baseOption.initFrom(listView_);
+    const qreal dpr = listView_->devicePixelRatioF();
+    baseOption.decorationSize = QSize(qRound(dpr), qRound(dpr));
+    cardDelegate_->preRenderAll(proxyModel_, baseOption);
+
+    // Release all per-item pixmaps and intermediate caches.
+    const int rowCount = boardModel_->rowCount();
+    for (int row = 0; row < rowCount; ++row) {
+        const ClipboardItem *item = boardModel_->itemPtrAt(row);
+        if (!item) {
+            continue;
+        }
+        bool needsUpdate = false;
+        ClipboardItem updated = *item;
+        if (item->hasThumbnail()) {
+            updated.setThumbnail(QPixmap());
+            needsUpdate = true;
+        }
+        if (!item->getIcon().isNull()) {
+            updated.setIcon(QPixmap());
+            needsUpdate = true;
+        }
+        if (!item->getFavicon().isNull()) {
+            updated.setFavicon(QPixmap());
+            needsUpdate = true;
+        }
+        if (needsUpdate) {
+            boardModel_->updateItem(row, updated);
+        }
+    }
+    managedThumbnailNames_.clear();
+    cardDelegate_->clearIntermediateCaches();
+    setVisibleLoadingThumbnailNames({});
+}
+
 void ScrollItemsWidget::updateVisibleThumbnails() {
     if (!boardModel_ || !proxyModel_ || !listView_) {
         return;
@@ -2365,19 +2410,15 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
         std::swap(visibleStartRow, visibleEndRow);
     }
 
-    // Pre-render ALL cards into cardPixmapCache_ (including off-screen),
-    // then release all per-item pixmaps and intermediate caches.
-    if (boardModel_ && cardDelegate_ && listView_) {
-        QStyleOptionViewItem baseOption;
-        baseOption.initFrom(listView_);
-        const qreal dpr = listView_->devicePixelRatioF();
-        baseOption.decorationSize = QSize(qRound(dpr), qRound(dpr));
-        cardDelegate_->preRenderAll(proxyModel_, baseOption);
-
+    // Release per-item pixmaps (thumbnail, icon, favicon) for cards that
+    // have already been rendered into cardPixmapCache_.  Cards not yet
+    // cached keep their data so they can render correctly when scrolled to.
+    if (boardModel_ && cardDelegate_) {
+        bool anyCleaned = false;
         const int rowCount = boardModel_->rowCount();
         for (int row = 0; row < rowCount; ++row) {
             const ClipboardItem *item = boardModel_->itemPtrAt(row);
-            if (!item) {
+            if (!item || !cardDelegate_->isCardCached(item->getName())) {
                 continue;
             }
             bool needsUpdate = false;
@@ -2396,10 +2437,13 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
             }
             if (needsUpdate) {
                 boardModel_->updateItem(row, updated);
+                anyCleaned = true;
             }
         }
         managedThumbnailNames_.clear();
-        cardDelegate_->clearIntermediateCaches();
+        if (anyCleaned) {
+            cardDelegate_->clearIntermediateCaches();
+        }
     }
     setVisibleLoadingThumbnailNames({});
 
@@ -2660,24 +2704,28 @@ bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
         }
     }
 
+    // Debug: log fingerprint comparison for first 5 indexed items.
+    if (boardService_) {
+        const QByteArray newFp = nItem.fingerprint();
+        qInfo().noquote() << QStringLiteral("[dedup] new item fp=%1 type=%2 text=%3")
+            .arg(QString::fromLatin1(newFp.toHex().left(16)))
+            .arg(static_cast<int>(nItem.getContentType()))
+            .arg(nItem.getNormalizedText().left(80));
+        const auto &metas = boardService_->indexedItemsMeta();
+        for (int i = 0; i < qMin(5, metas.size()); ++i) {
+            const auto &m = metas.at(i);
+            qInfo().noquote() << QStringLiteral("[dedup]   index[%1] fp=%2 type=%3 name=%4")
+                .arg(i)
+                .arg(QString::fromLatin1(m.fingerprint.toHex().left(16)))
+                .arg(static_cast<int>(m.contentType))
+                .arg(m.name);
+        }
+    }
+
     // Also check the on-disk index — during startup the model may not
     // be fully loaded yet, so the model check above can miss duplicates.
-    // Use both fingerprint and content-based matching since contentType
-    // changes (e.g. classification fixes) can alter fingerprints.
-    if (boardService_) {
-        if (boardService_->containsFingerprint(nItem.fingerprint())) {
-            boardService_->moveIndexedItemToFront(nItem.getName());
-            return false;
-        }
-        const QString newText = nItem.getNormalizedText().simplified();
-        if (!newText.isEmpty()) {
-            for (const auto &entry : boardService_->indexedItemsMeta()) {
-                if (entry.searchableText.contains(newText.left(256).toLower())) {
-                    boardService_->moveIndexedItemToFront(entry.name);
-                    return false;
-                }
-            }
-        }
+    if (boardService_ && boardService_->containsFingerprint(nItem.fingerprint())) {
+        return false;
     }
 
     // Add item to model immediately so the UI can display it right away.

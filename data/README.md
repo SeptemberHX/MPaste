@@ -53,3 +53,6 @@ update: 修改本目录文件时，同步更新本 README。
 - LocalSaver now writes .mpaste v5 with custom alias metadata while still reading v4.
 
 - LocalSaver now writes .mpaste v6 with alias + pin metadata while still reading v4/v5.
+- `CardPreviewMetrics.h`: `kCardHeaderHeight` reduced from 64 to 56, giving card content areas more vertical space.
+- `ContentClassifier`: Link classification now requires http/https scheme URLs; arbitrary-scheme strings are no longer classified as links.
+- `ClipboardItem::buildFingerprint` no longer includes `contentType` in the hash, so fingerprints are now purely content-based.

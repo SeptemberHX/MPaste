@@ -711,6 +711,7 @@ private:
 
     QByteArray buildFingerprint() const {
         QCryptographicHash hash(QCryptographicHash::Sha1);
+        hash.addData(QByteArray::number(static_cast<int>(getContentType())));
 
         if (!mimeData_) {
             return hash.result();
@@ -725,7 +726,7 @@ private:
             hash.addData(doc.toPlainText().simplified().toUtf8());
         }
 
-        if (mimeDataLoaded_ && shouldTreatHtmlPayloadAsImage()) {
+        if (shouldTreatHtmlPayloadAsImage()) {
             const QString imageIdentity = htmlImageIdentity();
             if (!imageIdentity.isEmpty()) {
                 hash.addData(QByteArrayLiteral("html-image:"));
@@ -745,10 +746,10 @@ private:
             hash.addData(QByteArray::number(static_cast<quint32>(getColor().rgba())));
         }
 
-        if (hasFastImagePayload() || (mimeDataLoaded_ && hasDecodableImage())) {
+        if (hasFastImagePayload()) {
             QByteArray imageBytes = extractFastImagePayloadBytes();
 
-            if (imageBytes.isEmpty() && mimeDataLoaded_) {
+            if (imageBytes.isEmpty()) {
                 QPixmap pixmap = getImage();
                 if (!pixmap.isNull()) {
                     QBuffer buffer(&imageBytes);

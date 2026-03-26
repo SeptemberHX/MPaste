@@ -148,7 +148,10 @@ QString countLabelForCard(const CardData &card) {
             }
             if (card.normalizedUrls.size() == 1) {
                 const QUrl url = card.normalizedUrls.front();
-                return url.isLocalFile() ? url.toLocalFile() : url.toDisplayString(QUrl::PreferLocalFile);
+                if (url.isLocalFile()) {
+                    return QFileInfo(url.toLocalFile()).absolutePath();
+                }
+                return url.toDisplayString(QUrl::PreferLocalFile);
             }
             return QString();
         case ClipboardItem::Color:
@@ -970,7 +973,8 @@ void ClipboardCardDelegate::clearIntermediateCaches() {
     linkFallbackCache_.clear();
     coverPixmapCache().clear();
     localImageThumbnailCache_.clear();
-    localFileIconCache_.clear();
+    // Keep localFileIconCache_ — file type icons are small, come from the
+    // OS, and are needed for cache-miss re-renders of File cards.
     pendingLocalImageThumbnailKeys_.clear();
     failedLocalImageThumbnailKeys_.clear();
     pendingLocalFileIconKeys_.clear();
@@ -1140,6 +1144,13 @@ void ClipboardCardDelegate::ensureFileIconTimer() const {
             self->failedLocalFileIconKeys_.insert(request.cacheKey);
         }
 
+        // Invalidate cardPixmapCache so the card re-renders with the icon.
+        if (request.index.isValid()) {
+            const QString name = request.index.data(ClipboardBoardModel::NameRole).toString();
+            if (!name.isEmpty()) {
+                self->cardPixmapCache_.remove(name);
+            }
+        }
         self->scheduleViewportUpdate(request.index);
         if (!self->pendingFileIconRequests_.isEmpty()) {
             self->fileIconLoadTimer_->start(0);
@@ -1198,6 +1209,13 @@ QPixmap ClipboardCardDelegate::localImageThumbnail(const QString &filePath,
                 pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
                 guard->localImageThumbnailCache_.insert(cacheKey, new QPixmap(pixmap), 1);
                 guard->failedLocalImageThumbnailKeys_.remove(cacheKey);
+            }
+            // Invalidate cardPixmapCache so the card re-renders with the thumbnail.
+            if (persistentIndex.isValid()) {
+                const QString name = persistentIndex.data(ClipboardBoardModel::NameRole).toString();
+                if (!name.isEmpty()) {
+                    guard->cardPixmapCache_.remove(name);
+                }
             }
             guard->scheduleViewportUpdate(persistentIndex);
         }, Qt::QueuedConnection);
@@ -1700,16 +1718,29 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
                 const QString filePath = card.normalizedUrls.first().isLocalFile()
                     ? card.normalizedUrls.first().toLocalFile()
                     : QString();
+                const QFileInfo fileInfo(filePath);
+                const QString fileName = fileInfo.fileName();
+
+                // Reserve space for filename below icon.
+                QFont nameFont = painter->font();
+                applyUiFontDefaults(nameFont);
+                nameFont.setPointSize(qMax(8, 9 * scale / 100));
+                const QFontMetrics nameMetrics(nameFont);
+                const int nameHeight = nameMetrics.height() + qMax(4, 6 * scale / 100);
+                const int nameTopGap = qMax(4, 6 * scale / 100);
+
                 const int iconPadding = qMax(10, 12 * scale / 100);
+                const int availableHeight = previewRect.height() - nameHeight - nameTopGap;
                 const int iconSize = qMax(24, qMin(previewRect.width() - iconPadding * 2,
-                                                   previewRect.height() - iconPadding * 2));
-                const QRect iconRect(previewRect.left() + (previewRect.width() - iconSize) / 2,
-                                     previewRect.top() + (previewRect.height() - iconSize) / 2,
-                                     iconSize,
-                                     iconSize);
+                                                   availableHeight - iconPadding * 2));
+                const QRect iconArea(previewRect.left(), previewRect.top(),
+                                     previewRect.width(), availableHeight);
+                const QRect iconRect(iconArea.left() + (iconArea.width() - iconSize) / 2,
+                                     iconArea.top() + (iconArea.height() - iconSize) / 2,
+                                     iconSize, iconSize);
                 QPixmap iconPixmap = filePath.isEmpty()
                     ? QPixmap()
-                    : localFileIcon(filePath, iconRect.size(), paintDpr, index);
+                    : loadLocalFileIconSync(filePath, iconRect.size(), paintDpr);
                 if (iconPixmap.isNull()) {
                     iconPixmap = filePixmap(iconRect.size());
                 }
@@ -1722,47 +1753,99 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
                     iconPos.setY(iconRect.top() + (iconRect.height() - iconLogicalSize.height()) / 2);
                 }
                 painter->drawPixmap(iconPos, iconPixmap);
+
+                // Draw filename below icon.
+                if (!fileName.isEmpty()) {
+                    const int namePadding = qMax(6, 8 * scale / 100);
+                    const QRect nameRect(previewRect.left() + namePadding,
+                                         iconArea.bottom() + nameTopGap,
+                                         previewRect.width() - namePadding * 2,
+                                         nameHeight);
+                    drawElidedText(painter, nameRect, fileName, nameFont, bodyTextColor,
+                                   Qt::AlignHCenter | Qt::AlignTop, Qt::ElideMiddle);
+                }
                 break;
             }
 
             if (card.normalizedUrls.size() > 1) {
-                QFont previewFont = painter->font();
-                applyUiFontDefaults(previewFont);
-                previewFont.setPointSize(qMax(9, 10 * scale / 100));
-                const QFontMetrics metrics(previewFont);
-                const int textHeight = qMax(metrics.height() * 2 + 4, 28 * scale / 100);
-                const int textSidePadding = qMax(8, 10 * scale / 100);
-                const QRect textRect(previewRect.left() + textSidePadding,
-                                     previewRect.bottom() - textHeight,
-                                     previewRect.width() - textSidePadding * 2,
-                                     textHeight);
-                const int iconSidePadding = qMax(10, 12 * scale / 100);
-                const int iconMaxSize = qMin(previewRect.width() - iconSidePadding * 2,
-                                             qMax(24, previewRect.height() - textHeight - 8 * scale / 100));
-                const QRect iconRect(previewRect.left() + (previewRect.width() - iconMaxSize) / 2,
-                                     previewRect.top() + qMax(2, 4 * scale / 100),
-                                     iconMaxSize,
-                                     iconMaxSize);
-                painter->drawPixmap(iconRect, filePixmap(iconRect.size()));
+                // File chips: rounded-rect rows with icon + filename.
+                const int padding = qMax(4, 5 * scale / 100);
+                const int iconGap = qMax(4, 5 * scale / 100);
+                const int chipPadX = qMax(2, 3 * scale / 100);
+                const int chipPadY = qMax(5, 6 * scale / 100);
+                const int chipRadius = qMax(4, 6 * scale / 100);
+                const int chipGap = qMax(2, 3 * scale / 100);
 
-                const QString fileNames = joinFileNames(card.normalizedUrls);
-                const QString formatted = formatTwoLineEndElidedText(fileNames, previewFont, metrics, textRect.width());
+                QFont listFont = painter->font();
+                applyUiFontDefaults(listFont);
+                listFont.setPointSize(qMax(8, 9 * scale / 100));
+                const QFontMetrics listMetrics(listFont);
+                const int chipH = listMetrics.height() * 4 / 3 + chipPadY * 2;
+                const int iconSize = qMax(8, chipH - chipPadY * 2);
+                const int availH = previewRect.height() - padding * 2;
+                const int maxChips = qMax(1, (availH + chipGap) / (chipH + chipGap));
+                const int actualChips = qMin(card.normalizedUrls.size(), maxChips);
+                const int totalH = actualChips * chipH + (actualChips - 1) * chipGap;
+                const int startY = previewRect.top() + padding + qMax(0, (availH - totalH) / 2);
+                const int chipLeft = previewRect.left() + padding;
+                const int chipW = previewRect.width() - padding * 2;
+                const QColor chipBg = darkTheme ? QColor(255, 255, 255, 18) : QColor(0, 0, 0, 10);
+                const int textLeft = chipLeft + chipPadX + iconSize + iconGap;
+                const int textW = chipW - chipPadX * 2 - iconSize - iconGap;
+
                 painter->save();
-                painter->setFont(previewFont);
-                painter->setPen(bodyTextColor);
-                painter->drawText(textRect, Qt::AlignLeft | Qt::AlignTop, formatted);
+                painter->setRenderHint(QPainter::Antialiasing, true);
+                painter->setFont(listFont);
+
+                for (int i = 0; i < actualChips; ++i) {
+                    const int y = startY + i * (chipH + chipGap);
+                    const QRect chipRect(chipLeft, y, chipW, chipH);
+
+                    // Chip background.
+                    painter->setPen(Qt::NoPen);
+                    painter->setBrush(chipBg);
+                    painter->drawRoundedRect(chipRect, chipRadius, chipRadius);
+
+                    if (i == maxChips - 1 && card.normalizedUrls.size() > maxChips) {
+                        painter->setPen(bodyTextColor);
+                        painter->drawText(chipRect, Qt::AlignCenter,
+                                          QStringLiteral("... +%1").arg(card.normalizedUrls.size() - i));
+                        break;
+                    }
+
+                    const QUrl &url = card.normalizedUrls.at(i);
+                    const QString path = url.isLocalFile() ? url.toLocalFile() : QString();
+                    const QString name = url.isLocalFile()
+                        ? QFileInfo(path).fileName()
+                        : url.toDisplayString(QUrl::PreferLocalFile);
+
+                    // File type icon (synchronous), forced to exact size.
+                    QPixmap ico;
+                    if (!path.isEmpty()) {
+                        ico = loadLocalFileIconSync(path, QSize(iconSize, iconSize), paintDpr);
+                    }
+                    if (ico.isNull()) {
+                        ico = filePixmap(QSize(iconSize, iconSize));
+                    }
+                    if (!ico.isNull()) {
+                        const QSize targetPx = QSize(iconSize, iconSize) * paintDpr;
+                        if (ico.size() != targetPx) {
+                            ico = ico.scaled(targetPx, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                            ico.setDevicePixelRatio(paintDpr);
+                        }
+                    }
+                    const int iconY = y + (chipH - iconSize) / 2;
+                    painter->drawPixmap(QPoint(chipLeft + chipPadX, iconY), ico);
+
+                    // File name.
+                    painter->setPen(bodyTextColor);
+                    const QRect textRect(textLeft, y, textW, chipH);
+                    painter->drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter,
+                                      listMetrics.elidedText(name, Qt::ElideMiddle, textW));
+                }
                 painter->restore();
                 break;
             }
-
-            const int glyphSize = qMin(previewRect.width() / 4, previewRect.height() / 3);
-            const QRect glyphRect(previewRect.left() + 4 * scale / 100, previewRect.top(), glyphSize, glyphSize);
-            painter->drawPixmap(glyphRect, filePixmap(glyphRect.size()));
-            QFont previewFont = painter->font();
-            applyUiFontDefaults(previewFont);
-            previewFont.setPointSize(qMax(9, 10 * scale / 100));
-            drawWrappedText(painter, previewRect.adjusted(glyphSize + 12 * scale / 100, 2 * scale / 100, -4 * scale / 100, -2 * scale / 100),
-                            previewTextForCard(card), previewFont, bodyTextColor);
             break;
         }
         case ClipboardItem::Text:
