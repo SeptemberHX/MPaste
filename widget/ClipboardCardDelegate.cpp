@@ -996,6 +996,34 @@ void ClipboardCardDelegate::invalidateCard(const QString &name) {
     cardPixmapCache_.remove(name);
 }
 
+QString ClipboardCardDelegate::cacheMemoryStats() const {
+    // Estimate bytes for a QCache<QString, QPixmap>.
+    auto estimateCache = [](const QCache<QString, QPixmap> &cache) -> qint64 {
+        qint64 bytes = 0;
+        const auto keys = cache.keys();
+        for (const QString &key : keys) {
+            if (const QPixmap *pm = cache.object(key)) {
+                bytes += static_cast<qint64>(pm->width()) * pm->height() * 4;
+            }
+        }
+        return bytes;
+    };
+
+    QStringList lines;
+    lines << QStringLiteral("  cardPixmapCache: %1 items, %2 KB")
+                 .arg(cardPixmapCache_.size()).arg(estimateCache(cardPixmapCache_) / 1024);
+    lines << QStringLiteral("  headerIconCache: %1 items, %2 KB")
+                 .arg(headerIconCache_.size()).arg(estimateCache(headerIconCache_) / 1024);
+    lines << QStringLiteral("  linkFallbackCache: %1 items, %2 KB")
+                 .arg(linkFallbackCache_.size()).arg(estimateCache(linkFallbackCache_) / 1024);
+    lines << QStringLiteral("  localImageThumbCache: %1 items, %2 KB")
+                 .arg(localImageThumbnailCache_.size()).arg(estimateCache(localImageThumbnailCache_) / 1024);
+    lines << QStringLiteral("  localFileIconCache: %1 items, %2 KB")
+                 .arg(localFileIconCache_.size()).arg(estimateCache(localFileIconCache_) / 1024);
+    lines << QStringLiteral("  QPixmapCache limit: %1 KB").arg(QPixmapCache::cacheLimit());
+    return lines.join(QLatin1Char('\n'));
+}
+
 void ClipboardCardDelegate::preRenderAll(QAbstractItemModel *model, const QStyleOptionViewItem &baseOption) {
     if (!model) {
         return;

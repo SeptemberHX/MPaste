@@ -63,6 +63,7 @@ private slots:
     void updateItemCount(int itemCount);
     void hideAndPaste();
     void debugKeyState();
+    void dumpMemoryStats();
 
 private:
     void initializeWidget();

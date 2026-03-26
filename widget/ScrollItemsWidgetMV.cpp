@@ -1550,13 +1550,24 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
         }
         boardModel_->updateItem(row, updated);
         syncPreviewStateForRow(row);
+
+        // The updateItem triggers a repaint which renders the card into
+        // cardPixmapCache_.  Once cached, the thumbnail/icon/favicon in
+        // the model item are redundant — release them to save memory.
+        // Defer to the next event loop iteration so paint has finished.
+        QTimer::singleShot(0, this, [this, expectedName]() {
+            if (!boardModel_) return;
+            const int r = boardModel_->rowForName(expectedName);
+            if (r >= 0) {
+                releaseItemPixmaps(r);
+            }
+        });
     }
     // The async save may have changed the service index count; keep
     // bookkeeping in sync to avoid a spurious full page reload.
     if (paginationEnabled() && loadedPageTotalItems_ >= 0) {
         loadedPageTotalItems_ = totalItemCountForPagination();
     }
-    scheduleThumbnailUpdate();
     updateLoadingOverlay();
 }
 
@@ -1588,12 +1599,19 @@ void ScrollItemsWidget::handleThumbnailReady(const QString &expectedName, const 
         ClipboardItem updated = *itemPtr;
         updated.setThumbnail(thumbnail);
         boardModel_->updateItem(row, updated);
+
+        // Release pixmaps once the card is cached.
+        QTimer::singleShot(0, this, [this, expectedName]() {
+            if (!boardModel_) return;
+            const int r = boardModel_->rowForName(expectedName);
+            if (r >= 0) {
+                releaseItemPixmaps(r);
+            }
+        });
     } else {
         missingThumbnailNames_.insert(expectedName);
     }
     syncPreviewStateForRow(row);
-
-    scheduleThumbnailUpdate();
 }
 
 void ScrollItemsWidget::handleKeywordMatched(const QSet<QString> &matchedNames, quint64 token) {
@@ -2312,6 +2330,12 @@ void ScrollItemsWidget::updateThumbnailViewport(const QSet<QString> &names) {
     }
 }
 
+void ScrollItemsWidget::releaseItemPixmaps(int row) {
+    if (boardModel_) {
+        boardModel_->releaseItemPixmaps(row);
+    }
+}
+
 void ScrollItemsWidget::preRenderAndCleanup() {
     if (!boardModel_ || !cardDelegate_ || !listView_ || !proxyModel_) {
         return;
@@ -2324,30 +2348,10 @@ void ScrollItemsWidget::preRenderAndCleanup() {
     baseOption.decorationSize = QSize(qRound(dpr), qRound(dpr));
     cardDelegate_->preRenderAll(proxyModel_, baseOption);
 
-    // Release all per-item pixmaps and intermediate caches.
+    // Release all per-item pixmaps now that cards are cached.
     const int rowCount = boardModel_->rowCount();
     for (int row = 0; row < rowCount; ++row) {
-        const ClipboardItem *item = boardModel_->itemPtrAt(row);
-        if (!item) {
-            continue;
-        }
-        bool needsUpdate = false;
-        ClipboardItem updated = *item;
-        if (item->hasThumbnail()) {
-            updated.setThumbnail(QPixmap());
-            needsUpdate = true;
-        }
-        if (!item->getIcon().isNull()) {
-            updated.setIcon(QPixmap());
-            needsUpdate = true;
-        }
-        if (!item->getFavicon().isNull()) {
-            updated.setFavicon(QPixmap());
-            needsUpdate = true;
-        }
-        if (needsUpdate) {
-            boardModel_->updateItem(row, updated);
-        }
+        releaseItemPixmaps(row);
     }
     managedThumbnailNames_.clear();
     cardDelegate_->clearIntermediateCaches();
@@ -2937,6 +2941,60 @@ void ScrollItemsWidget::syncFromDiskIncremental() {
 
     applyFilters();
     emit itemCountChanged(itemCountForDisplay());
+}
+
+QString ScrollItemsWidget::memoryStats() const {
+    QStringList lines;
+    const QString cat = category;
+
+    // Model items
+    int modelRows = 0;
+    int mimeLoadedCount = 0;
+    qint64 thumbnailBytes = 0;
+    qint64 iconBytes = 0;
+    qint64 faviconBytes = 0;
+    int thumbnailCount = 0;
+    if (boardModel_) {
+        modelRows = boardModel_->rowCount();
+        for (int i = 0; i < modelRows; ++i) {
+            const ClipboardItem *item = boardModel_->itemPtrAt(i);
+            if (!item) continue;
+            if (item->isMimeDataLoaded()) ++mimeLoadedCount;
+            if (item->hasThumbnail()) {
+                const QPixmap t = item->thumbnail();
+                thumbnailBytes += static_cast<qint64>(t.width()) * t.height() * 4;
+                ++thumbnailCount;
+            }
+            if (!item->getIcon().isNull()) {
+                const QPixmap ic = item->getIcon();
+                iconBytes += static_cast<qint64>(ic.width()) * ic.height() * 4;
+            }
+            if (!item->getFavicon().isNull()) {
+                const QPixmap fv = item->getFavicon();
+                faviconBytes += static_cast<qint64>(fv.width()) * fv.height() * 4;
+            }
+        }
+    }
+
+    // Card pixmap cache
+    int cacheCount = 0;
+    int cacheMaxCost = 0;
+    if (cardDelegate_) {
+        cacheCount = cardDelegate_->cachedCardCount();
+        cacheMaxCost = cardDelegate_->cachedCardMaxCost();
+    }
+
+    lines << QStringLiteral("[%1] model: %2 items, mimeData loaded: %3")
+                 .arg(cat).arg(modelRows).arg(mimeLoadedCount);
+    lines << QStringLiteral("[%1] thumbnails: %2 (%3 KB), icons: %4 KB, favicons: %5 KB")
+                 .arg(cat).arg(thumbnailCount).arg(thumbnailBytes / 1024).arg(iconBytes / 1024).arg(faviconBytes / 1024);
+    lines << QStringLiteral("[%1] cardCache: %2 / %3")
+                 .arg(cat).arg(cacheCount).arg(cacheMaxCost);
+    if (cardDelegate_) {
+        lines << cardDelegate_->cacheMemoryStats();
+    }
+
+    return lines.join(QLatin1Char('\n'));
 }
 
 QScrollBar *ScrollItemsWidget::horizontalScrollbar() const {

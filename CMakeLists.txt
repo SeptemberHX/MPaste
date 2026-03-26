@@ -118,6 +118,7 @@ if(WIN32)
             dwmapi
             shell32
             ole32
+            psapi
     )
 else()
     target_link_libraries(${BIN_NAME} PRIVATE

@@ -337,6 +337,17 @@ const ClipboardItem *ClipboardBoardModel::itemPtrAt(int row) const {
     return &entries_.at(row).item;
 }
 
+void ClipboardBoardModel::releaseItemPixmaps(int row) {
+    if (row < 0 || row >= entries_.size()) {
+        return;
+    }
+    ClipboardItem &item = entries_[row].item;
+    item.setThumbnail(QPixmap());
+    item.setIcon(QPixmap());
+    item.setFavicon(QPixmap());
+    // No dataChanged — the card is already cached in cardPixmapCache_.
+}
+
 QList<ClipboardItem> ClipboardBoardModel::items() const {
     QList<ClipboardItem> result;
     result.reserve(entries_.size());

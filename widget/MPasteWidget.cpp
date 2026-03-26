@@ -41,6 +41,10 @@
 #include "ui_MPasteWidget.h"
 #include "utils/PlatformRelated.h"
 #include "data/LocalSaver.h"
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <psapi.h>
+#endif
 
 namespace {
 bool looksBrokenTranslation(const QString &text) {
@@ -1324,6 +1328,13 @@ void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
         case Qt::Key_Tab:
             handleTabKey();
             break;
+        case Qt::Key_M:
+            if (event->modifiers().testFlag(Qt::ControlModifier)) {
+                dumpMemoryStats();
+                return;
+            }
+            handleSearchInput(event);
+            break;
         default:
             handleSearchInput(event);
             break;
@@ -1992,6 +2003,26 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
 
         animation->start(QAbstractAnimation::DeleteWhenStopped);
     }
+}
+
+void MPasteWidget::dumpMemoryStats() {
+    qInfo().noquote() << QStringLiteral("===== MPaste Memory Stats =====");
+    if (ui_.clipboardWidget) {
+        qInfo().noquote() << ui_.clipboardWidget->memoryStats();
+    }
+    if (ui_.staredWidget) {
+        qInfo().noquote() << ui_.staredWidget->memoryStats();
+    }
+#ifdef Q_OS_WIN
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        qInfo().noquote() << QStringLiteral("[process] workingSet: %1 MB, peakWorkingSet: %2 MB, pagefile: %3 MB")
+                                .arg(pmc.WorkingSetSize / (1024 * 1024))
+                                .arg(pmc.PeakWorkingSetSize / (1024 * 1024))
+                                .arg(pmc.PagefileUsage / (1024 * 1024));
+    }
+#endif
+    qInfo().noquote() << QStringLiteral("===============================");
 }
 
 void MPasteWidget::debugKeyState() {

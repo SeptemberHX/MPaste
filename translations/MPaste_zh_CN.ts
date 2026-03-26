@@ -411,13 +411,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="1285"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="1286"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="1313"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="1314"/>
         <source>Loading</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="1310"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="1338"/>
         <source>Preview unavailable</source>
         <translation type="unfinished"></translation>
     </message>
