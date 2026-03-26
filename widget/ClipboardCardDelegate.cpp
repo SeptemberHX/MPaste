@@ -653,9 +653,9 @@ QPixmap buildLinkFallbackPreviewUncached(const QUrl &url, const QString &title, 
 
     const QRectF headlineRect(heroRect.left(), badgeRect.bottom() + 16.0, heroRect.width(), 34.0);
     QFont headlineFont = painter.font();
-    applyUiFontDefaults(headlineFont);
+    headlineFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
     headlineFont.setBold(true);
-    headlineFont.setPointSizeF(qMax(11.0, bounds.height() * 0.074));
+    headlineFont.setPointSizeF(qMax(9.0, bounds.height() * 0.048));
     painter.setFont(headlineFont);
     painter.setPen(QColor(255, 255, 255, 235));
     const QFontMetricsF headlineMetrics(headlineFont);

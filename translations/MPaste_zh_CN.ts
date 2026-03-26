@@ -425,7 +425,7 @@
 <context>
     <name>ScrollItemsWidget</name>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1462"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1477"/>
         <source>Preview</source>
         <translation type="unfinished">预览</translation>
     </message>

@@ -342,9 +342,10 @@ void ClipboardBoardModel::releaseItemPixmaps(int row) {
         return;
     }
     ClipboardItem &item = entries_[row].item;
+    // Only release the thumbnail (the large preview image).
+    // Keep icon and favicon — they are small and needed when the
+    // card cache is invalidated (theme/scale change).
     item.setThumbnail(QPixmap());
-    item.setIcon(QPixmap());
-    item.setFavicon(QPixmap());
     // No dataChanged — the card is already cached in cardPixmapCache_.
 }
 

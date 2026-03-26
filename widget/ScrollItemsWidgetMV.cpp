@@ -428,6 +428,20 @@ public:
         updateGeometries();
     }
 
+    // Allow the next scrollTo call to go through.
+    void setExplicitScrollTo(bool allow) { explicitScrollTo_ = allow; }
+
+    void scrollTo(const QModelIndex &index, ScrollHint hint = EnsureVisible) override {
+        // Block auto-scrollTo triggered internally by QListView (e.g.
+        // after setCurrentIndex / dataChanged) which yanks the viewport
+        // back while the user is browsing.  Only honour calls that our
+        // code explicitly requested.
+        if (explicitScrollTo_) {
+            explicitScrollTo_ = false;
+            QListView::scrollTo(index, hint);
+        }
+    }
+
 protected:
     void paintEvent(QPaintEvent *event) override {
         if (!fpsWindow_.isValid()) {
@@ -491,6 +505,7 @@ private:
     qint64 maxPaintMs_ = 0;
     int jank20Count_ = 0;
     int jank33Count_ = 0;
+    bool explicitScrollTo_ = false;
 };
 
 }
@@ -2009,7 +2024,10 @@ int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
             if (targetRow != sourceRow) {
                 boardModel_->moveItemToRow(sourceRow, targetRow);
             }
-            setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+            const QScrollBar *sb = horizontalScrollbar();
+            if (!sb || sb->value() <= sb->minimum()) {
+                setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+            }
             return targetRow;
         }
         currentPage_ = 0;
@@ -2027,7 +2045,10 @@ int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
         setCurrentPageNumber(1);
     }
 
-    setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+    const QScrollBar *sb = horizontalScrollbar();
+    if (!sb || sb->value() <= sb->minimum()) {
+        setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
+    }
     return targetRow;
 }
 
@@ -2590,7 +2611,14 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
     }
 
     const QModelIndex firstProxyIndex = proxyIndexForSourceRow(insertRow);
-    setCurrentProxyIndex(firstProxyIndex);
+    // Only auto-select the new item if the user is already at the
+    // beginning.  Otherwise scrolling would jump back to the start
+    // every time a clipboard capture arrives.
+    const QScrollBar *sb = horizontalScrollbar();
+    const bool atStart = !sb || sb->value() <= sb->minimum();
+    if (atStart) {
+        setCurrentProxyIndex(firstProxyIndex);
+    }
     ensureLinkPreviewForIndex(firstProxyIndex);
     scheduleThumbnailUpdate();
 
@@ -3052,6 +3080,7 @@ void ScrollItemsWidget::focusMoveLeft() {
 
     const QModelIndex nextIndex = proxyModel_->index(qMax(0, current.row() - 1), 0);
     setCurrentProxyIndex(nextIndex);
+    if (auto *bv = dynamic_cast<ClipboardBoardView *>(listView_)) bv->setExplicitScrollTo(true);
     listView_->scrollTo(nextIndex, QAbstractItemView::EnsureVisible);
 }
 
@@ -3068,6 +3097,7 @@ void ScrollItemsWidget::focusMoveRight() {
 
     const QModelIndex nextIndex = proxyModel_->index(qMin(proxyModel_->rowCount() - 1, current.row() + 1), 0);
     setCurrentProxyIndex(nextIndex);
+    if (auto *bv = dynamic_cast<ClipboardBoardView *>(listView_)) bv->setExplicitScrollTo(true);
     listView_->scrollTo(nextIndex, QAbstractItemView::EnsureVisible);
 }
 
