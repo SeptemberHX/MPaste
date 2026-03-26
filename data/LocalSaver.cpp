@@ -429,7 +429,9 @@ bool readByteArrayWithLimit(QDataStream &in, quint32 maxBytes, QByteArray *out) 
         return false;
     }
 
-    if (size == 0) {
+    // QDataStream encodes a null QByteArray as 0xFFFFFFFF and an empty
+    // one as size 0.  Both mean "no data for this entry".
+    if (size == 0 || size == 0xFFFFFFFF) {
         if (out) {
             out->clear();
         }
@@ -956,6 +958,14 @@ ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath, bool includ
     QDataStream in(&file);
     ClipboardItem item = loadFromStreamLight(in, filePath, includeThumbnail);
     file.close();
+
+    // The file may have been renamed (e.g. moveItemToFirst) while the
+    // header still contains the old name.  Use the filename as the
+    // canonical name so sorting by filename stays consistent.
+    const QString fileBaseName = QFileInfo(filePath).completeBaseName();
+    if (!item.getName().isEmpty() && item.getName() != fileBaseName) {
+        item.setName(fileBaseName);
+    }
     return item;
 }
 
@@ -1077,6 +1087,8 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
         return false;
     }
 
+    qInfo().noquote() << QStringLiteral("[loadMimePayloads] file=%1 offset=%2 fileSize=%3 formatCount=%4 streamOk=%5")
+        .arg(filePath).arg(offset).arg(file.size()).arg(formatCount).arg(in.status() == QDataStream::Ok);
     constexpr quint32 kMaxPreviewHtmlBytes = 2 * 1024 * 1024;
     constexpr quint32 kMaxPreviewImageBytes = 12 * 1024 * 1024;
     QList<QByteArray> uniqueBlobs;
@@ -1097,9 +1109,29 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
         }
 
         const bool wantsHtml = htmlOut && htmlBytes.isEmpty() && format == QStringLiteral("text/html");
-        const bool wantsImage = imageOut && imageBytes.isEmpty()
-            && (ContentClassifier::preferredImageFormats().contains(format)
-                || format.startsWith(QStringLiteral("image/")));
+        qInfo().noquote() << QStringLiteral("[loadMimePayloads] i=%1 format=%2 dataIndex=%3")
+            .arg(i).arg(format).arg(dataIndex);
+        // Match standard image MIME types as well as Windows clipboard
+        // wrappers like application/x-qt-windows-mime;value="PNG".
+        bool isImageFormat = false;
+        if (imageOut && imageBytes.isEmpty()) {
+            isImageFormat = ContentClassifier::preferredImageFormats().contains(format)
+                || format.startsWith(QStringLiteral("image/"));
+            if (!isImageFormat && format.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
+                static const QStringList winImageValues = {
+                    QStringLiteral("PNG"), QStringLiteral("JFIF"),
+                    QStringLiteral("GIF"), QStringLiteral("DIB"),
+                    QStringLiteral("Bitmap"),
+                };
+                for (const QString &val : winImageValues) {
+                    if (format.contains(val)) {
+                        isImageFormat = true;
+                        break;
+                    }
+                }
+            }
+        }
+        const bool wantsImage = isImageFormat;
         const bool shouldRead = wantsHtml || wantsImage;
 
         QByteArray data;

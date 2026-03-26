@@ -305,37 +305,37 @@
         <translation type="vanished">?? MIME ??</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="147"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="148"/>
         <source>Paste as Plain Text</source>
         <translation type="unfinished">??????</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="159"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="160"/>
         <source>Details</source>
         <translation type="unfinished">??</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="171"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="172"/>
         <source>Open Containing Folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="183"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="184"/>
         <source>Alias</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="221"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="222"/>
         <source>Save</source>
         <translation type="unfinished">保存</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="229"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="230"/>
         <source>Delete</source>
         <translation type="unfinished">删除</translation>
     </message>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="237"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="238"/>
         <source>Delete Selected</source>
         <translation type="unfinished"></translation>
     </message>
@@ -411,13 +411,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="1313"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="1314"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="1302"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="1303"/>
         <source>Loading</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="1338"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="1327"/>
         <source>Preview unavailable</source>
         <translation type="unfinished"></translation>
     </message>
@@ -425,7 +425,7 @@
 <context>
     <name>ScrollItemsWidget</name>
     <message>
-        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1477"/>
+        <location filename="../widget/ScrollItemsWidgetMV.cpp" line="1478"/>
         <source>Preview</source>
         <translation type="unfinished">预览</translation>
     </message>

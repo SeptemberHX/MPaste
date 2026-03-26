@@ -25,6 +25,7 @@
 #include <QTextBrowser>
 #include <QTextDocument>
 #include <QThread>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWindow>
@@ -309,9 +310,12 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
             break;
         }
         case ClipboardItem::Office: {
-            QImage image = !fallbackImage.isNull()
-                ? scalePreviewImage(fallbackImage, targetSize, devicePixelRatio)
-                : loadPreviewImageFromBytes(imageBytes, targetSize, devicePixelRatio);
+            // Prefer the full-resolution image from MIME data over the
+            // low-res card thumbnail used as fallback.
+            QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
+            if (image.isNull() && !fallbackImage.isNull()) {
+                image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
+            }
             if (!image.isNull()) {
                 payload.kind = PreviewKind::Image;
                 payload.image = image;
@@ -661,6 +665,14 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
             }
         }
 
+        qInfo().noquote() << QStringLiteral("[preview] type=%1 sourceFile=%2 mimeOffset=%3 imageBytes=%4 fallbackNull=%5 preferFull=%6")
+            .arg(resolvedType)
+            .arg(sourceFilePath.isEmpty() ? QStringLiteral("(empty)") : sourceFilePath)
+            .arg(mimeOffset)
+            .arg(resolvedImageBytes.size())
+            .arg(resolvedFallbackImage.isNull())
+            .arg(preferFullItem);
+
         PreviewPayload payload = buildPreviewPayload(resolvedType,
                                                      resolvedText,
                                                      resolvedUrls,
@@ -683,6 +695,14 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                     case PreviewKind::Image: {
                         guard->setImagePreview(payload.image);
                         guard->ui_.contentLayout->setCurrentWidget(guard->ui_.imageScrollArea);
+                        // Viewport size may not be valid until after the
+                        // layout switch.  Reset zoom and re-fit after
+                        // the layout settles with the correct viewport.
+                        QTimer::singleShot(0, guard.data(), [guard]() {
+                            if (!guard) return;
+                            guard->imageZoomFactor_ = 1.0;
+                            guard->updateImagePreview();
+                        });
                         break;
                     }
                     case PreviewKind::Html: {
@@ -798,6 +818,10 @@ void ClipboardItemPreviewDialog::updateImagePreview() {
         fitScale = qMin(scaleX, scaleY);
     }
     imageFitScale_ = fitScale;
+    qInfo().noquote() << QStringLiteral("[updateImagePreview] imageSize=%1x%2 viewportSize=%3x%4 fitScale=%5 zoomFactor=%6")
+        .arg(imageSize.width()).arg(imageSize.height())
+        .arg(viewportSize.width()).arg(viewportSize.height())
+        .arg(fitScale, 0, 'f', 3).arg(imageZoomFactor_, 0, 'f', 3);
 
     qreal scale = imageFitScale_ * imageZoomFactor_;
     scale = qBound(kImageZoomMin, scale, kImageZoomMax);
