@@ -291,10 +291,10 @@ void CALLBACK WinUtils::winEventProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd,
 
     if (!hwnd || !IsWindow(hwnd)) return;
 
-    // 蹇界暐涓嶅彲瑙佺獥鍙?
+    // 忽略不可见窗口
     if (!IsWindowVisible(hwnd)) return;
 
-    // 鑾峰彇绐楀彛鏍囬锛屾帓闄?MPaste 鑷韩
+    // 获取窗口标题，排除 MPaste 自身
     wchar_t title[256];
     GetWindowTextW(hwnd, title, 256);
     QString windowTitle = QString::fromWCharArray(title);
@@ -372,7 +372,7 @@ void WinUtils::simulateKeyPress(WORD key, bool ctrl, bool shift, bool alt) {
     INPUT inputs[8] = {};
     int inputCount = 0;
 
-    // 鑾峰彇鎵弿鐮?
+    // 获取扫描码
     WORD scanCode = MapVirtualKey(key, MAPVK_VK_TO_VSC);
     WORD ctrlScan = MapVirtualKey(VK_CONTROL, MAPVK_VK_TO_VSC);
     WORD shiftScan = MapVirtualKey(VK_SHIFT, MAPVK_VK_TO_VSC);
@@ -565,7 +565,7 @@ QPixmap PlatformRelated::getWindowIcon(WId wId) {
 }
 
 WId PlatformRelated::currActiveWindow() {
-    return (WId)WinUtils::currentWinId();  // 浣跨敤 WId 绫诲瀷杞崲
+    return (WId)WinUtils::currentWinId();  // 使用 WId 类型转换
 }
 
 void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode) {

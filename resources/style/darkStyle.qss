@@ -1,0 +1,108 @@
+﻿/*
+ * input: Depends on Qt style system and resource paths.
+ * output: Provides dark theme color overrides for the main window and common controls.
+ * pos: resources/style theme stylesheet.
+ * update: Keep this header and resources/style/README.md in sync.
+ * note: Added for dark theme support.
+ */
+QWidget#pasteWidget {
+    background-color: transparent;  /* Background and gradient border are painted in paintEvent */
+}
+
+QWidget#pasteWidget,
+QWidget#pasteWidget QLabel,
+QWidget#pasteWidget QToolButton,
+QWidget#pasteWidget QPushButton {
+    color: {{text_primary}};
+}
+
+QToolButton#clipboardButton,
+QToolButton#staredButton,
+QToolButton#allTypeBtn,
+QToolButton#textTypeBtn,
+QToolButton#linkTypeBtn,
+QToolButton#imageTypeBtn,
+QToolButton#richTextTypeBtn,
+QToolButton#fileTypeBtn {
+    color: {{tab_text}};
+}
+
+#firstButton:hover, #lastButton:hover,
+#firstButton:selected, #lastButton:selected,
+#searchButton:selected, #searchButton:hover,
+#menuButton:selected, #menuButton:hover {
+    background-color: {{top_hover_bg}};
+}
+
+/* Input box */
+QLineEdit {
+    border-color: {{line_edit_border}};
+    background-color: {{line_edit_bg}};
+    color: {{text_primary}};
+}
+
+QLineEdit:focus {
+    border-color: {{line_edit_border_focus}};
+}
+
+/* Count badge */
+QToolButton#countArea {
+    background-color: {{badge_bg}};
+    color: {{badge_text}};
+    border: 1px solid {{badge_border}};
+}
+
+QToolButton#countArea:hover {
+    background-color: {{badge_bg_hover}};
+    border-color: {{badge_border_hover}};
+}
+
+/* Clipboard tabs */
+QWidget#clipboardBtnWidget QToolButton {
+    color: {{tab_text}};
+}
+QWidget#clipboardBtnWidget QToolButton:!checked {
+    color: {{tab_text}};
+}
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:hover,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:pressed,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:checked,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
+    background-color: {{tab_checked_bg}};
+    border: 2px solid {{accent_blue}};
+    color: {{tab_text}};
+}
+
+QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
+QWidget#clipboardBtnWidget QToolButton#staredButton:pressed,
+QWidget#clipboardBtnWidget QToolButton#staredButton:checked,
+QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
+    background-color: {{tab_checked_bg}};
+    border: 2px solid {{accent_orange}};
+    color: {{tab_text}};
+}
+
+/* Type filter pills */
+QWidget#typeBtnWidget QToolButton {
+    color: {{tab_text}};
+}
+QWidget#typeBtnWidget QToolButton:!checked {
+    color: {{tab_text}};
+}
+
+QWidget#typeBtnWidget QToolButton:hover,
+QWidget#typeBtnWidget QToolButton:pressed,
+QWidget#typeBtnWidget QToolButton:checked {
+    background-color: {{type_checked_bg}};
+    border: 2px solid {{accent_blue}};
+    color: {{tab_text}};
+}
+
+/* About window */
+QWidget#AboutWidget {
+    background-color: {{menu_bg}};
+    border: 1px solid {{menu_border}};
+}
+QWidget#AboutWidget QLabel {
+    color: {{text_primary}};
+}

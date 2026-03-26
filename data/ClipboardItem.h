@@ -1,7 +1,7 @@
 // input: Depends on Qt mime/image/text primitives and raw clipboard payloads from the system.
-// output: Exposes a comparable clipboard item with cached search text and lightweight content fingerprint.
+// output: Exposes a comparable clipboard item with cached search text, alias + pin metadata, and lightweight content fingerprint + image snapshot hints.
 // pos: Data-layer core clipboard model used by persistence, filtering, dedup, and rendering code.
-// update: If I change, update this header block and my folder README.md.
+// update: If I change, update this header block and my folder README.md (data-layer preview kind for card rendering).
 #ifndef MPASTE_CLIPBOARDITEM_H
 #define MPASTE_CLIPBOARDITEM_H
 
@@ -9,6 +9,7 @@
 #include <QColor>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QImage>
 #include <QMimeData>
@@ -21,12 +22,29 @@
 #include <QUrl>
 #include <QVariant>
 
+#include "ContentType.h"
+#include "ContentClassifier.h"
+#include "PreviewKind.h"
+#include "PreviewClassifier.h"
+
 #include <algorithm>
 #include <cstring>
 
 class ClipboardItem {
 public:
-    enum ContentType { All = 0, Text, Link, Image, RichText, File, Color };
+    // NOTE: Append new values to preserve on-disk enum compatibility.
+    using ContentType = ::ContentType;
+    using PreviewKind = ::ClipboardPreviewKind;
+    static constexpr ContentType All = ::All;
+    static constexpr ContentType Text = ::Text;
+    static constexpr ContentType Link = ::Link;
+    static constexpr ContentType Image = ::Image;
+    static constexpr ContentType RichText = ::RichText;
+    static constexpr ContentType File = ::File;
+    static constexpr ContentType Color = ::Color;
+    static constexpr ContentType Office = ::Office;
+    static constexpr PreviewKind TextPreview = ::TextPreview;
+    static constexpr PreviewKind VisualPreview = ::VisualPreview;
 
 private:
     QString name_;
@@ -36,6 +54,8 @@ private:
     QPixmap favicon_;
     QString title_;
     QString url_;
+    QString alias_;
+    bool pinned_ = false;
     mutable QByteArray fingerprintCache_;
     mutable bool fingerprintCacheInitialized_ = false;
     mutable QString searchableTextCache_;
@@ -49,12 +69,50 @@ private:
 
     // Lazy-load support (V4 format)
     QPixmap thumbnail_;
+    bool thumbnailAvailableHint_ = false;
     QString sourceFilePath_;
     quint64 mimeDataFileOffset_ = 0;
     bool mimeDataLoaded_ = true;
     mutable ContentType cachedContentType_ = Text;
+    mutable PreviewKind cachedPreviewKind_ = TextPreview;
     mutable QString cachedNormalizedText_;
     mutable QList<QUrl> cachedNormalizedUrls_;
+
+    static QString windowsDrivePathFromUrl(const QUrl &url) {
+        if (!url.isValid() || url.isLocalFile()) {
+            return {};
+        }
+
+        const QString scheme = url.scheme();
+        const QString path = url.path();
+        if (scheme.size() == 1 && !path.isEmpty() && path.startsWith(QLatin1Char('/'))) {
+            return QDir::fromNativeSeparators(scheme.toUpper() + QStringLiteral(":") + path);
+        }
+
+        const QString asText = url.toDisplayString(QUrl::PreferLocalFile);
+        if (asText.size() > 2
+            && asText[1] == QLatin1Char(':')
+            && (asText[2] == QLatin1Char('/') || asText[2] == QLatin1Char('\\'))) {
+            return QDir::fromNativeSeparators(asText);
+        }
+
+        return {};
+    }
+
+    static QUrl normalizePotentialLocalFileUrl(const QUrl &url) {
+        if (!url.isValid()) {
+            return {};
+        }
+        if (url.isLocalFile()) {
+            return url;
+        }
+
+        const QString localPath = windowsDrivePathFromUrl(url);
+        if (!localPath.isEmpty()) {
+            return QUrl::fromLocalFile(localPath);
+        }
+        return url;
+    }
 
     static QList<QUrl> parseUrlsFromLines(const QStringList &lines, bool strictMode) {
         QList<QUrl> result;
@@ -64,17 +122,17 @@ private:
                 continue;
             }
 
-            QUrl url(trimmed);
-            if (url.isValid() && !url.isRelative() && !trimmed.contains(QLatin1Char(' '))) {
-                result << url;
-                continue;
-            }
-
             if ((trimmed.startsWith(QLatin1String("/"))
                  || (trimmed.size() > 2 && trimmed[1] == QLatin1Char(':')
                      && (trimmed[2] == QLatin1Char('/') || trimmed[2] == QLatin1Char('\\'))))
                 && QFileInfo::exists(trimmed)) {
-                result << QUrl::fromLocalFile(trimmed);
+                result << QUrl::fromLocalFile(QDir::fromNativeSeparators(trimmed));
+                continue;
+            }
+
+            QUrl url(trimmed);
+            if (url.isValid() && !url.isRelative() && !trimmed.contains(QLatin1Char(' '))) {
+                result << normalizePotentialLocalFileUrl(url);
                 continue;
             }
 
@@ -231,6 +289,10 @@ private:
 
         QList<QUrl> urls = mimeData_->urls();
         if (!urls.isEmpty()) {
+            for (QUrl &url : urls) {
+                url = normalizePotentialLocalFileUrl(url);
+            }
+
             const bool allLocalFiles = std::all_of(urls.begin(), urls.end(),
                 [](const QUrl &url) { return url.isLocalFile(); });
             if (allLocalFiles) {
@@ -345,21 +407,6 @@ private:
     }
 
 
-    static bool shouldSkipImageDecodeFormatName(const QString &format) {
-        const QString lower = format.toLower();
-        return lower.startsWith(QStringLiteral("text/"))
-            || lower.contains(QStringLiteral("html"))
-            || lower.contains(QStringLiteral("plain"))
-            || lower.contains(QStringLiteral("xml"))
-            || lower.contains(QStringLiteral("json"))
-            || lower.contains(QStringLiteral("url"))
-            || lower.contains(QStringLiteral("uri"))
-            || lower.contains(QStringLiteral("descriptor"))
-            || lower.contains(QStringLiteral("gvml"))
-            || lower.contains(QStringLiteral("rtf"))
-            || lower.contains(QStringLiteral("rich text"));
-    }
-
     static QPixmap decodePixmapFromMimeData(const QMimeData *mimeData) {
         if (!mimeData) {
             return QPixmap();
@@ -376,15 +423,7 @@ private:
             }
         }
 
-        static const QStringList commonFormats = {
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp"),
-            QStringLiteral("application/x-qt-image")
-        };
-
-        for (const QString &format : commonFormats) {
+        for (const QString &format : ContentClassifier::commonImageFormats()) {
             if (mimeData->hasFormat(format)) {
                 QPixmap pixmap;
                 const QByteArray data = mimeData->data(format);
@@ -395,7 +434,7 @@ private:
         }
 
         for (const QString &format : formats) {
-            if (shouldSkipImageDecodeFormatName(format)) {
+            if (ContentClassifier::shouldSkipImageDecodeFormatName(format)) {
                 continue;
             }
 
@@ -442,183 +481,29 @@ private:
         mimeData->setData(QStringLiteral("application/x-qt-windows-mime;value=\"PNG\""), imageData);
     }
 
-    bool isImageLikeText(const QString &text) const {
-        const QString trimmed = text.trimmed();
-        if (trimmed.isEmpty()) {
-            return true;
-        }
-
-        if (trimmed.size() == 1) {
-            const QChar ch = trimmed.at(0);
-            if (ch == QChar(0xFFFC) || ch == QChar::ReplacementCharacter) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     bool hasDecodableImage() const {
-        if (!mimeData_) {
-            return false;
-        }
-
-        if (mimeData_->hasImage()) {
-            return true;
-        }
-
-        const QStringList windowsFormats = mimeData_->formats();
-        for (const QString &format : windowsFormats) {
-            if (format.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
-                QPixmap pixmap;
-                const QByteArray data = mimeData_->data(format);
-                if (!data.isEmpty() && pixmap.loadFromData(data)) {
-                    return true;
-                }
-            }
-        }
-
-        static const QStringList commonFormats = {
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp"),
-            QStringLiteral("application/x-qt-image")
-        };
-
-        for (const QString &format : commonFormats) {
-            if (mimeData_->hasFormat(format)) {
-                QPixmap pixmap;
-                const QByteArray data = mimeData_->data(format);
-                if (!data.isEmpty() && pixmap.loadFromData(data)) {
-                    return true;
-                }
-            }
-        }
-
-        for (const QString &format : mimeData_->formats()) {
-            if (shouldSkipImageDecodeFormat(format)) {
-                continue;
-            }
-
-            QPixmap pixmap;
-            const QByteArray data = mimeData_->data(format);
-            if (!data.isEmpty() && pixmap.loadFromData(data)) {
-                return true;
-            }
-        }
-
-        const QVariant imageData = mimeData_->imageData();
-        if (imageData.canConvert<QPixmap>()) {
-            const QPixmap pixmap = qvariant_cast<QPixmap>(imageData);
-            if (!pixmap.isNull()) {
-                return true;
-            }
-        }
-        if (imageData.canConvert<QImage>()) {
-            const QImage image = qvariant_cast<QImage>(imageData);
-            if (!image.isNull()) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool hasMaterializedImagePayload() const {
-        if (!mimeData_) {
-            return false;
-        }
-
-        if (mimeData_->hasImage()) {
-            return true;
-        }
-
-        static const QStringList preferredFormats = {
-            QStringLiteral("application/x-qt-image"),
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp")
-        };
-
-        for (const QString &format : preferredFormats) {
-            if (!mimeData_->hasFormat(format)) {
-                continue;
-            }
-
-            QPixmap pixmap;
-            const QByteArray data = mimeData_->data(format);
-            if (!data.isEmpty() && pixmap.loadFromData(data)) {
-                return true;
-            }
-        }
-
-        const QStringList formats = mimeData_->formats();
-        for (const QString &format : formats) {
-            if (!format.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
-                continue;
-            }
-
-            QPixmap pixmap;
-            const QByteArray data = mimeData_->data(format);
-            if (!data.isEmpty() && pixmap.loadFromData(data)) {
-                return true;
-            }
-        }
-
-        return false;
+        return ContentClassifier::hasDecodableImage(mimeData_.data());
     }
 
     bool hasFastImagePayload() const {
-        if (!mimeData_) {
-            return false;
-        }
-
-        if (mimeData_->hasImage() || mimeData_->hasFormat(QStringLiteral("application/x-qt-image"))) {
-            return true;
-        }
-
-        const QStringList formats = mimeData_->formats();
-        for (const QString &format : formats) {
-            const QString lower = format.toLower();
-            if (lower.startsWith(QStringLiteral("image/"))) {
-                return true;
-            }
-            if (lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))
-                && (lower.contains(QStringLiteral("png"))
-                    || lower.contains(QStringLiteral("jpeg"))
-                    || lower.contains(QStringLiteral("jpg"))
-                    || lower.contains(QStringLiteral("bmp"))
-                    || lower.contains(QStringLiteral("dib"))
-                    || lower.contains(QStringLiteral("gif"))
-                    || lower.contains(QStringLiteral("webp")))) {
-                return true;
-            }
-        }
-
-        return false;
+        return ContentClassifier::hasFastImagePayload(mimeData_.data());
     }
 
-    QByteArray extractFastImagePayloadBytes() const {
+    QByteArray extractFastImagePayloadBytes(QString *formatOut = nullptr) const {
         if (!mimeData_) {
             return {};
         }
+        if (formatOut) {
+            formatOut->clear();
+        }
 
-        static const QStringList preferredFormats = {
-            QStringLiteral("application/x-qt-image"),
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/jpg"),
-            QStringLiteral("image/webp"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp")
-        };
-
-        for (const QString &format : preferredFormats) {
+        for (const QString &format : ContentClassifier::preferredImageFormats()) {
             if (mimeData_->hasFormat(format)) {
                 const QByteArray data = mimeData_->data(format);
                 if (!data.isEmpty()) {
+                    if (formatOut) {
+                        *formatOut = format;
+                    }
                     return data;
                 }
             }
@@ -639,6 +524,9 @@ private:
             if (imageMime || imageWindowsMime) {
                 const QByteArray data = mimeData_->data(format);
                 if (!data.isEmpty()) {
+                    if (formatOut) {
+                        *formatOut = format;
+                    }
                     return data;
                 }
             }
@@ -647,25 +535,21 @@ private:
         return {};
     }
 
-    static QByteArray extractFastImagePayloadBytes(const QMimeData *mimeData) {
+    static QByteArray extractFastImagePayloadBytes(const QMimeData *mimeData, QString *formatOut = nullptr) {
         if (!mimeData) {
             return {};
         }
+        if (formatOut) {
+            formatOut->clear();
+        }
 
-        static const QStringList preferredFormats = {
-            QStringLiteral("application/x-qt-image"),
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/jpg"),
-            QStringLiteral("image/webp"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp")
-        };
-
-        for (const QString &format : preferredFormats) {
+        for (const QString &format : ContentClassifier::preferredImageFormats()) {
             if (mimeData->hasFormat(format)) {
                 const QByteArray data = mimeData->data(format);
                 if (!data.isEmpty()) {
+                    if (formatOut) {
+                        *formatOut = format;
+                    }
                     return data;
                 }
             }
@@ -686,6 +570,9 @@ private:
             if (imageMime || imageWindowsMime) {
                 const QByteArray data = mimeData->data(format);
                 if (!data.isEmpty()) {
+                    if (formatOut) {
+                        *formatOut = format;
+                    }
                     return data;
                 }
             }
@@ -696,6 +583,18 @@ private:
 
     static bool shouldCopyLightMimeFormat(const QString &format) {
         const QString lower = format.toLower();
+        if (lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\""))) {
+            // Skip JVM clipboard formats — extracting them triggers expensive
+            // cross-process IPC (COM/OLE → JVM serialization) and the data is
+            // editor-internal state (IntelliJ folding, paste options) that is
+            // not useful for later paste.
+            if (lower.contains(QStringLiteral("java_dataflavor"))
+                || lower.contains(QStringLiteral("x-java-"))) {
+                return false;
+            }
+            // Preserve Windows clipboard formats (EMF/OLE/Office) so Office shapes remain editable.
+            return true;
+        }
         return lower.startsWith(QStringLiteral("text/"))
             || lower.contains(QStringLiteral("html"))
             || lower.contains(QStringLiteral("plain"))
@@ -709,100 +608,19 @@ private:
     }
 
     bool shouldSkipImageDecodeFormat(const QString &format) const {
-        const QString lower = format.toLower();
-        return lower.startsWith(QStringLiteral("text/"))
-            || lower.contains(QStringLiteral("html"))
-            || lower.contains(QStringLiteral("plain"))
-            || lower.contains(QStringLiteral("xml"))
-            || lower.contains(QStringLiteral("json"))
-            || lower.contains(QStringLiteral("url"))
-            || lower.contains(QStringLiteral("uri"))
-            || lower.contains(QStringLiteral("descriptor"))
-            || lower.contains(QStringLiteral("gvml"))
-            || lower.contains(QStringLiteral("rtf"))
-            || lower.contains(QStringLiteral("rich text"));
+        return ContentClassifier::shouldSkipImageDecodeFormatName(format);
     }
 
     bool shouldTreatHtmlPayloadAsImage() const {
-        if (!mimeData_ || !mimeData_->hasHtml()) {
-            return false;
-        }
-
-        const QString text = buildNormalizedText();
-        const QString html = mimeData_->html();
-        const QString lowerHtml = html.toLower();
-        if (!lowerHtml.contains(QStringLiteral("<img"))) {
-            return false;
-        }
-
-        QTextDocument doc;
-        doc.setHtml(html);
-        const QString plainText = doc.toPlainText();
-        if (!isImageLikeText(text) && !isImageLikeText(plainText)) {
-            return false;
-        }
-
-        return lowerHtml.contains(QStringLiteral("ksdocclipboard"))
-            || lowerHtml.contains(QStringLiteral("kingsoft"))
-            || lowerHtml.contains(QStringLiteral("from:'wps'"))
-            || lowerHtml.contains(QStringLiteral("from:&quot;wps&quot;"))
-            || hasDecodableImage();
+        return ContentClassifier::shouldTreatHtmlPayloadAsImage(mimeData_.data(), buildNormalizedText());
     }
 
     bool shouldTreatHtmlPayloadAsImageFast() const {
-        if (!mimeData_ || !mimeData_->hasHtml()) {
-            return false;
-        }
-
-        const QString text = buildNormalizedText();
-        const QString lowerHtml = mimeData_->html().toLower();
-        if (!lowerHtml.contains(QStringLiteral("<img"))) {
-            return false;
-        }
-
-        if (!isImageLikeText(text)) {
-            return false;
-        }
-
-        return lowerHtml.contains(QStringLiteral("ksdocclipboard"))
-            || lowerHtml.contains(QStringLiteral("kingsoft"))
-            || lowerHtml.contains(QStringLiteral("from:'wps'"))
-            || lowerHtml.contains(QStringLiteral("from:&quot;wps&quot;"))
-            || hasFastImagePayload();
+        return ContentClassifier::shouldTreatHtmlPayloadAsImageFast(mimeData_.data(), buildNormalizedText());
     }
 
     ContentType detectLightContentType() const {
-        if (!mimeData_) return Text;
-
-        if (mimeData_->hasColor()) return Color;
-
-        const QList<QUrl> urls = buildNormalizedUrls();
-        if (!urls.isEmpty() && !mimeData_->hasHtml()) {
-            bool allValid = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
-                [](const QUrl &url) { return url.isValid() && !url.isRelative(); });
-            if (allValid) {
-                bool allFiles = std::all_of(urls.begin(), urls.end(),
-                    [](const QUrl &url) { return url.isLocalFile(); });
-                return allFiles ? File : Link;
-            }
-            return Text;
-        }
-
-        if (mimeData_->hasHtml()) {
-            if (shouldTreatHtmlPayloadAsImageFast()) {
-                return Image;
-            }
-            QString text = buildNormalizedText().trimmed();
-            if (!mimeData_->formats().contains(QStringLiteral("Rich Text Format"))
-                && !text.contains(QLatin1Char('\n'))
-                && (text.startsWith(QStringLiteral("http://")) || text.startsWith(QStringLiteral("https://")))) {
-                return Link;
-            }
-            return RichText;
-        }
-
-        if (hasFastImagePayload()) return Image;
-        return Text;
+        return ContentClassifier::classifyLight(mimeData_.data(), buildNormalizedText(), buildNormalizedUrls());
     }
 
     QString htmlImageIdentity() const {
@@ -852,6 +670,9 @@ private:
         }
 
         QStringList parts;
+        if (!alias_.isEmpty()) {
+            parts << alias_;
+        }
         if (!title_.isEmpty()) {
             parts << title_;
         }
@@ -905,7 +726,7 @@ private:
             hash.addData(doc.toPlainText().simplified().toUtf8());
         }
 
-        if (mimeDataLoaded_ && shouldTreatHtmlPayloadAsImage()) {
+        if (shouldTreatHtmlPayloadAsImage()) {
             const QString imageIdentity = htmlImageIdentity();
             if (!imageIdentity.isEmpty()) {
                 hash.addData(QByteArrayLiteral("html-image:"));
@@ -925,10 +746,10 @@ private:
             hash.addData(QByteArray::number(static_cast<quint32>(getColor().rgba())));
         }
 
-        if (hasFastImagePayload() || (mimeDataLoaded_ && hasDecodableImage())) {
+        if (hasFastImagePayload()) {
             QByteArray imageBytes = extractFastImagePayloadBytes();
 
-            if (imageBytes.isEmpty() && mimeDataLoaded_) {
+            if (imageBytes.isEmpty()) {
                 QPixmap pixmap = getImage();
                 if (!pixmap.isNull()) {
                     QBuffer buffer(&imageBytes);
@@ -961,6 +782,10 @@ private:
     }
 
 public:
+    static bool shouldCopyExtraMimeFormat(const QString &format) {
+        return shouldCopyLightMimeFormat(format);
+    }
+
     ClipboardItem(const QPixmap &icon, const QMimeData *mimeData) : icon_(icon) {
         if (mimeData) {
             mimeData_.reset(new QMimeData);
@@ -996,27 +821,50 @@ public:
                 item.mimeData_->setColorData(mimeData->colorData());
             }
 
+            // Copy additional MIME formats needed for paste fidelity
+            // (RTF, Office shapes, etc.).  Skip formats already captured
+            // above and JVM formats that trigger expensive cross-process IPC.
             for (const QString &format : mimeData->formats()) {
+                if (format == QStringLiteral("text/plain")
+                    || format == QStringLiteral("text/html")
+                    || format == QStringLiteral("text/uri-list")) {
+                    continue;
+                }
                 if (!shouldCopyLightMimeFormat(format)) {
                     continue;
                 }
-
                 const QByteArray data = mimeData->data(format);
                 if (!data.isEmpty()) {
                     item.mimeData_->setData(format, data);
                 }
             }
 
-            const QByteArray imageBytes = extractFastImagePayloadBytes(mimeData);
+            // Capture image payload: try fast raw bytes first, fall back
+            // to QVariant image decoding for screenshots.
+            QString imageFormat;
+            const QByteArray imageBytes = extractFastImagePayloadBytes(mimeData, &imageFormat);
             if (!imageBytes.isEmpty()) {
-                item.mimeData_->setData(QStringLiteral("application/x-qt-image"), imageBytes);
+                const QString format = imageFormat.isEmpty()
+                    ? QStringLiteral("application/x-qt-image")
+                    : imageFormat;
+                item.mimeData_->setData(format, imageBytes);
+            } else if (mimeData->hasImage()) {
+                const QPixmap pixmap = decodePixmapFromMimeData(mimeData);
+                materializeCanonicalImage(item.mimeData_.data(), pixmap);
             }
         }
         item.time_ = QDateTime::currentDateTime();
         item.name_ = QString::number(item.time_.toMSecsSinceEpoch());
         item.cachedNormalizedText_ = item.buildNormalizedText();
         item.cachedNormalizedUrls_ = item.buildNormalizedUrls();
-        item.cachedContentType_ = item.detectLightContentType();
+        item.cachedContentType_ = mimeData
+            ? ContentClassifier::classifyLight(mimeData, item.cachedNormalizedText_, item.cachedNormalizedUrls_)
+            : item.detectLightContentType();
+        item.cachedPreviewKind_ = PreviewClassifier::classifyLight(item.cachedContentType_,
+                                                                   item.cachedNormalizedText_,
+                                                                   item.hasThumbnailHint(),
+                                                                   item.mimeData_.data(),
+                                                                   item.hasFastImagePayload());
         item.mimeDataLoaded_ = false;
         return item;
     }
@@ -1034,6 +882,8 @@ public:
         favicon_ = other.favicon_;
         title_ = other.title_;
         url_ = other.url_;
+        alias_ = other.alias_;
+        pinned_ = other.pinned_;
         icon_ = other.icon_;
         fingerprintCache_ = other.fingerprintCache_;
         fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
@@ -1046,10 +896,12 @@ public:
         imageSizeCache_ = other.imageSizeCache_;
         imageSizeCacheInitialized_ = other.imageSizeCacheInitialized_;
         thumbnail_ = other.thumbnail_;
+        thumbnailAvailableHint_ = other.thumbnailAvailableHint_;
         sourceFilePath_ = other.sourceFilePath_;
         mimeDataFileOffset_ = other.mimeDataFileOffset_;
         mimeDataLoaded_ = other.mimeDataLoaded_;
         cachedContentType_ = other.cachedContentType_;
+        cachedPreviewKind_ = other.cachedPreviewKind_;
         cachedNormalizedText_ = other.cachedNormalizedText_;
         cachedNormalizedUrls_ = other.cachedNormalizedUrls_;
     }
@@ -1061,6 +913,8 @@ public:
             favicon_ = other.favicon_;
             title_ = other.title_;
             url_ = other.url_;
+            alias_ = other.alias_;
+            pinned_ = other.pinned_;
             icon_ = other.icon_;
             fingerprintCache_ = other.fingerprintCache_;
             fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
@@ -1073,10 +927,12 @@ public:
             imageSizeCache_ = other.imageSizeCache_;
             imageSizeCacheInitialized_ = other.imageSizeCacheInitialized_;
             thumbnail_ = other.thumbnail_;
+            thumbnailAvailableHint_ = other.thumbnailAvailableHint_;
             sourceFilePath_ = other.sourceFilePath_;
             mimeDataFileOffset_ = other.mimeDataFileOffset_;
             mimeDataLoaded_ = other.mimeDataLoaded_;
             cachedContentType_ = other.cachedContentType_;
+            cachedPreviewKind_ = other.cachedPreviewKind_;
             cachedNormalizedText_ = other.cachedNormalizedText_;
             cachedNormalizedUrls_ = other.cachedNormalizedUrls_;
 
@@ -1102,7 +958,8 @@ public:
         if (!mimeDataLoaded_) {
             return cachedNormalizedText_.toLower().contains(lower)
                 || title_.toLower().contains(lower)
-                || url_.toLower().contains(lower);
+                || url_.toLower().contains(lower)
+                || alias_.toLower().contains(lower);
         }
 
         if (!mimeData_) {
@@ -1154,8 +1011,10 @@ public:
         }
 
         if (mimeData_->hasHtml() || other.mimeData_->hasHtml()) {
-            QStringView frag1 = htmlFragment(mimeData_->html());
-            QStringView frag2 = htmlFragment(other.mimeData_->html());
+            const QString html1 = mimeData_->html();
+            const QString html2 = other.mimeData_->html();
+            QStringView frag1 = htmlFragment(html1);
+            QStringView frag2 = htmlFragment(html2);
             const bool imageLikeHtml = shouldTreatHtmlPayloadAsImage() || other.shouldTreatHtmlPayloadAsImage();
             if (imageLikeHtml) {
                 const QString imageId1 = htmlImageIdentity();
@@ -1291,15 +1150,7 @@ public:
             }
         }
 
-        static const QStringList commonFormats = {
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/gif"),
-            QStringLiteral("image/bmp"),
-            QStringLiteral("application/x-qt-image")
-        };
-
-        for (const QString &format : commonFormats) {
+        for (const QString &format : ContentClassifier::commonImageFormats()) {
             if (mimeData_->hasFormat(format)) {
                 QPixmap pixmap;
                 QByteArray data = mimeData_->data(format);
@@ -1352,6 +1203,16 @@ public:
     QByteArray imagePayloadBytesFast() const { return extractFastImagePayloadBytes(); }
 
     QString getHtml() const { return mimeData_ ? mimeData_->html() : QString(); }
+    PreviewKind getPreviewKind() const {
+        if (!mimeDataLoaded_) {
+            return cachedPreviewKind_;
+        }
+        return PreviewClassifier::classifyFull(getContentType(),
+                                               getNormalizedText(),
+                                               mimeData_.data(),
+                                               hasFastImagePayload(),
+                                               hasDecodableImage());
+    }
     QList<QUrl> getUrls() const { return mimeData_ ? mimeData_->urls() : QList<QUrl>(); }
     QColor getColor() const {
         return mimeData_ && mimeData_->hasColor()
@@ -1367,27 +1228,61 @@ public:
 
     QString getTitle() const { return title_; }
     QString getUrl() const { return url_; }
+    QString getAlias() const { return alias_; }
+    bool isPinned() const { return pinned_; }
 
     void setTitle(const QString &title) { title_ = title; invalidateSearchCache(); }
     void setUrl(const QString &url) { url_ = url; invalidateSearchCache(); }
+    void setAlias(const QString &alias) { alias_ = alias; invalidateSearchCache(); }
+    void setPinned(bool pinned) { pinned_ = pinned; }
 
     void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }
 
+    void setMimeFormat(const QString &format, const QByteArray &data) {
+        if (!mimeData_) {
+            mimeData_.reset(new QMimeData);
+        }
+        mimeData_->setData(format, data);
+    }
+
     bool hasThumbnail() const { return !thumbnail_.isNull(); }
+    bool hasThumbnailHint() const { return thumbnailAvailableHint_ || !thumbnail_.isNull(); }
     const QPixmap& thumbnail() const { return thumbnail_; }
-    void setThumbnail(const QPixmap &thumb) { thumbnail_ = thumb; }
+    void setThumbnail(const QPixmap &thumb) {
+        thumbnail_ = thumb;
+        if (!thumb.isNull()) {
+            thumbnailAvailableHint_ = true;
+        }
+    }
+    void clearThumbnail() { thumbnail_ = QPixmap(); }
+    void setThumbnailAvailableHint(bool available) {
+        thumbnailAvailableHint_ = available || !thumbnail_.isNull();
+    }
     void setSourceFilePath(const QString &path) { sourceFilePath_ = path; }
     const QString& sourceFilePath() const { return sourceFilePath_; }
     void setMimeDataFileOffset(quint64 offset) { mimeDataFileOffset_ = offset; }
     quint64 mimeDataFileOffset() const { return mimeDataFileOffset_; }
     bool isMimeDataLoaded() const { return mimeDataLoaded_; }
 
-    void setLightLoaded(ContentType type, const QString &normText, const QList<QUrl> &normUrls) {
+    void setLightLoaded(ContentType type,
+                        const QString &normText,
+                        const QList<QUrl> &normUrls,
+                        bool hasThumbnailHint = false) {
         mimeDataLoaded_ = false;
         cachedContentType_ = type;
         cachedNormalizedText_ = normText;
         cachedNormalizedUrls_ = normUrls;
+        thumbnailAvailableHint_ = hasThumbnailHint || !thumbnail_.isNull();
+        cachedPreviewKind_ = PreviewClassifier::classifyLight(cachedContentType_,
+                                                              cachedNormalizedText_,
+                                                              thumbnailAvailableHint_,
+                                                              mimeData_.data(),
+                                                              hasFastImagePayload());
+        if (cachedContentType_ == RichText && cachedPreviewKind_ == TextPreview) {
+            thumbnail_ = QPixmap();
+            thumbnailAvailableHint_ = false;
+        }
     }
 
     // Implemented in LocalSaver.cpp to avoid circular dependency
@@ -1399,40 +1294,10 @@ public:
         }
         if (!mimeData_) return Text;
 
-        if (mimeData_->hasColor()) return Color;
-
-        QList<QUrl> urls = getNormalizedUrls();
-        if (!urls.isEmpty() && !mimeData_->hasHtml()) {
-            bool allValid = !urls.isEmpty() && std::all_of(urls.begin(), urls.end(),
-                [](const QUrl &url) { return url.isValid() && !url.isRelative(); });
-            if (allValid) {
-                bool allFiles = std::all_of(urls.begin(), urls.end(),
-                    [](const QUrl &url) { return url.isLocalFile(); });
-                return allFiles ? File : Link;
-            }
-            return Text;
-        }
-
-        if (mimeData_->hasHtml()) {
-            if (shouldTreatHtmlPayloadAsImage()) {
-                return Image;
-            }
-            QString text = buildNormalizedText().trimmed();
-            if (!mimeData_->formats().contains("Rich Text Format")
-                && !text.contains("\n")
-                && (text.startsWith("http://") || text.startsWith("https://"))) {
-                return Link;
-            }
-            return RichText;
-        }
-
-        if (hasMaterializedImagePayload()) {
-            return Image;
-        }
-
-        if (hasDecodableImage()) return Image;
-        return Text;
+        return ContentClassifier::classifyFull(mimeData_.data(), getNormalizedText(), getNormalizedUrls());
     }
 };
+
+Q_DECLARE_METATYPE(ClipboardItem)
 
 #endif // MPASTE_CLIPBOARDITEM_H

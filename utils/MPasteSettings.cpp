@@ -11,6 +11,9 @@
 #include <QDir>
 #include <iostream>
 #include <QSettings>
+#include <QGuiApplication>
+#include <QPalette>
+#include <QStyleHints>
 
 MPasteSettings *MPasteSettings::inst = nullptr;
 
@@ -31,6 +34,10 @@ const QString &MPasteSettings::getSaveDir() const {
     return saveDir;
 }
 
+void MPasteSettings::setSaveDir(const QString &dir) {
+    saveDir = dir;
+}
+
 MPasteSettings::MPasteSettings()
     : saveDir(QDir::homePath() + QDir::separator() +  ".MPaste")
     , maxSize(500)
@@ -46,7 +53,10 @@ MPasteSettings::MPasteSettings()
     this->pasteShortcutMode = AutoPasteShortcut;
     this->shortcutStr = "Alt+Q";
     this->itemScale = 100;
+    this->thumbnailPrefetchCount = 50;
     this->playSound = true;
+    this->themeMode = ThemeSystem;
+    this->historyViewMode = ViewModePaged;
 
     this->terminalNames << tr("Terminal");
 
@@ -105,7 +115,12 @@ void MPasteSettings::loadSettings() {
     this->pasteShortcutMode = static_cast<PasteShortcutMode>(settings.value("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode)).toInt());
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
     this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
+    this->thumbnailPrefetchCount = settings.value("main/thumbnailPrefetchCount", this->thumbnailPrefetchCount).toInt();
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
+    this->themeMode = static_cast<ThemeMode>(
+        settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
+    this->historyViewMode = static_cast<HistoryViewMode>(
+        settings.value("main/historyViewMode", static_cast<int>(this->historyViewMode)).toInt());
 }
 
 void MPasteSettings::saveSettings() {
@@ -119,7 +134,10 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode));
     settings.setValue("main/shortcut", this->shortcutStr);
     settings.setValue("main/itemScale", this->itemScale);
+    settings.setValue("main/thumbnailPrefetchCount", this->thumbnailPrefetchCount);
     settings.setValue("main/playSound", this->playSound);
+    settings.setValue("main/themeMode", static_cast<int>(this->themeMode));
+    settings.setValue("main/historyViewMode", static_cast<int>(this->historyViewMode));
 }
 
 bool MPasteSettings::isAutoPaste() const {
@@ -182,12 +200,63 @@ void MPasteSettings::setItemScale(int itemScale) {
     MPasteSettings::itemScale = itemScale;
 }
 
+int MPasteSettings::getThumbnailPrefetchCount() const {
+    return thumbnailPrefetchCount;
+}
+
+void MPasteSettings::setThumbnailPrefetchCount(int count) {
+    thumbnailPrefetchCount = qBound(10, count, 200);
+}
+
 bool MPasteSettings::isPlaySound() const {
     return playSound;
 }
 
 void MPasteSettings::setPlaySound(bool playSound) {
     MPasteSettings::playSound = playSound;
+}
+
+MPasteSettings::ThemeMode MPasteSettings::getThemeMode() const {
+    return themeMode;
+}
+
+void MPasteSettings::setThemeMode(MPasteSettings::ThemeMode mode) {
+    if (themeMode == mode) {
+        return;
+    }
+    themeMode = mode;
+    emit themeModeChanged(themeMode);
+}
+
+MPasteSettings::HistoryViewMode MPasteSettings::getHistoryViewMode() const {
+    return historyViewMode;
+}
+
+void MPasteSettings::setHistoryViewMode(HistoryViewMode mode) {
+    if (historyViewMode == mode) {
+        return;
+    }
+    historyViewMode = mode;
+    saveSettings();
+}
+
+bool MPasteSettings::isDarkTheme() const {
+    switch (themeMode) {
+        case ThemeDark:
+            return true;
+        case ThemeLight:
+            return false;
+        case ThemeSystem:
+        default:
+            break;
+    }
+
+    if (auto *hints = QGuiApplication::styleHints()) {
+        return hints->colorScheme() == Qt::ColorScheme::Dark;
+    }
+
+    const QColor windowColor = QGuiApplication::palette().color(QPalette::Window);
+    return windowColor.lightness() < 128;
 }
 
 bool MPasteSettings::isTerminalTitle(const QString &title) {

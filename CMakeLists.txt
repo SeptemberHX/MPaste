@@ -4,7 +4,7 @@
 # update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
 cmake_minimum_required(VERSION 3.7)
 set(_VERSION_MAJOR 0)
-set(_VERSION_MINOR 6)
+set(_VERSION_MINOR 7)
 set(_VERSION_PATCH 0)
 set(VERSION "${_VERSION_MAJOR}.${_VERSION_MINOR}.${_VERSION_PATCH}")
 project(MPaste)
@@ -30,7 +30,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DQT_DEBUG")
 
 set(BIN_NAME MPaste)
 
-file(GLOB SRCS
+file(GLOB SRCS CONFIGURE_DEPENDS
         "*.h" "*.cpp"
         "widget/*.ui" "widget/*.h" "widget/*.cpp"
         "resources.qrc"
@@ -52,7 +52,7 @@ set(TS_FILES
 )
 set_source_files_properties(${TS_FILES} PROPERTIES
         OUTPUT_LOCATION ${CMAKE_BINARY_DIR}/translations)
-qt6_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} utils ${TS_FILES})
+qt6_create_translation(QM_FILES ${SRCS} ${TS_FILES})
 qt6_add_translation(QM_FILES ${TS_FILES})
 
 if(UNIX)

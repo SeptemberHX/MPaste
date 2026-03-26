@@ -1,12 +1,15 @@
 // input: Depends on LocalSaver.h, Qt serialization primitives, and clipboard item metadata/MIME payloads.
-// output: Implements current `.mpaste` v4 persistence with thumbnail + dedup plus lazy MIME load.
+// output: Implements current `.mpaste` v6 persistence with thumbnail + dedup, alias/pin metadata, and lazy MIME load.
 // pos: Data-layer persistence implementation responsible for durable item storage and current-format reload.
 // update: If I change, update this header block and my folder README.md.
+// note: Preserve alias/pin metadata, avoid empty MIME payloads when rehydrating, and use shared card preview metrics.
 //
 // Created by ragdoll on 2021/5/24.
 //
 
 #include "LocalSaver.h"
+
+#include "CardPreviewMetrics.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -15,24 +18,50 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QImageReader>
+#include <QScopedPointer>
 #include <QScreen>
+#include <QSaveFile>
 
 namespace {
 constexpr quint32 kLocalSaverVersionV4 = 4;
 const QString kLocalSaverMagicV4 = QStringLiteral("MPASTE_CLIP_V4");
 constexpr quint32 kLocalSaverFlagsV4 = 0;
+constexpr quint32 kLocalSaverVersionV5 = 5;
+const QString kLocalSaverMagicV5 = QStringLiteral("MPASTE_CLIP_V5");
+constexpr quint32 kLocalSaverFlagsV5 = 0;
+constexpr quint32 kLocalSaverVersionV6 = 6;
+const QString kLocalSaverMagicV6 = QStringLiteral("MPASTE_CLIP_V6");
+constexpr quint32 kLocalSaverFlagsV6 = 0;
 
 bool hasMeaningfulMimeData(const QMimeData *mimeData) {
     if (!mimeData) {
         return false;
     }
 
-    return mimeData->hasText()
-        || mimeData->hasHtml()
-        || mimeData->hasImage()
-        || mimeData->hasUrls()
-        || mimeData->hasColor()
-        || !mimeData->formats().isEmpty();
+    if (mimeData->hasText() && !mimeData->text().isEmpty()) {
+        return true;
+    }
+    if (mimeData->hasHtml() && !mimeData->html().isEmpty()) {
+        return true;
+    }
+    if (mimeData->hasUrls() && !mimeData->urls().isEmpty()) {
+        return true;
+    }
+    if (mimeData->hasColor()) {
+        return true;
+    }
+    if (mimeData->hasImage()) {
+        const QVariant imageData = mimeData->imageData();
+        if (imageData.isValid() && !imageData.isNull()) {
+            return true;
+        }
+    }
+    for (const QString &format : mimeData->formats()) {
+        if (!mimeData->data(format).isEmpty()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ClipboardItem finalizeLoadedItem(const QPixmap &icon,
@@ -41,6 +70,8 @@ ClipboardItem finalizeLoadedItem(const QPixmap &icon,
                                  const QPixmap &favicon,
                                  const QString &title,
                                  const QString &url,
+                                 const QString &alias,
+                                 bool pinned,
                                  QMimeData *mimeData) {
     if (!hasMeaningfulMimeData(mimeData) || name.isEmpty()) {
         delete mimeData;
@@ -54,16 +85,72 @@ ClipboardItem finalizeLoadedItem(const QPixmap &icon,
     item.setTime(time);
     item.setTitle(title);
     item.setUrl(url);
+    item.setAlias(alias);
+    item.setPinned(pinned);
     return item;
 }
 
-bool readCurrentFormatPrefix(QDataStream &in, quint32 &flags) {
+bool readCurrentFormatPrefix(QDataStream &in, quint32 &flags, quint32 &version) {
     QString magic;
-    quint32 version = 0;
     in >> magic >> version >> flags;
     return in.status() == QDataStream::Ok
-        && magic == kLocalSaverMagicV4
-        && version == kLocalSaverVersionV4;
+        && ((magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
+            || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
+            || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4));
+}
+
+struct CurrentFormatHeader {
+    QDateTime time;
+    QString name;
+    QPixmap icon;
+    QPixmap favicon;
+    QString title;
+    QString url;
+    QString alias;
+    bool pinned = false;
+    quint32 contentType = 0;
+    QString normalizedText;
+    QList<QUrl> normalizedUrls;
+    QByteArray fingerprint;
+    QPixmap thumbnail;
+    quint64 mimeDataOffset = 0;
+};
+
+bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHeader &header) {
+    in >> header.time >> header.name >> header.icon >> header.favicon >> header.title >> header.url;
+    if (version >= kLocalSaverVersionV5) {
+        in >> header.alias;
+        if (version >= kLocalSaverVersionV6) {
+            in >> header.pinned;
+        }
+    }
+    quint32 normalizedUrlCount = 0;
+    in >> header.contentType >> header.normalizedText >> normalizedUrlCount;
+    header.normalizedUrls.clear();
+    header.normalizedUrls.reserve(static_cast<int>(normalizedUrlCount));
+    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
+        QString urlStr;
+        in >> urlStr;
+        header.normalizedUrls << QUrl(urlStr);
+    }
+    in >> header.fingerprint >> header.thumbnail >> header.mimeDataOffset;
+    return in.status() == QDataStream::Ok && !header.name.isEmpty();
+}
+
+qint64 writeCurrentFormatHeader(QDataStream &out, const CurrentFormatHeader &header, quint64 mimeDataOffsetPlaceholder = 0) {
+    out << kLocalSaverMagicV6 << kLocalSaverVersionV6 << kLocalSaverFlagsV6;
+    out << header.time << header.name << header.icon << header.favicon << header.title << header.url;
+    out << header.alias << header.pinned;
+    out << header.contentType << header.normalizedText;
+    out << quint32(header.normalizedUrls.size());
+    for (const QUrl &url : header.normalizedUrls) {
+        out << url.toString(QUrl::FullyEncoded);
+    }
+    out << header.fingerprint;
+    out << header.thumbnail;
+    const qint64 mimeOffsetPos = out.device() ? out.device()->pos() : -1;
+    out << mimeDataOffsetPlaceholder;
+    return mimeOffsetPos;
 }
 
 bool isCurrentFormatDevice(QIODevice *device) {
@@ -77,8 +164,9 @@ bool isCurrentFormatDevice(QIODevice *device) {
     quint32 version = 0;
     in >> magic >> version;
     const bool isCurrent = in.status() == QDataStream::Ok
-        && magic == kLocalSaverMagicV4
-        && version == kLocalSaverVersionV4;
+        && ((magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
+            || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
+            || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4));
     device->seek(originalPos);
     return isCurrent;
 }
@@ -99,8 +187,8 @@ QPixmap buildCardThumbnailPixmap(const QPixmap &fullImage) {
         return QPixmap();
     }
 
-    constexpr int cardW = 275;
-    constexpr int cardH = 218;
+    constexpr int cardW = kCardPreviewWidth;
+    constexpr int cardH = kCardPreviewHeight;
     const qreal thumbnailDpr = maxThumbnailDevicePixelRatio();
     const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
     if (!pixelTargetSize.isValid()) {
@@ -168,15 +256,7 @@ QSize probeImageSizeFromMimeData(const QMimeData *mimeData) {
         }
     }
 
-    static const QStringList commonFormats = {
-        QStringLiteral("image/png"),
-        QStringLiteral("image/jpeg"),
-        QStringLiteral("image/gif"),
-        QStringLiteral("image/bmp"),
-        QStringLiteral("application/x-qt-image")
-    };
-
-    for (const QString &format : commonFormats) {
+    for (const QString &format : ContentClassifier::commonImageFormats()) {
         if (mimeData->hasFormat(format)) {
             const QSize size = probeImageSizeFromBytes(mimeData->data(format));
             if (size.isValid()) {
@@ -312,7 +392,80 @@ bool payloadContainsKeyword(const QByteArray &data, const QString &lowerKeyword)
     return false;
 }
 
-bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const QString &keyword) {
+bool skipBytes(QIODevice *device, qint64 bytes) {
+    if (!device || bytes <= 0) {
+        return true;
+    }
+
+    if (!device->isSequential()) {
+        return device->seek(device->pos() + bytes);
+    }
+
+    constexpr qint64 kChunkSize = 64 * 1024;
+    QByteArray buffer;
+    buffer.resize(static_cast<int>(kChunkSize));
+    qint64 remaining = bytes;
+    while (remaining > 0) {
+        const qint64 toRead = qMin(remaining, kChunkSize);
+        const qint64 read = device->read(buffer.data(), toRead);
+        if (read <= 0) {
+            return false;
+        }
+        remaining -= read;
+    }
+    return true;
+}
+
+bool readByteArrayWithLimit(QDataStream &in, quint32 maxBytes, QByteArray *out) {
+    quint32 size = 0;
+    in >> size;
+    if (in.status() != QDataStream::Ok) {
+        return false;
+    }
+
+    QIODevice *device = in.device();
+    if (!device) {
+        in.setStatus(QDataStream::ReadCorruptData);
+        return false;
+    }
+
+    if (size == 0) {
+        if (out) {
+            out->clear();
+        }
+        return true;
+    }
+
+    if (!out || maxBytes == 0) {
+        if (!skipBytes(device, size)) {
+            in.setStatus(QDataStream::ReadCorruptData);
+            return false;
+        }
+        return true;
+    }
+
+    if (maxBytes > 0 && size > maxBytes) {
+        if (out) {
+            out->clear();
+        }
+        if (!skipBytes(device, size)) {
+            in.setStatus(QDataStream::ReadCorruptData);
+            return false;
+        }
+        return true;
+    }
+
+    out->resize(static_cast<int>(size));
+    if (in.readRawData(out->data(), static_cast<int>(size)) != static_cast<int>(size)) {
+        in.setStatus(QDataStream::ReadCorruptData);
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+bool LocalSaver::mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const QString &keyword) {
     if (filePath.isEmpty() || keyword.isEmpty()) {
         return false;
     }
@@ -336,28 +489,38 @@ bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const Q
         return false;
     }
 
+    constexpr quint32 kMaxSearchBytes = 2 * 1024 * 1024;
     QList<QByteArray> uniqueBlobs;
     for (quint32 i = 0; i < formatCount; ++i) {
         QString format;
         quint32 dataIndex = 0;
-        QByteArray data;
-        in >> format >> dataIndex >> data;
+        in >> format >> dataIndex;
         if (in.status() != QDataStream::Ok) {
             file.close();
             return false;
         }
 
-        QByteArray payload = data;
+        while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
+            uniqueBlobs.append(QByteArray());
+        }
+
+        const bool shouldInspect = formatMayContainSearchText(format);
+        QByteArray data;
+        if (!readByteArrayWithLimit(in, shouldInspect ? kMaxSearchBytes : 0, &data)) {
+            file.close();
+            return false;
+        }
+
         if (!data.isEmpty()) {
-            while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
-                uniqueBlobs.append(QByteArray());
-            }
             uniqueBlobs[dataIndex] = data;
-        } else if (static_cast<int>(dataIndex) < uniqueBlobs.size()) {
+        }
+
+        QByteArray payload = data;
+        if (payload.isEmpty() && static_cast<int>(dataIndex) < uniqueBlobs.size()) {
             payload = uniqueBlobs[dataIndex];
         }
 
-        if (formatMayContainSearchText(format) && payloadContainsKeyword(payload, lowerKeyword)) {
+        if (shouldInspect && payloadContainsKeyword(payload, lowerKeyword)) {
             file.close();
             return true;
         }
@@ -366,6 +529,8 @@ bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const Q
     file.close();
     return false;
 }
+
+namespace {
 
 ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     if (rawData.isEmpty()) {
@@ -380,39 +545,22 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
 
     QDataStream in(&buffer);
     quint32 flags = 0;
-    QDateTime time;
-    QString name;
-    QPixmap icon;
-    QPixmap favicon;
-    QString title;
-    QString url;
-    quint32 contentType = 0;
-    QString normalizedText;
-    quint32 normalizedUrlCount = 0;
-    QByteArray fingerprint;
-    QPixmap thumbnail;
-    quint64 mimeDataOffset = 0;
+    quint32 version = 0;
+    CurrentFormatHeader header;
     quint32 formatCount = 0;
 
-    if (!readCurrentFormatPrefix(in, flags)) {
+    if (!readCurrentFormatPrefix(in, flags, version)) {
         return ClipboardItem();
     }
     Q_UNUSED(flags);
 
-    in >> time >> name >> icon >> favicon >> title >> url;
-    in >> contentType >> normalizedText >> normalizedUrlCount;
-    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
-        QString ignoredUrl;
-        in >> ignoredUrl;
+    if (!readCurrentFormatHeader(in, version, header)) {
+        return ClipboardItem();
     }
-    in >> fingerprint >> thumbnail >> mimeDataOffset >> formatCount;
+    in >> formatCount;
     if (in.status() != QDataStream::Ok) {
         return ClipboardItem();
     }
-    Q_UNUSED(contentType);
-    Q_UNUSED(normalizedText);
-    Q_UNUSED(fingerprint);
-    Q_UNUSED(mimeDataOffset);
 
     QList<QByteArray> uniqueBlobs;
     auto *mimeData = new QMimeData;
@@ -437,9 +585,26 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
         }
     }
 
-    ClipboardItem item = finalizeLoadedItem(icon, time, name, favicon, title, url, mimeData);
+    if (!hasMeaningfulMimeData(mimeData)) {
+        if (!header.normalizedText.isEmpty()) {
+            mimeData->setText(header.normalizedText);
+        }
+        if (!header.normalizedUrls.isEmpty()) {
+            mimeData->setUrls(header.normalizedUrls);
+        }
+    }
+
+    ClipboardItem item = finalizeLoadedItem(header.icon,
+                                            header.time,
+                                            header.name,
+                                            header.favicon,
+                                            header.title,
+                                            header.url,
+                                            header.alias,
+                                            header.pinned,
+                                            mimeData);
     if (!item.getName().isEmpty()) {
-        item.setThumbnail(thumbnail);
+        item.setThumbnail(header.thumbnail);
     }
     return item;
 }
@@ -451,20 +616,6 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
         return false;
     }
 
-    QDataStream out(&file);
-    out << kLocalSaverMagicV4 << kLocalSaverVersionV4 << kLocalSaverFlagsV4;
-    out << item.getTime() << item.getName() << item.getIcon();
-    out << item.getFavicon() << item.getTitle() << item.getUrl();
-    out << quint32(item.getContentType()) << item.getNormalizedText();
-
-    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
-    out << quint32(normalizedUrls.size());
-    for (const QUrl &url : normalizedUrls) {
-        out << url.toString(QUrl::FullyEncoded);
-    }
-
-    out << item.fingerprint();
-
     // Generate and write a HiDPI-aware card thumbnail so list loads can avoid full image decode.
     QPixmap thumbnail = item.hasThumbnail() ? item.thumbnail() : QPixmap();
     if (thumbnail.isNull()) {
@@ -473,18 +624,46 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
             thumbnail = buildCardThumbnailPixmap(fullImage);
         }
     }
-    out << thumbnail;
 
-    // Reserve space for mimeDataOffset, write placeholder, then come back
-    const qint64 mimeDataOffsetPos = file.pos();
+    CurrentFormatHeader header;
+    header.time = item.getTime();
+    header.name = item.getName();
+    header.icon = item.getIcon();
+    header.favicon = item.getFavicon();
+    header.title = item.getTitle();
+    header.url = item.getUrl();
+    header.alias = item.getAlias();
+    header.pinned = item.isPinned();
+    header.contentType = quint32(item.getContentType());
+    header.normalizedText = item.getNormalizedText();
+    header.normalizedUrls = item.getNormalizedUrls();
+    header.fingerprint = item.fingerprint();
+    header.thumbnail = thumbnail;
+
+    QDataStream out(&file);
+    const qint64 mimeDataOffsetPos = writeCurrentFormatHeader(out, header);
     quint64 mimeDataOffset = 0;
-    out << mimeDataOffset;
 
     // Record actual MIME data start
     mimeDataOffset = static_cast<quint64>(file.pos());
 
     // Write MIME formats with dedup
     const QMimeData* mimeData = item.getMimeData();
+    QScopedPointer<QMimeData> fallbackMime;
+    if (!mimeData || !hasMeaningfulMimeData(mimeData)) {
+        const QString fallbackText = item.getNormalizedText();
+        const QList<QUrl> fallbackUrls = item.getNormalizedUrls();
+        if (!fallbackText.isEmpty() || !fallbackUrls.isEmpty()) {
+            fallbackMime.reset(new QMimeData);
+            if (!fallbackText.isEmpty()) {
+                fallbackMime->setText(fallbackText);
+            }
+            if (!fallbackUrls.isEmpty()) {
+                fallbackMime->setUrls(fallbackUrls);
+            }
+            mimeData = fallbackMime.data();
+        }
+    }
     if (mimeData) {
         const QStringList formats = mimeData->formats();
         out << quint32(formats.size());
@@ -517,6 +696,156 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
     return out.status() == QDataStream::Ok;
 }
 
+namespace {
+bool rewriteCurrentFormatHeader(const QString &filePath,
+                                const QString *aliasOverride,
+                                const bool *pinnedOverride,
+                                const QPixmap *thumbnailOverride) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    QDataStream in(&file);
+    QString magic;
+    quint32 version = 0;
+    quint32 flags = 0;
+    in >> magic >> version >> flags;
+    const bool isCurrent = (magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
+        || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
+        || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4);
+    if (!isCurrent || in.status() != QDataStream::Ok) {
+        return false;
+    }
+    Q_UNUSED(flags);
+
+    CurrentFormatHeader header;
+    if (!readCurrentFormatHeader(in, version, header)) {
+        return false;
+    }
+
+    if (aliasOverride) {
+        header.alias = *aliasOverride;
+    }
+    if (pinnedOverride) {
+        header.pinned = *pinnedOverride;
+    }
+    if (thumbnailOverride) {
+        header.thumbnail = *thumbnailOverride;
+    }
+
+    const qint64 fileSize = file.size();
+    const bool hasBlob = header.mimeDataOffset > 0 && header.mimeDataOffset < static_cast<quint64>(fileSize);
+    bool blobHasPayload = false;
+    if (hasBlob) {
+        if (!file.seek(static_cast<qint64>(header.mimeDataOffset))) {
+            return false;
+        }
+        QDataStream blobIn(&file);
+        quint32 formatCount = 0;
+        blobIn >> formatCount;
+        if (blobIn.status() != QDataStream::Ok) {
+            return false;
+        }
+        QList<QByteArray> uniqueBlobs;
+        uniqueBlobs.reserve(static_cast<int>(formatCount));
+        for (quint32 i = 0; i < formatCount; ++i) {
+            QString format;
+            quint32 dataIndex = 0;
+            QByteArray data;
+            blobIn >> format >> dataIndex >> data;
+            if (blobIn.status() != QDataStream::Ok) {
+                return false;
+            }
+            if (!data.isEmpty()) {
+                while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
+                    uniqueBlobs.append(QByteArray());
+                }
+                uniqueBlobs[dataIndex] = data;
+                blobHasPayload = true;
+            } else if (static_cast<int>(dataIndex) < uniqueBlobs.size()
+                       && !uniqueBlobs[dataIndex].isEmpty()) {
+                blobHasPayload = true;
+            }
+        }
+        if (!file.seek(static_cast<qint64>(header.mimeDataOffset))) {
+            return false;
+        }
+    }
+
+    QSaveFile outFile(filePath);
+    if (!outFile.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+
+    QDataStream out(&outFile);
+    const qint64 offsetPos = writeCurrentFormatHeader(out, header);
+    quint64 newMimeOffset = 0;
+    const qint64 blobStart = outFile.pos();
+
+    const bool shouldRepairMime = !blobHasPayload
+        && (!header.normalizedText.isEmpty() || !header.normalizedUrls.isEmpty());
+
+    if (hasBlob && !shouldRepairMime) {
+        constexpr qint64 kChunkSize = 64 * 1024;
+        QByteArray buffer;
+        buffer.resize(static_cast<int>(kChunkSize));
+        while (!file.atEnd()) {
+            const qint64 read = file.read(buffer.data(), buffer.size());
+            if (read <= 0) {
+                break;
+            }
+            outFile.write(buffer.constData(), read);
+        }
+    } else {
+        if (shouldRepairMime) {
+            QByteArray urlPayload;
+            if (!header.normalizedUrls.isEmpty()) {
+                for (const QUrl &u : header.normalizedUrls) {
+                    urlPayload.append(u.toString(QUrl::FullyEncoded).toUtf8());
+                    urlPayload.append("\r\n");
+                }
+            }
+
+            quint32 formatCount = 0;
+            if (!header.normalizedText.isEmpty()) {
+                ++formatCount;
+            }
+            if (!urlPayload.isEmpty()) {
+                ++formatCount;
+            }
+            out << formatCount;
+            quint32 dataIndex = 0;
+            if (!header.normalizedText.isEmpty()) {
+                out << QStringLiteral("text/plain;charset=utf-8") << dataIndex++ << header.normalizedText.toUtf8();
+            }
+            if (!urlPayload.isEmpty()) {
+                out << QStringLiteral("text/uri-list") << dataIndex++ << urlPayload;
+            }
+        } else {
+            out << quint32(0);
+        }
+    }
+
+    outFile.seek(offsetPos);
+    out << quint64(blobStart);
+
+    if (out.status() != QDataStream::Ok) {
+        return false;
+    }
+
+    return outFile.commit();
+}
+}
+
+bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, bool pinned) {
+    return rewriteCurrentFormatHeader(filePath, &alias, &pinned, nullptr);
+}
+
+bool LocalSaver::updateThumbnail(const QString &filePath, const QPixmap &thumbnail) {
+    return rewriteCurrentFormatHeader(filePath, nullptr, nullptr, &thumbnail);
+}
+
 ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -539,72 +868,94 @@ ClipboardItem LocalSaver::loadFromRawData(const QByteArray &rawData) {
     return loadCurrentFormat(rawData);
 }
 
-ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath) {
+namespace {
+ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool includeThumbnail) {
+    quint32 flags = 0;
+    quint32 version = 0;
+    if (!readCurrentFormatPrefix(in, flags, version)) {
+        return ClipboardItem();
+    }
+    Q_UNUSED(flags);
+    CurrentFormatHeader header;
+    if (!readCurrentFormatHeader(in, version, header)) {
+        return ClipboardItem();
+    }
+
+    // Build a light-loaded ClipboardItem (no MIME data, no full image decode).
+    ClipboardItem item;
+    ClipboardItem::ContentType effectiveType = static_cast<ClipboardItem::ContentType>(header.contentType);
+    if (!header.thumbnail.isNull()
+        && effectiveType == ClipboardItem::Text
+        && header.normalizedText.trimmed().isEmpty()
+        && header.normalizedUrls.isEmpty()) {
+        effectiveType = ClipboardItem::Image;
+    }
+    {
+        // Downscale icon to save memory — card header displays at ~40px.
+        constexpr int kMaxIconSize = 64;
+        QPixmap icon = header.icon;
+        if (!icon.isNull() && (icon.width() > kMaxIconSize || icon.height() > kMaxIconSize)) {
+            icon = icon.scaled(kMaxIconSize, kMaxIconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        item.setIcon(icon);
+    }
+    item.setName(header.name);
+    item.setTime(header.time);
+    item.setTitle(header.title);
+    item.setUrl(header.url);
+    item.setAlias(header.alias);
+    item.setPinned(header.pinned);
+    {
+        constexpr int kMaxFaviconSize = 64;
+        QPixmap fav = header.favicon;
+        if (!fav.isNull() && (fav.width() > kMaxFaviconSize || fav.height() > kMaxFaviconSize)) {
+            fav = fav.scaled(kMaxFaviconSize, kMaxFaviconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        item.setFavicon(fav);
+    }
+    item.setThumbnailAvailableHint(!header.thumbnail.isNull());
+    if (includeThumbnail && !header.thumbnail.isNull()) {
+        item.setThumbnail(header.thumbnail);
+    }
+    item.setSourceFilePath(filePath);
+    item.setMimeDataFileOffset(header.mimeDataOffset);
+    item.setFingerprintCache(header.fingerprint);
+    item.setLightLoaded(
+        effectiveType,
+        header.normalizedText,
+        header.normalizedUrls,
+        !header.thumbnail.isNull());
+
+    return item;
+}
+}
+
+ClipboardItem LocalSaver::loadFromRawDataLight(const QByteArray &rawData,
+                                               const QString &sourceFilePath,
+                                               bool includeThumbnail) {
+    if (rawData.isEmpty()) {
+        return ClipboardItem();
+    }
+
+    QBuffer buffer;
+    buffer.setData(rawData);
+    if (!buffer.open(QIODevice::ReadOnly)) {
+        return ClipboardItem();
+    }
+
+    QDataStream in(&buffer);
+    return loadFromStreamLight(in, sourceFilePath, includeThumbnail);
+}
+
+ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath, bool includeThumbnail) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         return ClipboardItem();
     }
 
     QDataStream in(&file);
-    quint32 flags = 0;
-    if (!readCurrentFormatPrefix(in, flags)) {
-        file.close();
-        return ClipboardItem();
-    }
-    Q_UNUSED(flags);
-    QDateTime time;
-    QString name;
-    QPixmap icon;
-    QPixmap favicon;
-    QString title;
-    QString url;
-    quint32 contentType = 0;
-    QString normalizedText;
-    quint32 normalizedUrlCount = 0;
-    QByteArray fingerprint;
-    QPixmap thumbnail;
-    quint64 mimeDataOffset = 0;
-
-    in >> time >> name >> icon >> favicon >> title >> url;
-    in >> contentType >> normalizedText >> normalizedUrlCount;
-
-    QList<QUrl> normalizedUrls;
-    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
-        QString urlStr;
-        in >> urlStr;
-        normalizedUrls << QUrl(urlStr);
-    }
-    in >> fingerprint >> thumbnail >> mimeDataOffset;
+    ClipboardItem item = loadFromStreamLight(in, filePath, includeThumbnail);
     file.close();
-
-    if (in.status() != QDataStream::Ok || name.isEmpty()) {
-        return ClipboardItem();
-    }
-
-    // Build a light-loaded ClipboardItem (no MIME data, no full image decode).
-    ClipboardItem item;
-    ClipboardItem::ContentType effectiveType = static_cast<ClipboardItem::ContentType>(contentType);
-    if (!thumbnail.isNull()
-        && effectiveType == ClipboardItem::Text
-        && normalizedText.trimmed().isEmpty()
-        && normalizedUrls.isEmpty()) {
-        effectiveType = ClipboardItem::Image;
-    }
-    item.setIcon(icon);
-    item.setName(name);
-    item.setTime(time);
-    item.setTitle(title);
-    item.setUrl(url);
-    item.setFavicon(favicon);
-    item.setThumbnail(thumbnail);
-    item.setSourceFilePath(filePath);
-    item.setMimeDataFileOffset(mimeDataOffset);
-    item.setFingerprintCache(fingerprint);
-    item.setLightLoaded(
-        effectiveType,
-        normalizedText,
-        normalizedUrls);
-
     return item;
 }
 
@@ -629,6 +980,9 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
 
     // Read MIME formats with dedup reconstruction.
     QList<QByteArray> uniqueBlobs;
+    const QString savedNormalizedText = item.getNormalizedText();
+    const QList<QUrl> savedNormalizedUrls = item.getNormalizedUrls();
+
     auto *mimeData = new QMimeData;
     for (quint32 i = 0; i < formatCount; ++i) {
         QString format;
@@ -653,14 +1007,27 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     }
     file.close();
 
+    if (!hasMeaningfulMimeData(mimeData)) {
+        if (!savedNormalizedText.isEmpty()) {
+            mimeData->setText(savedNormalizedText);
+        }
+        if (!savedNormalizedUrls.isEmpty()) {
+            mimeData->setUrls(savedNormalizedUrls);
+        }
+    }
+
     // Save metadata that would be overwritten by operator=.
     const QString savedName = item.getName();
     const QDateTime savedTime = item.getTime();
     const QString savedTitle = item.getTitle();
     const QString savedUrl = item.getUrl();
+    const QString savedAlias = item.getAlias();
+    const bool savedPinned = item.isPinned();
     const QPixmap savedFavicon = item.getFavicon();
     const QPixmap savedThumbnail = item.thumbnail();
     const QByteArray savedFingerprint = item.fingerprint();
+    const QString savedSourceFilePath = item.sourceFilePath();
+    const quint64 savedMimeOffset = item.mimeDataFileOffset();
 
     // Materialize canonical image formats through ClipboardItem(icon, mimeData)
     // and then restore the metadata that only exists on light-loaded items.
@@ -674,9 +1041,104 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     item.setTime(savedTime);
     item.setTitle(savedTitle);
     item.setUrl(savedUrl);
+    item.setAlias(savedAlias);
+    item.setPinned(savedPinned);
     item.setFavicon(savedFavicon);
     item.setThumbnail(savedThumbnail);
     item.setFingerprintCache(savedFingerprint);
+    item.setSourceFilePath(savedSourceFilePath);
+    item.setMimeDataFileOffset(savedMimeOffset);
+    return true;
+}
+
+bool LocalSaver::loadMimePayloads(const QString &filePath,
+                                  quint64 offset,
+                                  QString *htmlOut,
+                                  QByteArray *imageOut) {
+    if (filePath.isEmpty() || (!htmlOut && !imageOut)) {
+        return false;
+    }
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    if (!file.seek(static_cast<qint64>(offset))) {
+        file.close();
+        return false;
+    }
+
+    QDataStream in(&file);
+    quint32 formatCount = 0;
+    in >> formatCount;
+    if (in.status() != QDataStream::Ok) {
+        file.close();
+        return false;
+    }
+
+    constexpr quint32 kMaxPreviewHtmlBytes = 2 * 1024 * 1024;
+    constexpr quint32 kMaxPreviewImageBytes = 12 * 1024 * 1024;
+    QList<QByteArray> uniqueBlobs;
+    QByteArray htmlBytes;
+    QByteArray imageBytes;
+
+    for (quint32 i = 0; i < formatCount; ++i) {
+        QString format;
+        quint32 dataIndex = 0;
+        in >> format >> dataIndex;
+        if (in.status() != QDataStream::Ok) {
+            file.close();
+            return false;
+        }
+
+        while (uniqueBlobs.size() <= static_cast<int>(dataIndex)) {
+            uniqueBlobs.append(QByteArray());
+        }
+
+        const bool wantsHtml = htmlOut && htmlBytes.isEmpty() && format == QStringLiteral("text/html");
+        const bool wantsImage = imageOut && imageBytes.isEmpty()
+            && (ContentClassifier::preferredImageFormats().contains(format)
+                || format.startsWith(QStringLiteral("image/")));
+        const bool shouldRead = wantsHtml || wantsImage;
+
+        QByteArray data;
+        const quint32 maxBytes = wantsHtml ? kMaxPreviewHtmlBytes
+            : (wantsImage ? kMaxPreviewImageBytes : 0);
+        if (!readByteArrayWithLimit(in, shouldRead ? maxBytes : 0, &data)) {
+            file.close();
+            return false;
+        }
+
+        if (!data.isEmpty()) {
+            uniqueBlobs[dataIndex] = data;
+        }
+
+        QByteArray payload = data;
+        if (payload.isEmpty() && static_cast<int>(dataIndex) < uniqueBlobs.size()) {
+            payload = uniqueBlobs[dataIndex];
+        }
+
+        if (wantsHtml && htmlBytes.isEmpty()) {
+            htmlBytes = payload;
+        }
+        if (wantsImage && imageBytes.isEmpty()) {
+            imageBytes = payload;
+        }
+
+        if ((!htmlOut || !htmlBytes.isEmpty()) && (!imageOut || !imageBytes.isEmpty())) {
+            // Collected everything we need.
+            break;
+        }
+    }
+    file.close();
+
+    if (htmlOut) {
+        *htmlOut = htmlBytes.isEmpty() ? QString() : QString::fromUtf8(htmlBytes);
+    }
+    if (imageOut) {
+        *imageOut = imageBytes;
+    }
     return true;
 }
 
@@ -759,5 +1221,5 @@ bool ClipboardItem::containsDeep(const QString &keyword) const {
         return false;
     }
 
-    return mimeSectionContainsKeyword(sourceFilePath_, mimeDataFileOffset_, keyword);
+    return LocalSaver::mimeSectionContainsKeyword(sourceFilePath_, mimeDataFileOffset_, keyword);
 }

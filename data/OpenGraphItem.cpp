@@ -1,4 +1,5 @@
-// input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
+﻿// input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
+// note: image kind
 // output: 提供 OpenGraphItem 的实现逻辑。
 // pos: data 层中的 OpenGraphItem 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
@@ -28,6 +29,10 @@ const QPixmap &OpenGraphItem::getImage() const {
     return image;
 }
 
+OpenGraphItem::ImageKind OpenGraphItem::getImageKind() const {
+    return imageKind;
+}
+
 void OpenGraphItem::setTitle(const QString &title) {
     OpenGraphItem::title = title;
 }
@@ -38,4 +43,8 @@ void OpenGraphItem::setDescription(const QString &description) {
 
 void OpenGraphItem::setImage(const QPixmap &image) {
     OpenGraphItem::image = image;
+}
+
+void OpenGraphItem::setImageKind(OpenGraphItem::ImageKind kind) {
+    imageKind = kind;
 }

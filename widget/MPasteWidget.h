@@ -2,6 +2,7 @@
 // output: 对外提供 MPasteWidget 的声明接口。
 // pos: widget 层中的 MPasteWidget 接口定义。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
+// note: Added theme application hooks for dark mode, multi-select count handling, and a manual page-number selector for board browsing.
 #ifndef MPASTEWIDGET_H
 #define MPASTEWIDGET_H
 
@@ -16,9 +17,13 @@
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
 #include <QElapsedTimer>
+#include <QHideEvent>
+#include <QFileSystemWatcher>
+#include <QTimer>
+#include <QLabel>
+#include <QComboBox>
 
 #include "utils/ClipboardMonitor.h"
-#include "ClipboardItemWidget.h"
 #include "data/ClipboardItem.h"
 #include "data/LocalSaver.h"
 #include "AboutWidget.h"
@@ -46,6 +51,7 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
     bool focusNextPrevChild(bool next) override;
 
 signals:
@@ -53,7 +59,7 @@ signals:
 
 private slots:
     void clipboardActivityObserved(int wId);
-    void clipboardUpdated(ClipboardItem item, int wId);
+    void clipboardUpdated(const ClipboardItem &item, int wId);
     void updateItemCount(int itemCount);
     void hideAndPaste();
     void debugKeyState();
@@ -69,6 +75,11 @@ private:
     void initSound();
     void initMenu();
     void setupConnections();
+    AboutWidget *ensureAboutWidget();
+    ClipboardItemDetailsDialog *ensureDetailsDialog();
+    ClipboardItemPreviewDialog *ensurePreviewDialog();
+    MPasteSettingsWidget *ensureSettingsWidget();
+    void applyTheme(bool dark);
     void syncSoundOutputDevice();
     void rebuildSoundPlaybackChain(const QAudioDevice &device);
     void playCopySoundIfNeeded(int wId, const QByteArray &fingerprint = QByteArray());
@@ -77,7 +88,11 @@ private:
     QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
     void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
+    void scheduleStartupWarmup();
     void reloadHistoryBoards();
+    void runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheAction action);
+    void updatePageSelector();
+    void updatePageSelectorStyle();
 
     void setFocusOnSearch(bool flag);
     void handleSearchInput(QKeyEvent *event);
@@ -92,30 +107,42 @@ private:
     bool triggerShortcutPaste(int shortcutIndex, bool plainText);
 
     ScrollItemsWidget* currItemsWidget();
+    void setupSyncWatcher();
+    void scheduleSyncReload();
+    void applyScale(int scale);
 
 private:
     struct {
-        Ui::MPasteWidget *ui;
-        QHBoxLayout *layout;
-        AboutWidget *aboutWidget;
-        ClipboardItemDetailsDialog *detailsDialog;
-        ClipboardItemPreviewDialog *previewDialog;
-        MPasteSettingsWidget *settingsWidget;
+        Ui::MPasteWidget *ui = nullptr;
+        QHBoxLayout *layout = nullptr;
+        AboutWidget *aboutWidget = nullptr;
+        ClipboardItemDetailsDialog *detailsDialog = nullptr;
+        ClipboardItemPreviewDialog *previewDialog = nullptr;
+        MPasteSettingsWidget *settingsWidget = nullptr;
 
         QMap<QString, ScrollItemsWidget*> boardWidgetMap;
+        QWidget *pageSelectorWidget = nullptr;
+        QLabel *pagePrefixLabel = nullptr;
+        QComboBox *pageComboBox = nullptr;
+        QLabel *pageTotalLabel = nullptr;
+        QLabel *pageSuffixLabel = nullptr;
 
-        QButtonGroup *buttonGroup;
+        QButtonGroup *buttonGroup = nullptr;
 
-        QButtonGroup *typeButtonGroup;
+        QButtonGroup *typeButtonGroup = nullptr;
 
-        ScrollItemsWidget *clipboardWidget;
+        ScrollItemsWidget *clipboardWidget = nullptr;
 
-        ScrollItemsWidget *staredWidget;
+        ScrollItemsWidget *staredWidget = nullptr;
 
-        QPropertyAnimation *searchShowAnim;
-        QPropertyAnimation *searchHideAnim;
-        QSystemTrayIcon *trayIcon;
-        QMenu *menu;
+        QPropertyAnimation *searchShowAnim = nullptr;
+        QPropertyAnimation *searchHideAnim = nullptr;
+        QSystemTrayIcon *trayIcon = nullptr;
+        QMenu *menu = nullptr;
+        QMenu *trayMenu = nullptr;
+        QAction *aboutAction = nullptr;
+        QAction *settingsAction = nullptr;
+        QAction *quitAction = nullptr;
     } ui_;
 
     struct {
@@ -123,6 +150,18 @@ private:
         bool isPasting = false;
         bool copiedWhenHide = false;
     } clipboard_;
+
+    struct {
+        QFileSystemWatcher *watcher = nullptr;
+        QTimer *reloadTimer = nullptr;
+        bool pendingReload = false;
+        qint64 suppressReloadUntilMs = 0;
+    } sync_;
+
+    struct {
+        bool startupWarmupScheduled = false;
+        bool startupWarmupCompleted = false;
+    } loading_;
 
     struct {
         QMediaPlayer *player = nullptr;
@@ -137,6 +176,8 @@ private:
 
     static constexpr int HIDE_ANIMATION_TIME = 50;
     static constexpr qint64 SOUND_BURST_WINDOW_MS = 500;
+
+    bool darkTheme_ = false;
 };
 
 

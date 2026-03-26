@@ -4,6 +4,7 @@
 // update: 修改本文件时，同步更新文件头注释与根目录 README.md。
 #include <QApplication>
 #include <iostream>
+#include <QFontDatabase>
 #include <QScreen>
 #include <qsurfaceformat.h>
 #include <QTimer>
@@ -14,6 +15,7 @@
 #include "utils/SingleApplication.h"
 #include "utils/PlatformRelated.h"
 #include "utils/HotKeyManager.h"
+#include "utils/ThemeManager.h"
 
 QScreen* getScreenForWindow(WId windowId) {
     if (windowId) {
@@ -27,6 +29,33 @@ QScreen* getScreenForWindow(WId windowId) {
 #endif
     }
     return QGuiApplication::primaryScreen();
+}
+
+QString chooseInstalledUiFontFamily(const QStringList &preferredFamilies, const QString &fallbackFamily) {
+    const QFontDatabase database;
+    const QStringList availableFamilies = database.families();
+    for (const QString &family : preferredFamilies) {
+        if (availableFamilies.contains(family, Qt::CaseInsensitive)) {
+            return family;
+        }
+    }
+    return fallbackFamily;
+}
+
+void configureApplicationFont(QApplication &app) {
+    QFont font = app.font();
+    const QString chosenFamily = chooseInstalledUiFontFamily(
+        {
+            QStringLiteral("Microsoft YaHei UI"),
+            QStringLiteral("Microsoft YaHei"),
+            QStringLiteral("Segoe UI"),
+            QStringLiteral("Noto Sans"),
+            QStringLiteral("Arial")
+        },
+        font.family());
+    font.setFamily(chosenFamily);
+    font.setStyleHint(QFont::SansSerif, QFont::PreferDefault);
+    app.setFont(font);
 }
 
 #ifdef Q_OS_WIN
@@ -90,6 +119,7 @@ int main(int argc, char* argv[]) {
     qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
 
     QApplication app(argc, argv);
+    configureApplicationFont(app);
     SingleApplication singleApp("com.mpaste.app");
 
     if (singleApp.isPrimaryInstance()) {
@@ -121,6 +151,8 @@ int main(int argc, char* argv[]) {
         } else {
             qWarning() << "Failed to load translation for" << locale;
         }
+
+        ThemeManager::instance()->initialize();
 
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");

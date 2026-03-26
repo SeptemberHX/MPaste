@@ -2,6 +2,7 @@
 // output: 对外提供 ClipboardMonitor 的声明接口。
 // pos: utils 层中的 ClipboardMonitor 接口定义。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
+// note: Adds image payload settle retries for lazy clipboard providers.
 //
 // Created by ragdoll on 2021/5/22.
 //
@@ -11,6 +12,7 @@
 
 #include <QObject>
 #include <QByteArray>
+#include <QMap>
 #include <QTimer>
 #include <QPointer>
 #include "data/ClipboardItem.h"
@@ -32,7 +34,8 @@ public:
 
 signals:
     void clipboardActivityObserved(int wId);
-    void clipboardUpdated(ClipboardItem item, int wId);
+    void clipboardUpdated(const ClipboardItem &item, int wId);
+    void clipboardMimeCompleted(const QString &itemName, const QMap<QString, QByteArray> &extraFormats);
 
 public slots:
     void clipboardChanged();
@@ -46,6 +49,7 @@ private:
     bool isDuplicateRecentCapture(const ClipboardItem &item, int wId) const;
     void rememberCapturedItem(const ClipboardItem &item, int wId);
     void fetchWpsImageAndEmit(const QMimeData *mimeData, const QUrl &url, int wId, quint64 captureToken);
+    void scheduleDeferredMimeCapture(const QString &itemName);
 
     static bool hasMeaningfulContent(const QMimeData *mimeData);
     static bool looksLikeWpsStagedClipboard(const QMimeData *mimeData);
@@ -68,6 +72,7 @@ private:
     static const int STABILIZE_INTERVAL = 200;
     static const int MAX_RETRIES = 10;
     static const int WPS_SETTLE_INTERVAL = 700;  // WPS staged clipboard settle window in ms
+    static const int IMAGE_SETTLE_INTERVAL = 120;  // Lazy image payload settle window in ms
     static const int DUPLICATE_CAPTURE_WINDOW_MS = 900;
 };
 

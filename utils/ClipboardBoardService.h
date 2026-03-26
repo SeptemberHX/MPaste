@@ -1,0 +1,166 @@
+// input: Depends on ClipboardItem data, MPaste settings, and Qt threading/timer APIs.
+// output: Provides board-level persistence, deferred loading, and background processing services.
+// pos: utils layer board service.
+// update: If I change, update this header block and my folder README.md.
+// note: Adds async thumbnail fetch for on-demand UI loading with bounded worker concurrency.
+#ifndef MPASTE_CLIPBOARD_BOARD_SERVICE_H
+#define MPASTE_CLIPBOARD_BOARD_SERVICE_H
+
+#include <QByteArray>
+#include <QDateTime>
+#include <QList>
+#include <QPair>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+#include <QObject>
+#include <QPixmap>
+
+#include <memory>
+#include <functional>
+
+#include "data/ClipboardItem.h"
+
+class LocalSaver;
+class QThread;
+class QTimer;
+class QThreadPool;
+
+class ClipboardBoardService : public QObject {
+    Q_OBJECT
+
+public:
+    enum PreviewCacheMaintenanceMode {
+        RepairBrokenPreviews = 0,
+        RebuildAllPreviews,
+        ClearAllPreviews
+    };
+
+    struct IndexedItemMeta {
+        QString filePath;
+        QString name;
+        QString title;
+        QString url;
+        QString alias;
+        QString searchableText;
+        QList<QUrl> normalizedUrls;
+        QByteArray fingerprint;
+        QDateTime time;
+        ClipboardItem::ContentType contentType = ClipboardItem::Text;
+        ClipboardItem::PreviewKind previewKind = ClipboardItem::TextPreview;
+        quint64 mimeDataOffset = 0;
+        bool pinned = false;
+        bool hasThumbnailHint = false;
+    };
+
+    explicit ClipboardBoardService(const QString &category, QObject *parent = nullptr);
+    ~ClipboardBoardService() override;
+
+    QString category() const;
+    QString saveDir() const;
+
+    int totalItemCount() const;
+    int pendingCount() const;
+    bool hasPendingItems() const;
+    bool deferredLoadActive() const;
+    bool hasRecentInternalWrite() const;
+
+    void refreshIndex();
+    void startAsyncLoad(int initialBatchSize, int deferredBatchSize);
+    void loadNextBatch(int batchSize);
+    void ensureAllItemsLoaded(int batchSize);
+
+    void startDeferredLoad(int batchSize);
+    void stopDeferredLoad();
+    void setVisibleHint(bool visible);
+
+    ClipboardItem prepareItemForSave(const ClipboardItem &source) const;
+    void saveItem(const ClipboardItem &item);
+    void saveItemQuiet(const ClipboardItem &item);
+    void scheduleDeferredSave(const ClipboardItem &item);
+    void removeItemFile(const QString &filePath);
+    void deleteItemByPath(const QString &filePath);
+    void deleteItemByPathQuiet(const QString &filePath);
+    bool deletePendingItemByPath(const QString &filePath);
+    QString filePathForItem(const ClipboardItem &item) const;
+    QString filePathForName(const QString &name) const;
+    ClipboardItem loadItemLight(const QString &filePath, bool includeThumbnail = false);
+    void refreshIndexedItemForPath(const QString &filePath);
+    int filteredItemCount(ClipboardItem::ContentType type,
+                          const QString &keyword,
+                          const QSet<QString> &matchedNames) const;
+    QList<QPair<QString, ClipboardItem>> loadIndexedSlice(int offset, int count, bool includeThumbnail = false);
+    QList<QPair<QString, ClipboardItem>> loadFilteredIndexedSlice(ClipboardItem::ContentType type,
+                                                                  const QString &keyword,
+                                                                  const QSet<QString> &matchedNames,
+                                                                  int offset,
+                                                                  int count,
+                                                                  bool includeThumbnail = false);
+    QSet<QByteArray> loadAllFingerprints();
+    bool containsFingerprint(const QByteArray &fingerprint) const;
+    const QList<IndexedItemMeta> &indexedItemsMeta() const { return indexedItems_; }
+    void notifyItemAdded();
+    bool moveIndexedItemToFront(const QString &name);
+    void trimExpiredPendingItems(const QDateTime &cutoff);
+    int maintainPreviewCache(PreviewCacheMaintenanceMode mode);
+
+    void processPendingItemAsync(const ClipboardItem &item, const QString &expectedName);
+    void requestThumbnailAsync(const QString &expectedName, const QString &filePath);
+    void startAsyncKeywordSearch(const QList<QPair<QString, quint64>> &candidates,
+                                 const QString &keyword,
+                                 quint64 token);
+
+signals:
+    void itemsLoaded(const QList<QPair<QString, ClipboardItem>> &items);
+    void pendingItemReady(const QString &expectedName, const ClipboardItem &item);
+    void thumbnailReady(const QString &expectedName, const QPixmap &thumbnail);
+    void keywordMatched(const QSet<QString> &matchedNames, quint64 token);
+    void localPersistenceChanged();
+    void totalItemCountChanged(int total);
+    void pendingCountChanged(int pending);
+    void deferredLoadCompleted();
+
+private slots:
+    void continueDeferredLoad();
+    void handleDeferredBatchRead(const QList<QPair<QString, QByteArray>> &batchPayloads);
+
+private:
+    QThread *startTrackedThread(const std::function<void()> &task);
+    void startThumbnailTask(const std::function<void()> &task);
+    void trackExclusiveThread(QThread *thread, QThread **slot);
+    void startRawReadBatch(int batchSize);
+    void applyPendingFileIndex(const QStringList &filePaths, int initialBatchSize, int deferredBatchSize, quint64 token);
+    bool saveItemInternal(const ClipboardItem &item);
+    void deleteItemByPathInternal(const QString &filePath);
+    void checkSaveDir();
+    void updateTotalItemCount(int total);
+    void decrementTotalItemCount();
+    void scheduleDeferredLoadBatch();
+    void processDeferredLoadedItems();
+    void waitForDeferredRead();
+    void waitForIndexRefresh();
+
+    QString category_;
+    std::unique_ptr<LocalSaver> saver_;
+    QTimer *deferredLoadTimer_ = nullptr;
+    QThread *indexRefreshThread_ = nullptr;
+    QThread *deferredLoadThread_ = nullptr;
+    QThread *keywordSearchThread_ = nullptr;
+    QList<QThread *> processingThreads_;
+    std::unique_ptr<QThreadPool> thumbnailTaskPool_;
+    QSet<QString> failedFullLoadPaths_;
+    QList<IndexedItemMeta> indexedItems_;
+    QStringList indexedFilePaths_;
+    QStringList pendingLoadFilePaths_;
+    QList<QPair<QString, QByteArray>> deferredLoadedItems_;
+    int totalItemCount_ = 0;
+    int deferredBatchSize_ = 0;
+    quint64 asyncLoadToken_ = 0;
+    bool deferredLoadActive_ = false;
+    bool visibleHint_ = false;
+    qint64 lastInternalWriteMs_ = 0;
+    QList<ClipboardItem> pendingSaveQueue_;
+    QTimer *deferredSaveTimer_ = nullptr;
+};
+
+#endif // MPASTE_CLIPBOARD_BOARD_SERVICE_H

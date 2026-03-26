@@ -352,6 +352,27 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
           </widget>
          </item>
          <item>
+          <widget class="QToolButton" name="officeTypeBtn">
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>28</height>
+            </size>
+           </property>
+           <property name="font">
+            <font>
+             <family>Microsoft YaHei</family>
+            </font>
+           </property>
+           <property name="text">
+            <string>Office</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QToolButton" name="richTextTypeBtn">
            <property name="maximumSize">
             <size>

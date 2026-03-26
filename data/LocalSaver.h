@@ -20,8 +20,18 @@ public:
     bool removeItem(const QString &filePath);
     ClipboardItem loadFromFile(const QString &filePath);
     ClipboardItem loadFromRawData(const QByteArray &rawData);
-    ClipboardItem loadFromFileLight(const QString &filePath);
+    ClipboardItem loadFromRawDataLight(const QByteArray &rawData,
+                                       const QString &sourceFilePath,
+                                       bool includeThumbnail = false);
+    ClipboardItem loadFromFileLight(const QString &filePath, bool includeThumbnail = false);
+    bool updateMetadata(const QString &filePath, const QString &alias, bool pinned);
+    bool updateThumbnail(const QString &filePath, const QPixmap &thumbnail);
     static bool loadMimeSection(const QString &filePath, quint64 offset, ClipboardItem &item);
+    static bool loadMimePayloads(const QString &filePath,
+                                 quint64 offset,
+                                 QString *htmlOut,
+                                 QByteArray *imageOut);
+    static bool mimeSectionContainsKeyword(const QString &filePath, quint64 offset, const QString &keyword);
     static bool isCurrentFormatFile(const QString &filePath);
 };
 

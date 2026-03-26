@@ -2,6 +2,7 @@
 // output: Implements the main window, item interaction flow, reliable quick-paste shortcuts, and plain-text paste behavior.
 // pos: Widget-layer main window implementation coordinating boards, shortcuts, and system integration.
 // update: If I change, update this header block and my folder README.md.
+// note: Added theme application, dark mode propagation, tray menu theming, robust paste rehydration, and alias sync.
 #include <QScrollBar>
 #include <QClipboard>
 #include <QKeyEvent>
@@ -12,22 +13,34 @@
 #include <QDir>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QButtonGroup>
 #include <QLocale>
 #include <QIcon>
 #include <QAction>
+#include <QApplication>
 #include <QStringList>
 #include <QTimer>
+#include <QScreen>
+#include <QGuiApplication>
 #include <QTextDocument>
 #include <QWheelEvent>
 #include <QWindow>
 #include <QPainter>
 #include <QPainterPath>
+#include <QMessageBox>
+#include <QLabel>
+#include <QComboBox>
+#include <QStyle>
+#include <QStyleFactory>
 #include "utils/MPasteSettings.h"
+#include "utils/ClipboardExportService.h"
+#include "utils/ThemeManager.h"
+#include "utils/IconResolver.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
-#include "ClipboardItemWidget.h"
 #include "utils/PlatformRelated.h"
+#include "data/LocalSaver.h"
 
 namespace {
 bool looksBrokenTranslation(const QString &text) {
@@ -57,6 +70,139 @@ QString menuText(const char *source, const QString &zhFallback) {
     return translated;
 }
 
+class PageSelectorPill final : public QWidget {
+public:
+    explicit PageSelectorPill(QWidget *parent = nullptr)
+        : QWidget(parent) {}
+
+    void setColors(const QColor &background, const QColor &border, const QColor &divider) {
+        background_ = background;
+        border_ = border;
+        divider_ = divider;
+        update();
+    }
+
+    void setCornerRadius(int radius) {
+        cornerRadius_ = radius;
+        update();
+    }
+
+    void setDividerPosition(int x) {
+        dividerX_ = x;
+        update();
+    }
+
+    void setDividerInset(int inset) {
+        dividerInset_ = inset;
+        update();
+    }
+
+    void setPaintFrame(bool paintFrame) {
+        paintFrame_ = paintFrame;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        if (!paintFrame_) {
+            return;
+        }
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        const QRectF rectF = QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0);
+        painter.setPen(QPen(border_, 2));
+        painter.setBrush(background_);
+        painter.drawRoundedRect(rectF, cornerRadius_, cornerRadius_);
+
+        if (dividerX_ > 0) {
+            painter.setPen(QPen(divider_, 1));
+            const int top = qBound(2, dividerInset_, height() / 2);
+            const int bottom = qMax(top, height() - dividerInset_ - 1);
+            painter.drawLine(QPointF(dividerX_, top), QPointF(dividerX_, bottom));
+        }
+    }
+
+private:
+    QColor background_ = QColor(Qt::white);
+    QColor border_ = QColor(Qt::black);
+    QColor divider_ = QColor(Qt::black);
+    int cornerRadius_ = 14;
+    int dividerX_ = 0;
+    int dividerInset_ = 3;
+    bool paintFrame_ = true;
+};
+
+ClipboardItem rehydrateClipboardItem(const ClipboardItem &item) {
+    if (item.getName().isEmpty()) {
+        return {};
+    }
+
+    LocalSaver saver;
+    const QString sourceFilePath = item.sourceFilePath();
+    if (!sourceFilePath.isEmpty() && QFileInfo::exists(sourceFilePath)) {
+        ClipboardItem loaded = saver.loadFromFile(sourceFilePath);
+        if (!loaded.getName().isEmpty()) {
+            return loaded;
+        }
+    }
+
+    const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
+    if (rootDir.isEmpty()) {
+        return {};
+    }
+
+    const QStringList categories = {
+        MPasteSettings::STAR_CATEGORY_NAME,
+        MPasteSettings::CLIPBOARD_CATEGORY_NAME
+    };
+    for (const QString &category : categories) {
+        const QString filePath = QDir::cleanPath(rootDir + QDir::separator()
+                                                 + category + QDir::separator()
+                                                 + item.getName() + ".mpaste");
+        if (!QFileInfo::exists(filePath)) {
+            continue;
+        }
+        ClipboardItem loaded = saver.loadFromFile(filePath);
+        if (!loaded.getName().isEmpty()) {
+            return loaded;
+        }
+    }
+
+    return {};
+}
+
+bool hasUsableMimeData(ClipboardItem item) {
+    const QMimeData *mimeData = item.getMimeData();
+    return mimeData && !mimeData->formats().isEmpty();
+}
+
+void applyMenuTheme(QMenu *menu) {
+    if (!menu) {
+        return;
+    }
+    const bool dark = ThemeManager::instance()->isDark();
+    QPalette pal = menu->palette();
+    if (dark) {
+        pal.setColor(QPalette::Window, QColor("#1E232B"));
+        pal.setColor(QPalette::WindowText, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Base, QColor("#1E232B"));
+        pal.setColor(QPalette::AlternateBase, QColor("#1A1F27"));
+        pal.setColor(QPalette::Text, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Button, QColor("#1E232B"));
+        pal.setColor(QPalette::ButtonText, QColor("#D6DEE8"));
+        pal.setColor(QPalette::Highlight, QColor("#2D7FD3"));
+        pal.setColor(QPalette::HighlightedText, QColor("#FFFFFF"));
+    } else {
+        pal = qApp->palette();
+    }
+    menu->setPalette(pal);
+    if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
+        fusion->setParent(menu);
+        menu->setStyle(fusion);
+    }
+}
+
 QString elideClipboardLogText(QString text, int maxLen = 48) {
     text.replace(QLatin1Char('\n'), QLatin1Char(' '));
     text.replace(QLatin1Char('\r'), QLatin1Char(' '));
@@ -75,6 +221,7 @@ QString widgetItemSummary(const ClipboardItem &item) {
         .arg(item.getHtml().size())
         .arg(item.getNormalizedUrls().size());
 }
+
 }
 
 #ifdef Q_OS_WIN
@@ -116,7 +263,14 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
 
 typedef BOOL (WINAPI *pfnSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
-static void enableBlurBehind(HWND hwnd) {
+static DWORD accentColorFromArgb(const QColor &color) {
+    return (static_cast<DWORD>(color.alpha()) << 24)
+        | (static_cast<DWORD>(color.blue()) << 16)
+        | (static_cast<DWORD>(color.green()) << 8)
+        | static_cast<DWORD>(color.red());
+}
+
+static void enableBlurBehind(HWND hwnd, const QColor &tintColor) {
     MARGINS margins = {-1, -1, -1, -1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
 
@@ -130,7 +284,7 @@ static void enableBlurBehind(HWND hwnd) {
         GetProcAddress(user32, "SetWindowCompositionAttribute"));
     if (!setWCA) return;
 
-    DWORD tint = (20u << 24) | (244u << 16) | (241u << 8) | 231u; // rgba(231,241,244,20)
+    DWORD tint = accentColorFromArgb(tintColor);
 
     ACCENT_POLICY accent{};
     accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
@@ -216,10 +370,9 @@ void MPasteWidget::initializeWidget() {
     qInfo().noquote() << QStringLiteral("[startup] initSound done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
     setupConnections();
     qInfo().noquote() << QStringLiteral("[startup] setupConnections done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
-    loadFromSaveDir();
-    qInfo().noquote() << QStringLiteral("[startup] loadFromSaveDir done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
-    clipboard_.monitor->primeCurrentClipboard();
-    qInfo().noquote() << QStringLiteral("[startup] primeCurrentClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
+    setupSyncWatcher();
+    scheduleStartupWarmup();
+    qInfo().noquote() << QStringLiteral("[startup] startup warmup scheduled elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
 
     setFocusOnSearch(false);
     misc_.pendingNumKey = 0;
@@ -265,7 +418,6 @@ void MPasteWidget::initStyle() {
     setAttribute(Qt::WA_InputMethodEnabled, false);
     setAttribute(Qt::WA_KeyCompression, false);
     setAttribute(Qt::WA_NoSystemBackground);
-    enableBlurBehind((HWND)winId());
 #else
     setAttribute(Qt::WA_TranslucentBackground);
 #endif
@@ -275,37 +427,11 @@ void MPasteWidget::initStyle() {
     ui_.ui->itemsWidget->setAttribute(Qt::WA_NoSystemBackground, false);
 
     setObjectName("pasteWidget");
-    QFile styleFile(":/resources/resources/style/defaultStyle.qss");
-    if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
-        QString style = QLatin1String(styleFile.readAll());
-        setStyleSheet(style);
-        styleFile.close();
-    } else {
-        qWarning() << "Failed to load style sheet:" << styleFile.errorString();
-    }
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &MPasteWidget::applyTheme);
 }
 
 void MPasteWidget::initUI() {
     initSearchAnimations();
-
-    ui_.aboutWidget = new AboutWidget(this);
-    ui_.aboutWidget->setWindowFlag(Qt::Tool);
-    ui_.aboutWidget->setWindowTitle("MPaste About");
-    ui_.aboutWidget->hide();
-
-    ui_.detailsDialog = new ClipboardItemDetailsDialog(this);
-    ui_.detailsDialog->setWindowFlag(Qt::Tool);
-    ui_.detailsDialog->hide();
-
-    ui_.previewDialog = new ClipboardItemPreviewDialog(this);
-    ui_.previewDialog->setWindowFlag(Qt::Tool);
-    ui_.previewDialog->hide();
-
-    ui_.settingsWidget = new MPasteSettingsWidget(this);
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
-            this, &MPasteWidget::shortcutChanged);
-    connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
-            this, &MPasteWidget::reloadHistoryBoards);
 
     ui_.clipboardWidget = new ScrollItemsWidget(
         MPasteSettings::CLIPBOARD_CATEGORY_NAME, MPasteSettings::CLIPBOARD_CATEGORY_COLOR, this);
@@ -320,7 +446,7 @@ void MPasteWidget::initUI() {
     ui_.boardWidgetMap.insert(ui_.staredWidget->getCategory(), ui_.staredWidget);
 
     ui_.layout = new QHBoxLayout(ui_.ui->itemsWidget);
-    ui_.layout->setContentsMargins(0, 0, 0, 0);
+    ui_.layout->setContentsMargins(0, 10, 0, 0);
     ui_.layout->setSpacing(0);
     ui_.layout->addWidget(ui_.clipboardWidget);
     ui_.layout->addWidget(ui_.staredWidget);
@@ -333,17 +459,63 @@ void MPasteWidget::initUI() {
     ui_.ui->textTypeBtn->setText(menuText("Text", QStringLiteral("文本")));
     ui_.ui->linkTypeBtn->setText(menuText("Link", QStringLiteral("链接")));
     ui_.ui->imageTypeBtn->setText(menuText("Image", QStringLiteral("图片")));
+    ui_.ui->officeTypeBtn->setText(menuText("Office", QStringLiteral("Office")));
     ui_.ui->richTextTypeBtn->setText(menuText("Rich Text", QStringLiteral("富文本")));
     ui_.ui->fileTypeBtn->setText(menuText("File", QStringLiteral("文件")));
 
+    ui_.ui->searchButton->setText(QString());
+    ui_.ui->searchButton->setIcon(IconResolver::themedIcon(QStringLiteral("search"), ThemeManager::instance()->isDark()));
+    ui_.ui->searchButton->setIconSize(QSize(16, 16));
+    ui_.ui->searchButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+
     ui_.ui->menuButton->setText(QString());
-    ui_.ui->menuButton->setIcon(QIcon(QStringLiteral(":/resources/resources/menu_more.svg")));
-    ui_.ui->menuButton->setIconSize(QSize(16, 16));
+    ui_.ui->menuButton->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), ThemeManager::instance()->isDark()));
+    ui_.ui->menuButton->setIconSize(QSize(20, 20));
+    ui_.ui->menuButton->setFixedSize(QSize(32, 28));
     ui_.ui->menuButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     ui_.ui->menuButton->setToolTip(menuText("More", QStringLiteral("更多")));
 
-    // Adjust window height to fit content (adapts to card scale)
-    adjustSize();
+    ui_.pageSelectorWidget = new PageSelectorPill(this);
+    auto *pageLayout = new QHBoxLayout(ui_.pageSelectorWidget);
+    pageLayout->setContentsMargins(8, 0, 8, 0);
+    pageLayout->setSpacing(3);
+
+    ui_.pagePrefixLabel = new QLabel(QStringLiteral("第"), ui_.pageSelectorWidget);
+    ui_.pagePrefixLabel->setAlignment(Qt::AlignCenter);
+    ui_.pagePrefixLabel->setFixedWidth(14);
+
+    ui_.pageComboBox = new QComboBox(ui_.pageSelectorWidget);
+    ui_.pageComboBox->setEditable(false);
+    ui_.pageComboBox->setInsertPolicy(QComboBox::NoInsert);
+    ui_.pageComboBox->setMaxVisibleItems(18);
+    ui_.pageComboBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    ui_.pageComboBox->setMinimumContentsLength(2);
+    ui_.pageComboBox->addItem(QStringLiteral("1"), 1);
+    ui_.pageComboBox->setCurrentIndex(0);
+    ui_.pageComboBox->setFixedWidth(38);
+
+    ui_.pageTotalLabel = new QLabel(QStringLiteral("/ 1"), ui_.pageSelectorWidget);
+    ui_.pageTotalLabel->setAlignment(Qt::AlignCenter);
+    ui_.pageTotalLabel->setFixedWidth(36);
+
+    ui_.pageSuffixLabel = new QLabel(QStringLiteral("页"), ui_.pageSelectorWidget);
+    ui_.pageSuffixLabel->setAlignment(Qt::AlignCenter);
+    ui_.pageSuffixLabel->setFixedWidth(14);
+
+    pageLayout->addWidget(ui_.pagePrefixLabel);
+    pageLayout->addWidget(ui_.pageComboBox);
+    pageLayout->addWidget(ui_.pageTotalLabel);
+    pageLayout->addWidget(ui_.pageSuffixLabel);
+    ui_.pageSelectorWidget->setFixedWidth(110);
+
+    if (ui_.ui->horizontalLayout) {
+        const int countIndex = ui_.ui->horizontalLayout->indexOf(ui_.ui->countArea);
+        ui_.ui->horizontalLayout->insertWidget(countIndex >= 0 ? countIndex : ui_.ui->horizontalLayout->count(),
+                                               ui_.pageSelectorWidget);
+    }
+    ui_.ui->countArea->setFixedWidth(72);
+
+    applyScale(MPasteSettings::getInst()->getItemScale());
 
     ui_.buttonGroup = new QButtonGroup(this);
     ui_.buttonGroup->setExclusive(true);
@@ -357,6 +529,7 @@ void MPasteWidget::initUI() {
     ui_.ui->textTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Text));
     ui_.ui->linkTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Link));
     ui_.ui->imageTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Image));
+    ui_.ui->officeTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Office));
     ui_.ui->richTextTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::RichText));
     ui_.ui->fileTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::File));
 
@@ -364,6 +537,7 @@ void MPasteWidget::initUI() {
     ui_.typeButtonGroup->addButton(ui_.ui->textTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->linkTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->imageTypeBtn);
+    ui_.typeButtonGroup->addButton(ui_.ui->officeTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->richTextTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->fileTypeBtn);
 
@@ -376,6 +550,245 @@ void MPasteWidget::initUI() {
     ui_.ui->searchEdit->installEventFilter(this);
     ui_.ui->clipboardBtnWidget->installEventFilter(this);
     ui_.ui->typeBtnWidget->installEventFilter(this);
+
+    applyTheme(ThemeManager::instance()->isDark());
+    updatePageSelector();
+    updatePageSelectorStyle();
+}
+
+AboutWidget *MPasteWidget::ensureAboutWidget() {
+    if (!ui_.aboutWidget) {
+        ui_.aboutWidget = new AboutWidget(this);
+        ui_.aboutWidget->setWindowFlag(Qt::Tool);
+        ui_.aboutWidget->setWindowTitle("MPaste About");
+        ui_.aboutWidget->hide();
+    }
+    return ui_.aboutWidget;
+}
+
+ClipboardItemDetailsDialog *MPasteWidget::ensureDetailsDialog() {
+    if (!ui_.detailsDialog) {
+        ui_.detailsDialog = new ClipboardItemDetailsDialog(this);
+        ui_.detailsDialog->setWindowFlag(Qt::Tool);
+        ui_.detailsDialog->hide();
+    }
+    return ui_.detailsDialog;
+}
+
+ClipboardItemPreviewDialog *MPasteWidget::ensurePreviewDialog() {
+    if (!ui_.previewDialog) {
+        ui_.previewDialog = new ClipboardItemPreviewDialog(this);
+        ui_.previewDialog->setWindowFlag(Qt::Tool);
+        ui_.previewDialog->hide();
+    }
+    return ui_.previewDialog;
+}
+
+MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
+    if (!ui_.settingsWidget) {
+        ui_.settingsWidget = new MPasteSettingsWidget(this);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
+                this, &MPasteWidget::shortcutChanged);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
+                this, &MPasteWidget::reloadHistoryBoards);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::historyViewModeChanged,
+                this, &MPasteWidget::reloadHistoryBoards);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::saveDirChanged,
+                this, [this]() {
+                    setupSyncWatcher();
+                    reloadHistoryBoards();
+                });
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::itemScaleChanged,
+                this, [this](int scale) {
+                    applyScale(scale);
+                });
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::previewCacheActionRequested,
+                this, &MPasteWidget::runPreviewCacheAction);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::thumbnailPrefetchChanged,
+                this, [this](int) {
+                    if (ui_.clipboardWidget) {
+                        ui_.clipboardWidget->refreshThumbnailCache();
+                    }
+                    if (ui_.staredWidget) {
+                        ui_.staredWidget->refreshThumbnailCache();
+                    }
+                });
+    }
+    return ui_.settingsWidget;
+}
+
+void MPasteWidget::scheduleStartupWarmup() {
+    if (loading_.startupWarmupScheduled) {
+        return;
+    }
+    loading_.startupWarmupScheduled = true;
+
+    QTimer::singleShot(0, this, [this]() {
+        loadFromSaveDir();
+        qInfo().noquote() << QStringLiteral("[startup] deferred loadFromSaveDir done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
+
+        // Wait for the clipboard board to finish loading before priming
+        // the clipboard, so duplicate detection has the full history.
+        // Always wait — hasPendingItems() is unreliable during async scan.
+        auto *boardService = ui_.clipboardWidget->boardServiceRef();
+        if (boardService) {
+            connect(boardService, &ClipboardBoardService::deferredLoadCompleted, this, [this]() {
+                clipboard_.monitor->primeCurrentClipboard();
+                qInfo().noquote() << QStringLiteral("[startup] deferred primeCurrentClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
+                loading_.startupWarmupCompleted = true;
+            }, Qt::SingleShotConnection);
+        }
+    });
+}
+
+void MPasteWidget::applyScale(int scale) {
+    if (ui_.clipboardWidget) {
+        ui_.clipboardWidget->applyScale(scale);
+    }
+    if (ui_.staredWidget) {
+        ui_.staredWidget->applyScale(scale);
+    }
+
+    auto scaleFont = [scale](QWidget *widget) {
+        if (!widget) {
+            return;
+        }
+        QFont font = widget->font();
+        QVariant baseVar = widget->property("baseFontPt");
+        qreal base = baseVar.isValid() ? baseVar.toReal() : font.pointSizeF();
+        if (!baseVar.isValid()) {
+            widget->setProperty("baseFontPt", base);
+        }
+        if (base > 0) {
+            font.setPointSizeF(qMax<qreal>(8.0, base * scale / 100.0));
+            widget->setFont(font);
+        }
+    };
+
+    auto scaleHeight = [scale](QWidget *widget, int minBase = 24) {
+        if (!widget) {
+            return;
+        }
+        QVariant baseVar = widget->property("baseHeight");
+        int base = baseVar.isValid() ? baseVar.toInt() : widget->sizeHint().height();
+        if (!baseVar.isValid()) {
+            widget->setProperty("baseHeight", base);
+        }
+        const int height = qMax(minBase, base * scale / 100);
+        widget->setMinimumHeight(height);
+        widget->setMaximumHeight(height);
+    };
+    auto applyRadius = [](QWidget *widget) {
+        if (!widget) {
+            return;
+        }
+        const int height = qMax(1, widget->maximumHeight());
+        const int radius = qMax(6, height / 2);
+        widget->setStyleSheet(QStringLiteral("border-radius: %1px;").arg(radius));
+    };
+
+    const int topBarHeight = qMax(32, 36 * scale / 100);
+    if (ui_.ui->topLine) {
+        ui_.ui->topLine->setFixedHeight(qMax(1, scale / 20));
+    }
+    scaleHeight(ui_.ui->widget, topBarHeight);
+
+    const int tabButtonHeight = qMax(24, 28 * scale / 100);
+    scaleHeight(ui_.ui->clipboardButton, tabButtonHeight);
+    scaleHeight(ui_.ui->staredButton, tabButtonHeight);
+    scaleHeight(ui_.ui->allTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->textTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->linkTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->imageTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->officeTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->richTextTypeBtn, tabButtonHeight);
+    scaleHeight(ui_.ui->fileTypeBtn, tabButtonHeight);
+    scaleFont(ui_.ui->clipboardButton);
+    scaleFont(ui_.ui->staredButton);
+    scaleFont(ui_.ui->allTypeBtn);
+    scaleFont(ui_.ui->textTypeBtn);
+    scaleFont(ui_.ui->linkTypeBtn);
+    scaleFont(ui_.ui->imageTypeBtn);
+    scaleFont(ui_.ui->officeTypeBtn);
+    scaleFont(ui_.ui->richTextTypeBtn);
+    scaleFont(ui_.ui->fileTypeBtn);
+
+    applyRadius(ui_.ui->clipboardButton);
+    applyRadius(ui_.ui->staredButton);
+    applyRadius(ui_.ui->allTypeBtn);
+    applyRadius(ui_.ui->textTypeBtn);
+    applyRadius(ui_.ui->linkTypeBtn);
+    applyRadius(ui_.ui->imageTypeBtn);
+    applyRadius(ui_.ui->officeTypeBtn);
+    applyRadius(ui_.ui->richTextTypeBtn);
+    applyRadius(ui_.ui->fileTypeBtn);
+
+    if (ui_.ui->searchEdit) {
+        scaleHeight(ui_.ui->searchEdit, tabButtonHeight);
+    }
+    if (ui_.ui->firstButton) {
+        scaleHeight(ui_.ui->firstButton, tabButtonHeight);
+    }
+    if (ui_.ui->lastButton) {
+        scaleHeight(ui_.ui->lastButton, tabButtonHeight);
+    }
+    if (ui_.pageComboBox) {
+        scaleHeight(ui_.pageComboBox, tabButtonHeight);
+        scaleFont(ui_.pageComboBox);
+    }
+    if (ui_.pagePrefixLabel) {
+        scaleFont(ui_.pagePrefixLabel);
+        ui_.pagePrefixLabel->setFixedWidth(qMax(12, 14 * scale / 100));
+    }
+    if (ui_.pageTotalLabel) {
+        scaleFont(ui_.pageTotalLabel);
+        ui_.pageTotalLabel->setFixedWidth(qMax(32, 36 * scale / 100));
+    }
+    if (ui_.pageSuffixLabel) {
+        scaleFont(ui_.pageSuffixLabel);
+        ui_.pageSuffixLabel->setFixedWidth(qMax(12, 14 * scale / 100));
+    }
+    if (ui_.pageSelectorWidget) {
+        ui_.pageSelectorWidget->setFixedHeight(tabButtonHeight);
+        ui_.pageSelectorWidget->setFixedWidth(qMax(96, 110 * scale / 100));
+    }
+    if (ui_.ui->countArea) {
+        ui_.ui->countArea->setFixedWidth(qMax(64, 72 * scale / 100));
+    }
+    updatePageSelector();
+    updatePageSelectorStyle();
+
+    if (ui_.layout) {
+        ui_.layout->setContentsMargins(0, qMax(6, 10 * scale / 100), 0, 0);
+    }
+
+    const int newHeight = ui_.ui->widget->height()
+        + ui_.ui->itemsWidget->sizeHint().height()
+        + qMax(6, 10 * scale / 100)
+        + qMax(1, scale / 20);
+    setFixedHeight(newHeight);
+
+    QScreen *screen = this->screen();
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (screen) {
+        const QRect avail = screen->availableGeometry();
+        QRect geom = geometry();
+        const int newWidth = geom.width();
+        int newY = avail.bottom() - newHeight + 1;
+        if (newY < avail.top()) {
+            newY = avail.top();
+        }
+        int newX = geom.x();
+        if (newX + newWidth > avail.right()) {
+            newX = avail.right() - newWidth + 1;
+        }
+        if (newX < avail.left()) {
+            newX = avail.left();
+        }
+        setGeometry(newX, newY, newWidth, newHeight);
+    }
 }
 
 void MPasteWidget::initSearchAnimations() {
@@ -438,15 +851,20 @@ void MPasteWidget::syncSoundOutputDevice() {
 void MPasteWidget::initSystemTray() {
     ui_.trayIcon = new QSystemTrayIcon(this);
     ui_.trayIcon->setIcon(QIcon(":/resources/resources/mpaste.svg"));
-    ui_.trayIcon->setContextMenu(ui_.menu);
+    ui_.trayIcon->setContextMenu(ui_.trayMenu ? ui_.trayMenu : ui_.menu);
     ui_.trayIcon->show();
 }
 
 void MPasteWidget::initMenu() {
     ui_.menu = new QMenu(this);
+    ui_.trayMenu = new QMenu(this);
 
-    ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/info.svg")),
-        menuText("About", QStringLiteral("关于")), [this]() {
+    ui_.aboutAction = new QAction(
+        IconResolver::themedIcon(QStringLiteral("info"), ThemeManager::instance()->isDark()),
+        menuText("About", QString::fromUtf16(u"\u5173\u4E8E")),
+        this);
+    connect(ui_.aboutAction, &QAction::triggered, this, [this]() {
+        AboutWidget *aboutWidget = ensureAboutWidget();
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
@@ -454,14 +872,18 @@ void MPasteWidget::initMenu() {
             return;
 
         QRect screenGeometry = screen->geometry();
-        int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
-        int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
-        ui_.aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
-        ui_.aboutWidget->show();
+        int x = (screenGeometry.width() - aboutWidget->width()) / 2;
+        int y = (screenGeometry.height() - aboutWidget->height()) / 2;
+        aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
+        aboutWidget->show();
     });
 
-    ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/settings.svg")),
-        menuText("Settings", QStringLiteral("设置")), [this]() {
+    ui_.settingsAction = new QAction(
+        IconResolver::themedIcon(QStringLiteral("settings"), ThemeManager::instance()->isDark()),
+        menuText("Settings", QString::fromUtf16(u"\u8BBE\u7F6E")),
+        this);
+    connect(ui_.settingsAction, &QAction::triggered, this, [this]() {
+        MPasteSettingsWidget *settingsWidget = ensureSettingsWidget();
         QScreen *screen = QGuiApplication::primaryScreen();
         if (const QWindow *window = windowHandle())
             screen = window->screen();
@@ -469,23 +891,79 @@ void MPasteWidget::initMenu() {
             return;
 
         QRect screenGeometry = screen->geometry();
-        int x = (screenGeometry.width() - ui_.aboutWidget->width()) / 2;
-        int y = (screenGeometry.height() - ui_.aboutWidget->height()) / 2;
-        ui_.settingsWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
-        ui_.settingsWidget->show();
+        int x = (screenGeometry.width() - settingsWidget->width()) / 2;
+        int y = (screenGeometry.height() - settingsWidget->height()) / 2;
+        settingsWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
+        settingsWidget->show();
     });
 
-    ui_.menu->addSeparator();
-    ui_.menu->addAction(QIcon(QStringLiteral(":/resources/resources/quit.svg")),
-        menuText("Quit", QStringLiteral("退出")), [this]() { qApp->exit(0); });
+    ui_.quitAction = new QAction(
+        QIcon(QStringLiteral(":/resources/resources/quit.svg")),
+        menuText("Quit", QString::fromUtf16(u"\u9000\u51FA")),
+        this);
+    connect(ui_.quitAction, &QAction::triggered, this, []() { qApp->exit(0); });
+
+    const auto addActions = [this](QMenu *menu) {
+        if (!menu) {
+            return;
+        }
+        menu->addAction(ui_.aboutAction);
+        menu->addAction(ui_.settingsAction);
+        menu->addSeparator();
+        menu->addAction(ui_.quitAction);
+    };
+    addActions(ui_.menu);
+    addActions(ui_.trayMenu);
+
+    applyMenuTheme(ui_.menu);
+    applyMenuTheme(ui_.trayMenu);
 }
 
+
+void MPasteWidget::applyTheme(bool dark) {
+    darkTheme_ = dark;
+
+#ifdef Q_OS_WIN
+    const QColor tint = darkTheme_ ? QColor(12, 18, 26, 48) : QColor(231, 241, 244, 20);
+    enableBlurBehind((HWND)winId(), tint);
+#endif
+
+    if (ui_.ui) {
+        ui_.ui->menuButton->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), darkTheme_));
+        ui_.ui->searchButton->setIcon(QIcon(darkTheme_
+            ? QStringLiteral(":/resources/resources/search_light.svg")
+            : QStringLiteral(":/resources/resources/search.svg")));
+        ui_.ui->searchButton->setIconSize(QSize(16, 16));
+        ui_.ui->searchButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        ui_.ui->searchButton->setText(QString());
+        ui_.ui->firstButton->setIcon(IconResolver::themedIcon(QStringLiteral("first"), darkTheme_));
+        ui_.ui->lastButton->setIcon(IconResolver::themedIcon(QStringLiteral("last"), darkTheme_));
+    }
+
+    if (ui_.aboutAction) {
+        ui_.aboutAction->setIcon(IconResolver::themedIcon(QStringLiteral("info"), darkTheme_));
+    }
+    if (ui_.settingsAction) {
+        ui_.settingsAction->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), darkTheme_));
+    }
+    if (ui_.quitAction) {
+        ui_.quitAction->setIcon(QIcon(QStringLiteral(":/resources/resources/quit.svg")));
+    }
+    updatePageSelectorStyle();
+    applyMenuTheme(ui_.menu);
+    applyMenuTheme(ui_.trayMenu);
+    update();
+}
 
 void MPasteWidget::setupConnections() {
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardActivityObserved,
             this, &MPasteWidget::clipboardActivityObserved);
     connect(clipboard_.monitor, &ClipboardMonitor::clipboardUpdated,
             this, &MPasteWidget::clipboardUpdated);
+    connect(clipboard_.monitor, &ClipboardMonitor::clipboardMimeCompleted,
+            this, [this](const QString &itemName, const QMap<QString, QByteArray> &extraFormats) {
+        ui_.clipboardWidget->mergeDeferredMimeFormats(itemName, extraFormats);
+    });
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
         connect(boardWidget, &ScrollItemsWidget::doubleClicked,
         this, [this](const ClipboardItem &item) {
@@ -503,12 +981,12 @@ void MPasteWidget::setupConnections() {
 
         connect(boardWidget, &ScrollItemsWidget::detailsRequested,
         this, [this](const ClipboardItem &item, int sequence, int totalCount) {
-            ui_.detailsDialog->showItem(item, sequence, totalCount);
+            ensureDetailsDialog()->showItem(item, sequence, totalCount);
         });
         connect(boardWidget, &ScrollItemsWidget::previewRequested,
         this, [this](const ClipboardItem &item) {
             if (ClipboardItemPreviewDialog::supportsPreview(item)) {
-                ui_.previewDialog->showItem(item);
+                ensurePreviewDialog()->showItem(item);
             }
         });
 
@@ -517,9 +995,25 @@ void MPasteWidget::setupConnections() {
                 this->updateItemCount(itemCount);
             }
         });
+        connect(boardWidget, &ScrollItemsWidget::selectionStateChanged, this, [this, boardWidget]() {
+            if (ui_.buttonGroup->checkedButton()->property("category").toString() == boardWidget->getCategory()) {
+                this->updateItemCount(boardWidget->getItemCount());
+            }
+        });
+        connect(boardWidget, &ScrollItemsWidget::pageStateChanged, this, [this, boardWidget](int, int) {
+            if (ui_.buttonGroup->checkedButton()->property("category").toString() == boardWidget->getCategory()) {
+                this->updatePageSelector();
+            }
+        });
 
         connect(boardWidget, &ScrollItemsWidget::itemStared, this, [this](const ClipboardItem &item) {
             ClipboardItem updatedItem(item);
+            if (!hasUsableMimeData(updatedItem)) {
+                ClipboardItem rehydrated = rehydrateClipboardItem(updatedItem);
+                if (!rehydrated.getName().isEmpty()) {
+                    updatedItem = rehydrated;
+                }
+            }
             ui_.staredWidget->addAndSaveItem(updatedItem);
             ui_.clipboardWidget->setItemFavorite(updatedItem, true);
         });
@@ -529,6 +1023,16 @@ void MPasteWidget::setupConnections() {
             if (boardWidget == ui_.staredWidget) {
                 ui_.clipboardWidget->setItemFavorite(item, false);
             }
+        });
+        connect(boardWidget, &ScrollItemsWidget::aliasChanged, this, [this, boardWidget](const QByteArray &fingerprint, const QString &alias) {
+            for (auto *other : ui_.boardWidgetMap.values()) {
+                if (other && other != boardWidget) {
+                    other->syncAlias(fingerprint, alias);
+                }
+            }
+        });
+        connect(boardWidget, &ScrollItemsWidget::localPersistenceChanged, this, [this]() {
+            sync_.suppressReloadUntilMs = QDateTime::currentMSecsSinceEpoch() + 800;
         });
     }
 
@@ -541,6 +1045,14 @@ void MPasteWidget::setupConnections() {
     });
     connect(ui_.ui->searchButton, &QToolButton::clicked, this, [this](bool flag) {
         this->setFocusOnSearch(flag);
+    });
+    connect(ui_.pageComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        if (ScrollItemsWidget *board = currItemsWidget()) {
+            board->setCurrentPageNumber(index + 1);
+        }
     });
 
     connect(ui_.ui->firstButton, &QPushButton::clicked, this, [this]() {
@@ -577,6 +1089,8 @@ void MPasteWidget::setupConnections() {
                     boardWidget->filterByKeyword(ui_.ui->searchEdit->text());
                 }
             }
+            updateItemCount(currItemsWidget()->getItemCount());
+            updatePageSelector();
         });
 }
 
@@ -616,7 +1130,7 @@ void MPasteWidget::clipboardActivityObserved(int wId) {
     playCopySoundIfNeeded(wId);
 }
 
-void MPasteWidget::clipboardUpdated(ClipboardItem nItem, int wId) {
+void MPasteWidget::clipboardUpdated(const ClipboardItem &nItem, int wId) {
     if (!clipboard_.isPasting) {
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
@@ -683,7 +1197,54 @@ bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
         .arg(widgetItemSummary(item));
     clipboard_.monitor->disconnectMonitor();
 
-    QMimeData *mimeData = plainText ? createPlainTextMimeData(item) : item.createMimeData();
+    QMimeData *mimeData = plainText ? createPlainTextMimeData(item)
+                                    : ClipboardExportService::buildMimeData(item);
+    if (!mimeData && !plainText) {
+        const ClipboardItem rehydrated = rehydrateClipboardItem(item);
+        if (!rehydrated.getName().isEmpty()) {
+            mimeData = ClipboardExportService::buildMimeData(rehydrated);
+            if (!mimeData) {
+                mimeData = createPlainTextMimeData(rehydrated);
+            }
+        }
+    }
+    if (mimeData) {
+        bool hasPayload = false;
+        if (mimeData->hasText() && !mimeData->text().isEmpty()) {
+            hasPayload = true;
+        } else if (mimeData->hasHtml() && !mimeData->html().isEmpty()) {
+            hasPayload = true;
+        } else if (mimeData->hasUrls() && !mimeData->urls().isEmpty()) {
+            hasPayload = true;
+        } else if (mimeData->hasColor()) {
+            hasPayload = true;
+        } else if (mimeData->hasImage()) {
+            const QVariant imageData = mimeData->imageData();
+            hasPayload = imageData.isValid() && !imageData.isNull();
+        } else {
+            for (const QString &format : mimeData->formats()) {
+                if (!mimeData->data(format).isEmpty()) {
+                    hasPayload = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasPayload) {
+            delete mimeData;
+            mimeData = createPlainTextMimeData(item);
+        }
+    }
+    if (mimeData && !plainText) {
+        const QString normalizedText = item.getNormalizedText();
+        const bool hasText = mimeData->hasText() && !mimeData->text().isEmpty();
+        const bool hasHtml = mimeData->hasHtml() && !mimeData->html().isEmpty();
+        const bool hasUrls = mimeData->hasUrls() && !mimeData->urls().isEmpty();
+        if (!normalizedText.isEmpty() && !hasText && !hasHtml && !hasUrls) {
+            mimeData->setText(normalizedText);
+            mimeData->setData("text/plain;charset=utf-8", normalizedText.toUtf8());
+        }
+    }
     if (!mimeData) {
         qInfo() << "[clipboard-widget] setClipboard aborted: no mimeData";
         clipboard_.monitor->connectMonitor();
@@ -787,15 +1348,26 @@ void MPasteWidget::handleEscapeKey() {
 }
 
 void MPasteWidget::handleEnterKey(bool plainText) {
-    const ClipboardItem *selectedItem = currItemsWidget()->selectedByEnter();
+    if (currItemsWidget()->hasMultipleSelectedItems()) {
+        return;
+    }
+
+    auto *board = currItemsWidget();
+    const ClipboardItem *selectedItem = board->selectedByEnter();
     if (selectedItem && setClipboard(*selectedItem, plainText)) {
         hideAndPaste();
+        board->moveSelectedToFirst();
     }
 }
 
 void MPasteWidget::handlePreviewKey() {
-    if (ui_.previewDialog && ui_.previewDialog->isVisible()) {
-        ui_.previewDialog->reject();
+    ClipboardItemPreviewDialog *previewDialog = ensurePreviewDialog();
+    if (previewDialog->isVisible()) {
+        previewDialog->reject();
+        return;
+    }
+
+    if (currItemsWidget()->hasMultipleSelectedItems()) {
         return;
     }
 
@@ -804,7 +1376,7 @@ void MPasteWidget::handlePreviewKey() {
         return;
     }
 
-    ui_.previewDialog->showItem(*selectedItem);
+    previewDialog->showItem(*selectedItem);
 }
 
 bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
@@ -812,13 +1384,15 @@ bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
         return false;
     }
 
-    const ClipboardItem *selectedItem = currItemsWidget()->selectedByShortcut(shortcutIndex);
+    auto *board = currItemsWidget();
+    const ClipboardItem *selectedItem = board->selectedByShortcut(shortcutIndex);
     if (!selectedItem || !setClipboard(*selectedItem, plainText)) {
         return false;
     }
 
-    QTimer::singleShot(50, this, [this]() {
+    QTimer::singleShot(50, this, [this, board]() {
         hideAndPaste();
+        board->moveSelectedToFirst();
         currItemsWidget()->cleanShortCutInfo();
     });
     return true;
@@ -996,14 +1570,135 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     activateWindow();
     raise();
     setFocus();
+    if (sync_.pendingReload) {
+        sync_.pendingReload = false;
+        scheduleSyncReload();
+    }
+}
+
+void MPasteWidget::hideEvent(QHideEvent *event) {
+    QWidget::hideEvent(event);
+    for (auto it = ui_.boardWidgetMap.cbegin(); it != ui_.boardWidgetMap.cend(); ++it) {
+        if (auto *board = it.value()) {
+            board->hideHoverTools();
+        }
+    }
+}
+
+void MPasteWidget::setupSyncWatcher() {
+    const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
+    if (rootDir.isEmpty()) {
+        return;
+    }
+
+    if (!sync_.watcher) {
+        sync_.watcher = new QFileSystemWatcher(this);
+        connect(sync_.watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
+            scheduleSyncReload();
+        });
+    }
+
+    if (!sync_.reloadTimer) {
+        sync_.reloadTimer = new QTimer(this);
+        sync_.reloadTimer->setSingleShot(true);
+        sync_.reloadTimer->setInterval(400);
+        connect(sync_.reloadTimer, &QTimer::timeout, this, [this]() {
+            if (!isVisible()) {
+                sync_.pendingReload = true;
+                return;
+            }
+            reloadHistoryBoards();
+        });
+    }
+
+    QDir().mkpath(rootDir);
+    const QStringList watchDirs = {
+        rootDir,
+        QDir::cleanPath(rootDir + QDir::separator() + MPasteSettings::CLIPBOARD_CATEGORY_NAME),
+        QDir::cleanPath(rootDir + QDir::separator() + MPasteSettings::STAR_CATEGORY_NAME)
+    };
+    for (const QString &dir : watchDirs) {
+        QDir().mkpath(dir);
+    }
+
+    const QStringList existing = sync_.watcher->directories();
+    if (!existing.isEmpty()) {
+        sync_.watcher->removePaths(existing);
+    }
+    sync_.watcher->addPaths(watchDirs);
+}
+
+void MPasteWidget::scheduleSyncReload() {
+    if (!sync_.reloadTimer) {
+        return;
+    }
+    // Ignore directory changes caused by our own file writes.  Each board
+    // service tracks its last write timestamp; if any service wrote recently,
+    // this change is internal, not an external sync event.
+    if ((ui_.clipboardWidget && ui_.clipboardWidget->boardServiceRef()
+            && ui_.clipboardWidget->boardServiceRef()->hasRecentInternalWrite())
+        || (ui_.staredWidget && ui_.staredWidget->boardServiceRef()
+            && ui_.staredWidget->boardServiceRef()->hasRecentInternalWrite())) {
+        return;
+    }
+    if (!isVisible()) {
+        sync_.pendingReload = true;
+        return;
+    }
+    sync_.reloadTimer->start();
 }
 
 void MPasteWidget::loadFromSaveDir() {
-    ui_.staredWidget->loadFromSaveDir();
-    for (const ClipboardItem &item : ui_.staredWidget->allItems()) {
-        ui_.clipboardWidget->setItemFavorite(item, true);
-    }
+    ui_.clipboardWidget->setFavoriteFingerprints(ui_.staredWidget->loadAllFingerprints());
+    ui_.staredWidget->loadFromSaveDirDeferred();
     ui_.clipboardWidget->loadFromSaveDirDeferred();
+}
+
+void MPasteWidget::runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheAction action) {
+    ScrollItemsWidget *boardWidget = currItemsWidget();
+    if (!boardWidget) {
+        return;
+    }
+
+    ClipboardBoardService::PreviewCacheMaintenanceMode mode = ClipboardBoardService::RepairBrokenPreviews;
+    QString actionLabel;
+    switch (action) {
+        case MPasteSettingsWidget::RepairBrokenPreviews:
+            mode = ClipboardBoardService::RepairBrokenPreviews;
+            actionLabel = menuText("Repair broken previews", QString::fromUtf16(u"\u4FEE\u590D\u635F\u574F\u9884\u89C8"));
+            break;
+        case MPasteSettingsWidget::RebuildCurrentPreviews:
+            mode = ClipboardBoardService::RebuildAllPreviews;
+            actionLabel = menuText("Rebuild current previews", QString::fromUtf16(u"\u91CD\u5EFA\u5F53\u524D\u9884\u89C8"));
+            break;
+        case MPasteSettingsWidget::ClearCurrentPreviews:
+            mode = ClipboardBoardService::ClearAllPreviews;
+            actionLabel = menuText("Clear current previews", QString::fromUtf16(u"\u6E05\u7A7A\u5F53\u524D\u9884\u89C8"));
+            break;
+    }
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const int changedCount = boardWidget->maintainPreviewCache(mode);
+    QApplication::restoreOverrideCursor();
+
+    reloadHistoryBoards();
+
+    const QString boardLabel = ui_.buttonGroup && ui_.buttonGroup->checkedButton()
+        ? ui_.buttonGroup->checkedButton()->text()
+        : boardWidget->getCategory();
+    const QLocale locale = QLocale::system();
+    const bool zh = locale.language() == QLocale::Chinese
+        || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive);
+    const QString summary = changedCount > 0
+        ? (zh
+            ? QString::fromUtf16(u"\u5DF2\u5728 %1 \u4E2D\u66F4\u65B0 %2 \u4E2A\u6761\u76EE\u3002").arg(boardLabel).arg(changedCount)
+            : QStringLiteral("Updated %1 items in %2.").arg(changedCount).arg(boardLabel))
+        : (zh
+            ? QString::fromUtf16(u"%1 \u4E2D\u6CA1\u6709\u9700\u8981\u66F4\u65B0\u7684\u9884\u89C8\u6761\u76EE\u3002").arg(boardLabel)
+            : QStringLiteral("No preview entries needed updates in %1.").arg(boardLabel));
+    QMessageBox::information(ensureSettingsWidget(),
+                             menuText("Preview Cache", QString::fromUtf16(u"\u9884\u89C8\u7F13\u5B58")),
+                             QStringLiteral("%1\n%2").arg(actionLabel, summary));
 }
 
 void MPasteWidget::reloadHistoryBoards() {
@@ -1019,6 +1714,7 @@ void MPasteWidget::reloadHistoryBoards() {
     ui_.staredWidget->filterByType(type);
     ui_.staredWidget->filterByKeyword(keyword);
     updateItemCount(currItemsWidget()->getItemCount());
+    updatePageSelector();
 }
 
 void MPasteWidget::setFocusOnSearch(bool flag) {
@@ -1034,6 +1730,10 @@ void MPasteWidget::setFocusOnSearch(bool flag) {
 }
 
 ScrollItemsWidget *MPasteWidget::currItemsWidget() {
+    if (!ui_.buttonGroup) {
+        return ui_.clipboardWidget;
+    }
+
     QAbstractButton* currentBtn = ui_.buttonGroup->checkedButton();
     if (currentBtn) {
         QString category = currentBtn->property("category").toString();
@@ -1043,10 +1743,129 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
     return ui_.clipboardWidget;
 }
 
+void MPasteWidget::updatePageSelectorStyle() {
+    if (!ui_.pageSelectorWidget || !ui_.pagePrefixLabel || !ui_.pageComboBox || !ui_.pageTotalLabel || !ui_.pageSuffixLabel) {
+        return;
+    }
+
+    const int height = qMax(24, ui_.pageSelectorWidget->height());
+    const int radius = qMax(12, height / 2);
+    const QString background = darkTheme_
+        ? QStringLiteral("rgba(28, 34, 44, 235)")
+        : QStringLiteral("rgba(255, 255, 255, 242)");
+    const QString border = QStringLiteral("#4A90E2");
+    const QString text = darkTheme_ ? QStringLiteral("#F2F6FB") : QStringLiteral("#2C3E50");
+    const QString divider = darkTheme_ ? QStringLiteral("rgba(242, 246, 251, 110)")
+                                       : QStringLiteral("rgba(44, 62, 80, 96)");
+    const QString arrow = darkTheme_
+        ? QStringLiteral(":/resources/resources/page_chevron_light.svg")
+        : QStringLiteral(":/resources/resources/page_chevron.svg");
+    if (auto *pill = static_cast<PageSelectorPill *>(ui_.pageSelectorWidget)) {
+        ui_.pageSelectorWidget->layout()->activate();
+        pill->setColors(QColor(background), QColor(border), QColor(divider));
+        pill->setCornerRadius(radius);
+        pill->setDividerInset(3);
+        pill->setDividerPosition(ui_.pageComboBox->geometry().right() + 4);
+        pill->setPaintFrame(false);
+    }
+    ui_.pageComboBox->setStyleSheet(QStringLiteral(
+        "QComboBox {"
+        " background: transparent;"
+        " border: none;"
+        " color: %1;"
+        " padding: 0;"
+        " font-size: 13px;"
+        " font-weight: 700;"
+        "}"
+        "QComboBox::drop-down {"
+        " subcontrol-origin: padding;"
+        " subcontrol-position: top right;"
+        " width: 6px;"
+        " border: none;"
+        " background: transparent;"
+        "}"
+        "QComboBox::down-arrow {"
+        " width: 5px;"
+        " height: 3px;"
+        " image: url(%2);"
+        "}"
+        "QComboBox QAbstractItemView {"
+        " background-color: %3;"
+        " border: 1px solid %4;"
+        " color: %5;"
+        " selection-background-color: %6;"
+        " selection-color: %5;"
+        "}").arg(text, arrow,
+                 darkTheme_ ? QStringLiteral("#1E232B") : QStringLiteral("#FFFFFF"),
+                 darkTheme_ ? QStringLiteral("#2C3440") : QStringLiteral("#E5E5E5"),
+                 darkTheme_ ? QStringLiteral("#F2F6FB") : QStringLiteral("#1A1A1A"),
+                 darkTheme_ ? QStringLiteral("rgba(28, 34, 44, 235)") : QStringLiteral("#E5E5E5")));
+    const QString secondary = darkTheme_ ? QStringLiteral("rgba(242, 246, 251, 185)")
+                                         : QStringLiteral("rgba(44, 62, 80, 185)");
+    ui_.pagePrefixLabel->setStyleSheet(QStringLiteral(
+        "QLabel { color: %1; font-size: 13px; font-weight: 600; background: transparent; }").arg(secondary));
+    ui_.pageTotalLabel->setStyleSheet(QStringLiteral(
+        "QLabel { color: %1; font-size: 13px; font-weight: 700; background: transparent; }").arg(secondary));
+    ui_.pageSuffixLabel->setStyleSheet(QStringLiteral(
+        "QLabel { color: %1; font-size: 13px; font-weight: 600; background: transparent; }").arg(secondary));
+}
+
+void MPasteWidget::updatePageSelector() {
+    if (!ui_.pageSelectorWidget || !ui_.pagePrefixLabel || !ui_.pageComboBox || !ui_.pageTotalLabel || !ui_.pageSuffixLabel) {
+        return;
+    }
+
+    const bool pagedMode = MPasteSettings::getInst()->getHistoryViewMode() == MPasteSettings::ViewModePaged;
+    ui_.pageSelectorWidget->setVisible(pagedMode);
+    if (!pagedMode) {
+        return;
+    }
+
+    ScrollItemsWidget *board = currItemsWidget();
+    const int totalPages = board ? board->totalPageCount() : 0;
+    const int currentPage = board ? board->currentPageNumber() : 0;
+
+    const int clampedTotalPages = qMax(1, totalPages);
+    ui_.pageComboBox->blockSignals(true);
+    if (ui_.pageComboBox->count() != clampedTotalPages) {
+        ui_.pageComboBox->clear();
+        for (int page = 1; page <= clampedTotalPages; ++page) {
+            ui_.pageComboBox->addItem(QString::number(page), page);
+        }
+    }
+    ui_.pageComboBox->setCurrentIndex(qBound(0, (currentPage > 0 ? currentPage : 1) - 1, clampedTotalPages - 1));
+    ui_.pageComboBox->blockSignals(false);
+    ui_.pageTotalLabel->setText(QStringLiteral("/ %1").arg(totalPages));
+
+    const QFontMetrics comboMetrics(ui_.pageComboBox->font());
+    const int comboTextWidth = comboMetrics.horizontalAdvance(QString::number(clampedTotalPages));
+    const int comboWidth = qMax(24, comboTextWidth + 12);
+    ui_.pageComboBox->setFixedWidth(comboWidth);
+
+    const QFontMetrics totalMetrics(ui_.pageTotalLabel->font());
+    const int totalWidth = qMax(26, totalMetrics.horizontalAdvance(QStringLiteral("/ %1").arg(totalPages)) + 4);
+    ui_.pageTotalLabel->setFixedWidth(totalWidth);
+
+    if (ui_.pageSelectorWidget && ui_.pageSelectorWidget->layout()) {
+        const QMargins margins = ui_.pageSelectorWidget->layout()->contentsMargins();
+        const int spacing = ui_.pageSelectorWidget->layout()->spacing();
+        ui_.pageSelectorWidget->setFixedWidth(margins.left()
+                                              + ui_.pagePrefixLabel->width()
+                                              + spacing
+                                              + comboWidth
+                                              + spacing
+                                              + totalWidth
+                                              + spacing
+                                              + ui_.pageSuffixLabel->width()
+                                              + margins.right());
+    }
+}
+
 void MPasteWidget::updateItemCount(int itemCount) {
-    ui_.ui->countArea->setText(QString::number(itemCount));
-    ui_.ui->countArea->adjustSize();
-    ui_.ui->countArea->setFixedWidth(qMax(30, ui_.ui->countArea->sizeHint().width()));
+    const int selectedCount = currItemsWidget() ? currItemsWidget()->selectedItemCount() : 0;
+    ui_.ui->countArea->setText(selectedCount > 1
+        ? QStringLiteral("%1/%2").arg(selectedCount).arg(itemCount)
+        : QString::number(itemCount));
     ui_.ui->countArea->updateGeometry();
 }
 

@@ -2,6 +2,7 @@
 // output: Implements a polished clipboard item inspector dialog aligned with the app's rounded glass-card language.
 // pos: Widget-layer details dialog implementation for clipboard debugging and transparency.
 // update: If I change, update this header block and my folder README.md.
+// note: Added dark theme styling support.
 #include "ClipboardItemDetailsDialog.h"
 
 #include <QApplication>
@@ -26,6 +27,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWindow>
+
+#include "utils/ThemeManager.h"
 
 namespace {
 constexpr int kDetailsDialogWidth = 860;
@@ -94,22 +97,106 @@ QFont preferredEditorFont() {
 
     return font;
 }
-}
 
-ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
-    : QDialog(parent) {
-    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
-    setModal(false);
-    setAttribute(Qt::WA_TranslucentBackground);
-    setFixedWidth(kDetailsDialogWidth);
-    resize(kDetailsDialogWidth, kDetailsDialogHeight);
+QString detailsStyleSheet(bool dark) {
+    if (dark) {
+        return QStringLiteral(R"(
+            QFrame#detailsCard {
+                background: transparent;
+                border: none;
+                border-radius: 18px;
+            }
+            QLabel#detailsTitle {
+                color: #E6EDF5;
+                font-size: 19px;
+                font-weight: 700;
+                background: transparent;
+            }
+            QLabel#sectionLabel {
+                color: #8B97A6;
+                font-size: 11px;
+                font-weight: 700;
+                background: transparent;
+                letter-spacing: 0.4px;
+                padding-bottom: 1px;
+            }
+            QLabel#valueLabel {
+                color: #D6DEE8;
+                font-size: 13px;
+                background: transparent;
+            }
+            QLabel#previewVisual, QLabel#previewThumbnail {
+                background-color: #1F242D;
+                border: 1px solid rgba(116, 154, 214, 40);
+                border-radius: 14px;
+                color: #9AA7B5;
+                padding: 12px;
+            }
+            QLabel#previewThumbnail {
+                padding: 8px;
+            }
+            QFrame#metaCard, QFrame#previewCard {
+                background-color: #1E232B;
+                border: 1px solid rgba(116, 154, 214, 40);
+                border-radius: 14px;
+            }
+            QTextEdit {
+                background-color: #1F242D;
+                border: 1px solid rgba(116, 154, 214, 40);
+                border-radius: 12px;
+                padding: 10px 12px;
+                color: #E6EDF5;
+                selection-background-color: rgba(74, 144, 226, 110);
+            }
+            QTextEdit:focus {
+                border-color: rgba(116, 154, 214, 80);
+            }
+            QToolButton#closeButton {
+                background-color: #1F242D;
+                border: 1px solid rgba(116, 154, 214, 40);
+                border-radius: 14px;
+                color: #C9D4E0;
+                font-size: 17px;
+                font-weight: 700;
+                min-width: 28px;
+                min-height: 28px;
+            }
+            QToolButton#closeButton:hover {
+                background-color: #27303A;
+                border-color: rgba(116, 154, 214, 80);
+            }
+            QTabWidget::pane {
+                border-left: 1px solid rgba(116, 154, 214, 40);
+                border-right: 1px solid rgba(116, 154, 214, 40);
+                border-bottom: 1px solid rgba(116, 154, 214, 40);
+                border-top: none;
+                border-radius: 14px;
+                background-color: #1E232B;
+                margin-top: 10px;
+                top: 0px;
+            }
+            QTabBar::tab {
+                background-color: #1F242D;
+                border: 1px solid rgba(116, 154, 214, 40);
+                color: #9AA7B5;
+                border-radius: 12px;
+                padding: 6px 12px;
+                margin-right: 6px;
+                font-weight: 600;
+                font-size: 12px;
+            }
+            QTabBar::tab:selected {
+                background-color: #1E232B;
+                border-color: rgba(116, 154, 214, 80);
+                color: #E6EDF5;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #27303A;
+            }
+        )");
+    }
 
-    auto *rootLayout = new QVBoxLayout(this);
-    rootLayout->setContentsMargins(10, 10, 10, 10);
-
-    ui_.card = new QFrame(this);
-    ui_.card->setObjectName("detailsCard");
-    ui_.card->setStyleSheet(QStringLiteral(R"(
+    return QStringLiteral(R"(
         QFrame#detailsCard {
             background: transparent;
             border: none;
@@ -202,7 +289,25 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
         QTabBar::tab:hover:!selected {
             background-color: #F7FAFF;
         }
-    )"));
+    )");
+}
+}
+
+ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
+    : QDialog(parent) {
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
+    setModal(false);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setFixedWidth(kDetailsDialogWidth);
+    resize(kDetailsDialogWidth, kDetailsDialogHeight);
+
+    auto *rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(10, 10, 10, 10);
+
+    ui_.card = new QFrame(this);
+    ui_.card->setObjectName("detailsCard");
+    applyTheme(ThemeManager::instance()->isDark());
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &ClipboardItemDetailsDialog::applyTheme);
 
     rootLayout->addWidget(ui_.card);
 
@@ -417,8 +522,18 @@ void ClipboardItemDetailsDialog::paintEvent(QPaintEvent *) {
     gradient.setColorAt(1.00, QColor("#4A90E2"));
 
     painter.setPen(QPen(QBrush(gradient), borderWidth));
-    painter.setBrush(QColor(247, 250, 255, 245));
+    painter.setBrush(darkTheme_ ? QColor(26, 31, 38, 245) : QColor(247, 250, 255, 245));
     painter.drawRoundedRect(outerRect, radius, radius);
+}
+
+void ClipboardItemDetailsDialog::applyTheme(bool dark) {
+    darkTheme_ = dark;
+    if (ui_.card) {
+        ui_.card->setStyleSheet(detailsStyleSheet(darkTheme_));
+    } else {
+        setStyleSheet(detailsStyleSheet(darkTheme_));
+    }
+    update();
 }
 
 void ClipboardItemDetailsDialog::mousePressEvent(QMouseEvent *event) {
@@ -453,6 +568,8 @@ QString ClipboardItemDetailsDialog::contentTypeLabel(ClipboardItem::ContentType 
             return uiText(QStringLiteral("Link"), zh(u"链接"));
         case ClipboardItem::Image:
             return uiText(QStringLiteral("Image"), zh(u"图片"));
+        case ClipboardItem::Office:
+            return uiText(QStringLiteral("Office Shape"), zh(u"Office Shape"));
         case ClipboardItem::RichText:
             return uiText(QStringLiteral("Rich Text"), zh(u"富文本"));
         case ClipboardItem::File:
@@ -525,7 +642,8 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
     QString summary;
 
     switch (item.getContentType()) {
-        case ClipboardItem::Image: {
+        case ClipboardItem::Image:
+        case ClipboardItem::Office: {
             previewPixmap = item.getImage();
             if (item.hasThumbnail()) {
                 thumbnailPixmap = item.thumbnail();
@@ -572,6 +690,25 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
             }
             break;
         }
+        case ClipboardItem::Link:
+        case ClipboardItem::Text:
+        case ClipboardItem::File:
+            if (item.hasThumbnail()) {
+                previewPixmap = item.thumbnail();
+                thumbnailPixmap = item.thumbnail();
+                summary = QStringLiteral("%1 | %2: %3 × %4 px")
+                              .arg(contentTypeLabel(item.getContentType()))
+                              .arg(uiText(QStringLiteral("Thumbnail"), zh(u"缩略图")))
+                              .arg(thumbnailPixmap.width())
+                              .arg(thumbnailPixmap.height());
+            } else if (!item.getFavicon().isNull()) {
+                previewPixmap = item.getFavicon();
+                summary = uiText(QStringLiteral("Favicon Preview"), zh(u"站点图标预览"));
+            } else {
+                previewPixmap = item.getIcon();
+                summary = uiText(QStringLiteral("Item Icon"), zh(u"条目标识"));
+            }
+            break;
         default:
             if (!item.getFavicon().isNull()) {
                 previewPixmap = item.getFavicon();
