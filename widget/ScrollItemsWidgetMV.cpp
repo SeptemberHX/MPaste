@@ -2704,24 +2704,6 @@ bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
         }
     }
 
-    // Debug: log fingerprint comparison for first 5 indexed items.
-    if (boardService_) {
-        const QByteArray newFp = nItem.fingerprint();
-        qInfo().noquote() << QStringLiteral("[dedup] new item fp=%1 type=%2 text=%3")
-            .arg(QString::fromLatin1(newFp.toHex().left(16)))
-            .arg(static_cast<int>(nItem.getContentType()))
-            .arg(nItem.getNormalizedText().left(80));
-        const auto &metas = boardService_->indexedItemsMeta();
-        for (int i = 0; i < qMin(5, metas.size()); ++i) {
-            const auto &m = metas.at(i);
-            qInfo().noquote() << QStringLiteral("[dedup]   index[%1] fp=%2 type=%3 name=%4")
-                .arg(i)
-                .arg(QString::fromLatin1(m.fingerprint.toHex().left(16)))
-                .arg(static_cast<int>(m.contentType))
-                .arg(m.name);
-        }
-    }
-
     // Also check the on-disk index — during startup the model may not
     // be fully loaded yet, so the model check above can miss duplicates.
     if (boardService_ && boardService_->containsFingerprint(nItem.fingerprint())) {
@@ -2732,14 +2714,8 @@ bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
     const bool added = addOneItem(nItem);
     ensureLinkPreviewForIndex(proxyIndexForSourceRow(0));
     if (added && boardService_) {
-        // Save the lightweight item to disk synchronously (saveItemQuiet
-        // does NOT emit signals, so no page-reload cascade).  This ensures
-        // the file exists in the service index BEFORE any deferred-loading
-        // batch triggers reloadCurrentPageItems — otherwise the reload
-        // would clear the model and the newly added item would vanish.
-        boardService_->saveItemQuiet(nItem);
-
-        // Thumbnail generation + full MIME save happen asynchronously.
+        // Save + thumbnail generation happen asynchronously to avoid
+        // blocking the UI with large items (e.g. Word documents).
         boardService_->processPendingItemAsync(nItem, nItem.getName());
 
         // Keep loaded-page bookkeeping in sync.

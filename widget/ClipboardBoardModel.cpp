@@ -10,9 +10,9 @@ QList<int> changedRolesForItem(const ClipboardItem &existing, const ClipboardIte
     QList<int> roles;
     roles.reserve(16);
 
-    if (!(existing == item)) {
-        roles.append(ClipboardBoardModel::ItemRole);
-    }
+    // Skip expensive operator== for ItemRole — the per-field checks
+    // below cover all roles the delegate actually uses.
+    roles.append(ClipboardBoardModel::ItemRole);
     if (existing.getNormalizedText() != item.getNormalizedText()) {
         roles.append(Qt::DisplayRole);
         roles.append(ClipboardBoardModel::NormalizedTextRole);
@@ -235,7 +235,8 @@ bool ClipboardBoardModel::updateItem(int row, const ClipboardItem &item) {
 
     const ClipboardItem &existing = entries_[row].item;
     const QList<int> roles = changedRolesForItem(existing, item);
-    if (existing == item && roles.size() == 1 && roles.first() == ItemRole) {
+    // If only ItemRole changed (always included), nothing visible differs.
+    if (roles.size() == 1 && roles.first() == ItemRole) {
         return false;
     }
 

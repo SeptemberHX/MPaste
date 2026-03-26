@@ -1011,8 +1011,10 @@ public:
         }
 
         if (mimeData_->hasHtml() || other.mimeData_->hasHtml()) {
-            QStringView frag1 = htmlFragment(mimeData_->html());
-            QStringView frag2 = htmlFragment(other.mimeData_->html());
+            const QString html1 = mimeData_->html();
+            const QString html2 = other.mimeData_->html();
+            QStringView frag1 = htmlFragment(html1);
+            QStringView frag2 = htmlFragment(html2);
             const bool imageLikeHtml = shouldTreatHtmlPayloadAsImage() || other.shouldTreatHtmlPayloadAsImage();
             if (imageLikeHtml) {
                 const QString imageId1 = htmlImageIdentity();
