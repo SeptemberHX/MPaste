@@ -57,6 +57,7 @@ public:
     void cleanShortCutInfo();
     void loadFromSaveDir();
     void loadFromSaveDirDeferred();
+    void syncFromDiskIncremental();
     void applyScale(int scale);
     QScrollBar* horizontalScrollbar() const;
     void setAllItemVisible();

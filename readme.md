@@ -1,147 +1,121 @@
 # MPaste
 
-<!--
-input: 依赖仓库结构、维护规范与对外说明的真实状态。
-output: 对外提供根目录级说明、规则与文件清单。
-pos: 仓库级主文档与维护约束入口。
-update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
--->
+A modern clipboard manager for **Windows** and **Linux**, inspired by [Paste](https://pasteapp.io/) for macOS.
 
-## Documentation Discipline
-- 任何功能、架构、写法更新，必须在工作结束后同步更新相关目录的 `README.md` 与被改文件的开头注释。
-- 任何新增、删除、移动文件的操作，必须同步修正对应文件夹的文件清单与职责说明。
-- 二进制资源与法律/格式强约束文件以目录 README 为准，不强行插入会破坏格式的头注释。
+> MPaste has no affiliation with Paste for Mac. I just like its UX design and decided to build one in Qt.
 
-## Root Architecture
-- 定位：根目录承载启动入口、构建配置、资源索引与仓库级说明。
-- 依赖：Qt 工具链、各子目录实现与平台打包配置。
-- 输出：应用启动入口、构建入口与维护规范。
+Light mode:
 
-## Root Files
-- `.gitignore`: 地位=忽略规则；功能=定义仓库不纳入版本管理的文件模式。
-- `CMakeLists.txt`: 地位=主构建入口；功能=定义全项目构建图、依赖与打包开关。
-- `CMakeLists.txt.user`: 地位=本地工程配置；功能=保存 CMakeLists.txt.user 对应的 Qt Creator 本地工程状态。
-- `CMakeLists.txt.user.92dd5e2.4.9-pre1`: 地位=本地工程配置；功能=保存 CMakeLists.txt.user.92dd5e2.4.9-pre1 对应的 Qt Creator 本地工程状态。
-- `deb.cmake`: 地位=打包辅助脚本；功能=补充 Debian/CPack 打包配置。
-- `LICENSE`: 地位=许可证文本；功能=声明项目授权与法律边界。
-- `MPaste.cpp`: 地位=程序入口；功能=启动应用、配置运行环境并拉起主窗口。
-- `MPaste.desktop`: 地位=桌面入口清单；功能=描述 Linux 桌面环境中的启动方式与图标。
-- `readme.md`: 地位=主说明；功能=提供仓库级说明、维护规则与根目录清单。
-- `resources.qrc`: 地位=资源索引；功能=注册 Qt 资源系统中的静态资源路径。
+![Screenshot on Windows 11](./screenshot/mpaste_on_windows_11_light.png)
 
-A clipboard manager alternative to Paste for Linux & Windows.
-
-> It has nothing related to `Paste` for mac. I just like its UX design, and decide to implement one in Qt
-
-> For wayland, it cannot get the icons of current window, which is treated as the provider of current clipboard data. I haven't found how to fetch the window icon under wayland with window id. Check PlatformRelated.h for more details.
-
-## Feature
-
-* Clipboard history saved to files
-* More elegant UI design
-* History search
-* auto paste
-* Paste selected item as plain text
-
-* Dark mode
-## Shortcut
-
-* `Alt+[1-9, 0]`: quick select and paste item. Holding `Alt` can show the shortcut tips
-* `Alt+Shift+[1-9, 0]`: quick select and paste item as plain text
-* `Ctrl+Enter`: paste the currently selected item as plain text
-* Any characters: search mode
-* Global shortcut to show window: Open your shortcut settings in system settings, and assign a shortcut for command `/path/to/your/MPaste`
-* On Windows, `Alt`-based global show/hide now avoids more Office/WPS ribbon-keytip side effects by changing when the window grabs or releases focus
-
-> On Gnome, please install the extension: https://extensions.gnome.org/extension/1005/focus-my-window/  
-> Or the window will not get focused after appearing with shortcut
-
-## Default settings
-
-> configure file path: `~/.config/MPaste/MPaste.conf`. Data path configure doesn't work yet.
-
-* Max history size: 500
-* History location: `~/.MPaste`
-* Auto Paste when item selected
-
-## Screenshot
-
-Gif on [Imgur](https://i.imgur.com/79gyO0n.gifv)
-
-### Windows 11
+Dark mode:
 
 ![Screenshot on Windows 11](./screenshot/mpaste_on_windows_11.png)
 
+## Features
+
+- **Clipboard history** — automatically captures text, links, images, rich text, files, colors, and Office content
+- **Card-based UI** — each clipboard item rendered as a visual card with icon, thumbnail, and metadata
+- **Boards** — "Clipboard" for live history, "Starred" for favorites; pin or star items independently
+- **Search & filter** — type to search, filter by content type
+- **Quick paste** — `Alt+[1-9, 0]` to paste by position; `Ctrl+Enter` or `Alt+Shift+[1-9, 0]` to paste as plain text
+- **Space preview** — press `Space` to open a large, zoomable preview of the selected item
+- **Dark / Light / System theme** — full theme support with smooth switching
+- **Auto paste** — optionally paste immediately on item selection
+- **Persistent history** — clipboard items saved to disk in `.mpaste v4` format with embedded thumbnails
+- **Link preview** — fetches OpenGraph metadata and favicons for URL items
+- **Multi-select** — `Ctrl`/`Shift` click to select multiple items for bulk favorite or delete
+- **Configurable retention** — auto-cleanup history by days, weeks, or months
+- **Global hotkey** — assign a system shortcut to toggle the MPaste window
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Alt+[1-9, 0]` | Quick select and paste |
+| `Alt+Shift+[1-9, 0]` | Quick select and paste as plain text |
+| `Ctrl+Enter` | Paste selected item as plain text |
+| `Space` | Toggle preview |
+| `Left` / `Right` | Navigate items |
+| `Tab` | Switch boards |
+| Any character | Enter search mode |
+
+Hold `Alt` to show shortcut hints on cards.
+
+## Platform Notes
+
+### Windows
+
+- Global hotkey uses `Alt`-based toggle with Office/WPS ribbon-keytip avoidance
+- Paste injection via simulated keypress (`Ctrl+V`, `Shift+Insert`, etc.)
+
 ### Linux
 
-![Screenshot on Ubuntu 21.04 with Gnome](https://i.imgur.com/q6OCzOT.png)
+- X11 support with `xdotool` integration
+- Wayland: window icons cannot be fetched (see `PlatformRelated.h`)
+- On GNOME, install [Focus My Window](https://extensions.gnome.org/extension/1005/focus-my-window/) for proper focus after hotkey activation
+- Deepin V20: download `.deb` from the release page
 
-![Screenshot on Deepin V20 with DDE](https://i.imgur.com/iRUJK8I.png)
+## Configuration
 
-![Screenshot on neon with KDE](https://i.imgur.com/h5GXFkF.png)
+Config file: `~/.config/MPaste/MPaste.conf`
 
-## For Deepin V20
+| Setting | Default |
+|---|---|
+| Max history size | 500 |
+| History location | `~/.MPaste` |
+| Auto paste | On |
 
-Download the deb package from the release page and install it.
+## Build from Source
 
-**do not forget to set a shortcut for it in system settings**
+### Requirements
 
-## How to bulid from source
+- C++17 compiler
+- CMake 3.7+
+- Qt 6 (Widgets, Multimedia, Network, Xml)
+
+### Linux
 
 ```shell
 sudo apt install cmake g++ make libkf5windowsystem-dev qttools5-dev libqt5x11extras5-dev qtmultimedia5-dev libgsettings-qt-dev
 git clone https://github.com/SeptemberHX/MPaste
 cd MPaste
-mkdir build
-cd build
+mkdir build && cd build
 cmake ..
 make -j8
 ```
 
-### Build configuration notes
-
-On Windows, the project no longer hardcodes local Qt / MinGW paths.
-
-- Optional Qt prefix: `-DMPASTE_QT_ROOT=/path/to/Qt/6.x.x/<toolchain>`
-- Optional MinGW runtime directory: `-DMPASTE_MINGW_BIN_DIR=/path/to/mingw/bin`
-- Disable post-build Windows packaging: `-DMPASTE_ENABLE_WINDOWS_DEPLOY=OFF`
-
-Example:
+### Windows
 
 ```shell
 cmake -B build -DMPASTE_QT_ROOT=C:/Qt/6.8.0/mingw_64
 cmake --build build
 ```
 
-### Rendering backend
+Optional CMake flags:
 
-You can optionally control the OpenGL backend with the `MPASTE_OPENGL_BACKEND` environment variable:
+| Flag | Description |
+|---|---|
+| `-DMPASTE_QT_ROOT=<path>` | Qt installation prefix |
+| `-DMPASTE_MINGW_BIN_DIR=<path>` | MinGW runtime directory |
+| `-DMPASTE_ENABLE_WINDOWS_DEPLOY=OFF` | Disable post-build packaging |
 
-- `auto`: do not force a backend
-- `gles`: force OpenGL ES
-- `software`: force software OpenGL
-- `software-gles`: keep the previous compatibility behavior
+### Rendering Backend
 
-Example:
+Control the OpenGL backend via `MPASTE_OPENGL_BACKEND` environment variable:
 
-```shell
-set MPASTE_OPENGL_BACKEND=software
-MPaste.exe
-```
+| Value | Behavior |
+|---|---|
+| `auto` | System default |
+| `gles` | Force OpenGL ES |
+| `software` | Force software rendering |
 
-### History file format
+## Credits
 
-- History files now use `.mpaste v4`, with explicit metadata, embedded thumbnails, and MIME offsets for light loading.
-- Only the current `.mpaste v4` format is loaded.
-- Invalid / corrupted history files are skipped instead of breaking the whole load process.
+- [KDSingleApplication](https://github.com/KDAB/KDSingleApplication)
+- Sound effects from [Zapsplat](https://www.zapsplat.com/)
+- Icons by [Pixel Perfect](https://www.flaticon.com/authors/pixel-perfect) from [Flaticon](https://www.flaticon.com/)
 
-* [KDSingleApplication](https://github.com/KDAB/KDSingleApplication)
-* sound effect from https://www.zapsplat.com/
+## License
 
-<div>Icons made by <a href="https://www.flaticon.com/authors/pixel-perfect" title="Pixel perfect">Pixel perfect</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a></div>
-
-## Todo
-
-* Use image instead of widget in scroll area to speed up
-* Pin the application default font to an installed UI family and use integer-alpha QSS tokens to avoid DirectWrite fallback noise and stylesheet parse failures on Windows
-* Categories
+[GPLv3](LICENSE)

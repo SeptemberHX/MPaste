@@ -2900,6 +2900,45 @@ void ScrollItemsWidget::loadFromSaveDirDeferred() {
     }
 }
 
+void ScrollItemsWidget::syncFromDiskIncremental() {
+    if (!boardService_ || !boardModel_) {
+        return;
+    }
+
+    const auto syncResult = boardService_->syncIndexIncremental();
+    if (syncResult.addedPaths.isEmpty() && syncResult.removedPaths.isEmpty()) {
+        return;
+    }
+
+    // Remove items that no longer exist on disk.
+    for (const QString &path : syncResult.removedPaths) {
+        // Extract name from filename: "name.mpaste" → "name"
+        const QString name = QFileInfo(path).completeBaseName();
+        const int row = boardModel_->rowForName(name);
+        if (row >= 0) {
+            if (cardDelegate_) {
+                cardDelegate_->invalidateCard(name);
+            }
+            boardModel_->removeItemAt(row);
+        }
+    }
+
+    // Add new items from disk.
+    for (const QString &path : syncResult.addedPaths) {
+        ClipboardItem item = boardService_->loadItemLight(path, true);
+        if (item.getName().isEmpty()) {
+            continue;
+        }
+        if (boardModel_->rowForName(item.getName()) >= 0) {
+            continue;
+        }
+        appendModelItem(item);
+    }
+
+    applyFilters();
+    emit itemCountChanged(itemCountForDisplay());
+}
+
 QScrollBar *ScrollItemsWidget::horizontalScrollbar() const {
     return listView_ ? listView_->horizontalScrollBar() : nullptr;
 }

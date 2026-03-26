@@ -64,8 +64,14 @@ public:
     bool hasPendingItems() const;
     bool deferredLoadActive() const;
     bool hasRecentInternalWrite() const;
+    quint64 internalWriteGeneration() const;
 
     void refreshIndex();
+    struct IncrementalSyncResult {
+        QStringList addedPaths;
+        QStringList removedPaths;
+    };
+    IncrementalSyncResult syncIndexIncremental();
     void startAsyncLoad(int initialBatchSize, int deferredBatchSize);
     void loadNextBatch(int batchSize);
     void ensureAllItemsLoaded(int batchSize);
@@ -159,6 +165,7 @@ private:
     bool deferredLoadActive_ = false;
     bool visibleHint_ = false;
     qint64 lastInternalWriteMs_ = 0;
+    quint64 internalWriteGen_ = 0;
     QList<ClipboardItem> pendingSaveQueue_;
     QTimer *deferredSaveTimer_ = nullptr;
 };
