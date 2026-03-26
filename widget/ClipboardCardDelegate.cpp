@@ -1396,9 +1396,17 @@ void ClipboardCardDelegate::drawShortcutOverlay(QPainter *painter, const QStyleO
         footerRect.height());
 
     const bool darkTheme = ThemeManager::instance()->isDark();
-    const QColor textColor = darkTheme ? QColor(200, 210, 225, 180) : QColor(80, 95, 110, 180);
+    const QColor bgColor = darkTheme ? QColor(28, 35, 44, 210) : QColor(245, 247, 250, 220);
+    const QColor textColor = darkTheme ? QColor(200, 210, 225, 220) : QColor(80, 95, 110, 220);
+    const qreal pillRadius = qMax(4.0, 5.0 * scale / 100);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(bgColor);
+    painter->drawRoundedRect(QRectF(shortcutRect).adjusted(1, 2, -1, -2), pillRadius, pillRadius);
+    painter->restore();
     drawElidedText(painter, shortcutRect, shortcutText, footerFont, textColor,
-                   Qt::AlignRight | Qt::AlignVCenter);
+                   Qt::AlignCenter);
 }
 
 void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {

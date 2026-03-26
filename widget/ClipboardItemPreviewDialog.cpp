@@ -796,7 +796,6 @@ void ClipboardItemPreviewDialog::updateImagePreview() {
         const qreal scaleX = viewportSize.width() / static_cast<qreal>(imageSize.width());
         const qreal scaleY = viewportSize.height() / static_cast<qreal>(imageSize.height());
         fitScale = qMin(scaleX, scaleY);
-        fitScale = qMin(fitScale, 1.0);
     }
     imageFitScale_ = fitScale;
 
