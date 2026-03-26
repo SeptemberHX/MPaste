@@ -1297,6 +1297,18 @@ QSet<QByteArray> ClipboardBoardService::loadAllFingerprints() {
     return fingerprints;
 }
 
+bool ClipboardBoardService::containsFingerprint(const QByteArray &fingerprint) const {
+    if (fingerprint.isEmpty()) {
+        return false;
+    }
+    for (const auto &entry : indexedItems_) {
+        if (entry.fingerprint == fingerprint) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void ClipboardBoardService::notifyItemAdded() {
     updateTotalItemCount(totalItemCount_ + 1);
 }

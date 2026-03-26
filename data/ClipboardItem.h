@@ -711,7 +711,6 @@ private:
 
     QByteArray buildFingerprint() const {
         QCryptographicHash hash(QCryptographicHash::Sha1);
-        hash.addData(QByteArray::number(static_cast<int>(getContentType())));
 
         if (!mimeData_) {
             return hash.result();

@@ -97,6 +97,8 @@ public:
                                                                   int count,
                                                                   bool includeThumbnail = false);
     QSet<QByteArray> loadAllFingerprints();
+    bool containsFingerprint(const QByteArray &fingerprint) const;
+    const QList<IndexedItemMeta> &indexedItemsMeta() const { return indexedItems_; }
     void notifyItemAdded();
     bool moveIndexedItemToFront(const QString &name);
     void trimExpiredPendingItems(const QDateTime &cutoff);

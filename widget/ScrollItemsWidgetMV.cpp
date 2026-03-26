@@ -1287,6 +1287,22 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
         }
 
         ClipboardItem updated = boardModel_->itemAt(row);
+
+        // Icon/favicon may have been cleared by the memory cleanup cycle.
+        // Reload from disk so the re-rendered card has the app icon.
+        if (updated.getIcon().isNull() && boardService_) {
+            const QString filePath = boardService_->filePathForName(updated.getName());
+            if (!filePath.isEmpty()) {
+                ClipboardItem diskItem = boardService_->loadItemLight(filePath, false);
+                if (!diskItem.getIcon().isNull()) {
+                    updated.setIcon(diskItem.getIcon());
+                }
+                if (updated.getFavicon().isNull() && !diskItem.getFavicon().isNull()) {
+                    updated.setFavicon(diskItem.getFavicon());
+                }
+            }
+        }
+
         if (!ogItem.getTitle().isEmpty()) {
             updated.setTitle(ogItem.getTitle());
         }
@@ -1301,8 +1317,13 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
             }
         }
 
-        if (boardModel_->updateItem(row, updated) && boardService_) {
-            boardService_->saveItem(updated);
+        if (boardModel_->updateItem(row, updated)) {
+            if (cardDelegate_) {
+                cardDelegate_->invalidateCard(updated.getName());
+            }
+            if (boardService_) {
+                boardService_->saveItem(updated);
+            }
         }
     });
     fetcher->handle();
@@ -2344,14 +2365,19 @@ void ScrollItemsWidget::updateVisibleThumbnails() {
         std::swap(visibleStartRow, visibleEndRow);
     }
 
-    // Once a card is rendered into cardPixmapCache_, all per-item pixmaps
-    // (thumbnail, icon, favicon) and delegate intermediate caches are
-    // redundant.  Release them.
-    if (boardModel_ && cardDelegate_) {
+    // Pre-render ALL cards into cardPixmapCache_ (including off-screen),
+    // then release all per-item pixmaps and intermediate caches.
+    if (boardModel_ && cardDelegate_ && listView_) {
+        QStyleOptionViewItem baseOption;
+        baseOption.initFrom(listView_);
+        const qreal dpr = listView_->devicePixelRatioF();
+        baseOption.decorationSize = QSize(qRound(dpr), qRound(dpr));
+        cardDelegate_->preRenderAll(proxyModel_, baseOption);
+
         const int rowCount = boardModel_->rowCount();
         for (int row = 0; row < rowCount; ++row) {
             const ClipboardItem *item = boardModel_->itemPtrAt(row);
-            if (!item || !cardDelegate_->isCardCached(item->getName())) {
+            if (!item) {
                 continue;
             }
             bool needsUpdate = false;
@@ -2598,6 +2624,12 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
         || favoriteFingerprints_.contains(nItem.fingerprint());
     const int insertRow = pinnedInsertRow();
     boardModel_->insertItem(insertRow, nItem, favorite);
+
+    // Keep the model within PAGE_SIZE when pagination is active.
+    if (paginationEnabled() && boardModel_->rowCount() > PAGE_SIZE) {
+        boardModel_->removeItemAt(boardModel_->rowCount() - 1);
+    }
+
     const QModelIndex firstProxyIndex = proxyIndexForSourceRow(insertRow);
     setCurrentProxyIndex(firstProxyIndex);
     ensureLinkPreviewForIndex(firstProxyIndex);
@@ -2625,6 +2657,26 @@ bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
             // Delegate to addOneItem which handles update + moveToFirst.
             addOneItem(nItem);
             return false;
+        }
+    }
+
+    // Also check the on-disk index — during startup the model may not
+    // be fully loaded yet, so the model check above can miss duplicates.
+    // Use both fingerprint and content-based matching since contentType
+    // changes (e.g. classification fixes) can alter fingerprints.
+    if (boardService_) {
+        if (boardService_->containsFingerprint(nItem.fingerprint())) {
+            boardService_->moveIndexedItemToFront(nItem.getName());
+            return false;
+        }
+        const QString newText = nItem.getNormalizedText().simplified();
+        if (!newText.isEmpty()) {
+            for (const auto &entry : boardService_->indexedItemsMeta()) {
+                if (entry.searchableText.contains(newText.left(256).toLower())) {
+                    boardService_->moveIndexedItemToFront(entry.name);
+                    return false;
+                }
+            }
         }
     }
 

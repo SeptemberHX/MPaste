@@ -58,6 +58,8 @@ public:
     void clearIntermediateCaches();
     void clearVisualCaches();
     bool isCardCached(const QString &name) const;
+    void invalidateCard(const QString &name);
+    void preRenderAll(QAbstractItemModel *model, const QStyleOptionViewItem &baseOption);
     void drawSelectionBorder(QPainter *painter, const QStyleOptionViewItem &option,
                              bool selected, int scale) const;
     void drawShortcutOverlay(QPainter *painter, const QStyleOptionViewItem &option,
