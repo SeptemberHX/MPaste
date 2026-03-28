@@ -7,6 +7,7 @@
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"
 #include "utils/ThemeManager.h"
+#include "BoardInternalHelpers.h"
 #include "ToggleSwitch.h"
 #include <QShowEvent>
 #include <QMouseEvent>
@@ -31,24 +32,10 @@ static const int BORDER_WIDTH = 2;
 static const int CORNER_RADIUS = 10;
 
 namespace {
-bool looksBrokenTranslation(const QString &text) {
-    if (text.isEmpty()) {
-        return true;
-    }
-
-    int suspiciousCount = 0;
-    for (const QChar ch : text) {
-        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
-            ++suspiciousCount;
-        }
-    }
-    return suspiciousCount >= qMax(2, text.size() / 2);
-}
-
 QString uiText(const char *source, const QString &zhFallback) {
     const QString translated = QObject::tr(source);
     const QLocale locale = QLocale::system();
-    if (translated == QLatin1String(source) || looksBrokenTranslation(translated)) {
+    if (translated == QLatin1String(source) || BoardHelpers::looksBrokenTranslation(translated)) {
         if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
             return zhFallback;
         }

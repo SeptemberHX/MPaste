@@ -10,13 +10,15 @@
 #define MPASTE_LOCALSAVER_H
 
 #include <QByteArray>
+#include <QImage>
 #include <QString>
 #include "ClipboardItem.h"
 
 class LocalSaver {
 
 public:
-    bool saveToFile(const ClipboardItem &item, const QString &filePath);
+    bool saveToFile(const ClipboardItem &item, const QString &filePath,
+                    const QImage &thumbnailOverride = QImage());
     bool removeItem(const QString &filePath);
     ClipboardItem loadFromFile(const QString &filePath);
     ClipboardItem loadFromRawData(const QByteArray &rawData);

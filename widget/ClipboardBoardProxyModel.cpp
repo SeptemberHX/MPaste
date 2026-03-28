@@ -22,7 +22,7 @@ QString ClipboardBoardProxyModel::keyword() const {
     return keyword_;
 }
 
-void ClipboardBoardProxyModel::setTypeFilter(ClipboardItem::ContentType type) {
+void ClipboardBoardProxyModel::setTypeFilter(ContentType type) {
     if (typeFilter_ == type) {
         return;
     }
@@ -31,7 +31,7 @@ void ClipboardBoardProxyModel::setTypeFilter(ClipboardItem::ContentType type) {
     invalidateFilter();
 }
 
-ClipboardItem::ContentType ClipboardBoardProxyModel::typeFilter() const {
+ContentType ClipboardBoardProxyModel::typeFilter() const {
     return typeFilter_;
 }
 
@@ -80,7 +80,7 @@ bool ClipboardBoardProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex
         return false;
     }
 
-    if (typeFilter_ != ClipboardItem::All && item.getContentType() != typeFilter_) {
+    if (typeFilter_ != All && item.getContentType() != typeFilter_) {
         return false;
     }
 

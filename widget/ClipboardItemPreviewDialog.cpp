@@ -37,6 +37,25 @@
 #include "data/ContentClassifier.h"
 #include "data/LocalSaver.h"
 #include "utils/ThemeManager.h"
+#include "utils/ThumbnailBuilder.h"
+#include "BoardInternalHelpers.h"
+
+// QTextBrowser subclass that blocks all remote resource loading.
+// Without this, setHtml() with complex web content (e.g. B站 comments)
+// triggers HTTP requests for every <img> and CSS background-image,
+// freezing the UI for tens of seconds.
+class OfflineTextBrowser : public QTextBrowser {
+public:
+    using QTextBrowser::QTextBrowser;
+    QVariant loadResource(int type, const QUrl &url) override {
+        Q_UNUSED(type);
+        Q_UNUSED(url);
+        return QVariant();
+    }
+};
+
+// simplifyHtmlForPreview — use ThumbnailBuilder::simplifyHtmlForRendering()
+
 namespace {
 constexpr int kPreviewDialogWidth = 980;
 constexpr int kPreviewDialogHeight = 760;
@@ -44,26 +63,6 @@ constexpr int kPreviewBodyFontSize = 16;
 constexpr qreal kImageZoomMin = 0.1;
 constexpr qreal kImageZoomMax = 8.0;
 constexpr qreal kImageZoomStep = 1.15;
-
-bool looksBrokenTranslation(const QString &text) {
-    if (text.isEmpty()) {
-        return true;
-    }
-
-    int suspiciousCount = 0;
-    for (const QChar ch : text) {
-        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
-            ++suspiciousCount;
-        }
-    }
-    return suspiciousCount >= qMax(2, text.size() / 2);
-}
-
-bool preferChineseFallback() {
-    const QLocale locale = QLocale::system();
-    return locale.language() == QLocale::Chinese
-           || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive);
-}
 
 QString joinUrls(const QList<QUrl> &urls) {
     QStringList lines;
@@ -276,7 +275,7 @@ QString previewStyleSheet(bool dark) {
     )");
 }
 
-PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
+PreviewPayload buildPreviewPayload(ContentType contentType,
                                    const QString &normalizedText,
                                    const QList<QUrl> &normalizedUrls,
                                    const QString &html,
@@ -288,13 +287,13 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
     PreviewPayload payload;
 
     switch (contentType) {
-        case ClipboardItem::Text:
-        case ClipboardItem::Link: {
+        case Text:
+        case Link: {
             payload.kind = PreviewKind::PlainText;
             payload.text = normalizedText.isEmpty() ? unavailableText() : normalizedText;
             break;
         }
-        case ClipboardItem::Image: {
+        case Image: {
             QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
             if (image.isNull() && !fallbackImage.isNull()) {
                 image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
@@ -309,7 +308,7 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
             }
             break;
         }
-        case ClipboardItem::Office: {
+        case Office: {
             // Prefer the full-resolution image from MIME data over the
             // low-res card thumbnail used as fallback.
             QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
@@ -326,7 +325,7 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
             }
             break;
         }
-        case ClipboardItem::File: {
+        case File: {
             if (!filePath.isEmpty() && isLocalImageFile(filePath)) {
                 QImage image = loadPreviewImageFileBytes(filePath, QSize(), devicePixelRatio);
                 if (!image.isNull()) {
@@ -340,7 +339,7 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
             payload.text = normalizedUrls.isEmpty() ? unavailableText() : joinUrls(normalizedUrls);
             break;
         }
-        case ClipboardItem::RichText: {
+        case RichText: {
             if (!html.isEmpty()) {
                 payload.kind = PreviewKind::Html;
                 payload.html = html;
@@ -358,8 +357,8 @@ PreviewPayload buildPreviewPayload(ClipboardItem::ContentType contentType,
             }
             break;
         }
-        case ClipboardItem::Color:
-        case ClipboardItem::All:
+        case Color:
+        case All:
         default: {
             // Fallback for unknown/corrupt content types (e.g. items synced
             // from a remote machine): try image → text → unavailable.
@@ -477,7 +476,7 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     headerLayout->addWidget(ui_.closeButton, 0, Qt::AlignTop);
     cardLayout->addLayout(headerLayout);
 
-    ui_.browser = new QTextBrowser(card);
+    ui_.browser = new OfflineTextBrowser(card);
     QFont previewFont = ui_.browser->font();
     previewFont.setPointSize(kPreviewBodyFontSize);
     ui_.browser->setFont(previewFont);
@@ -527,13 +526,13 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
 
 bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {
     switch (item.getContentType()) {
-        case ClipboardItem::Text:
-        case ClipboardItem::Link:
-        case ClipboardItem::RichText:
-        case ClipboardItem::Image:
-        case ClipboardItem::Office:
+        case Text:
+        case Link:
+        case RichText:
+        case Image:
+        case Office:
             return true;
-        case ClipboardItem::File:
+        case File:
             return !item.getNormalizedUrls().isEmpty();
         default:
             return false;
@@ -543,7 +542,7 @@ bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {
 void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     releasePreviewContent();
 
-    const ClipboardItem::ContentType contentType = item.getContentType();
+    const ContentType contentType = item.getContentType();
 
     ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Preview"), QStringLiteral("剪贴板预览")));
     ui_.subtitleLabel->setText(item.getName().isEmpty()
@@ -558,14 +557,14 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
 
     const QString normalizedText = item.getNormalizedText();
     const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
-    const QString html = contentType == ClipboardItem::RichText ? item.getHtml() : QString();
-    const QByteArray imageBytes = (contentType == ClipboardItem::Image
-            || contentType == ClipboardItem::Office
-            || contentType == ClipboardItem::RichText)
+    const QString html = contentType == RichText ? item.getHtml() : QString();
+    const QByteArray imageBytes = (contentType == Image
+            || contentType == Office
+            || contentType == RichText)
         ? item.imagePayloadBytesFast()
         : QByteArray();
     QImage fallbackImage;
-    if (contentType == ClipboardItem::Office) {
+    if (contentType == Office) {
         const QPixmap previewPixmap = item.getImage();
         if (!previewPixmap.isNull()) {
             fallbackImage = previewPixmap.toImage();
@@ -573,11 +572,11 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
         } else if (item.hasThumbnail()) {
             fallbackImage = item.thumbnail().toImage();
         }
-    } else if (contentType == ClipboardItem::Image && item.hasThumbnail()) {
+    } else if (contentType == Image && item.hasThumbnail()) {
         fallbackImage = item.thumbnail().toImage();
     }
     QString filePath;
-    if (contentType == ClipboardItem::File && normalizedUrls.size() == 1 && normalizedUrls.first().isLocalFile()) {
+    if (contentType == File && normalizedUrls.size() == 1 && normalizedUrls.first().isLocalFile()) {
         filePath = normalizedUrls.first().toLocalFile();
     }
     const QString sourceFilePath = item.sourceFilePath();
@@ -589,7 +588,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
 
     QPointer<ClipboardItemPreviewDialog> guard(this);
     QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, fallbackImage, filePath, sourceFilePath, mimeOffset, preferFullItem, targetSize, dpr, token]() mutable {
-        ClipboardItem::ContentType resolvedType = contentType;
+        ContentType resolvedType = contentType;
         QString resolvedText = normalizedText;
         QList<QUrl> resolvedUrls = normalizedUrls;
         QString resolvedHtml = html;
@@ -607,7 +606,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 resolvedType = lightItem.getContentType();
                 resolvedText = lightItem.getNormalizedText();
                 resolvedUrls = lightItem.getNormalizedUrls();
-                if (resolvedType == ClipboardItem::File && resolvedUrls.size() == 1 && resolvedUrls.front().isLocalFile()) {
+                if (resolvedType == File && resolvedUrls.size() == 1 && resolvedUrls.front().isLocalFile()) {
                     resolvedFilePath = resolvedUrls.front().toLocalFile();
                 }
                 if (lightItem.hasThumbnail()) {
@@ -618,14 +617,14 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
             // For types that need image/html payloads, read ONLY those
             // sections from disk — not the full MIME blob.
             // Also try for All/unknown types (e.g. items from remote sync).
-            if (resolvedType == ClipboardItem::RichText
-                || resolvedType == ClipboardItem::Image
-                || resolvedType == ClipboardItem::Office
-                || resolvedType == ClipboardItem::All) {
+            if (resolvedType == RichText
+                || resolvedType == Image
+                || resolvedType == Office
+                || resolvedType == All) {
                 QString htmlPayload;
                 QByteArray imagePayload;
                 LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset,
-                    resolvedType == ClipboardItem::RichText ? &htmlPayload : nullptr,
+                    resolvedType == RichText ? &htmlPayload : nullptr,
                     &imagePayload);
                 if (!htmlPayload.isEmpty()) {
                     resolvedHtml = htmlPayload;
@@ -633,12 +632,12 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 if (!imagePayload.isEmpty()) {
                     resolvedImageBytes = imagePayload;
                 }
-            } else if (resolvedType == ClipboardItem::Text
-                       || resolvedType == ClipboardItem::Link) {
+            } else if (resolvedType == Text
+                       || resolvedType == Link) {
                 // lightItem.getNormalizedText() already has the full cached
                 // text from disk.  For rich HTML preview (e.g. RichText
                 // fallback-to-text), load the HTML payload only.
-                if (resolvedText.isEmpty() || resolvedType == ClipboardItem::Link) {
+                if (resolvedText.isEmpty() || resolvedType == Link) {
                     QString htmlPayload;
                     LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset, &htmlPayload, nullptr);
                     if (!htmlPayload.isEmpty()) {
@@ -647,15 +646,15 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 }
             }
         } else if (!sourceFilePath.isEmpty()
-                   && (resolvedType == ClipboardItem::Image
-                       || resolvedType == ClipboardItem::Office
-                       || resolvedType == ClipboardItem::RichText)) {
+                   && (resolvedType == Image
+                       || resolvedType == Office
+                       || resolvedType == RichText)) {
             // Fallback: load image/html payloads for items without
             // preferFullItem (e.g. freshly copied, not yet on disk).
             QString htmlPayload;
             QByteArray imagePayload;
             LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset,
-                resolvedType == ClipboardItem::RichText ? &htmlPayload : nullptr,
+                resolvedType == RichText ? &htmlPayload : nullptr,
                 &imagePayload);
             if (resolvedHtml.isEmpty() && !htmlPayload.isEmpty()) {
                 resolvedHtml = htmlPayload;
@@ -713,7 +712,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                                                                         QUrl(payload.imageUrl),
                                                                         payload.image);
                         }
-                        guard->ui_.browser->setHtml(payload.html);
+                        guard->ui_.browser->setHtml(ThumbnailBuilder::simplifyHtmlForRendering(payload.html));
                         guard->ui_.contentLayout->setCurrentWidget(guard->ui_.browser);
                         break;
                     }
@@ -818,10 +817,6 @@ void ClipboardItemPreviewDialog::updateImagePreview() {
         fitScale = qMin(scaleX, scaleY);
     }
     imageFitScale_ = fitScale;
-    qInfo().noquote() << QStringLiteral("[updateImagePreview] imageSize=%1x%2 viewportSize=%3x%4 fitScale=%5 zoomFactor=%6")
-        .arg(imageSize.width()).arg(imageSize.height())
-        .arg(viewportSize.width()).arg(viewportSize.height())
-        .arg(fitScale, 0, 'f', 3).arg(imageZoomFactor_, 0, 'f', 3);
 
     qreal scale = imageFitScale_ * imageZoomFactor_;
     scale = qBound(kImageZoomMin, scale, kImageZoomMax);
@@ -1028,8 +1023,8 @@ void ClipboardItemPreviewDialog::mouseMoveEvent(QMouseEvent *event) {
 
 QString ClipboardItemPreviewDialog::uiText(const QString &source, const QString &zhFallback) const {
     const QString translated = tr(source.toUtf8().constData());
-    if (translated == source || looksBrokenTranslation(translated)) {
-        return preferChineseFallback() ? zhFallback : source;
+    if (translated == source || BoardHelpers::looksBrokenTranslation(translated)) {
+        return BoardHelpers::prefersChineseUi() ? zhFallback : source;
     }
     return translated;
 }

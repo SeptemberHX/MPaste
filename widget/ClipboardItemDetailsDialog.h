@@ -34,7 +34,7 @@ protected:
 
 private:
     QString uiText(const QString &source, const QString &zhFallback) const;
-    QString contentTypeLabel(ClipboardItem::ContentType type) const;
+    QString contentTypeLabel(ContentType type) const;
     QString joinUrls(const QList<QUrl> &urls) const;
     QString byteCountLabel(qint64 bytes) const;
     QString mimeFormatsReport(const QMimeData *mimeData) const;

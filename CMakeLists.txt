@@ -12,6 +12,8 @@ project(MPaste)
 set(MPASTE_QT_ROOT "" CACHE PATH "Optional Qt installation prefix (prepended to CMAKE_PREFIX_PATH)")
 if(MPASTE_QT_ROOT)
     list(PREPEND CMAKE_PREFIX_PATH "${MPASTE_QT_ROOT}")
+elseif(NOT Qt6_DIR AND EXISTS "C:/Qt/6.8.0/mingw_64/lib/cmake/Qt6")
+    list(PREPEND CMAKE_PREFIX_PATH "C:/Qt/6.8.0/mingw_64")
 endif()
 
 option(MPASTE_ENABLE_WINDOWS_DEPLOY "Enable post-build Windows deployment packaging" ON)
@@ -33,6 +35,7 @@ set(BIN_NAME MPaste)
 file(GLOB SRCS CONFIGURE_DEPENDS
         "*.h" "*.cpp"
         "widget/*.ui" "widget/*.h" "widget/*.cpp"
+        "widget/cardrenderer/*.h" "widget/cardrenderer/*.cpp"
         "resources.qrc"
         "data/*.h" "data/*.cpp"
         "utils/*.h" "utils/*.cpp"

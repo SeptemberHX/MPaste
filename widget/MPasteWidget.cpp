@@ -12,7 +12,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDebug>
-#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QButtonGroup>
 #include <QLocale>
@@ -39,6 +38,7 @@
 #include "utils/IconResolver.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
+#include "BoardInternalHelpers.h"
 #include "utils/PlatformRelated.h"
 #include "data/LocalSaver.h"
 #ifdef Q_OS_WIN
@@ -47,25 +47,10 @@
 #endif
 
 namespace {
-bool looksBrokenTranslation(const QString &text) {
-    if (text.isEmpty()) {
-        return true;
-    }
-
-    int suspiciousCount = 0;
-    for (const QChar ch : text) {
-        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
-            ++suspiciousCount;
-        }
-    }
-
-    return suspiciousCount >= qMax(2, text.size() / 2);
-}
-
 QString menuText(const char *source, const QString &zhFallback) {
     const QString translated = QObject::tr(source);
     const QLocale locale = QLocale::system();
-    if (translated == QLatin1String(source) || looksBrokenTranslation(translated)) {
+    if (translated == QLatin1String(source) || BoardHelpers::looksBrokenTranslation(translated)) {
         if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
             return zhFallback;
         }
@@ -179,32 +164,6 @@ ClipboardItem rehydrateClipboardItem(const ClipboardItem &item) {
 bool hasUsableMimeData(ClipboardItem item) {
     const QMimeData *mimeData = item.getMimeData();
     return mimeData && !mimeData->formats().isEmpty();
-}
-
-void applyMenuTheme(QMenu *menu) {
-    if (!menu) {
-        return;
-    }
-    const bool dark = ThemeManager::instance()->isDark();
-    QPalette pal = menu->palette();
-    if (dark) {
-        pal.setColor(QPalette::Window, QColor("#1E232B"));
-        pal.setColor(QPalette::WindowText, QColor("#D6DEE8"));
-        pal.setColor(QPalette::Base, QColor("#1E232B"));
-        pal.setColor(QPalette::AlternateBase, QColor("#1A1F27"));
-        pal.setColor(QPalette::Text, QColor("#D6DEE8"));
-        pal.setColor(QPalette::Button, QColor("#1E232B"));
-        pal.setColor(QPalette::ButtonText, QColor("#D6DEE8"));
-        pal.setColor(QPalette::Highlight, QColor("#2D7FD3"));
-        pal.setColor(QPalette::HighlightedText, QColor("#FFFFFF"));
-    } else {
-        pal = qApp->palette();
-    }
-    menu->setPalette(pal);
-    if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
-        fusion->setParent(menu);
-        menu->setStyle(fusion);
-    }
 }
 
 QString elideClipboardLogText(QString text, int maxLen = 48) {
@@ -529,13 +488,13 @@ void MPasteWidget::initUI() {
     ui_.typeButtonGroup = new QButtonGroup(this);
     ui_.typeButtonGroup->setExclusive(true);
 
-    ui_.ui->allTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::All));
-    ui_.ui->textTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Text));
-    ui_.ui->linkTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Link));
-    ui_.ui->imageTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Image));
-    ui_.ui->officeTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::Office));
-    ui_.ui->richTextTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::RichText));
-    ui_.ui->fileTypeBtn->setProperty("contentType", static_cast<int>(ClipboardItem::File));
+    ui_.ui->allTypeBtn->setProperty("contentType", static_cast<int>(All));
+    ui_.ui->textTypeBtn->setProperty("contentType", static_cast<int>(Text));
+    ui_.ui->linkTypeBtn->setProperty("contentType", static_cast<int>(Link));
+    ui_.ui->imageTypeBtn->setProperty("contentType", static_cast<int>(Image));
+    ui_.ui->officeTypeBtn->setProperty("contentType", static_cast<int>(Office));
+    ui_.ui->richTextTypeBtn->setProperty("contentType", static_cast<int>(RichText));
+    ui_.ui->fileTypeBtn->setProperty("contentType", static_cast<int>(File));
 
     ui_.typeButtonGroup->addButton(ui_.ui->allTypeBtn);
     ui_.typeButtonGroup->addButton(ui_.ui->textTypeBtn);
@@ -919,8 +878,8 @@ void MPasteWidget::initMenu() {
     addActions(ui_.menu);
     addActions(ui_.trayMenu);
 
-    applyMenuTheme(ui_.menu);
-    applyMenuTheme(ui_.trayMenu);
+    BoardHelpers::applyMenuTheme(ui_.menu);
+    BoardHelpers::applyMenuTheme(ui_.trayMenu);
 }
 
 
@@ -954,8 +913,8 @@ void MPasteWidget::applyTheme(bool dark) {
         ui_.quitAction->setIcon(QIcon(QStringLiteral(":/resources/resources/quit.svg")));
     }
     updatePageSelectorStyle();
-    applyMenuTheme(ui_.menu);
-    applyMenuTheme(ui_.trayMenu);
+    BoardHelpers::applyMenuTheme(ui_.menu);
+    BoardHelpers::applyMenuTheme(ui_.trayMenu);
     update();
 }
 
@@ -1075,15 +1034,15 @@ void MPasteWidget::setupConnections() {
 
     connect(ui_.typeButtonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
         [this](QAbstractButton *button) {
-            auto type = static_cast<ClipboardItem::ContentType>(button->property("contentType").toInt());
+            auto type = static_cast<ContentType>(button->property("contentType").toInt());
             this->currItemsWidget()->filterByType(type);
         });
 
     connect(ui_.buttonGroup, QOverload<QAbstractButton *>::of(&QButtonGroup::buttonClicked),
         [this](QAbstractButton *button) {
             auto typeBtn = ui_.typeButtonGroup->checkedButton();
-            auto type = typeBtn ? static_cast<ClipboardItem::ContentType>(typeBtn->property("contentType").toInt())
-                                : ClipboardItem::All;
+            auto type = typeBtn ? static_cast<ContentType>(typeBtn->property("contentType").toInt())
+                                : All;
 
             for (auto *toolButton : ui_.buttonGroup->buttons()) {
                 auto *boardWidget = ui_.boardWidgetMap[toolButton->property("category").toString()];
@@ -1155,7 +1114,7 @@ QMimeData *MPasteWidget::createPlainTextMimeData(const ClipboardItem &item) cons
     QString plainText;
     const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
 
-    if (item.getContentType() == ClipboardItem::File && !normalizedUrls.isEmpty()) {
+    if (item.getContentType() == File && !normalizedUrls.isEmpty()) {
         QStringList urls;
         for (const QUrl &url : normalizedUrls) {
             urls << (url.isLocalFile() ? url.toLocalFile() : url.toString());
@@ -1168,9 +1127,10 @@ QMimeData *MPasteWidget::createPlainTextMimeData(const ClipboardItem &item) cons
     }
 
     if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasHtml()) {
-        QTextDocument doc;
-        doc.setHtml(item.getHtml());
-        plainText = doc.toPlainText();
+        plainText = item.getHtml();
+        static const QRegularExpression tagRe(QStringLiteral("<[^>]*>"));
+        plainText.replace(tagRe, QString());
+        plainText = plainText.trimmed();
     }
 
     if (plainText.isEmpty() && !normalizedUrls.isEmpty()) {
@@ -1255,7 +1215,7 @@ bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
         return false;
     }
 
-    if (!plainText && item.getContentType() == ClipboardItem::File) {
+    if (!plainText && item.getContentType() == File) {
         handleUrlsClipboard(mimeData, item);
     }
 
@@ -1733,10 +1693,10 @@ void MPasteWidget::runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheActio
 
 void MPasteWidget::reloadHistoryBoards() {
     const QString keyword = ui_.ui->searchEdit->text();
-    const auto type = static_cast<ClipboardItem::ContentType>(
+    const auto type = static_cast<ContentType>(
         ui_.typeButtonGroup->checkedButton()
             ? ui_.typeButtonGroup->checkedButton()->property("contentType").toInt()
-            : static_cast<int>(ClipboardItem::All));
+            : static_cast<int>(All));
 
     loadFromSaveDir();
     ui_.clipboardWidget->filterByType(type);

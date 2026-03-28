@@ -5,7 +5,6 @@
 // note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, respects data-layer preview kind for rich text, trims rich-text margins, backfills missing on-disk thumbnails on demand, and uses bounded worker concurrency.
 #include "ClipboardBoardService.h"
 
-#include <QBuffer>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDebug>
@@ -14,146 +13,20 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
-#include <QGuiApplication>
 #include <QImage>
-#include <QImageReader>
 #include <QPixmap>
 #include <QPointer>
-#include <QScreen>
-#include <QPainter>
-#include <QPainterPath>
-#include <QRegularExpression>
-#include <QTextDocument>
-#include <QTextOption>
 #include <QThread>
 #include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
 #include <QRunnable>
 
-#include "data/CardPreviewMetrics.h"
-#include "data/ContentClassifier.h"
 #include "data/LocalSaver.h"
 #include "utils/MPasteSettings.h"
+#include "utils/ThumbnailBuilder.h"
 
 namespace {
-
-qreal htmlPreviewZoom(qreal devicePixelRatio) {
-    return qMax<qreal>(1.0, devicePixelRatio);
-}
-
-QSize previewLogicalSize(int itemScale) {
-    const int scale = qMax(50, itemScale);
-    return QSize(qMax(1, kCardPreviewWidth * scale / 100),
-                 qMax(1, kCardPreviewHeight * scale / 100));
-}
-
-QString richTextThumbnailStyleSheet() {
-    return QStringLiteral(
-        "html, body { margin: 0 !important; width: 100% !important; max-width: 100% !important; }"
-        "body {"
-        " padding: 12px !important;"
-        " font-size: 15px !important;"
-        " line-height: 1.38 !important;"
-        " }"
-        "body * {"
-        " margin: 0 !important;"
-        " max-width: 100% !important;"
-        " white-space: normal !important;"
-        " overflow-wrap: anywhere !important;"
-        " word-wrap: break-word !important;"
-        " word-break: break-word !important;"
-        "}"
-        "table {"
-        " width: 100% !important;"
-        " max-width: 100% !important;"
-        " table-layout: fixed !important;"
-        " border-collapse: collapse !important;"
-        "}"
-        "tr, td, th {"
-        " max-width: 100% !important;"
-        " white-space: normal !important;"
-        " overflow-wrap: anywhere !important;"
-        " word-wrap: break-word !important;"
-        " word-break: break-word !important;"
-        "}"
-        "a, span, font, strong, em, b, i, u, sub, sup {"
-        " white-space: normal !important;"
-        " overflow-wrap: anywhere !important;"
-        " word-wrap: break-word !important;"
-        " word-break: break-word !important;"
-        "}"
-        "img { max-width: 100% !important; height: auto !important; }"
-        "pre, code {"
-        " white-space: pre-wrap !important;"
-        " overflow-wrap: anywhere !important;"
-        " word-break: break-word !important;"
-        "}");
-}
-
-QString richTextHtmlForThumbnail(QString html) {
-    const QString styleTag = QStringLiteral("<style>%1</style>").arg(richTextThumbnailStyleSheet());
-    const QRegularExpression headCloseRegex(QStringLiteral(R"(</head\s*>)"), QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch headCloseMatch = headCloseRegex.match(html);
-    if (headCloseMatch.hasMatch()) {
-        html.insert(headCloseMatch.capturedStart(), styleTag);
-        return html;
-    }
-
-    const QRegularExpression headOpenRegex(QStringLiteral(R"(<head[^>]*>)"), QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch headMatch = headOpenRegex.match(html);
-    if (headMatch.hasMatch()) {
-        html.insert(headMatch.capturedEnd(), styleTag);
-        return html;
-    }
-
-    const QRegularExpression htmlOpenRegex(QStringLiteral(R"(<html[^>]*>)"), QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch htmlMatch = htmlOpenRegex.match(html);
-    if (htmlMatch.hasMatch()) {
-        html.insert(htmlMatch.capturedEnd(), QStringLiteral("<head>%1</head>").arg(styleTag));
-        return html;
-    }
-
-    return QStringLiteral("<html><head>%1</head><body>%2</body></html>").arg(styleTag, html);
-}
-
-void configureRichTextThumbnailDocument(QTextDocument &document,
-                                        const QString &html,
-                                        const QString &imageSource,
-                                        const QByteArray &imageBytes) {
-    document.setDocumentMargin(0);
-    QTextOption option = document.defaultTextOption();
-    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    document.setDefaultTextOption(option);
-    document.setDefaultStyleSheet(richTextThumbnailStyleSheet());
-
-    if (!imageSource.isEmpty() && !imageBytes.isEmpty()) {
-        QImage image;
-        if (!image.loadFromData(imageBytes)) {
-            image = ContentClassifier::decodeQtSerializedImage(imageBytes);
-        }
-        if (!image.isNull()) {
-            document.addResource(QTextDocument::ImageResource, QUrl(imageSource), image);
-        }
-    }
-
-    document.setHtml(richTextHtmlForThumbnail(html));
-}
-
-qreal maxScreenDevicePixelRatio() {
-    qreal dpr = 1.0;
-    const QList<QScreen *> screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen) {
-            dpr = qMax(dpr, screen->devicePixelRatio());
-        }
-    }
-    return dpr;
-}
-
-bool isVeryTallImage(const QSize &size) {
-    return size.isValid() && size.height() >= qMax(4000, size.width() * 4);
-}
 
 ClipboardBoardService::IndexedItemMeta buildIndexedItemMeta(const QString &filePath,
                                                             const ClipboardItem &item) {
@@ -196,98 +69,19 @@ ClipboardBoardService::IndexedItemMeta buildIndexedItemMeta(const QString &fileP
 }
 
 bool indexedItemMatchesFilter(const ClipboardBoardService::IndexedItemMeta &item,
-                              ClipboardItem::ContentType type,
+                              ContentType type,
                               const QString &keyword,
                               const QSet<QString> &matchedNames) {
     if (item.name.isEmpty()) {
         return false;
     }
-    if (type != ClipboardItem::All && item.contentType != type) {
+    if (type != All && item.contentType != type) {
         return false;
     }
     if (keyword.isEmpty()) {
         return true;
     }
     return item.searchableText.contains(keyword, Qt::CaseInsensitive) || matchedNames.contains(item.name);
-}
-
-bool richTextHtmlHasImageContent(const QString &html) {
-    return !ContentClassifier::firstHtmlImageSource(html).isEmpty()
-        || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive);
-}
-
-bool isPreviewCacheManagedContent(const ClipboardItem &item) {
-    const ClipboardItem::ContentType type = item.getContentType();
-    return type == ClipboardItem::Image
-        || type == ClipboardItem::Office
-        || type == ClipboardItem::RichText;
-}
-
-bool usesVisualPreview(const ClipboardItem &item) {
-    const ClipboardItem::ContentType type = item.getContentType();
-    return type == ClipboardItem::Image
-        || type == ClipboardItem::Office
-        || (type == ClipboardItem::RichText && item.getPreviewKind() == ClipboardItem::VisualPreview);
-}
-
-QImage trimTransparentPadding(const QImage &source, int paddingPx) {
-    if (source.isNull()) {
-        return {};
-    }
-
-    QImage image = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-    const int width = image.width();
-    const int height = image.height();
-    if (width <= 0 || height <= 0) {
-        return image;
-    }
-
-    int left = width;
-    int right = -1;
-    int top = height;
-    int bottom = -1;
-    constexpr int kAlphaThreshold = 6;
-
-    for (int y = 0; y < height; ++y) {
-        const QRgb *line = reinterpret_cast<const QRgb *>(image.constScanLine(y));
-        for (int x = 0; x < width; ++x) {
-            if (qAlpha(line[x]) > kAlphaThreshold) {
-                left = qMin(left, x);
-                right = qMax(right, x);
-                top = qMin(top, y);
-                bottom = qMax(bottom, y);
-            }
-        }
-    }
-
-    if (right < left || bottom < top) {
-        return image;
-    }
-
-    left = qMax(0, left - paddingPx);
-    right = qMin(width - 1, right + paddingPx);
-    top = qMax(0, top - paddingPx);
-    bottom = qMin(height - 1, bottom + paddingPx);
-
-    const QRect bounds(left, top, right - left + 1, bottom - top + 1);
-    return image.copy(bounds);
-}
-
-QImage scaleCropToTarget(const QImage &source, const QSize &pixelTargetSize) {
-    if (source.isNull() || !pixelTargetSize.isValid()) {
-        return source;
-    }
-
-    QImage scaled = source.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    if (scaled.isNull()) {
-        return source;
-    }
-
-    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
-    return scaled.copy(x, y,
-                       qMin(scaled.width(), pixelTargetSize.width()),
-                       qMin(scaled.height(), pixelTargetSize.height()));
 }
 
 QDateTime itemTimestampForFile(const QFileInfo &info) {
@@ -304,410 +98,6 @@ QDateTime itemTimestampForFile(const QFileInfo &info) {
 
 bool isExpiredForCutoff(const QFileInfo &info, const QDateTime &cutoff) {
     return cutoff.isValid() && itemTimestampForFile(info) < cutoff;
-}
-
-QImage buildLinkPreviewImage(const QString &urlString, const QString &title, qreal targetDpr, int itemScale) {
-    const QSize logicalSize = previewLogicalSize(itemScale);
-    const QSize pixelSize = logicalSize * targetDpr;
-    if (!pixelSize.isValid()) {
-        return {};
-    }
-
-    QImage canvas(pixelSize, QImage::Format_ARGB32_Premultiplied);
-    canvas.fill(Qt::transparent);
-    canvas.setDevicePixelRatio(targetDpr);
-
-    const QUrl url(urlString);
-    QString hostLabel = url.host().trimmed();
-    if (hostLabel.startsWith(QStringLiteral("www."), Qt::CaseInsensitive)) {
-        hostLabel.remove(0, 4);
-    }
-    if (hostLabel.isEmpty()) {
-        hostLabel = url.toString(QUrl::RemoveScheme | QUrl::RemoveUserInfo | QUrl::RemoveFragment).trimmed();
-        if (hostLabel.isEmpty()) {
-            hostLabel = QStringLiteral("link");
-        }
-    }
-
-    // Derive monogram from host or title.
-    QString monogram;
-    auto extractLetters = [](const QString &text) {
-        QString token;
-        const auto parts = text.split(QRegularExpression(QStringLiteral("[^A-Za-z0-9]+")), Qt::SkipEmptyParts);
-        for (const QString &part : parts) {
-            if (!part.isEmpty()) {
-                token.append(part.front().toUpper());
-            }
-            if (token.size() >= 2) {
-                break;
-            }
-        }
-        return token;
-    };
-    monogram = extractLetters(hostLabel);
-    if (monogram.isEmpty()) {
-        monogram = extractLetters(title);
-    }
-    if (monogram.isEmpty()) {
-        monogram = QStringLiteral("L");
-    }
-    monogram = monogram.left(2);
-
-    const QString headline = title.trimmed().isEmpty() ? hostLabel : title.trimmed();
-
-    // Palette from host+title hash.
-    const uint paletteHash = qHash(hostLabel + title);
-    const int hueA = static_cast<int>(paletteHash % 360);
-    const int hueB = static_cast<int>((hueA + 28 + (paletteHash % 71)) % 360);
-    const QColor colorA = QColor::fromHsl(hueA, 130, 152);
-    const QColor colorB = QColor::fromHsl(hueB, 122, 170);
-
-    QPainter painter(&canvas);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    const QRectF bounds(QPointF(0, 0), QSizeF(logicalSize));
-    QLinearGradient bg(bounds.topLeft(), bounds.bottomRight());
-    bg.setColorAt(0.0, colorA.lighter(120));
-    bg.setColorAt(0.48, colorB);
-    bg.setColorAt(1.0, colorA.darker(116));
-    painter.fillRect(bounds, bg);
-
-    // Browser chrome
-    const QRectF browserRect = bounds.adjusted(14.0, 12.0, -14.0, -12.0);
-    QPainterPath browserPath;
-    browserPath.addRoundedRect(browserRect, 18.0, 18.0);
-    painter.fillPath(browserPath, QColor(255, 255, 255, 54));
-
-    // Badge circle with monogram
-    const QRectF heroRect(browserRect.left() + 18.0, browserRect.top() + 46.0,
-                          browserRect.width() - 36.0, browserRect.height() - 80.0);
-    const qreal badgeSize = qMin(heroRect.width(), heroRect.height()) * 0.38;
-    const QRectF badgeRect(heroRect.center().x() - badgeSize / 2.0,
-                           heroRect.top() + heroRect.height() * 0.10,
-                           badgeSize, badgeSize);
-    painter.setBrush(QColor(255, 255, 255, 214));
-    painter.setPen(Qt::NoPen);
-    painter.drawEllipse(badgeRect);
-
-    QFont monoFont;
-    monoFont.setBold(true);
-    monoFont.setPointSizeF(qMax(18.0, badgeSize * 0.26));
-    painter.setFont(monoFont);
-    painter.setPen(QColor(58, 72, 86));
-    painter.drawText(badgeRect, Qt::AlignCenter, monogram);
-
-    // Headline text
-    const QRectF headlineRect(heroRect.left(), badgeRect.bottom() + 16.0, heroRect.width(), 34.0);
-    QFont headlineFont;
-    headlineFont.setBold(true);
-    headlineFont.setPointSizeF(qMax(11.0, bounds.height() * 0.074));
-    painter.setFont(headlineFont);
-    painter.setPen(QColor(255, 255, 255, 235));
-    const QFontMetricsF hm(headlineFont);
-    painter.drawText(headlineRect, Qt::AlignCenter,
-                     hm.elidedText(headline, Qt::ElideRight, headlineRect.width()));
-
-    painter.end();
-    return canvas;
-}
-
-QImage buildTextPreviewImage(const QString &text, qreal targetDpr, int itemScale) {
-    if (text.trimmed().isEmpty()) {
-        return {};
-    }
-
-    const QSize logicalSize = previewLogicalSize(itemScale);
-    const QSize pixelSize = logicalSize * targetDpr;
-    if (!pixelSize.isValid()) {
-        return {};
-    }
-
-    QImage canvas(pixelSize, QImage::Format_ARGB32_Premultiplied);
-    canvas.fill(Qt::white);
-    canvas.setDevicePixelRatio(targetDpr);
-
-    QPainter painter(&canvas);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-
-    QFont font;
-    font.setPointSize(qMax(9, 10 * itemScale / 100));
-    painter.setFont(font);
-    painter.setPen(QColor(40, 40, 40));
-
-    const int pad = qMax(6, 8 * itemScale / 100);
-    const QRect textRect(pad, pad, logicalSize.width() - pad * 2, logicalSize.height() - pad * 2);
-    // Only use the first ~500 chars — card can't show more anyway.
-    painter.drawText(textRect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, text.left(500));
-    painter.end();
-    return canvas;
-}
-
-QImage buildFileListPreviewImage(const QList<QUrl> &urls, qreal targetDpr, int itemScale) {
-    if (urls.isEmpty()) {
-        return {};
-    }
-
-    const QSize logicalSize = previewLogicalSize(itemScale);
-    const QSize pixelSize = logicalSize * targetDpr;
-    if (!pixelSize.isValid()) {
-        return {};
-    }
-
-    QImage canvas(pixelSize, QImage::Format_ARGB32_Premultiplied);
-    canvas.fill(Qt::white);
-    canvas.setDevicePixelRatio(targetDpr);
-
-    QPainter painter(&canvas);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-
-    QFont font;
-    font.setPointSize(qMax(9, 10 * itemScale / 100));
-    painter.setFont(font);
-    painter.setPen(QColor(40, 40, 40));
-
-    const int pad = qMax(8, 10 * itemScale / 100);
-    QStringList names;
-    for (const QUrl &url : urls) {
-        const QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
-        const QFileInfo info(path);
-        names << (info.fileName().isEmpty() ? path : info.fileName());
-        if (names.size() >= 20) {
-            break;
-        }
-    }
-
-    const QRect textRect(pad, pad, logicalSize.width() - pad * 2, logicalSize.height() - pad * 2);
-    painter.drawText(textRect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, names.join(QLatin1Char('\n')));
-    painter.end();
-    return canvas;
-}
-
-QPixmap buildCardThumbnail(const ClipboardItem &item) {
-    if (item.hasThumbnail()) {
-        return item.thumbnail();
-    }
-
-    const QPixmap fullImage = item.getImage();
-    if (fullImage.isNull()) {
-        return QPixmap();
-    }
-
-    const QSize logicalSize = previewLogicalSize(MPasteSettings::getInst()->getItemScale());
-    const qreal thumbnailDpr = maxScreenDevicePixelRatio();
-    const QSize pixelTargetSize = logicalSize * thumbnailDpr;
-    if (!pixelTargetSize.isValid()) {
-        return fullImage;
-    }
-
-    QPixmap scaled = fullImage.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    if (scaled.isNull()) {
-        return QPixmap();
-    }
-
-    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
-    QPixmap thumbnail = scaled.copy(x, y,
-                                    qMin(scaled.width(), pixelTargetSize.width()),
-                                    qMin(scaled.height(), pixelTargetSize.height()));
-    thumbnail.setDevicePixelRatio(thumbnailDpr);
-    return thumbnail;
-}
-
-QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
-    const QMimeData *mimeData = item.getMimeData();
-    if (!mimeData || !mimeData->hasHtml()) {
-        return QPixmap();
-    }
-
-    const QString html = mimeData->html();
-    if (html.isEmpty()) {
-        return QPixmap();
-    }
-
-    const QSize logicalSize = previewLogicalSize(MPasteSettings::getInst()->getItemScale());
-    const qreal thumbnailDpr = maxScreenDevicePixelRatio();
-    const QSize pixelTargetSize = logicalSize * thumbnailDpr;
-    if (!pixelTargetSize.isValid()) {
-        return QPixmap();
-    }
-
-    const qreal previewZoom = htmlPreviewZoom(thumbnailDpr);
-    const int leftPadding = 0;
-    const int rightPadding = 0;
-    const int topPadding = 0;
-    const int bottomPadding = 0;
-    const QSize contentSize(
-        qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
-        qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
-    const QSizeF layoutSize(
-        qMax(1.0, contentSize.width() / previewZoom),
-        qMax(1.0, contentSize.height() / previewZoom));
-
-    const QString imageSource = ContentClassifier::firstHtmlImageSource(html);
-    const QByteArray imageBytes = item.imagePayloadBytesFast();
-    QTextDocument document;
-    configureRichTextThumbnailDocument(document, html, imageSource, imageBytes);
-    document.setPageSize(layoutSize);
-    document.setTextWidth(layoutSize.width());
-
-    QPixmap snapshot(pixelTargetSize);
-    snapshot.fill(Qt::transparent);
-
-    QPainter painter(&snapshot);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.translate(leftPadding, topPadding);
-    painter.scale(previewZoom, previewZoom);
-    painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    painter.end();
-
-    if (!richTextHtmlHasImageContent(html)) {
-        snapshot.setDevicePixelRatio(thumbnailDpr);
-        return snapshot;
-    }
-
-    QImage trimmed = trimTransparentPadding(snapshot.toImage(), qRound(2 * thumbnailDpr));
-    QImage scaled = scaleCropToTarget(trimmed, pixelTargetSize);
-    QPixmap finalPixmap = QPixmap::fromImage(scaled.isNull() ? snapshot.toImage() : scaled);
-    finalPixmap.setDevicePixelRatio(thumbnailDpr);
-    return finalPixmap;
-}
-
-QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targetDpr, int itemScale) {
-    if (imageBytes.isEmpty()) {
-        return QImage();
-    }
-
-    const QSize logicalSize = previewLogicalSize(itemScale);
-    const QSize pixelTargetSize = logicalSize * targetDpr;
-    if (!pixelTargetSize.isValid()) {
-        return QImage();
-    }
-
-    QBuffer buffer;
-    buffer.setData(imageBytes);
-    if (!buffer.open(QIODevice::ReadOnly)) {
-        return QImage();
-    }
-
-    QImageReader reader(&buffer);
-    reader.setDecideFormatFromContent(true);
-
-    const QSize sourceSize = reader.size();
-    if (sourceSize.isValid()) {
-        const QSize scaledSize = sourceSize.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding);
-        if (scaledSize.isValid()) {
-            reader.setScaledSize(scaledSize);
-        }
-    }
-
-    QImage decoded = reader.read();
-    if (decoded.isNull()) {
-        decoded.loadFromData(imageBytes);
-    }
-    if (decoded.isNull()) {
-        decoded = ContentClassifier::decodeQtSerializedImage(imageBytes);
-    }
-    if (decoded.isNull()) {
-        return QImage();
-    }
-
-    if (decoded.size() != pixelTargetSize) {
-        decoded = decoded.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    }
-    if (decoded.isNull()) {
-        return QImage();
-    }
-
-    const int x = qMax(0, (decoded.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (decoded.height() - pixelTargetSize.height()) / 2);
-    QImage thumbnail = decoded.copy(x, y,
-                                    qMin(decoded.width(), pixelTargetSize.width()),
-                                    qMin(decoded.height(), pixelTargetSize.height()));
-    thumbnail.setDevicePixelRatio(targetDpr);
-    return thumbnail;
-}
-
-QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray &imageBytes, qreal thumbnailDpr, int itemScale) {
-    if (html.isEmpty()) {
-        return QImage();
-    }
-
-    const QSize logicalSize = previewLogicalSize(itemScale);
-    const QSize pixelTargetSize = logicalSize * thumbnailDpr;
-    if (!pixelTargetSize.isValid()) {
-        return QImage();
-    }
-
-    const qreal previewZoom = htmlPreviewZoom(thumbnailDpr);
-    const int leftPadding = 0;
-    const int rightPadding = 0;
-    const int topPadding = 0;
-    const int bottomPadding = 0;
-    const QSize contentSize(
-        qMax(1, pixelTargetSize.width() - leftPadding - rightPadding),
-        qMax(1, pixelTargetSize.height() - topPadding - bottomPadding));
-    const QSizeF layoutSize(
-        qMax(1.0, contentSize.width() / previewZoom),
-        qMax(1.0, contentSize.height() / previewZoom));
-
-    const QString imageSource = ContentClassifier::firstHtmlImageSource(html);
-    QTextDocument document;
-    configureRichTextThumbnailDocument(document, html, imageSource, imageBytes);
-    document.setPageSize(layoutSize);
-    document.setTextWidth(layoutSize.width());
-
-    QImage snapshot(pixelTargetSize, QImage::Format_ARGB32_Premultiplied);
-    snapshot.fill(Qt::transparent);
-
-    QPainter painter(&snapshot);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.translate(leftPadding, topPadding);
-    painter.scale(previewZoom, previewZoom);
-    painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    painter.end();
-
-    if (!richTextHtmlHasImageContent(html)) {
-        snapshot.setDevicePixelRatio(thumbnailDpr);
-        return snapshot;
-    }
-
-    QImage trimmed = trimTransparentPadding(snapshot, qRound(2 * thumbnailDpr));
-    QImage scaled = scaleCropToTarget(trimmed, pixelTargetSize);
-    if (!scaled.isNull()) {
-        scaled.setDevicePixelRatio(thumbnailDpr);
-        return scaled;
-    }
-    snapshot.setDevicePixelRatio(thumbnailDpr);
-    return snapshot;
-}
-
-ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {
-    ClipboardItem item(source);
-    if (item.getContentType() == ClipboardItem::RichText
-        && item.getPreviewKind() == ClipboardItem::TextPreview
-        && item.hasThumbnail()) {
-        item.setThumbnail(QPixmap());
-        item.setThumbnailAvailableHint(false);
-    }
-    if (!item.hasThumbnail() && (item.getContentType() == ClipboardItem::Image
-                                 || item.getContentType() == ClipboardItem::Office)) {
-        const QPixmap thumbnail = buildCardThumbnail(item);
-        if (!thumbnail.isNull()) {
-            item.setThumbnail(thumbnail);
-        }
-    } else if (!item.hasThumbnail()
-               && item.getContentType() == ClipboardItem::RichText
-               && item.getPreviewKind() == ClipboardItem::VisualPreview) {
-        const QPixmap thumbnail = buildRichTextThumbnail(item);
-        if (!thumbnail.isNull()) {
-            item.setThumbnail(thumbnail);
-        }
-    }
-    return item;
 }
 
 struct PendingItemProcessingResult {
@@ -1030,7 +420,7 @@ void ClipboardBoardService::loadNextBatch(int batchSize) {
     const int count = qMin(batchSize, pendingLoadFilePaths_.size());
     for (int i = 0; i < count; ++i) {
         const QString filePath = pendingLoadFilePaths_.takeFirst();
-        ClipboardItem item = saver_->loadFromFileLight(filePath);
+        ClipboardItem item = saver_->loadFromFileLight(filePath, true);
         if (item.getName().isEmpty()) {
             qWarning().noquote() << QStringLiteral("[board-service] skip unreadable history file during loadNextBatch path=%1")
                 .arg(filePath);
@@ -1080,7 +470,7 @@ void ClipboardBoardService::setVisibleHint(bool visible) {
 }
 
 ClipboardItem ClipboardBoardService::prepareItemForSave(const ClipboardItem &source) const {
-    return prepareItemForDisplayAndSave(source);
+    return ThumbnailBuilder::prepareItemForDisplayAndSave(source);
 }
 
 void ClipboardBoardService::saveItem(const ClipboardItem &item) {
@@ -1267,7 +657,7 @@ void ClipboardBoardService::refreshIndexedItemForPath(const QString &filePath) {
     emit localPersistenceChanged();
 }
 
-int ClipboardBoardService::filteredItemCount(ClipboardItem::ContentType type,
+int ClipboardBoardService::filteredItemCount(ContentType type,
                                              const QString &keyword,
                                              const QSet<QString> &matchedNames) const {
     if (indexedItems_.isEmpty()) {
@@ -1302,7 +692,7 @@ QList<QPair<QString, ClipboardItem>> ClipboardBoardService::loadIndexedSlice(int
     return loadedItems;
 }
 
-QList<QPair<QString, ClipboardItem>> ClipboardBoardService::loadFilteredIndexedSlice(ClipboardItem::ContentType type,
+QList<QPair<QString, ClipboardItem>> ClipboardBoardService::loadFilteredIndexedSlice(ContentType type,
                                                                                       const QString &keyword,
                                                                                       const QSet<QString> &matchedNames,
                                                                                       int offset,
@@ -1421,7 +811,7 @@ int ClipboardBoardService::maintainPreviewCache(PreviewCacheMaintenanceMode mode
         }
 
         const ClipboardItem lightItem = saver.loadFromFileLight(filePath);
-        if (lightItem.getName().isEmpty() || !isPreviewCacheManagedContent(lightItem)) {
+        if (lightItem.getName().isEmpty() || !ThumbnailBuilder::isPreviewCacheManagedContent(lightItem)) {
             continue;
         }
 
@@ -1437,8 +827,8 @@ int ClipboardBoardService::maintainPreviewCache(PreviewCacheMaintenanceMode mode
                 break;
             }
             case RepairBrokenPreviews: {
-                if (lightItem.getContentType() == ClipboardItem::RichText
-                    && lightItem.getPreviewKind() == ClipboardItem::TextPreview) {
+                if (lightItem.getContentType() == RichText
+                    && lightItem.getPreviewKind() == TextPreview) {
                     const ClipboardItem fullItem = saver.loadFromFile(filePath);
                     if (!fullItem.getName().isEmpty()
                         && fullItem.hasThumbnail()
@@ -1448,7 +838,7 @@ int ClipboardBoardService::maintainPreviewCache(PreviewCacheMaintenanceMode mode
                     break;
                 }
 
-                if (!usesVisualPreview(lightItem) || lightItem.hasThumbnailHint()) {
+                if (!ThumbnailBuilder::usesVisualPreview(lightItem) || lightItem.hasThumbnailHint()) {
                     break;
                 }
 
@@ -1457,7 +847,7 @@ int ClipboardBoardService::maintainPreviewCache(PreviewCacheMaintenanceMode mode
                     break;
                 }
 
-                const ClipboardItem preparedItem = prepareItemForDisplayAndSave(fullItem);
+                const ClipboardItem preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
                 if (!preparedItem.thumbnail().isNull()
                     && saver.updateThumbnail(filePath, preparedItem.thumbnail())) {
                     ++changedCount;
@@ -1470,7 +860,7 @@ int ClipboardBoardService::maintainPreviewCache(PreviewCacheMaintenanceMode mode
                     break;
                 }
 
-                const ClipboardItem preparedItem = prepareItemForDisplayAndSave(fullItem);
+                const ClipboardItem preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
                 if (preparedItem.thumbnail().cacheKey() == fullItem.thumbnail().cacheKey()) {
                     break;
                 }
@@ -1493,24 +883,24 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
         return;
     }
 
-    const ClipboardItem::ContentType contentType = item.getContentType();
-    const ClipboardItem::PreviewKind previewKind = item.getPreviewKind();
+    const ContentType contentType = item.getContentType();
+    const ClipboardPreviewKind previewKind = item.getPreviewKind();
     const ClipboardItem baseItem = item;
-    const QByteArray imageBytes = (contentType == ClipboardItem::Image
-            || contentType == ClipboardItem::Office
-            || (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview))
+    const QByteArray imageBytes = (contentType == Image
+            || contentType == Office
+            || (contentType == RichText && previewKind == VisualPreview))
         ? item.imagePayloadBytesFast()
         : QByteArray();
-    const QString richHtml = (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview)
+    const QString richHtml = (contentType == RichText && previewKind == VisualPreview)
         ? item.getHtml()
         : QString();
     const QSize imageSize = item.isMimeDataLoaded()
-        && (contentType == ClipboardItem::Image || contentType == ClipboardItem::Office)
+        && (contentType == Image || contentType == Office)
         ? item.getImagePixelSize()
         : QSize();
     const QString sourceFilePath = item.sourceFilePath();
     const quint64 mimeOffset = item.mimeDataFileOffset();
-    const qreal thumbnailDpr = maxScreenDevicePixelRatio();
+    const qreal thumbnailDpr = ThumbnailBuilder::maxScreenDevicePixelRatio();
     const int itemScale = MPasteSettings::getInst()->getItemScale();
 
     QPointer<ClipboardBoardService> guard(this);
@@ -1520,17 +910,17 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
         QString resolvedHtml = richHtml;
         if ((resolvedImageBytes.isEmpty() || resolvedHtml.isEmpty())
             && !sourceFilePath.isEmpty()
-            && (contentType == ClipboardItem::Image
-                || contentType == ClipboardItem::Office
-                || (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview))) {
+            && (contentType == Image
+                || contentType == Office
+                || (contentType == RichText && previewKind == VisualPreview))) {
             QString htmlPayload;
             QByteArray imagePayload;
             LocalSaver::loadMimePayloads(sourceFilePath,
                                          mimeOffset,
-                                         (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview) ? &htmlPayload : nullptr,
-                                         (contentType == ClipboardItem::Image
-                                            || contentType == ClipboardItem::Office
-                                            || (contentType == ClipboardItem::RichText && previewKind == ClipboardItem::VisualPreview)) ? &imagePayload : nullptr);
+                                         (contentType == RichText && previewKind == VisualPreview) ? &htmlPayload : nullptr,
+                                         (contentType == Image
+                                            || contentType == Office
+                                            || (contentType == RichText && previewKind == VisualPreview)) ? &imagePayload : nullptr);
             if (resolvedHtml.isEmpty()) {
                 resolvedHtml = htmlPayload;
             }
@@ -1539,23 +929,14 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             }
         }
 
-        if ((contentType == ClipboardItem::Image || contentType == ClipboardItem::Office)
+        if ((contentType == Image || contentType == Office)
             && !resolvedImageBytes.isEmpty()) {
-            result.thumbnailImage = buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr, itemScale);
-            if (isVeryTallImage(imageSize)) {
-                qInfo().noquote() << QStringLiteral("[thumb-build] stage=worker name=%1 image=%2x%3 thumbPx=%4x%5 thumbDpr=%6")
-                    .arg(expectedName)
-                    .arg(imageSize.width())
-                    .arg(imageSize.height())
-                    .arg(result.thumbnailImage.width())
-                    .arg(result.thumbnailImage.height())
-                    .arg(result.thumbnailImage.devicePixelRatio(), 0, 'f', 2);
-            }
-        } else if (contentType == ClipboardItem::RichText
-                   && previewKind == ClipboardItem::VisualPreview
+            result.thumbnailImage = ThumbnailBuilder::buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr, itemScale);
+        } else if (contentType == RichText
+                   && previewKind == VisualPreview
                    && !resolvedHtml.isEmpty()) {
-            result.thumbnailImage = buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
-        } else if (contentType == ClipboardItem::Link && !baseItem.hasThumbnail()) {
+            result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
+        } else if (contentType == Link && !baseItem.hasThumbnail()) {
             QString linkUrl;
             const QList<QUrl> urls = baseItem.getNormalizedUrls();
             if (!urls.isEmpty()) {
@@ -1564,22 +945,17 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             } else {
                 linkUrl = baseItem.getNormalizedText().left(512).trimmed();
             }
-            result.thumbnailImage = buildLinkPreviewImage(linkUrl, baseItem.getTitle(), thumbnailDpr, itemScale);
+            result.thumbnailImage = ThumbnailBuilder::buildLinkPreviewImage(linkUrl, baseItem.getTitle(), thumbnailDpr, itemScale);
         }
 
-        // Save to disk in the worker thread to avoid blocking the UI.
+        // Save to disk in the worker thread.  Avoid QPixmap here — it
+        // requires the GUI thread and would block the main event loop.
         QString savedFilePath;
         {
-            ClipboardItem saveItem = baseItem;
-            if (!result.thumbnailImage.isNull()) {
-                QPixmap thumbnail = QPixmap::fromImage(result.thumbnailImage);
-                thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
-                saveItem.setThumbnail(thumbnail);
-            }
             if (guard) {
-                savedFilePath = guard->filePathForItem(saveItem);
+                savedFilePath = guard->filePathForItem(baseItem);
                 LocalSaver saver;
-                saver.saveToFile(saveItem, savedFilePath);
+                saver.saveToFile(baseItem, savedFilePath, result.thumbnailImage);
             }
         }
 
@@ -1599,7 +975,7 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                     thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
                     preparedItem.setThumbnail(thumbnail);
                     const QSize imageSize = preparedItem.getImagePixelSize();
-                    if (isVeryTallImage(imageSize)) {
+                    if (ThumbnailBuilder::isVeryTallImage(imageSize)) {
                         qInfo().noquote() << QStringLiteral("[thumb-build] stage=ui name=%1 image=%2x%3 thumbPx=%4x%5 thumbLogical=%6x%7 thumbDpr=%8")
                             .arg(expectedName)
                             .arg(imageSize.width())
@@ -1658,7 +1034,7 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
         bool loadedPersistedThumbnail = false;
         const QString loadedNormalizedText = loaded.getNormalizedText();
         if (!loaded.getName().isEmpty()) {
-            const ClipboardItem::ContentType type = loaded.getContentType();
+            const ContentType type = loaded.getContentType();
             if (loaded.hasThumbnailHint() && loaded.thumbnail().isNull()) {
                 ClipboardItem thumbnailItem = saver.loadFromFileLight(filePath, true);
                 if (!thumbnailItem.getName().isEmpty() && !thumbnailItem.thumbnail().isNull()) {
@@ -1668,13 +1044,13 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
             }
 
             const bool shouldRebuild =
-                (type == ClipboardItem::RichText && loaded.getPreviewKind() == ClipboardItem::VisualPreview)
+                (type == RichText && loaded.getPreviewKind() == VisualPreview)
                 || (preparedItem.thumbnail().isNull()
-                    && (type == ClipboardItem::Image
-                        || type == ClipboardItem::Office));
+                    && (type == Image
+                        || type == Office));
             if (shouldRebuild && !(guard && guard->failedFullLoadPaths_.contains(filePath))) {
                 attemptedRebuild = true;
-                if (type == ClipboardItem::RichText) {
+                if (type == RichText) {
                     QString htmlPayload;
                     QByteArray imagePayload;
                     if (LocalSaver::loadMimePayloads(filePath,
@@ -1682,9 +1058,9 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                                                      &htmlPayload,
                                                      &imagePayload)
                         && !htmlPayload.isEmpty()) {
-                        const qreal thumbnailDpr = maxScreenDevicePixelRatio();
+                        const qreal thumbnailDpr = ThumbnailBuilder::maxScreenDevicePixelRatio();
                         const int itemScale = MPasteSettings::getInst()->getItemScale();
-                        const QImage thumbnailImage = buildRichTextThumbnailImageFromHtml(htmlPayload,
+                        const QImage thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(htmlPayload,
                                                                                           imagePayload,
                                                                                           thumbnailDpr,
                                                                                           itemScale);
@@ -1700,7 +1076,7 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                     if (!generatedThumbnail) {
                         ClipboardItem fullItem = saver.loadFromFile(filePath);
                         if (!fullItem.getName().isEmpty()) {
-                            preparedItem = prepareItemForDisplayAndSave(fullItem);
+                            preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
                             generatedThumbnail = !preparedItem.thumbnail().isNull()
                                 && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
                             refreshedRichText = !preparedItem.thumbnail().isNull();
@@ -1713,10 +1089,10 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                 } else {
                     ClipboardItem fullItem = saver.loadFromFile(filePath);
                     if (!fullItem.getName().isEmpty()) {
-                        preparedItem = prepareItemForDisplayAndSave(fullItem);
+                        preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
                         generatedThumbnail = !preparedItem.thumbnail().isNull()
                             && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
-                        refreshedRichText = type == ClipboardItem::RichText;
+                        refreshedRichText = type == RichText;
                     } else {
                         rebuildFailed = true;
                     }

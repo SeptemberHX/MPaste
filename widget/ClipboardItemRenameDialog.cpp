@@ -16,25 +16,12 @@
 #include <QVBoxLayout>
 
 #include "utils/ThemeManager.h"
+#include "BoardInternalHelpers.h"
 
 namespace {
-bool looksBrokenTranslation(const QString &text) {
-    if (text.isEmpty()) {
-        return true;
-    }
-
-    int suspiciousCount = 0;
-    for (const QChar ch : text) {
-        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
-            ++suspiciousCount;
-        }
-    }
-    return suspiciousCount >= qMax(2, text.size() / 2);
-}
-
 QString fallbackText(const QString &translated, const QString &source, const QString &zhFallback) {
     const QLocale locale = QLocale::system();
-    if (translated == source || looksBrokenTranslation(translated)) {
+    if (translated == source || BoardHelpers::looksBrokenTranslation(translated)) {
         if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
             return zhFallback;
         }

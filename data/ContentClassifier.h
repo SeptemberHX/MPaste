@@ -303,9 +303,11 @@ inline bool shouldTreatHtmlPayloadAsImage(const QMimeData *mimeData, const QStri
         return false;
     }
 
-    QTextDocument doc;
-    doc.setHtml(html);
-    const QString plainText = doc.toPlainText();
+    // Strip tags without QTextDocument to avoid remote resource loading.
+    QString plainText = html;
+    static const QRegularExpression tagRe(QStringLiteral("<[^>]*>"));
+    plainText.replace(tagRe, QString());
+    plainText = plainText.trimmed();
     if (!isImageLikeText(normalizedText) && !isImageLikeText(plainText)) {
         return false;
     }
@@ -338,9 +340,6 @@ inline ContentType classifyLight(const QMimeData *mimeData,
     }
 
     const ContentTraits traits = analyze(mimeData);
-    qInfo().noquote() << QStringLiteral("[classifyLight] hasVector=%1 hasOle=%2 hasOleNative=%3 hasBitmap=%4 hasImage=%5 hasHtml=%6 formats=%7")
-        .arg(traits.hasVector).arg(traits.hasOle).arg(traits.hasOleNative).arg(traits.hasBitmap).arg(traits.hasImage).arg(traits.hasHtml)
-        .arg(mimeData->formats().join(QStringLiteral(", ")));
     if (traits.hasColor) {
         return Color;
     }

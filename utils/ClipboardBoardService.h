@@ -46,8 +46,8 @@ public:
         QList<QUrl> normalizedUrls;
         QByteArray fingerprint;
         QDateTime time;
-        ClipboardItem::ContentType contentType = ClipboardItem::Text;
-        ClipboardItem::PreviewKind previewKind = ClipboardItem::TextPreview;
+        ContentType contentType = Text;
+        ClipboardPreviewKind previewKind = TextPreview;
         quint64 mimeDataOffset = 0;
         bool pinned = false;
         bool hasThumbnailHint = false;
@@ -92,11 +92,11 @@ public:
     QString filePathForName(const QString &name) const;
     ClipboardItem loadItemLight(const QString &filePath, bool includeThumbnail = false);
     void refreshIndexedItemForPath(const QString &filePath);
-    int filteredItemCount(ClipboardItem::ContentType type,
+    int filteredItemCount(ContentType type,
                           const QString &keyword,
                           const QSet<QString> &matchedNames) const;
     QList<QPair<QString, ClipboardItem>> loadIndexedSlice(int offset, int count, bool includeThumbnail = false);
-    QList<QPair<QString, ClipboardItem>> loadFilteredIndexedSlice(ClipboardItem::ContentType type,
+    QList<QPair<QString, ClipboardItem>> loadFilteredIndexedSlice(ContentType type,
                                                                   const QString &keyword,
                                                                   const QSet<QString> &matchedNames,
                                                                   int offset,

@@ -29,30 +29,11 @@
 #include <QWindow>
 
 #include "utils/ThemeManager.h"
+#include "BoardInternalHelpers.h"
 
 namespace {
 constexpr int kDetailsDialogWidth = 860;
 constexpr int kDetailsDialogHeight = 640;
-
-bool looksBrokenTranslation(const QString &text) {
-    if (text.isEmpty()) {
-        return true;
-    }
-
-    int suspiciousCount = 0;
-    for (const QChar ch : text) {
-        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
-            ++suspiciousCount;
-        }
-    }
-    return suspiciousCount >= qMax(2, text.size() / 2);
-}
-
-bool preferChineseFallback() {
-    const QLocale locale = QLocale::system();
-    return locale.language() == QLocale::Chinese
-           || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive);
-}
 
 QString zh(const char16_t *text) {
     return QString::fromUtf16(text);
@@ -554,29 +535,29 @@ void ClipboardItemDetailsDialog::mouseMoveEvent(QMouseEvent *event) {
 
 QString ClipboardItemDetailsDialog::uiText(const QString &source, const QString &zhFallback) const {
     const QString translated = tr(source.toUtf8().constData());
-    if (translated == source || looksBrokenTranslation(translated)) {
-        return preferChineseFallback() ? zhFallback : source;
+    if (translated == source || BoardHelpers::looksBrokenTranslation(translated)) {
+        return BoardHelpers::prefersChineseUi() ? zhFallback : source;
     }
     return translated;
 }
 
-QString ClipboardItemDetailsDialog::contentTypeLabel(ClipboardItem::ContentType type) const {
+QString ClipboardItemDetailsDialog::contentTypeLabel(ContentType type) const {
     switch (type) {
-        case ClipboardItem::Text:
+        case Text:
             return uiText(QStringLiteral("Text"), zh(u"文本"));
-        case ClipboardItem::Link:
+        case Link:
             return uiText(QStringLiteral("Link"), zh(u"链接"));
-        case ClipboardItem::Image:
+        case Image:
             return uiText(QStringLiteral("Image"), zh(u"图片"));
-        case ClipboardItem::Office:
+        case Office:
             return uiText(QStringLiteral("Office Shape"), zh(u"Office Shape"));
-        case ClipboardItem::RichText:
+        case RichText:
             return uiText(QStringLiteral("Rich Text"), zh(u"富文本"));
-        case ClipboardItem::File:
+        case File:
             return uiText(QStringLiteral("File"), zh(u"文件"));
-        case ClipboardItem::Color:
+        case Color:
             return uiText(QStringLiteral("Color"), zh(u"颜色"));
-        case ClipboardItem::All:
+        case All:
         default:
             return uiText(QStringLiteral("All"), zh(u"全部"));
     }
@@ -642,8 +623,8 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
     QString summary;
 
     switch (item.getContentType()) {
-        case ClipboardItem::Image:
-        case ClipboardItem::Office: {
+        case Image:
+        case Office: {
             previewPixmap = item.getImage();
             if (item.hasThumbnail()) {
                 thumbnailPixmap = item.thumbnail();
@@ -661,7 +642,7 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
             }
             break;
         }
-        case ClipboardItem::RichText: {
+        case RichText: {
             if (item.hasThumbnail()) {
                 previewPixmap = item.thumbnail();
                 thumbnailPixmap = item.thumbnail();
@@ -675,7 +656,7 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
             }
             break;
         }
-        case ClipboardItem::Color: {
+        case Color: {
             const QColor color = item.getColor();
             if (color.isValid()) {
                 QPixmap swatch(180, 120);
@@ -690,9 +671,9 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
             }
             break;
         }
-        case ClipboardItem::Link:
-        case ClipboardItem::Text:
-        case ClipboardItem::File:
+        case Link:
+        case Text:
+        case File:
             if (item.hasThumbnail()) {
                 previewPixmap = item.thumbnail();
                 thumbnailPixmap = item.thumbnail();
