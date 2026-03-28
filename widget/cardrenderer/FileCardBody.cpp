@@ -140,7 +140,7 @@ void FileCardBody::paint(QPainter *painter, const CardBodyContext &ctx) const {
         const int startY = ctx.previewRect.top() + padding + qMax(0, (availH - totalH) / 2);
         const int chipLeft = ctx.previewRect.left() + padding;
         const int chipW = ctx.previewRect.width() - padding * 2;
-        const QColor chipBg = CardTheme::forCurrentTheme().fileChipBgColor;
+        const QColor chipBg = ctx.theme.fileChipBgColor;
         const int textLeft = chipLeft + chipPadX + iconSize + iconGap;
         const int textW = chipW - chipPadX * 2 - iconSize - iconGap;
 

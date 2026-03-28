@@ -8,6 +8,8 @@
 
 class ClipboardCardDelegate;
 
+struct CardTheme;
+
 // Shared rendering context passed from delegate to body renderers.
 struct CardBodyContext {
     const QRect &bodyRect;
@@ -20,6 +22,7 @@ struct CardBodyContext {
     QColor bodyTextColor;
     const QModelIndex &index;
     const ClipboardCardDelegate *delegate;
+    const CardTheme &theme;
 };
 
 // Base class for card body renderers. Each content type has its own subclass.

@@ -19,6 +19,9 @@
 #include <QUrl>
 #include <QVariant>
 
+#include <functional>
+#include <optional>
+
 #include "ContentType.h"
 #include "ContentClassifier.h"
 #include "PreviewKind.h"
@@ -35,16 +38,11 @@ private:
     QString url_;
     QString alias_;
     bool pinned_ = false;
-    mutable QByteArray fingerprintCache_;
-    mutable bool fingerprintCacheInitialized_ = false;
-    mutable QString searchableTextCache_;
-    mutable bool searchableTextCacheInitialized_ = false;
-    mutable QList<QUrl> normalizedUrlsCache_;
-    mutable bool normalizedUrlsCacheInitialized_ = false;
-    mutable QPixmap imageCache_;
-    mutable bool imageCacheInitialized_ = false;
-    mutable QSize imageSizeCache_;
-    mutable bool imageSizeCacheInitialized_ = false;
+    mutable std::optional<QByteArray> fingerprintCache_;
+    mutable std::optional<QString> searchableTextCache_;
+    mutable std::optional<QList<QUrl>> normalizedUrlsCache_;
+    mutable std::optional<QPixmap> imageCache_;
+    mutable std::optional<QSize> imageSizeCache_;
 
     // Lazy-load support (V4 format)
     QPixmap thumbnail_;
@@ -52,6 +50,7 @@ private:
     QString sourceFilePath_;
     quint64 mimeDataFileOffset_ = 0;
     bool mimeDataLoaded_ = true;
+    std::function<void(ClipboardItem&)> mimeDataLoader_;
     mutable ContentType cachedContentType_ = ::Text;
     mutable ClipboardPreviewKind cachedPreviewKind_ = ::TextPreview;
     mutable QString cachedNormalizedText_;
@@ -94,10 +93,8 @@ private:
     QString htmlImageIdentity() const;
 
     void invalidateSearchCache() {
-        searchableTextCacheInitialized_ = false;
-        searchableTextCache_.clear();
-        normalizedUrlsCacheInitialized_ = false;
-        normalizedUrlsCache_.clear();
+        searchableTextCache_.reset();
+        normalizedUrlsCache_.reset();
     }
 
 public:
@@ -118,16 +115,14 @@ public:
     bool operator==(const ClipboardItem &other) const;
 
     const QByteArray &fingerprint() const {
-        if (!fingerprintCacheInitialized_) {
+        if (!fingerprintCache_) {
             fingerprintCache_ = buildFingerprint();
-            fingerprintCacheInitialized_ = true;
         }
-        return fingerprintCache_;
+        return *fingerprintCache_;
     }
 
     void setFingerprintCache(const QByteArray &fp) {
         fingerprintCache_ = fp;
-        fingerprintCacheInitialized_ = true;
     }
 
     const QPixmap& getIcon() const { return icon_; }
@@ -164,11 +159,10 @@ public:
         if (!mimeDataLoaded_) {
             return cachedNormalizedUrls_;
         }
-        if (!normalizedUrlsCacheInitialized_) {
+        if (!normalizedUrlsCache_) {
             normalizedUrlsCache_ = buildNormalizedUrls();
-            normalizedUrlsCacheInitialized_ = true;
         }
-        return normalizedUrlsCache_;
+        return *normalizedUrlsCache_;
     }
 
     QPixmap getImage() const;
@@ -259,8 +253,22 @@ public:
         }
     }
 
-    // Implemented in LocalSaver.cpp to avoid circular dependency
-    void ensureMimeDataLoaded();
+    void setMimeDataLoader(std::function<void(ClipboardItem&)> loader) {
+        mimeDataLoader_ = std::move(loader);
+    }
+
+    void ensureMimeDataLoaded() {
+        if (mimeDataLoaded_) return;
+        mimeDataLoaded_ = true;
+        if (mimeDataLoader_) {
+            mimeDataLoader_(*this);
+            // Invalidate caches that were built from light-loaded metadata.
+            imageCache_.reset();
+            imageSizeCache_.reset();
+            searchableTextCache_.reset();
+            normalizedUrlsCache_.reset();
+        }
+    }
 
     ContentType getContentType() const {
         if (!mimeDataLoaded_) {

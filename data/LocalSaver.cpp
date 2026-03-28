@@ -968,6 +968,13 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
     item.setSourceFilePath(filePath);
     item.setMimeDataFileOffset(header.mimeDataOffset);
     item.setFingerprintCache(header.fingerprint);
+    {
+        const QString capturedPath = filePath;
+        const quint64 capturedOffset = header.mimeDataOffset;
+        item.setMimeDataLoader([capturedPath, capturedOffset](ClipboardItem &self) {
+            LocalSaver::loadMimeSection(capturedPath, capturedOffset, self);
+        });
+    }
     item.setLightLoaded(
         effectiveType,
         header.normalizedText,
@@ -1255,54 +1262,31 @@ bool LocalSaver::removeItem(const QString &filePath) {
 }
 
 QSize ClipboardItem::getImagePixelSize() const {
-    if (imageSizeCacheInitialized_) {
-        return imageSizeCache_;
+    if (imageSizeCache_) {
+        return *imageSizeCache_;
     }
 
-    if (imageCacheInitialized_ && !imageCache_.isNull()) {
-        imageSizeCache_ = imageCache_.size();
-        imageSizeCacheInitialized_ = true;
-        return imageSizeCache_;
+    if (imageCache_ && !imageCache_->isNull()) {
+        imageSizeCache_ = imageCache_->size();
+        return *imageSizeCache_;
     }
 
     if (!mimeDataLoaded_) {
         imageSizeCache_ = probeImageSizeFromMimeSection(sourceFilePath_, mimeDataFileOffset_);
-        imageSizeCacheInitialized_ = true;
-        return imageSizeCache_;
+        return *imageSizeCache_;
     }
 
-    imageSizeCache_ = probeImageSizeFromMimeData(mimeData_.data());
-    if (!imageSizeCache_.isValid()) {
+    QSize probed = probeImageSizeFromMimeData(mimeData_.data());
+    if (!probed.isValid()) {
         const QPixmap pixmap = getImage();
         if (!pixmap.isNull()) {
-            imageSizeCache_ = pixmap.size();
+            probed = pixmap.size();
         }
     }
-    imageSizeCacheInitialized_ = true;
-    return imageSizeCache_;
+    imageSizeCache_ = probed;
+    return *imageSizeCache_;
 }
 
-// Implementation of ClipboardItem::ensureMimeDataLoaded - placed here to avoid
-// circular dependency (ClipboardItem.h cannot include LocalSaver.h).
-void ClipboardItem::ensureMimeDataLoaded() {
-    if (mimeDataLoaded_) {
-        return;
-    }
-
-    mimeDataLoaded_ = true;
-
-    if (sourceFilePath_.isEmpty()) {
-        return;
-    }
-
-    LocalSaver::loadMimeSection(sourceFilePath_, mimeDataFileOffset_, *this);
-
-    // Invalidate caches that were built from light-loaded metadata.
-    imageCacheInitialized_ = false;
-    imageSizeCacheInitialized_ = false;
-    searchableTextCacheInitialized_ = false;
-    normalizedUrlsCacheInitialized_ = false;
-}
 
 bool ClipboardItem::containsDeep(const QString &keyword) const {
     if (keyword.isEmpty()) {

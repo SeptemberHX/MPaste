@@ -591,6 +591,7 @@ QPixmap buildHeaderIconPixmapUncached(const QPixmap &sourcePixmap, const QSize &
 
 ClipboardCardDelegate::ClipboardCardDelegate(const QColor &borderColor, QObject *parent)
     : QStyledItemDelegate(parent),
+      cachedTheme_(CardTheme::forCurrentTheme()),
       borderColor_(borderColor),
       headerIconCache_(60),
       linkFallbackCache_(60),
@@ -606,6 +607,9 @@ ClipboardCardDelegate::ClipboardCardDelegate(const QColor &borderColor, QObject 
       textRenderer_(std::make_unique<TextCardBody>()) {
     previewTaskPool_.setMaxThreadCount(qBound(1, QThread::idealThreadCount() / 2, 4));
     previewTaskPool_.setExpiryTimeout(15000);
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](bool) {
+        cachedTheme_ = CardTheme::forCurrentTheme();
+    });
 }
 
 ClipboardCardDelegate::~ClipboardCardDelegate() {
@@ -649,6 +653,7 @@ void ClipboardCardDelegate::clearVisualCaches() {
     clearIntermediateCaches();
     cardPixmapCache_.clear();
     QPixmapCache::clear();
+    cachedTheme_ = CardTheme::forCurrentTheme();
 }
 
 bool ClipboardCardDelegate::isCardCached(const QString &name) const {
@@ -973,7 +978,7 @@ void ClipboardCardDelegate::drawShortcutOverlay(QPainter *painter, const QStyleO
         shortcutWidth,
         footerRect.height());
 
-    const CardTheme theme = CardTheme::forCurrentTheme();
+    const CardTheme &theme = cachedTheme_;
     const QColor bgColor = theme.shortcutBgColor;
     const QColor textColor = theme.shortcutTextColor;
     const qreal pillRadius = qMax(4.0, 5.0 * scale / 100);
@@ -1076,7 +1081,7 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     const QRect bodyRect(cardRect.left(), topRect.bottom(), cardRect.width(), cardRect.height() - topHeight - effectiveFooterHeight);
     const QRect footerRect(cardRect.left(), cardRect.bottom() - effectiveFooterHeight + 1, cardRect.width(), effectiveFooterHeight);
 
-    const CardTheme theme = CardTheme::forCurrentTheme();
+    const CardTheme &theme = cachedTheme_;
     const bool darkTheme = ThemeManager::instance()->isDark();
     const QColor baseSurface = theme.baseSurface;
     const QColor bodyTextColor = theme.bodyTextColor;
@@ -1230,7 +1235,8 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
             paintDpr,
             bodyTextColor,
             index,
-            this
+            this,
+            cachedTheme_
         };
         bodyRendererForType(card.contentType).paint(painter, ctx);
     }

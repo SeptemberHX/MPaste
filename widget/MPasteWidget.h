@@ -11,14 +11,10 @@
 #include <QHBoxLayout>
 #include <QMimeData>
 #include <QMenu>
-#include <QAudioOutput>
-#include <QMediaDevices>
-#include <QMediaPlayer>
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
 #include <QElapsedTimer>
 #include <QHideEvent>
-#include <QFileSystemWatcher>
 #include <QTimer>
 #include <QLabel>
 #include <QComboBox>
@@ -31,6 +27,10 @@
 #include "ClipboardItemPreviewDialog.h"
 #include "MPasteSettingsWidget.h"
 #include "ScrollItemsWidget.h"
+
+class CopySoundPlayer;
+class SyncWatcher;
+class ClipboardPasteController;
 
 namespace Ui {
 class MPasteWidget;
@@ -81,13 +81,6 @@ private:
     ClipboardItemPreviewDialog *ensurePreviewDialog();
     MPasteSettingsWidget *ensureSettingsWidget();
     void applyTheme(bool dark);
-    void syncSoundOutputDevice();
-    void rebuildSoundPlaybackChain(const QAudioDevice &device);
-    void playCopySoundIfNeeded(int wId, const QByteArray &fingerprint = QByteArray());
-
-    bool setClipboard(const ClipboardItem &item, bool plainText = false);
-    QMimeData *createPlainTextMimeData(const ClipboardItem &item) const;
-    void handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item);
     void loadFromSaveDir();
     void scheduleStartupWarmup();
     void reloadHistoryBoards();
@@ -110,8 +103,6 @@ private:
 
     ScrollItemsWidget* currItemsWidget();
     void setupSyncWatcher();
-    void scheduleSyncReload();
-    quint64 currentWriteGeneration() const;
     void applyScale(int scale);
 
 private:
@@ -150,36 +141,27 @@ private:
 
     struct {
         ClipboardMonitor *monitor;
-        bool isPasting = false;
         bool copiedWhenHide = false;
     } clipboard_;
 
-    struct {
-        QFileSystemWatcher *watcher = nullptr;
-        QTimer *reloadTimer = nullptr;
-        bool pendingReload = false;
-        qint64 suppressReloadUntilMs = 0;
-        quint64 pendingWriteGen = 0;   // snapshot of write generations when pendingReload was set
-    } sync_;
+    ClipboardPasteController *pasteController_ = nullptr;
+    SyncWatcher *syncWatcher_ = nullptr;
 
     struct {
         bool startupWarmupScheduled = false;
         bool startupWarmupCompleted = false;
     } loading_;
 
+    CopySoundPlayer *copySoundPlayer_ = nullptr;
+
     struct {
-        QMediaPlayer *player = nullptr;
-        QAudioOutput *audioOutput = nullptr;
-        QMediaDevices *mediaDevices = nullptr;
         QList<int> numKeyList;
         int pendingNumKey = -1;
         bool pendingPlainTextNumKey = false;
-        qint64 lastSoundPlayAtMs = 0;
         QElapsedTimer startupPerfTimer;
     } misc_;
 
     static constexpr int HIDE_ANIMATION_TIME = 50;
-    static constexpr qint64 SOUND_BURST_WINDOW_MS = 500;
 
     bool darkTheme_ = false;
 };

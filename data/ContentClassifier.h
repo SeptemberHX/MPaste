@@ -332,9 +332,13 @@ inline bool shouldTreatOfficePayloadAsType(const ContentTraits &traits) {
     return false;
 }
 
-inline ContentType classifyLight(const QMimeData *mimeData,
-                                 const QString &normalizedText,
-                                 const QList<QUrl> &normalizedUrls) {
+enum ClassificationMode { LightClassification, FullClassification };
+
+inline ContentType classify(const QMimeData *mimeData,
+                            const QString &normalizedText,
+                            const QList<QUrl> &normalizedUrls,
+                            ClassificationMode mode = LightClassification,
+                            bool hasDecodableImg = false) {
     if (!mimeData) {
         return Text;
     }
@@ -368,7 +372,9 @@ inline ContentType classifyLight(const QMimeData *mimeData,
     }
 
     if (mimeData->hasHtml()) {
-        const bool htmlImageLike = shouldTreatHtmlPayloadAsImageFast(mimeData, normalizedText);
+        const bool htmlImageLike = (mode == LightClassification)
+            ? shouldTreatHtmlPayloadAsImageFast(mimeData, normalizedText)
+            : shouldTreatHtmlPayloadAsImage(mimeData, normalizedText);
         if (htmlImageLike) {
             return shouldTreatOfficePayloadAsType(traits) ? Office : Image;
         }
@@ -380,7 +386,10 @@ inline ContentType classifyLight(const QMimeData *mimeData,
         return RichText;
     }
 
-    if (hasFastImagePayload(mimeData)) {
+    const bool hasImagePayload = (mode == LightClassification)
+        ? hasFastImagePayload(mimeData)
+        : (hasDecodableImg || hasDecodableImage(mimeData));
+    if (hasImagePayload) {
         return shouldTreatOfficePayloadAsType(traits) ? Office : Image;
     }
 
@@ -391,63 +400,16 @@ inline ContentType classifyLight(const QMimeData *mimeData,
     return Text;
 }
 
+inline ContentType classifyLight(const QMimeData *mimeData,
+                                 const QString &normalizedText,
+                                 const QList<QUrl> &normalizedUrls) {
+    return classify(mimeData, normalizedText, normalizedUrls, LightClassification);
+}
+
 inline ContentType classifyFull(const QMimeData *mimeData,
                                 const QString &normalizedText,
                                 const QList<QUrl> &normalizedUrls) {
-    if (!mimeData) {
-        return Text;
-    }
-
-    const ContentTraits traits = analyze(mimeData);
-    if (traits.hasColor) {
-        return Color;
-    }
-
-    if (!normalizedUrls.isEmpty()) {
-        bool allValid = std::all_of(normalizedUrls.begin(), normalizedUrls.end(),
-            [](const QUrl &url) { return url.isValid() && !url.isRelative(); });
-        if (allValid) {
-            bool allFiles = std::all_of(normalizedUrls.begin(), normalizedUrls.end(),
-                [](const QUrl &url) { return url.isLocalFile(); });
-            if (allFiles) {
-                return File;
-            }
-            bool allWebLinks = std::all_of(normalizedUrls.begin(), normalizedUrls.end(),
-                [](const QUrl &url) {
-                    const QString scheme = url.scheme().toLower();
-                    return scheme == QLatin1String("http") || scheme == QLatin1String("https");
-                });
-            if (allWebLinks) {
-                return Link;
-            }
-        }
-        if (!mimeData->hasHtml()) {
-            return Text;
-        }
-    }
-
-    if (mimeData->hasHtml()) {
-        const bool htmlImageLike = shouldTreatHtmlPayloadAsImage(mimeData, normalizedText);
-        if (htmlImageLike) {
-            return shouldTreatOfficePayloadAsType(traits) ? Office : Image;
-        }
-        QString text = normalizedText.trimmed();
-        if (!text.contains(QLatin1Char('\n'))
-            && (text.startsWith(QStringLiteral("http://")) || text.startsWith(QStringLiteral("https://")))) {
-            return Link;
-        }
-        return RichText;
-    }
-
-    if (hasDecodableImage(mimeData)) {
-        return shouldTreatOfficePayloadAsType(traits) ? Office : Image;
-    }
-
-    if (shouldTreatOfficePayloadAsType(traits)) {
-        return Office;
-    }
-
-    return Text;
+    return classify(mimeData, normalizedText, normalizedUrls, FullClassification);
 }
 
 } // namespace ContentClassifier

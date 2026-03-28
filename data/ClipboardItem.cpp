@@ -291,14 +291,13 @@ QPixmap ClipboardItem::getImage() const {
         return thumbnail_;
     }
 
-    if (imageCacheInitialized_) {
-        return imageCache_;
+    if (imageCache_) {
+        return *imageCache_;
     }
 
     if (!mimeData_) {
         imageCache_ = QPixmap();
-        imageCacheInitialized_ = true;
-        return imageCache_;
+        return *imageCache_;
     }
 
     const QStringList formats = mimeData_->formats();
@@ -308,8 +307,7 @@ QPixmap ClipboardItem::getImage() const {
             QByteArray data = mimeData_->data(format);
             if (!data.isEmpty() && pixmap.loadFromData(data)) {
                 imageCache_ = pixmap;
-                imageCacheInitialized_ = true;
-                return imageCache_;
+                return *imageCache_;
             }
         }
     }
@@ -320,8 +318,7 @@ QPixmap ClipboardItem::getImage() const {
             QByteArray data = mimeData_->data(format);
             if (!data.isEmpty() && pixmap.loadFromData(data)) {
                 imageCache_ = pixmap;
-                imageCacheInitialized_ = true;
-                return imageCache_;
+                return *imageCache_;
             }
         }
     }
@@ -335,8 +332,7 @@ QPixmap ClipboardItem::getImage() const {
         const QByteArray data = mimeData_->data(format);
         if (!data.isEmpty() && pixmap.loadFromData(data)) {
             imageCache_ = pixmap;
-            imageCacheInitialized_ = true;
-            return imageCache_;
+            return *imageCache_;
         }
     }
 
@@ -345,22 +341,19 @@ QPixmap ClipboardItem::getImage() const {
         QPixmap pixmap = qvariant_cast<QPixmap>(imageData);
         if (!pixmap.isNull()) {
             imageCache_ = pixmap;
-            imageCacheInitialized_ = true;
-            return imageCache_;
+            return *imageCache_;
         }
     }
     if (imageData.canConvert<QImage>()) {
         QImage img = qvariant_cast<QImage>(imageData);
         if (!img.isNull()) {
             imageCache_ = QPixmap::fromImage(img);
-            imageCacheInitialized_ = true;
-            return imageCache_;
+            return *imageCache_;
         }
     }
 
     imageCache_ = QPixmap();
-    imageCacheInitialized_ = true;
-    return imageCache_;
+    return *imageCache_;
 }
 
 // --- Fast image payload extraction (instance method) ---
@@ -419,8 +412,8 @@ bool ClipboardItem::operator==(const ClipboardItem &other) const {
     }
     if (!mimeData_ || !other.mimeData_) {
         // When either item is light-loaded (no MIME data), compare via fingerprint
-        if (fingerprintCacheInitialized_ && other.fingerprintCacheInitialized_) {
-            return fingerprintCache_ == other.fingerprintCache_;
+        if (fingerprintCache_ && other.fingerprintCache_) {
+            return *fingerprintCache_ == *other.fingerprintCache_;
         }
         if (!mimeDataLoaded_ || !other.mimeDataLoaded_) {
             return fingerprint() == other.fingerprint();
@@ -513,20 +506,16 @@ ClipboardItem::ClipboardItem(const ClipboardItem &other) : icon_(other.icon_) {
     pinned_ = other.pinned_;
     icon_ = other.icon_;
     fingerprintCache_ = other.fingerprintCache_;
-    fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
     searchableTextCache_ = other.searchableTextCache_;
-    searchableTextCacheInitialized_ = other.searchableTextCacheInitialized_;
     normalizedUrlsCache_ = other.normalizedUrlsCache_;
-    normalizedUrlsCacheInitialized_ = other.normalizedUrlsCacheInitialized_;
     imageCache_ = other.imageCache_;
-    imageCacheInitialized_ = other.imageCacheInitialized_;
     imageSizeCache_ = other.imageSizeCache_;
-    imageSizeCacheInitialized_ = other.imageSizeCacheInitialized_;
     thumbnail_ = other.thumbnail_;
     thumbnailAvailableHint_ = other.thumbnailAvailableHint_;
     sourceFilePath_ = other.sourceFilePath_;
     mimeDataFileOffset_ = other.mimeDataFileOffset_;
     mimeDataLoaded_ = other.mimeDataLoaded_;
+    mimeDataLoader_ = other.mimeDataLoader_;
     cachedContentType_ = other.cachedContentType_;
     cachedPreviewKind_ = other.cachedPreviewKind_;
     cachedNormalizedText_ = other.cachedNormalizedText_;
@@ -546,20 +535,16 @@ ClipboardItem& ClipboardItem::operator=(const ClipboardItem &other) {
         pinned_ = other.pinned_;
         icon_ = other.icon_;
         fingerprintCache_ = other.fingerprintCache_;
-        fingerprintCacheInitialized_ = other.fingerprintCacheInitialized_;
         searchableTextCache_ = other.searchableTextCache_;
-        searchableTextCacheInitialized_ = other.searchableTextCacheInitialized_;
         normalizedUrlsCache_ = other.normalizedUrlsCache_;
-        normalizedUrlsCacheInitialized_ = other.normalizedUrlsCacheInitialized_;
         imageCache_ = other.imageCache_;
-        imageCacheInitialized_ = other.imageCacheInitialized_;
         imageSizeCache_ = other.imageSizeCache_;
-        imageSizeCacheInitialized_ = other.imageSizeCacheInitialized_;
         thumbnail_ = other.thumbnail_;
         thumbnailAvailableHint_ = other.thumbnailAvailableHint_;
         sourceFilePath_ = other.sourceFilePath_;
         mimeDataFileOffset_ = other.mimeDataFileOffset_;
         mimeDataLoaded_ = other.mimeDataLoaded_;
+        mimeDataLoader_ = other.mimeDataLoader_;
         cachedContentType_ = other.cachedContentType_;
         cachedPreviewKind_ = other.cachedPreviewKind_;
         cachedNormalizedText_ = other.cachedNormalizedText_;
@@ -665,12 +650,11 @@ bool ClipboardItem::contains(const QString &keyword) const {
         return false;
     }
 
-    if (!searchableTextCacheInitialized_) {
+    if (!searchableTextCache_) {
         searchableTextCache_ = buildSearchableText();
-        searchableTextCacheInitialized_ = true;
     }
 
-    return searchableTextCache_.contains(lower);
+    return searchableTextCache_->contains(lower);
 }
 
 // --- HTML helpers ---

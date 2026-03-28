@@ -3,6 +3,43 @@
 // pos: utils layer board service.
 // update: If I change, update this header block and my folder README.md.
 // note: Adds async thumbnail fetch for on-demand UI loading with bounded worker concurrency.
+//
+// Threading model
+// ---------------
+// Main-thread-only methods (called from the GUI/event-loop thread):
+//   - All public API methods except where noted below.
+//   - All slots (continueDeferredLoad, handleDeferredBatchRead).
+//   - All private helpers that mutate indexedItems_, indexedFilePaths_,
+//     pendingLoadFilePaths_, deferredLoadedItems_, and totalItemCount_.
+//
+// Worker-thread lambdas (run on QThread or QThreadPool):
+//   - startAsyncLoad:            Builds a LOCAL IndexedItemMeta list from disk;
+//                                does NOT read indexedItems_ or indexedFilePaths_.
+//   - startAsyncKeywordSearch:   Operates on a copied candidate list; does NOT
+//                                read service fields.
+//   - startRawReadBatch:         Reads files from a copied path list; does NOT
+//                                read service fields.
+//   - processPendingItemAsync:   Captures item data by value before dispatch.
+//                                Reads failedFullLoadPaths_ (race-benign hint)
+//                                and calls filePathForItem (reads const category_).
+//   - requestThumbnailAsync:     Same pattern as processPendingItemAsync.
+//
+// Fields accessed from worker threads:
+//   - category_ (immutable after construction -- safe).
+//   - failedFullLoadPaths_ (read from workers, written on main thread via
+//     invokeMethod callback -- benign race, worst case is a redundant rebuild).
+//
+// Cross-thread communication:
+//   All worker lambdas capture a QPointer<ClipboardBoardService> guard and
+//   deliver results back to the main thread via QMetaObject::invokeMethod
+//   with Qt::QueuedConnection.  The guard is checked both before posting and
+//   inside the queued callback to handle service destruction.
+//
+// indexLock_ (QReadWriteLock):
+//   Provided for future use if worker threads ever need direct read access to
+//   indexedItems_ / indexedFilePaths_.  Currently no worker reads these fields
+//   so no lock acquisitions are present -- all mutations and reads happen on
+//   the main thread.
 #ifndef MPASTE_CLIPBOARD_BOARD_SERVICE_H
 #define MPASTE_CLIPBOARD_BOARD_SERVICE_H
 
@@ -15,6 +52,7 @@
 #include <QStringList>
 #include <QObject>
 #include <QPixmap>
+#include <QReadWriteLock>
 
 #include <memory>
 #include <functional>
@@ -155,6 +193,7 @@ private:
     QList<QThread *> processingThreads_;
     std::unique_ptr<QThreadPool> thumbnailTaskPool_;
     QSet<QString> failedFullLoadPaths_;
+    mutable QReadWriteLock indexLock_;
     QList<IndexedItemMeta> indexedItems_;
     QStringList indexedFilePaths_;
     QStringList pendingLoadFilePaths_;

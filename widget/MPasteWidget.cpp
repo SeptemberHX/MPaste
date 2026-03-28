@@ -4,11 +4,8 @@
 // update: If I change, update this header block and my folder README.md.
 // note: Added theme application, dark mode propagation, tray menu theming, robust paste rehydration, and alias sync.
 #include <QScrollBar>
-#include <QClipboard>
 #include <QKeyEvent>
 #include <QResizeEvent>
-#include <QAudioDevice>
-#include <QAudioOutput>
 #include <QDateTime>
 #include <QDir>
 #include <QDebug>
@@ -33,12 +30,14 @@
 #include <QStyle>
 #include <QStyleFactory>
 #include "utils/MPasteSettings.h"
-#include "utils/ClipboardExportService.h"
 #include "utils/ThemeManager.h"
 #include "utils/IconResolver.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
 #include "BoardInternalHelpers.h"
+#include "CopySoundPlayer.h"
+#include "SyncWatcher.h"
+#include "ClipboardPasteController.h"
 #include "utils/PlatformRelated.h"
 #include "data/LocalSaver.h"
 #ifdef Q_OS_WIN
@@ -767,8 +766,12 @@ void MPasteWidget::initSearchAnimations() {
 
 void MPasteWidget::initClipboard() {
     clipboard_.monitor = new ClipboardMonitor();
-    clipboard_.isPasting = false;
     clipboard_.copiedWhenHide = false;
+
+    pasteController_ = new ClipboardPasteController(clipboard_.monitor, this);
+    connect(pasteController_, &ClipboardPasteController::pastingFinished, this, [this]() {
+        // pastingFinished is emitted after the isPasting flag is cleared internally
+    });
 }
 
 void MPasteWidget::initShortcuts() {
@@ -778,37 +781,10 @@ void MPasteWidget::initShortcuts() {
 }
 
 void MPasteWidget::initSound() {
-    rebuildSoundPlaybackChain(QMediaDevices::defaultAudioOutput());
-}
-
-void MPasteWidget::rebuildSoundPlaybackChain(const QAudioDevice &device) {
-    if (misc_.player) {
-        misc_.player->stop();
-        misc_.player->setAudioOutput(nullptr);
-        delete misc_.player;
-        misc_.player = nullptr;
-    }
-
-    if (misc_.audioOutput) {
-        delete misc_.audioOutput;
-        misc_.audioOutput = nullptr;
-    }
-
-    misc_.player = new QMediaPlayer(this);
-    misc_.audioOutput = new QAudioOutput(this);
-    misc_.audioOutput->setDevice(device);
-    misc_.player->setAudioOutput(misc_.audioOutput);
-    misc_.player->setSource(QUrl(QStringLiteral("qrc:/resources/resources/sound.mp3")));
-}
-
-void MPasteWidget::syncSoundOutputDevice() {
-    const QAudioDevice defaultDevice = QMediaDevices::defaultAudioOutput();
-    if (misc_.player && misc_.audioOutput
-        && misc_.audioOutput->device().id() == defaultDevice.id()) {
-        return;
-    }
-
-    rebuildSoundPlaybackChain(defaultDevice);
+    copySoundPlayer_ = new CopySoundPlayer(
+        MPasteSettings::getInst()->isPlaySound(),
+        QUrl(QStringLiteral("qrc:/resources/resources/sound.mp3")),
+        this);
 }
 
 void MPasteWidget::initSystemTray() {
@@ -930,14 +906,14 @@ void MPasteWidget::setupConnections() {
     for (auto *boardWidget : ui_.boardWidgetMap.values()) {
         connect(boardWidget, &ScrollItemsWidget::doubleClicked,
         this, [this](const ClipboardItem &item) {
-            if (this->setClipboard(item)) {
+            if (pasteController_->setClipboard(item)) {
                 this->hideAndPaste();
             }
         });
 
         connect(boardWidget, &ScrollItemsWidget::plainTextPasteRequested,
         this, [this](const ClipboardItem &item) {
-            if (this->setClipboard(item, true)) {
+            if (pasteController_->setClipboard(item, true)) {
                 this->hideAndPaste();
             }
         });
@@ -995,7 +971,9 @@ void MPasteWidget::setupConnections() {
             }
         });
         connect(boardWidget, &ScrollItemsWidget::localPersistenceChanged, this, [this]() {
-            sync_.suppressReloadUntilMs = QDateTime::currentMSecsSinceEpoch() + 800;
+            if (syncWatcher_) {
+                syncWatcher_->suppressReloadUntil(QDateTime::currentMSecsSinceEpoch() + 800);
+            }
         });
     }
 
@@ -1057,51 +1035,22 @@ void MPasteWidget::setupConnections() {
         });
 }
 
-void MPasteWidget::playCopySoundIfNeeded(int wId, const QByteArray &fingerprint) {
-    if (!MPasteSettings::getInst()->isPlaySound()) {
-        qInfo() << "[clipboard-widget] play sound disabled";
-        return;
-    }
-
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (now - misc_.lastSoundPlayAtMs < SOUND_BURST_WINDOW_MS) {
-        qInfo().noquote() << QStringLiteral("[clipboard-widget] suppress sound by burst window wId=%1 fp=%2 deltaMs=%3")
-            .arg(wId)
-            .arg(fingerprint.isEmpty() ? QStringLiteral("-") : QString::fromLatin1(fingerprint.toHex().left(12)))
-            .arg(now - misc_.lastSoundPlayAtMs);
-        return;
-    }
-
-    syncSoundOutputDevice();
-    if (misc_.player->mediaStatus() == QMediaPlayer::EndOfMedia) {
-        misc_.player->setPosition(0);
-    }
-    if (misc_.player->playbackState() == QMediaPlayer::PlayingState) {
-        misc_.player->stop();
-    }
-    misc_.player->play();
-    misc_.lastSoundPlayAtMs = now;
-    qInfo().noquote() << QStringLiteral("[clipboard-widget] play copy sound wId=%1 fp=%2")
-        .arg(wId)
-        .arg(fingerprint.isEmpty() ? QStringLiteral("-") : QString::fromLatin1(fingerprint.toHex().left(12)));
-}
+// Sound playback is now delegated to copySoundPlayer_.
 
 void MPasteWidget::clipboardActivityObserved(int wId) {
-    if (clipboard_.isPasting) {
+    if (pasteController_->isPasting()) {
         return;
     }
-    playCopySoundIfNeeded(wId);
+    copySoundPlayer_->playCopySoundIfNeeded(wId);
 }
 
 void MPasteWidget::clipboardUpdated(const ClipboardItem &nItem, int wId) {
-    if (!clipboard_.isPasting) {
-        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!pasteController_->isPasting()) {
         const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
-        qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated wId=%1 isPasting=%2 added=%3 sinceLastSoundMs=%4 %5")
+        qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated wId=%1 isPasting=%2 added=%3 %4")
             .arg(wId)
-            .arg(clipboard_.isPasting)
+            .arg(pasteController_->isPasting())
             .arg(added)
-            .arg(now - misc_.lastSoundPlayAtMs)
             .arg(widgetItemSummary(nItem));
 
         if (added) {
@@ -1110,158 +1059,7 @@ void MPasteWidget::clipboardUpdated(const ClipboardItem &nItem, int wId) {
     }
 }
 
-QMimeData *MPasteWidget::createPlainTextMimeData(const ClipboardItem &item) const {
-    QString plainText;
-    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
-
-    if (item.getContentType() == File && !normalizedUrls.isEmpty()) {
-        QStringList urls;
-        for (const QUrl &url : normalizedUrls) {
-            urls << (url.isLocalFile() ? url.toLocalFile() : url.toString());
-        }
-        plainText = urls.join(QLatin1Char('\n'));
-    }
-
-    if (plainText.isEmpty()) {
-        plainText = item.getNormalizedText();
-    }
-
-    if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasHtml()) {
-        plainText = item.getHtml();
-        static const QRegularExpression tagRe(QStringLiteral("<[^>]*>"));
-        plainText.replace(tagRe, QString());
-        plainText = plainText.trimmed();
-    }
-
-    if (plainText.isEmpty() && !normalizedUrls.isEmpty()) {
-        QStringList urls;
-        for (const QUrl &url : normalizedUrls) {
-            urls << (url.isLocalFile() ? url.toLocalFile() : url.toString());
-        }
-        plainText = urls.join(QLatin1Char('\n'));
-    }
-
-    if (plainText.isEmpty() && item.getMimeData() && item.getMimeData()->hasColor()) {
-        plainText = item.getColor().name(QColor::HexRgb);
-    }
-
-    if (plainText.isEmpty()) {
-        return nullptr;
-    }
-
-    auto *mimeData = new QMimeData;
-    mimeData->setText(plainText);
-    mimeData->setData("text/plain;charset=utf-8", plainText.toUtf8());
-    return mimeData;
-}
-
-bool MPasteWidget::setClipboard(const ClipboardItem &item, bool plainText) {
-    qInfo().noquote() << QStringLiteral("[clipboard-widget] setClipboard begin plainText=%1 %2")
-        .arg(plainText)
-        .arg(widgetItemSummary(item));
-    clipboard_.monitor->disconnectMonitor();
-
-    QMimeData *mimeData = plainText ? createPlainTextMimeData(item)
-                                    : ClipboardExportService::buildMimeData(item);
-    if (!mimeData && !plainText) {
-        const ClipboardItem rehydrated = rehydrateClipboardItem(item);
-        if (!rehydrated.getName().isEmpty()) {
-            mimeData = ClipboardExportService::buildMimeData(rehydrated);
-            if (!mimeData) {
-                mimeData = createPlainTextMimeData(rehydrated);
-            }
-        }
-    }
-    if (mimeData) {
-        bool hasPayload = false;
-        if (mimeData->hasText() && !mimeData->text().isEmpty()) {
-            hasPayload = true;
-        } else if (mimeData->hasHtml() && !mimeData->html().isEmpty()) {
-            hasPayload = true;
-        } else if (mimeData->hasUrls() && !mimeData->urls().isEmpty()) {
-            hasPayload = true;
-        } else if (mimeData->hasColor()) {
-            hasPayload = true;
-        } else if (mimeData->hasImage()) {
-            const QVariant imageData = mimeData->imageData();
-            hasPayload = imageData.isValid() && !imageData.isNull();
-        } else {
-            for (const QString &format : mimeData->formats()) {
-                if (!mimeData->data(format).isEmpty()) {
-                    hasPayload = true;
-                    break;
-                }
-            }
-        }
-
-        if (!hasPayload) {
-            delete mimeData;
-            mimeData = createPlainTextMimeData(item);
-        }
-    }
-    if (mimeData && !plainText) {
-        const QString normalizedText = item.getNormalizedText();
-        const bool hasText = mimeData->hasText() && !mimeData->text().isEmpty();
-        const bool hasHtml = mimeData->hasHtml() && !mimeData->html().isEmpty();
-        const bool hasUrls = mimeData->hasUrls() && !mimeData->urls().isEmpty();
-        if (!normalizedText.isEmpty() && !hasText && !hasHtml && !hasUrls) {
-            mimeData->setText(normalizedText);
-            mimeData->setData("text/plain;charset=utf-8", normalizedText.toUtf8());
-        }
-    }
-    if (!mimeData) {
-        qInfo() << "[clipboard-widget] setClipboard aborted: no mimeData";
-        clipboard_.monitor->connectMonitor();
-        return false;
-    }
-
-    if (!plainText && item.getContentType() == File) {
-        handleUrlsClipboard(mimeData, item);
-    }
-
-    QGuiApplication::clipboard()->setMimeData(mimeData);
-    qInfo() << "[clipboard-widget] setClipboard wrote system clipboard";
-    QTimer::singleShot(200, this, [this]() {
-        qInfo() << "[clipboard-widget] reconnect monitor after self clipboard write";
-        clipboard_.monitor->connectMonitor();
-    });
-    return true;
-}
-void MPasteWidget::handleUrlsClipboard(QMimeData *mimeData, const ClipboardItem &item) {
-    if (!mimeData) {
-        return;
-    }
-
-    const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
-    if (normalizedUrls.isEmpty()) {
-        return;
-    }
-
-    bool files = true;
-    for (const QUrl &url : normalizedUrls) {
-        if (!url.isLocalFile() || !QFileInfo::exists(url.toLocalFile())) {
-            files = false;
-            break;
-        }
-    }
-
-    if (files) {
-        QByteArray nautilus("x-special/nautilus-clipboard\n");
-        QByteArray byteArray("copy\n");
-        QStringList plainTextLines;
-        for (const QUrl &url : normalizedUrls) {
-            byteArray.append(url.toEncoded()).append('\n');
-            plainTextLines << url.toLocalFile();
-        }
-        mimeData->setData("x-special/gnome-copied-files", byteArray);
-        nautilus.append(byteArray);
-        mimeData->setData("COMPOUND_TEXT", nautilus);
-        const QString plainText = plainTextLines.join(QLatin1Char('\n'));
-        mimeData->setText(plainText);
-        mimeData->setData("text/plain;charset=utf-8", plainText.toUtf8());
-    }
-    mimeData->setUrls(normalizedUrls);
-}
+// Clipboard write and URL handling are now delegated to pasteController_.
 void MPasteWidget::handleKeyboardEvent(QKeyEvent *event) {
     switch (event->key()) {
         case Qt::Key_Escape:
@@ -1325,7 +1123,7 @@ void MPasteWidget::handleEnterKey(bool plainText) {
 
     auto *board = currItemsWidget();
     const ClipboardItem *selectedItem = board->selectedByEnter();
-    if (selectedItem && setClipboard(*selectedItem, plainText)) {
+    if (selectedItem && pasteController_->setClipboard(*selectedItem, plainText)) {
         hideAndPaste();
         board->moveSelectedToFirst();
     }
@@ -1357,7 +1155,7 @@ bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
 
     auto *board = currItemsWidget();
     const ClipboardItem *selectedItem = board->selectedByShortcut(shortcutIndex);
-    if (!selectedItem || !setClipboard(*selectedItem, plainText)) {
+    if (!selectedItem || !pasteController_->setClipboard(*selectedItem, plainText)) {
         return false;
     }
 
@@ -1541,13 +1339,8 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     activateWindow();
     raise();
     setFocus();
-    if (sync_.pendingReload) {
-        sync_.pendingReload = false;
-        // If write generations changed since the pending flag was set,
-        // the directory change was caused by our own async saves — skip.
-        if (currentWriteGeneration() == sync_.pendingWriteGen) {
-            syncHistoryBoardsIncremental();
-        }
+    if (syncWatcher_ && syncWatcher_->checkPendingReload()) {
+        syncHistoryBoardsIncremental();
     }
 }
 
@@ -1566,76 +1359,27 @@ void MPasteWidget::setupSyncWatcher() {
         return;
     }
 
-    if (!sync_.watcher) {
-        sync_.watcher = new QFileSystemWatcher(this);
-        connect(sync_.watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
-            scheduleSyncReload();
-        });
-    }
-
-    if (!sync_.reloadTimer) {
-        sync_.reloadTimer = new QTimer(this);
-        sync_.reloadTimer->setSingleShot(true);
-        sync_.reloadTimer->setInterval(400);
-        connect(sync_.reloadTimer, &QTimer::timeout, this, [this]() {
+    if (!syncWatcher_) {
+        syncWatcher_ = new SyncWatcher(this);
+        connect(syncWatcher_, &SyncWatcher::syncRequested, this, [this]() {
             if (!isVisible()) {
-                sync_.pendingReload = true;
+                syncWatcher_->setPendingReload();
                 return;
             }
             syncHistoryBoardsIncremental();
         });
     }
 
-    QDir().mkpath(rootDir);
-    const QStringList watchDirs = {
-        rootDir,
+    // Provide board services so internal-write detection works.
+    syncWatcher_->setBoardServices(
+        ui_.clipboardWidget ? ui_.clipboardWidget->boardServiceRef() : nullptr,
+        ui_.staredWidget ? ui_.staredWidget->boardServiceRef() : nullptr);
+
+    const QStringList categoryDirs = {
         QDir::cleanPath(rootDir + QDir::separator() + MPasteSettings::CLIPBOARD_CATEGORY_NAME),
         QDir::cleanPath(rootDir + QDir::separator() + MPasteSettings::STAR_CATEGORY_NAME)
     };
-    for (const QString &dir : watchDirs) {
-        QDir().mkpath(dir);
-    }
-
-    const QStringList existing = sync_.watcher->directories();
-    if (!existing.isEmpty()) {
-        sync_.watcher->removePaths(existing);
-    }
-    sync_.watcher->addPaths(watchDirs);
-}
-
-quint64 MPasteWidget::currentWriteGeneration() const {
-    quint64 gen = 0;
-    if (ui_.clipboardWidget && ui_.clipboardWidget->boardServiceRef()) {
-        gen += ui_.clipboardWidget->boardServiceRef()->internalWriteGeneration();
-    }
-    if (ui_.staredWidget && ui_.staredWidget->boardServiceRef()) {
-        gen += ui_.staredWidget->boardServiceRef()->internalWriteGeneration();
-    }
-    return gen;
-}
-
-void MPasteWidget::scheduleSyncReload() {
-    if (!sync_.reloadTimer) {
-        return;
-    }
-    // Ignore directory changes caused by our own file writes.  Each board
-    // service tracks its last write timestamp; if any service wrote recently,
-    // this change is internal, not an external sync event.
-    if ((ui_.clipboardWidget && ui_.clipboardWidget->boardServiceRef()
-            && ui_.clipboardWidget->boardServiceRef()->hasRecentInternalWrite())
-        || (ui_.staredWidget && ui_.staredWidget->boardServiceRef()
-            && ui_.staredWidget->boardServiceRef()->hasRecentInternalWrite())) {
-        return;
-    }
-    if (!isVisible()) {
-        // Only mark pending when the change is genuinely external.
-        // Snapshot current write generations so we can tell on show
-        // whether this was actually caused by our own async writes.
-        sync_.pendingReload = true;
-        sync_.pendingWriteGen = currentWriteGeneration();
-        return;
-    }
-    sync_.reloadTimer->start();
+    syncWatcher_->setup(rootDir, categoryDirs);
 }
 
 void MPasteWidget::loadFromSaveDir() {
@@ -1871,50 +1615,7 @@ void MPasteWidget::hideAndPaste() {
 
     hide();
 
-    if (!MPasteSettings::getInst()->isAutoPaste()) {
-        return;
-    }
-
-    clipboard_.isPasting = true;
-
-    auto finishPaste = [this]() {
-        PlatformRelated::triggerPasteShortcut(MPasteSettings::getInst()->getPasteShortcutMode());
-        QTimer::singleShot(200, this, [this]() {
-            clipboard_.isPasting = false;
-        });
-    };
-
-    auto restoreFocusAndPaste = [this, previousWId, finishPaste]() {
-        if (previousWId) {
-            PlatformRelated::activateWindow(previousWId);
-            QTimer::singleShot(100, this, finishPaste);
-            return;
-        }
-
-        QTimer::singleShot(0, this, finishPaste);
-    };
-
-#ifdef Q_OS_WIN
-    auto *altReleaseTimer = new QTimer(this);
-    auto *pollCount = new int(0);
-    altReleaseTimer->setInterval(10);
-    connect(altReleaseTimer, &QTimer::timeout, this, [altReleaseTimer, pollCount, restoreFocusAndPaste]() {
-        const bool altReleased = (GetAsyncKeyState(VK_MENU) & 0x8000) == 0;
-        const bool timedOut = *pollCount >= 50;
-        if (altReleased || timedOut) {
-            altReleaseTimer->stop();
-            altReleaseTimer->deleteLater();
-            delete pollCount;
-            restoreFocusAndPaste();
-            return;
-        }
-
-        ++(*pollCount);
-    });
-    altReleaseTimer->start();
-#else
-    restoreFocusAndPaste();
-#endif
+    pasteController_->pasteToTarget(previousWId);
 }
 void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == isVisible()) return;

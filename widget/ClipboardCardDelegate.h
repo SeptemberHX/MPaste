@@ -23,6 +23,7 @@
 #include <QUrl>
 
 #include "data/ClipboardItem.h"
+#include "CardTheme.h"
 #include "ClipboardBoardModel.h"
 
 class CardBodyRenderer;
@@ -57,6 +58,7 @@ public:
     explicit ClipboardCardDelegate(const QColor &borderColor, QObject *parent = nullptr);
     ~ClipboardCardDelegate() override;
 
+    const CardTheme &cachedTheme() const { return cachedTheme_; }
     void setLoadingPhase(int phase);
     void clearIntermediateCaches();
     void clearVisualCaches();
@@ -107,6 +109,7 @@ private:
     void enqueueFileIconRequest(const FileIconRequest &request) const;
     void scheduleViewportUpdate(const QPersistentModelIndex &index) const;
 
+    CardTheme cachedTheme_;
     QColor borderColor_;
     int loadingPhase_ = 0;
     mutable QHash<quint64, QColor> headerColorCache_;

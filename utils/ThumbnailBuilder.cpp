@@ -51,7 +51,6 @@ QString richTextThumbnailStyleSheet() {
         "body * {"
         " margin: 0 !important;"
         " max-width: 100% !important;"
-        " white-space: normal !important;"
         " overflow-wrap: anywhere !important;"
         " word-wrap: break-word !important;"
         " word-break: break-word !important;"
@@ -136,6 +135,10 @@ QString simplifyHtmlForRendering(const QString &html) {
                     tagStr.replace(remoteSrc, QString());
                     result += tagStr;
                 }
+            } else if (html[i + 1] != QLatin1Char('/')) {
+                // Dropped block-level tags (e.g. custom web components)
+                // are replaced with <br> to preserve visual line breaks.
+                result += QStringLiteral("<br>");
             }
             i = tagEnd + 1;
         } else {
