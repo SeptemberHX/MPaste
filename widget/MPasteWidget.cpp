@@ -454,7 +454,7 @@ void MPasteWidget::initUI() {
     ui_.pageComboBox->setMinimumContentsLength(2);
     ui_.pageComboBox->addItem(QStringLiteral("1"), 1);
     ui_.pageComboBox->setCurrentIndex(0);
-    ui_.pageComboBox->setFixedWidth(38);
+    ui_.pageComboBox->setFixedWidth(48);
 
     ui_.pageTotalLabel = new QLabel(QStringLiteral("/ 1"), ui_.pageSelectorWidget);
     ui_.pageTotalLabel->setAlignment(Qt::AlignCenter);
@@ -863,7 +863,7 @@ void MPasteWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
 
 #ifdef Q_OS_WIN
-    const QColor tint = darkTheme_ ? QColor(12, 18, 26, 48) : QColor(231, 241, 244, 20);
+    const QColor tint = darkTheme_ ? QColor(30, 40, 55, 18) : QColor(231, 241, 244, 20);
     enableBlurBehind((HWND)winId(), tint);
 #endif
 
@@ -1304,31 +1304,50 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    const qreal bw = 3.0;
     const qreal radius = 10.0;
-    QRectF r = QRectF(rect()).adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
+    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
 
-    QPainterPath path;
-    path.addRoundedRect(r, radius, radius);
-
-    // Gradient border
-    QConicalGradient grad(r.center(), 135);
-    grad.setColorAt(0.00, QColor("#4A90E2"));
-    grad.setColorAt(0.25, QColor("#1abc9c"));
-    grad.setColorAt(0.50, QColor("#fc9867"));
-    grad.setColorAt(0.75, QColor("#9B59B6"));
-    grad.setColorAt(1.00, QColor("#4A90E2"));
-
-    p.setPen(QPen(QBrush(grad), bw));
-
-    // Clear to transparent first so DWM glass/acrylic shows through
+    // Clear to transparent so DWM acrylic shows through
     p.setCompositionMode(QPainter::CompositionMode_Clear);
     p.fillRect(rect(), Qt::transparent);
     p.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
-    // Light tint overlay on top of the acrylic blur
-    p.setBrush(Qt::NoBrush);
-    p.drawPath(path);
+    if (darkTheme_) {
+        // Glass edge - thin luminous white border
+        QPen glassPen(QColor(255, 255, 255, 40), 1.5);
+        p.setPen(glassPen);
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r, radius, radius);
+
+        // Specular highlight arc at top
+        QLinearGradient specular(r.topLeft(), QPointF(r.left(), r.top() + r.height() * 0.15));
+        specular.setColorAt(0.0, QColor(255, 255, 255, 18));
+        specular.setColorAt(1.0, QColor(255, 255, 255, 0));
+        QPainterPath topClip;
+        topClip.addRoundedRect(r.adjusted(1.5, 1.5, -1.5, 0), radius - 1, radius - 1);
+        p.setClipPath(topClip);
+        p.fillRect(QRectF(r.left(), r.top(), r.width(), r.height() * 0.15), specular);
+        p.setClipping(false);
+
+        // Inner edge glow
+        QPen innerGlow(QColor(255, 255, 255, 20), 0.5);
+        p.setPen(innerGlow);
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r.adjusted(2, 2, -2, -2), radius - 1.5, radius - 1.5);
+    } else {
+        // Light: gradient border (original style)
+        const qreal bw = 3.0;
+        QRectF rb = QRectF(rect()).adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
+        QConicalGradient grad(rb.center(), 135);
+        grad.setColorAt(0.00, QColor("#4A90E2"));
+        grad.setColorAt(0.25, QColor("#1abc9c"));
+        grad.setColorAt(0.50, QColor("#fc9867"));
+        grad.setColorAt(0.75, QColor("#9B59B6"));
+        grad.setColorAt(1.00, QColor("#4A90E2"));
+        p.setPen(QPen(QBrush(grad), bw));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(rb, radius, radius);
+    }
 }
 
 void MPasteWidget::showEvent(QShowEvent *event) {

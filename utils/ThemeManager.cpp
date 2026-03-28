@@ -146,6 +146,19 @@ QHash<QString, QString> ThemeManager::themeTokens(bool dark) const {
         tokens.insert(QStringLiteral("menu_selected_text"), QStringLiteral("#FFFFFF"));
         tokens.insert(QStringLiteral("tooltip_bg"), QStringLiteral("#1E232B"));
         tokens.insert(QStringLiteral("tooltip_border"), QStringLiteral("#2C3440"));
+        // Glass tab/filter tokens (dark)
+        tokens.insert(QStringLiteral("glass_tab_bg"), QStringLiteral("rgba(255, 255, 255, 18)"));
+        tokens.insert(QStringLiteral("glass_tab_border"), QStringLiteral("rgba(255, 255, 255, 30)"));
+        tokens.insert(QStringLiteral("glass_tab_hover_bg"), QStringLiteral("rgba(255, 255, 255, 30)"));
+        tokens.insert(QStringLiteral("glass_tab_hover_border"), QStringLiteral("rgba(255, 255, 255, 42)"));
+        tokens.insert(QStringLiteral("glass_tab_checked_bg"), QStringLiteral("rgba(255, 255, 255, 36)"));
+        tokens.insert(QStringLiteral("glass_tab_checked_border"), QStringLiteral("rgba(255, 255, 255, 50)"));
+        tokens.insert(QStringLiteral("glass_filter_bg"), QStringLiteral("rgba(255, 255, 255, 14)"));
+        tokens.insert(QStringLiteral("glass_filter_border"), QStringLiteral("rgba(255, 255, 255, 24)"));
+        tokens.insert(QStringLiteral("glass_filter_hover_bg"), QStringLiteral("rgba(255, 255, 255, 26)"));
+        tokens.insert(QStringLiteral("glass_filter_hover_border"), QStringLiteral("rgba(255, 255, 255, 36)"));
+        tokens.insert(QStringLiteral("glass_filter_checked_bg"), QStringLiteral("rgba(255, 255, 255, 32)"));
+        tokens.insert(QStringLiteral("glass_filter_checked_border"), QStringLiteral("rgba(255, 255, 255, 46)"));
     } else {
         tokens.insert(QStringLiteral("text_primary"), QStringLiteral("#2C3E50"));
         tokens.insert(QStringLiteral("text_secondary"), QStringLiteral("#556270"));
@@ -170,6 +183,19 @@ QHash<QString, QString> ThemeManager::themeTokens(bool dark) const {
         tokens.insert(QStringLiteral("menu_selected_text"), QStringLiteral("#1A1A1A"));
         tokens.insert(QStringLiteral("tooltip_bg"), QStringLiteral("#FFFFFF"));
         tokens.insert(QStringLiteral("tooltip_border"), QStringLiteral("#E0E0E0"));
+        // Glass tab/filter tokens (light) — keep original opaque style
+        tokens.insert(QStringLiteral("glass_tab_bg"), QStringLiteral("transparent"));
+        tokens.insert(QStringLiteral("glass_tab_border"), QStringLiteral("transparent"));
+        tokens.insert(QStringLiteral("glass_tab_hover_bg"), QStringLiteral("rgba(255, 255, 255, 200)"));
+        tokens.insert(QStringLiteral("glass_tab_hover_border"), QStringLiteral("transparent"));
+        tokens.insert(QStringLiteral("glass_tab_checked_bg"), QStringLiteral("rgba(255, 255, 255, 242)"));
+        tokens.insert(QStringLiteral("glass_tab_checked_border"), QStringLiteral("#4A90E2"));
+        tokens.insert(QStringLiteral("glass_filter_bg"), QStringLiteral("transparent"));
+        tokens.insert(QStringLiteral("glass_filter_border"), QStringLiteral("transparent"));
+        tokens.insert(QStringLiteral("glass_filter_hover_bg"), QStringLiteral("rgba(255, 255, 255, 200)"));
+        tokens.insert(QStringLiteral("glass_filter_hover_border"), QStringLiteral("transparent"));
+        tokens.insert(QStringLiteral("glass_filter_checked_bg"), QStringLiteral("rgba(255, 255, 255, 242)"));
+        tokens.insert(QStringLiteral("glass_filter_checked_border"), QStringLiteral("#4A90E2"));
     }
 
     return tokens;
