@@ -57,7 +57,36 @@ QToolButton#countArea:hover {
     border-color: rgba(255, 255, 255, 35);
 }
 
-/* Tabs & filters: use glass tokens from defaultStyle.qss */
+/* Clipboard tabs — glass style for dark mode */
+QWidget#clipboardBtnWidget QToolButton {
+    background-color: transparent;
+    border: none;
+}
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:hover,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:pressed,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:checked,
+QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
+    background-color: rgba(255, 255, 255, 28);
+    border: 1px solid rgba(255, 255, 255, 36);
+    color: {{tab_text}};
+}
+QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
+QWidget#clipboardBtnWidget QToolButton#staredButton:pressed,
+QWidget#clipboardBtnWidget QToolButton#staredButton:checked,
+QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
+    background-color: rgba(255, 255, 255, 28);
+    border: 1px solid rgba(255, 255, 255, 36);
+    color: {{tab_text}};
+}
+
+/* Type filter pills — glass style for dark mode */
+QWidget#typeBtnWidget QToolButton:hover,
+QWidget#typeBtnWidget QToolButton:pressed,
+QWidget#typeBtnWidget QToolButton:checked {
+    background-color: rgba(255, 255, 255, 24);
+    border: 1px solid rgba(255, 255, 255, 32);
+    color: {{tab_text}};
+}
 
 /* About window */
 QWidget#AboutWidget {

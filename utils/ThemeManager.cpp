@@ -128,8 +128,12 @@ QHash<QString, QString> ThemeManager::themeTokens(bool dark) const {
         tokens.insert(QStringLiteral("accent_blue"), QStringLiteral("#4A90E2"));
         tokens.insert(QStringLiteral("accent_orange"), QStringLiteral("#fc9867"));
         tokens.insert(QStringLiteral("tab_text"), QStringLiteral("#F2F6FB"));
-        tokens.insert(QStringLiteral("tab_checked_bg"), QStringLiteral("rgba(28, 34, 44, 235)"));
-        tokens.insert(QStringLiteral("type_checked_bg"), QStringLiteral("rgba(28, 34, 44, 235)"));
+        tokens.insert(QStringLiteral("tab_checked_bg"), QStringLiteral("rgba(255, 255, 255, 28)"));
+        tokens.insert(QStringLiteral("type_checked_bg"), QStringLiteral("rgba(255, 255, 255, 24)"));
+        tokens.insert(QStringLiteral("tab_border_width"), QStringLiteral("1px"));
+        tokens.insert(QStringLiteral("tab_clipboard_border_color"), QStringLiteral("rgba(255, 255, 255, 36)"));
+        tokens.insert(QStringLiteral("tab_starred_border_color"), QStringLiteral("rgba(255, 255, 255, 36)"));
+        tokens.insert(QStringLiteral("type_checked_border_color"), QStringLiteral("rgba(255, 255, 255, 32)"));
         tokens.insert(QStringLiteral("top_hover_bg"), QStringLiteral("rgba(28, 34, 44, 235)"));
         tokens.insert(QStringLiteral("line_edit_border"), QStringLiteral("#3A4655"));
         tokens.insert(QStringLiteral("line_edit_border_focus"), QStringLiteral("#4A90E2"));
@@ -167,6 +171,10 @@ QHash<QString, QString> ThemeManager::themeTokens(bool dark) const {
         tokens.insert(QStringLiteral("tab_text"), QStringLiteral("#2C3E50"));
         tokens.insert(QStringLiteral("tab_checked_bg"), QStringLiteral("rgba(255, 255, 255, 242)"));
         tokens.insert(QStringLiteral("type_checked_bg"), QStringLiteral("rgba(255, 255, 255, 242)"));
+        tokens.insert(QStringLiteral("tab_border_width"), QStringLiteral("2px"));
+        tokens.insert(QStringLiteral("tab_clipboard_border_color"), QStringLiteral("#4A90E2"));
+        tokens.insert(QStringLiteral("tab_starred_border_color"), QStringLiteral("#fc9867"));
+        tokens.insert(QStringLiteral("type_checked_border_color"), QStringLiteral("#4A90E2"));
         tokens.insert(QStringLiteral("top_hover_bg"), QStringLiteral("#CCCCCC"));
         tokens.insert(QStringLiteral("line_edit_border"), QStringLiteral("#FFA07A"));
         tokens.insert(QStringLiteral("line_edit_border_focus"), QStringLiteral("#FF8C69"));
