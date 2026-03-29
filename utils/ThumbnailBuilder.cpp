@@ -21,6 +21,8 @@
 #include "data/CardPreviewMetrics.h"
 #include "data/ContentClassifier.h"
 #include "utils/MPasteSettings.h"
+#include "utils/MxGraphRenderer.h"
+#include "utils/ThemeManager.h"
 
 namespace ThumbnailBuilder {
 
@@ -513,6 +515,17 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
         return QPixmap();
     }
 
+    if (MxGraphRenderer::isMxGraphContent(html) || MxGraphRenderer::isMxGraphContent(item.getNormalizedText())) {
+        const int itemScale = MPasteSettings::getInst()->getItemScale();
+        const qreal dpr = maxScreenDevicePixelRatio();
+        const QImage mxImage = buildMxGraphThumbnailImage(html, item.getNormalizedText(), dpr, itemScale);
+        if (!mxImage.isNull()) {
+            QPixmap px = QPixmap::fromImage(mxImage);
+            px.setDevicePixelRatio(dpr);
+            return px;
+        }
+    }
+
     const QSize logicalSize = previewLogicalSize(MPasteSettings::getInst()->getItemScale());
     const qreal thumbnailDpr = maxScreenDevicePixelRatio();
     const QSize pixelTargetSize = logicalSize * thumbnailDpr;
@@ -623,6 +636,15 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
         return QImage();
     }
 
+    // draw.io mxGraphModel content: render the diagram instead of the
+    // invisible HTML wrapper (transparent text, 0px font).
+    if (MxGraphRenderer::isMxGraphContent(html)) {
+        const QImage mxImage = buildMxGraphThumbnailImage(html, QString(), thumbnailDpr, itemScale);
+        if (!mxImage.isNull()) {
+            return mxImage;
+        }
+    }
+
     const QString &truncatedHtml = html;
 
     const QSize logicalSize = previewLogicalSize(itemScale);
@@ -674,6 +696,27 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
     }
     snapshot.setDevicePixelRatio(thumbnailDpr);
     return snapshot;
+}
+
+bool isMxGraphRichText(const QString &html, const QString &normalizedText) {
+    return MxGraphRenderer::isMxGraphContent(html)
+        || MxGraphRenderer::isMxGraphContent(normalizedText);
+}
+
+QImage buildMxGraphThumbnailImage(const QString &html, const QString &normalizedText, qreal targetDpr, int itemScale) {
+    // Try to extract the XML from HTML first, then from normalized text.
+    QString xml = MxGraphRenderer::extractMxGraphXml(html);
+    if (xml.isEmpty()) {
+        xml = MxGraphRenderer::extractMxGraphXml(normalizedText);
+    }
+    if (xml.isEmpty()) {
+        return {};
+    }
+
+    const QSize logicalSize = previewLogicalSize(itemScale);
+    const QSize pixelSize = logicalSize * targetDpr;
+    const bool dark = ThemeManager::instance()->isDark();
+    return MxGraphRenderer::render(xml, pixelSize, targetDpr, dark);
 }
 
 ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {

@@ -40,6 +40,8 @@
 #include "utils/ThemeManager.h"
 #include "WindowBlurHelper.h"
 #include "utils/ThumbnailBuilder.h"
+#include "utils/MxGraphRenderer.h"
+#include "utils/ThemeManager.h"
 #include "BoardInternalHelpers.h"
 
 // QTextBrowser subclass that blocks all remote resource loading.
@@ -342,6 +344,26 @@ PreviewPayload buildPreviewPayload(ContentType contentType,
             break;
         }
         case RichText: {
+            if (MxGraphRenderer::isMxGraphContent(html)
+                || MxGraphRenderer::isMxGraphContent(normalizedText)) {
+                QString xml = MxGraphRenderer::extractMxGraphXml(html);
+                if (xml.isEmpty()) {
+                    xml = MxGraphRenderer::extractMxGraphXml(normalizedText);
+                }
+                if (!xml.isEmpty()) {
+                    const QSize previewPixelSize = targetSize.isValid()
+                        ? targetSize * devicePixelRatio
+                        : QSize(kPreviewDialogWidth, kPreviewDialogHeight) * devicePixelRatio;
+                    const bool dark = ThemeManager::instance()->isDark();
+                    QImage image = MxGraphRenderer::render(xml, previewPixelSize, devicePixelRatio, dark);
+                    if (!image.isNull()) {
+                        payload.kind = PreviewKind::Image;
+                        payload.image = image;
+                        payload.imageUrl = QStringLiteral("preview-image://mxgraph");
+                        break;
+                    }
+                }
+            }
             if (!html.isEmpty()) {
                 payload.kind = PreviewKind::Html;
                 payload.html = html;
