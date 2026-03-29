@@ -26,6 +26,8 @@ public:
     void pasteToTarget(WId targetWindow);
 
     bool isPasting() const { return isPasting_; }
+    QByteArray lastPastedFingerprint() const { return lastPastedFingerprint_; }
+    void clearLastPastedFingerprint() { lastPastedFingerprint_.clear(); }
 
 signals:
     void pastingStarted();
@@ -37,6 +39,7 @@ private:
 
     ClipboardMonitor *monitor_ = nullptr;
     bool isPasting_ = false;
+    QByteArray lastPastedFingerprint_;
 };
 
 #endif // CLIPBOARDPASTECONTROLLER_H

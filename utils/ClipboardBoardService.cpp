@@ -5,6 +5,9 @@
 // note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, respects data-layer preview kind for rich text, trims rich-text margins, backfills missing on-disk thumbnails on demand, and uses bounded worker concurrency.
 #include "ClipboardBoardService.h"
 
+#include <algorithm>
+#include <numeric>
+
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDebug>
@@ -263,7 +266,7 @@ ClipboardBoardService::IncrementalSyncResult ClipboardBoardService::syncIndexInc
     checkSaveDir();
     QDir dir(saveDir());
     const QFileInfoList fileInfos = dir.entryInfoList(
-        QStringList() << QStringLiteral("*.mpaste"), QDir::Files, QDir::Name | QDir::Reversed);
+        QStringList() << QStringLiteral("*.mpaste"), QDir::Files);
 
     QSet<QString> diskPaths;
     diskPaths.reserve(fileInfos.size());
@@ -339,7 +342,7 @@ void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBat
         QStringList filePaths;
         LocalSaver saver;
         QDir dir(directory);
-        const QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files, QDir::Name | QDir::Reversed);
+        const QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files);
         indexedItems.reserve(fileInfos.size());
         filePaths.reserve(fileInfos.size());
         for (const QFileInfo &info : fileInfos) {
@@ -354,6 +357,26 @@ void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBat
                 filePaths.append(filePath);
                 indexedItems.append(buildIndexedItemMeta(filePath, item));
             }
+        }
+        // Sort by header time (newest first) instead of relying on
+        // filename order, so items display correctly even if the
+        // filename timestamp diverges from the stored time.
+        QList<int> order(indexedItems.size());
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&](int a, int b) {
+            return indexedItems[a].time > indexedItems[b].time;
+        });
+        {
+            QList<ClipboardBoardService::IndexedItemMeta> sortedItems;
+            QStringList sortedPaths;
+            sortedItems.reserve(indexedItems.size());
+            sortedPaths.reserve(filePaths.size());
+            for (int idx : order) {
+                sortedItems.append(indexedItems[idx]);
+                sortedPaths.append(filePaths[idx]);
+            }
+            indexedItems = std::move(sortedItems);
+            filePaths = std::move(sortedPaths);
         }
 
         if (guard) {
@@ -738,7 +761,7 @@ QSet<QByteArray> ClipboardBoardService::loadAllFingerprints() {
 
     checkSaveDir();
     QDir dir(saveDir());
-    const QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files, QDir::Name | QDir::Reversed);
+    const QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files);
     for (const QFileInfo &info : fileInfos) {
         if (!LocalSaver::isCurrentFormatFile(info.filePath())) {
             continue;
@@ -783,6 +806,14 @@ bool ClipboardBoardService::moveIndexedItemToFront(const QString &name) {
         indexedItems_.move(index, 0);
     }
     return true;
+}
+
+void ClipboardBoardService::updateIndexedItemTime(const QString &name, const QDateTime &time) {
+    const QString filePath = filePathForName(name);
+    const int idx = indexedFilePaths_.indexOf(filePath);
+    if (idx >= 0 && idx < indexedItems_.size()) {
+        indexedItems_[idx].time = time;
+    }
 }
 
 void ClipboardBoardService::trimExpiredPendingItems(const QDateTime &cutoff) {

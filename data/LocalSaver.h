@@ -27,6 +27,7 @@ public:
                                        bool includeThumbnail = false);
     ClipboardItem loadFromFileLight(const QString &filePath, bool includeThumbnail = false);
     bool updateMetadata(const QString &filePath, const QString &alias, bool pinned);
+    bool updateTimestamp(const QString &filePath, const QDateTime &time, const QString &name);
     bool updateThumbnail(const QString &filePath, const QPixmap &thumbnail);
     static bool loadMimeSection(const QString &filePath, quint64 offset, ClipboardItem &item);
     static bool loadMimePayloads(const QString &filePath,

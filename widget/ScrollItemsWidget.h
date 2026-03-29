@@ -78,6 +78,7 @@ public:
     void setFavoriteFingerprints(const QSet<QByteArray> &fingerprints);
 
     void moveSelectedToFirst();
+    void moveItemByNameToFirst(const QString &itemName);
     void scrollToFirst();
     void scrollToLast();
     QString getCategory() const;

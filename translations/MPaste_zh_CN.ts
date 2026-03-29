@@ -391,28 +391,28 @@
         <translation type="unfinished">字符</translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="353"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="379"/>
         <source>Rich text preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="356"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="382"/>
         <source>Image preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="358"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="384"/>
         <source>Office shape preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="135"/>
         <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="136"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="137"/>
         <source>Loading</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="161"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="162"/>
         <source>Preview unavailable</source>
         <translation type="unfinished"></translation>
     </message>

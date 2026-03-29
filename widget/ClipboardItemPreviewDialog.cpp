@@ -502,6 +502,7 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
 
     ui_.browser = new OfflineTextBrowser(card);
     QFont previewFont = ui_.browser->font();
+    previewFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
     previewFont.setPointSize(kPreviewBodyFontSize);
     ui_.browser->setFont(previewFont);
     ui_.browser->document()->setDefaultFont(previewFont);

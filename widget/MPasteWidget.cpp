@@ -1266,17 +1266,31 @@ void MPasteWidget::clipboardActivityObserved(int wId) {
 }
 
 void MPasteWidget::clipboardUpdated(const ClipboardItem &nItem, int wId) {
-    if (!pasteController_->isPasting()) {
-        const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
-        qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated wId=%1 isPasting=%2 added=%3 %4")
-            .arg(wId)
-            .arg(pasteController_->isPasting())
-            .arg(added)
-            .arg(widgetItemSummary(nItem));
+    if (pasteController_->isPasting()) {
+        return;
+    }
 
-        if (added) {
-            clipboard_.copiedWhenHide = true;
-        }
+    // Suppress echo from our own clipboard write: if the captured item
+    // has the same fingerprint as the item we just pasted, skip the add
+    // to avoid creating a duplicate that pushes the original down.
+    const QByteArray pastedFp = pasteController_->lastPastedFingerprint();
+    if (!pastedFp.isEmpty() && nItem.fingerprint() == pastedFp) {
+        pasteController_->clearLastPastedFingerprint();
+        qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated suppressed echo wId=%1 fp=%2")
+            .arg(wId)
+            .arg(QString::fromLatin1(pastedFp.toHex().left(12)));
+        return;
+    }
+
+    const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
+    qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated wId=%1 isPasting=%2 added=%3 %4")
+        .arg(wId)
+        .arg(pasteController_->isPasting())
+        .arg(added)
+        .arg(widgetItemSummary(nItem));
+
+    if (added) {
+        clipboard_.copiedWhenHide = true;
     }
 }
 
@@ -1380,9 +1394,12 @@ bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
         return false;
     }
 
-    QTimer::singleShot(50, this, [this, board]() {
+    const QString itemName = selectedItem->getName();
+    qInfo().noquote() << QStringLiteral("[shortcut-paste] index=%1 itemName=%2")
+        .arg(shortcutIndex).arg(itemName);
+    QTimer::singleShot(50, this, [this, board, itemName]() {
         hideAndPaste();
-        board->moveSelectedToFirst();
+        board->moveItemByNameToFirst(itemName);
         currItemsWidget()->cleanShortCutInfo();
     });
     return true;

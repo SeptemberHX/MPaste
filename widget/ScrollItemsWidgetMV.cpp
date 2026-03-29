@@ -5,6 +5,8 @@
 // note: Context menu methods in BoardContextMenu.cpp, hover action bar in BoardHoverActions.cpp, pagination in BoardPagination.cpp, widget classes in BoardViewWidgets.h.
 #include <QDir>
 #include <QFile>
+
+#include "data/LocalSaver.h"
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QItemSelectionModel>
@@ -558,10 +560,7 @@ void ScrollItemsWidget::handleActivatedIndex(const QModelIndex &index) {
         // Emit first so the handler can read the item before moveItemToFirst
         // (which reloads the model in evict mode and clears the cache).
         emit doubleClicked(*selectedItem);
-        const bool alreadyFirst = (sourceRow == 0) && (currentPage_ == 0);
-        if (!alreadyFirst) {
-            moveItemToFirst(sourceRow);
-        }
+        moveItemToFirst(sourceRow);
     }
 }
 
@@ -784,60 +783,45 @@ int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
         return sourceRow;
     }
 
-    // Rename the file with a fresh timestamp so it sorts first on
-    // restart (files are sorted by name = timestamp).  We rename
-    // rather than re-save because the item's mimeData_ may have been
-    // released — a re-save would lose the MIME payload.
+    const int pinRow = pinnedInsertRow();
+    qInfo().noquote() << QStringLiteral("[moveItemToFirst] sourceRow=%1 name=%2 fp=%3 pinnedInsertRow=%4")
+        .arg(sourceRow).arg(item.getName()).arg(QString::fromLatin1(item.fingerprint().toHex().left(12))).arg(pinRow);
+
+    // Update the header timestamp in the .mpaste file so the item
+    // sorts first on restart (disk loading sorts by header time).
+    // No file rename needed — avoids filesystem events, index refresh
+    // cascades, and pagination reload conflicts.
     if (boardService_ && !item.isPinned()) {
-        const QString oldName = item.getName();
-        const QString newName = QString::number(QDateTime::currentMSecsSinceEpoch());
-        if (oldName != newName) {
-            const QString oldPath = boardService_->filePathForName(oldName);
-            const QString newPath = boardService_->filePathForName(newName);
-            if (QFile::rename(oldPath, newPath)) {
-                item.setName(newName);
-                item.setTime(QDateTime::currentDateTime());
-                item.setSourceFilePath(newPath);
-                boardModel_->updateItem(sourceRow, item);
-                if (cardDelegate_) {
-                    cardDelegate_->invalidateCard(oldName);
-                }
-                boardService_->refreshIndexedItemForPath(oldPath);
-                boardService_->refreshIndexedItemForPath(newPath);
-            }
+        item.setTime(QDateTime::currentDateTime());
+        const QString filePath = item.sourceFilePath().isEmpty()
+            ? boardService_->filePathForName(item.getName())
+            : item.sourceFilePath();
+        if (!filePath.isEmpty()) {
+            LocalSaver saver;
+            saver.updateTimestamp(filePath, item.getTime(), item.getName());
         }
+        boardModel_->updateItem(sourceRow, item);
+        if (cardDelegate_) {
+            cardDelegate_->invalidateCard(item.getName());
+        }
+        boardService_->updateIndexedItemTime(item.getName(), item.getTime());
     }
 
-    if (shouldEvictPages()) {
-        // In evict mode the model only holds the current page.  Move the
-        // entry to the front of the service index.  If we are already on
-        // page 0 the item is in the model so we can just move the row;
-        // otherwise switch to page 1 which triggers a reload.
-        if (boardService_) {
-            boardService_->moveIndexedItemToFront(item.getName());
-        }
-        if (currentPage_ == 0) {
-            const int targetRow = item.isPinned() ? 0 : pinnedInsertRow();
-            if (targetRow != sourceRow) {
-                boardModel_->moveItemToRow(sourceRow, targetRow);
-            }
-            const QScrollBar *sb = horizontalScrollbar();
-            if (!sb || sb->value() <= sb->minimum()) {
-                setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
-            }
-            return targetRow;
-        }
+    // Move in model and service index.
+    const int targetRow = item.isPinned() ? 0 : pinnedInsertRow();
+    if (boardService_) {
+        boardService_->moveIndexedItemToFront(item.getName());
+    }
+    if (targetRow != sourceRow) {
+        boardModel_->moveItemToRow(sourceRow, targetRow);
+    }
+
+    if (shouldEvictPages() && currentPage_ != 0) {
         currentPage_ = 0;
         reloadCurrentPageItems(true);
         syncPageWindow(true);
         return 0;
     }
-
-    const int targetRow = item.isPinned() ? 0 : pinnedInsertRow();
-    if (targetRow != sourceRow) {
-        boardModel_->moveItemToRow(sourceRow, targetRow);
-    }
-
     if (paginationEnabled() && currentPage_ != 0) {
         setCurrentPageNumber(1);
     }
@@ -1026,8 +1010,13 @@ void ScrollItemsWidget::primeVisibleThumbnailsSync() {
             continue;
         }
 
-        const ClipboardItem loaded = boardService_->loadItemLight(filePath, true);
+        ClipboardItem loaded = boardService_->loadItemLight(filePath, true);
         if (!loaded.getName().isEmpty() && loaded.hasThumbnail()) {
+            // Preserve in-memory time if it was updated by moveItemToFirst
+            // (the disk file may still have the original capture time).
+            if (item->getTime() > loaded.getTime()) {
+                loaded.setTime(item->getTime());
+            }
             boardModel_->updateItem(sourceRow, loaded);
             syncPreviewStateForRow(sourceRow);
         }
@@ -1433,8 +1422,15 @@ bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
 
     // Also check the on-disk index — during startup the model may not
     // be fully loaded yet, so the model check above can miss duplicates.
+    // However, if the model doesn't have the item (existingRow < 0 above)
+    // but the on-disk index claims the fingerprint exists, the backing file
+    // may have been cleaned up.  In that case, re-add and re-save the item
+    // so it becomes visible again.
     if (boardService_ && boardService_->containsFingerprint(nItem.fingerprint())) {
-        return false;
+        if (boardModel_ && boardModel_->rowForFingerprint(nItem.fingerprint()) >= 0) {
+            return false;
+        }
+        // Fingerprint in disk index but not in model — treat as new item.
     }
 
     // Add item to model immediately so the UI can display it right away.
@@ -1726,9 +1722,12 @@ void ScrollItemsWidget::syncFromDiskIncremental() {
         return;
     }
 
+    // Detect renames: a removed path and an added path that share the
+    // same fingerprint represent a moveItemToFirst rename, not a true
+    // delete + create.  For these pairs, update the model item in place
+    // so the existing row order is preserved.
     // Remove items that no longer exist on disk.
     for (const QString &path : syncResult.removedPaths) {
-        // Extract name from filename: "name.mpaste" → "name"
         const QString name = QFileInfo(path).completeBaseName();
         const int row = boardModel_->rowForName(name);
         if (row >= 0) {
@@ -1739,8 +1738,7 @@ void ScrollItemsWidget::syncFromDiskIncremental() {
         }
     }
 
-    // Add new items from disk, inserting at the correct position by
-    // timestamp (name) so the list stays sorted newest-first.
+    // Add new items from disk.
     for (const QString &path : syncResult.addedPaths) {
         ClipboardItem item = boardService_->loadItemLight(path, true);
         if (item.getName().isEmpty()) {
@@ -1756,13 +1754,13 @@ void ScrollItemsWidget::syncFromDiskIncremental() {
             const int insertRow = pinnedInsertRow();
             boardModel_->insertItem(insertRow, item, favorite);
         } else {
-            // Find the correct row: items are sorted newest (largest name) first.
-            // Skip past pinned items, then find where this name fits.
+            // Find the correct row: items are sorted newest-first by time.
+            // Skip past pinned items, then find where this item fits.
             const int startRow = pinnedInsertRow();
             int insertRow = startRow;
             for (int r = startRow; r < boardModel_->rowCount(); ++r) {
                 const ClipboardItem *existing = boardModel_->itemPtrAt(r);
-                if (existing && item.getName() > existing->getName()) {
+                if (existing && item.getTime() > existing->getTime()) {
                     break;
                 }
                 insertRow = r + 1;
@@ -1942,9 +1940,20 @@ void ScrollItemsWidget::setFavoriteFingerprints(const QSet<QByteArray> &fingerpr
 
 void ScrollItemsWidget::moveSelectedToFirst() {
     const int sourceRow = selectedSourceRow();
-    const bool alreadyFirst = (sourceRow == 0) && (currentPage_ == 0);
-    if (sourceRow >= 0 && !alreadyFirst) {
+    if (sourceRow >= 0) {
         moveItemToFirst(sourceRow);
+    }
+}
+
+void ScrollItemsWidget::moveItemByNameToFirst(const QString &itemName) {
+    if (itemName.isEmpty() || !boardModel_) {
+        return;
+    }
+    const int row = boardModel_->rowForName(itemName);
+    qInfo().noquote() << QStringLiteral("[move-by-name] name=%1 foundRow=%2 rowCount=%3")
+        .arg(itemName).arg(row).arg(boardModel_->rowCount());
+    if (row >= 0) {
+        moveItemToFirst(row);
     }
 }
 

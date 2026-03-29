@@ -47,6 +47,7 @@ QString richTextThumbnailStyleSheet() {
         "html, body { margin: 0 !important; width: 100% !important; max-width: 100% !important; }"
         "body {"
         " padding: 12px 12px 0 12px !important;"
+        " font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', 'Noto Sans', sans-serif !important;"
         " font-size: 15px !important;"
         " line-height: 1.38 !important;"
         " }"
@@ -449,7 +450,7 @@ QImage buildTextPreviewImage(const QString &text, qreal targetDpr, int itemScale
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
 
-    QFont font;
+    QFont font(QStringLiteral("Microsoft YaHei UI"));
     font.setPointSize(qMax(9, 10 * itemScale / 100));
     painter.setFont(font);
     painter.setPen(QColor(40, 40, 40));
@@ -480,7 +481,7 @@ QImage buildFileListPreviewImage(const QList<QUrl> &urls, qreal targetDpr, int i
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
 
-    QFont font;
+    QFont font(QStringLiteral("Microsoft YaHei UI"));
     font.setPointSize(qMax(9, 10 * itemScale / 100));
     painter.setFont(font);
     painter.setPen(QColor(40, 40, 40));

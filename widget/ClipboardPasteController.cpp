@@ -197,6 +197,7 @@ bool ClipboardPasteController::setClipboard(const ClipboardItem &item, bool plai
         handleUrlsClipboard(mimeData, item);
     }
 
+    lastPastedFingerprint_ = item.fingerprint();
     QGuiApplication::clipboard()->setMimeData(mimeData);
     qInfo() << "[clipboard-widget] setClipboard wrote system clipboard";
     QTimer::singleShot(200, this, [this]() {
