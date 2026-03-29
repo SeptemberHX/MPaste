@@ -300,37 +300,37 @@
         <translation type="vanished">?? MIME ??</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="89"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="114"/>
         <source>Paste as Plain Text</source>
         <translation type="unfinished">??????</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="101"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="126"/>
         <source>Details</source>
         <translation type="unfinished">??</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="113"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="138"/>
         <source>Open Containing Folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="125"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="150"/>
         <source>Alias</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="163"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="188"/>
         <source>Save</source>
         <translation type="unfinished">保存</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="171"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="196"/>
         <source>Delete</source>
         <translation type="unfinished">删除</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="179"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="204"/>
         <source>Delete Selected</source>
         <translation type="unfinished"></translation>
     </message>

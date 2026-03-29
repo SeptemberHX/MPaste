@@ -20,6 +20,7 @@
 
 #include "data/ClipboardItem.h"
 #include "utils/ThemeManager.h"
+#include "WindowBlurHelper.h"
 
 namespace BoardHelpers {
 
@@ -44,25 +45,49 @@ inline void applyMenuTheme(QMenu *menu) {
         return;
     }
     const bool dark = ThemeManager::instance()->isDark();
-    QPalette pal = menu->palette();
-    if (dark) {
-        pal.setColor(QPalette::Window, QColor("#1E232B"));
-        pal.setColor(QPalette::WindowText, QColor("#D6DEE8"));
-        pal.setColor(QPalette::Base, QColor("#1E232B"));
-        pal.setColor(QPalette::AlternateBase, QColor("#1A1F27"));
-        pal.setColor(QPalette::Text, QColor("#D6DEE8"));
-        pal.setColor(QPalette::Button, QColor("#1E232B"));
-        pal.setColor(QPalette::ButtonText, QColor("#D6DEE8"));
-        pal.setColor(QPalette::Highlight, QColor("#2D7FD3"));
-        pal.setColor(QPalette::HighlightedText, QColor("#FFFFFF"));
-    } else {
-        pal = qApp->palette();
-    }
-    menu->setPalette(pal);
-    if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
-        fusion->setParent(menu);
-        menu->setStyle(fusion);
-    }
+
+    menu->setAttribute(Qt::WA_TranslucentBackground);
+    menu->setWindowFlags(menu->windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+
+    const QString bg = QStringLiteral("transparent");
+    const QString border = dark ? QStringLiteral("rgba(255, 255, 255, 30)") : QStringLiteral("rgba(0, 0, 0, 22)");
+    const QString text = dark ? QStringLiteral("#D6DEE8") : QStringLiteral("#1E2936");
+    const QString highlight = dark ? QStringLiteral("rgba(255, 255, 255, 22)") : QStringLiteral("rgba(0, 0, 0, 12)");
+    const QString highlightText = dark ? QStringLiteral("#FFFFFF") : QStringLiteral("#1E2936");
+    const QString separator = dark ? QStringLiteral("rgba(255, 255, 255, 20)") : QStringLiteral("rgba(0, 0, 0, 15)");
+
+    menu->setStyleSheet(QStringLiteral(
+        "QMenu {"
+        " background-color: %1;"
+        " border: 1px solid %2;"
+        " border-radius: 10px;"
+        " padding: 6px 0px;"
+        " color: %3;"
+        " font-size: 13px;"
+        "}"
+        "QMenu::item {"
+        " padding: 6px 28px 6px 16px;"
+        " border-radius: 6px;"
+        " margin: 1px 6px;"
+        " color: %3;"
+        "}"
+        "QMenu::item:selected {"
+        " background-color: %4;"
+        " color: %5;"
+        "}"
+        "QMenu::separator {"
+        " height: 1px;"
+        " background: %6;"
+        " margin: 4px 12px;"
+        "}"
+        "QMenu::icon {"
+        " padding-left: 8px;"
+        "}").arg(bg, border, text, highlight, highlightText, separator));
+
+    // Apply blur after the menu is shown (connect once).
+    QObject::connect(menu, &QMenu::aboutToShow, menu, [menu, dark]() {
+        WindowBlurHelper::enableBlurBehind(menu, dark);
+    });
 }
 
 inline bool looksBrokenTranslation(const QString &text) {

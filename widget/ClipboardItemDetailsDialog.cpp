@@ -28,6 +28,8 @@
 #include <QVBoxLayout>
 #include <QWindow>
 
+#include "WindowBlurHelper.h"
+
 #include "utils/ThemeManager.h"
 #include "BoardInternalHelpers.h"
 
@@ -503,12 +505,13 @@ void ClipboardItemDetailsDialog::paintEvent(QPaintEvent *) {
     gradient.setColorAt(1.00, QColor("#4A90E2"));
 
     painter.setPen(QPen(QBrush(gradient), borderWidth));
-    painter.setBrush(darkTheme_ ? QColor(26, 31, 38, 245) : QColor(247, 250, 255, 245));
+    painter.setBrush(darkTheme_ ? QColor(26, 31, 38, 1) : QColor(247, 250, 255, 1));
     painter.drawRoundedRect(outerRect, radius, radius);
 }
 
 void ClipboardItemDetailsDialog::applyTheme(bool dark) {
     darkTheme_ = dark;
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     if (ui_.card) {
         ui_.card->setStyleSheet(detailsStyleSheet(darkTheme_));
     } else {
@@ -785,6 +788,7 @@ void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item, int sequenc
     }
 
     show();
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     raise();
     activateWindow();
 }
