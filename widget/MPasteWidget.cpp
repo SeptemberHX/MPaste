@@ -888,6 +888,20 @@ void MPasteWidget::applyTheme(bool dark) {
     if (ui_.quitAction) {
         ui_.quitAction->setIcon(QIcon(QStringLiteral(":/resources/resources/quit.svg")));
     }
+    // Force glass-style tab borders in dark mode (QSS tokens don't override reliably)
+    if (darkTheme_ && ui_.ui) {
+        const QString glassTabStyle = QStringLiteral(
+            "QToolButton { background-color: transparent; border: none; border-radius: 12px; }"
+            "QToolButton:hover { background-color: rgba(255,255,255,22); }"
+            "QToolButton:checked, QToolButton:pressed { background-color: rgba(255,255,255,50); }");
+        ui_.ui->clipboardBtnWidget->setStyleSheet(glassTabStyle);
+        ui_.ui->typeBtnWidget->setStyleSheet(glassTabStyle);
+    } else if (ui_.ui) {
+        // Light mode: clear overrides, let QSS tokens take effect
+        ui_.ui->clipboardBtnWidget->setStyleSheet(QString());
+        ui_.ui->typeBtnWidget->setStyleSheet(QString());
+    }
+
     updatePageSelectorStyle();
     BoardHelpers::applyMenuTheme(ui_.menu);
     BoardHelpers::applyMenuTheme(ui_.trayMenu);
@@ -1219,20 +1233,29 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
         QPainter p(w);
         p.setRenderHint(QPainter::Antialiasing);
 
-        const qreal bw = 2.0;
         const qreal radius = 13.0;
-        QRectF r = QRectF(w->rect()).adjusted(bw / 2, bw / 2, -bw / 2, -bw / 2);
+        QRectF r = QRectF(w->rect());
 
-        QConicalGradient grad(r.center(), 135);
-        grad.setColorAt(0.00, QColor("#4A90E2"));
-        grad.setColorAt(0.25, QColor("#1abc9c"));
-        grad.setColorAt(0.50, QColor("#fc9867"));
-        grad.setColorAt(0.75, QColor("#9B59B6"));
-        grad.setColorAt(1.00, QColor("#4A90E2"));
-
-        p.setPen(QPen(QBrush(grad), bw));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r, radius, radius);
+        if (darkTheme_) {
+            // Glass pill container
+            r = r.adjusted(0.5, 0.5, -0.5, -0.5);
+            p.setPen(QPen(QColor(255, 255, 255, 30), 1.0));
+            p.setBrush(QColor(255, 255, 255, 10));
+            p.drawRoundedRect(r, radius, radius);
+        } else {
+            // Light: colorful gradient border
+            const qreal bw = 2.0;
+            r = r.adjusted(bw / 2, bw / 2, -bw / 2, -bw / 2);
+            QConicalGradient grad(r.center(), 135);
+            grad.setColorAt(0.00, QColor("#4A90E2"));
+            grad.setColorAt(0.25, QColor("#1abc9c"));
+            grad.setColorAt(0.50, QColor("#fc9867"));
+            grad.setColorAt(0.75, QColor("#9B59B6"));
+            grad.setColorAt(1.00, QColor("#4A90E2"));
+            p.setPen(QPen(QBrush(grad), bw));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(r, radius, radius);
+        }
     }
 
     if (event->type() == QEvent::Wheel) {
