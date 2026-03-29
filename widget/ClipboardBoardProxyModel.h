@@ -19,8 +19,8 @@ public:
     void setKeyword(const QString &keyword);
     QString keyword() const;
 
-    void setTypeFilter(ClipboardItem::ContentType type);
-    ClipboardItem::ContentType typeFilter() const;
+    void setTypeFilter(ContentType type);
+    ContentType typeFilter() const;
 
     void setAsyncMatchedNames(const QSet<QString> &names);
 
@@ -34,7 +34,7 @@ protected:
 
 private:
     QString keyword_;
-    ClipboardItem::ContentType typeFilter_ = ClipboardItem::All;
+    ContentType typeFilter_ = All;
     QSet<QString> asyncMatchedNames_;
     int pageSize_ = 0;
     int pageIndex_ = 0;

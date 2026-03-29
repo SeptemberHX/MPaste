@@ -45,24 +45,9 @@ inline ClipboardPreviewKind classifyLight(ContentType type,
         return defaultPreviewKindForType(type);
     }
 
-    if (hasMeaningfulPreviewText(normalizedText)) {
-        return TextPreview;
-    }
-
-    if (hasThumbnailHint) {
-        return VisualPreview;
-    }
-
-    if (mimeData && mimeData->hasHtml()) {
-        const QString html = mimeData->html();
-        if (!ContentClassifier::firstHtmlImageSource(html).isEmpty()
-            || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive)
-            || hasFastImagePayload) {
-            return VisualPreview;
-        }
-    }
-
-    return TextPreview;
+    // Always use visual preview for RichText so the card thumbnail
+    // preserves text formatting (colors, bold, etc.) from the HTML.
+    return VisualPreview;
 }
 
 inline ClipboardPreviewKind classifyFull(ContentType type,
@@ -74,21 +59,7 @@ inline ClipboardPreviewKind classifyFull(ContentType type,
         return defaultPreviewKindForType(type);
     }
 
-    if (hasMeaningfulPreviewText(normalizedText)) {
-        return TextPreview;
-    }
-
-    if (mimeData && mimeData->hasHtml()) {
-        const QString html = mimeData->html();
-        if (!ContentClassifier::firstHtmlImageSource(html).isEmpty()
-            || html.contains(QStringLiteral("<img"), Qt::CaseInsensitive)
-            || hasFastImagePayload
-            || hasDecodableImage) {
-            return VisualPreview;
-        }
-    }
-
-    return TextPreview;
+    return VisualPreview;
 }
 
 } // namespace PreviewClassifier

@@ -52,7 +52,7 @@ public:
     bool addAndSaveItem(const ClipboardItem &item);
     void mergeDeferredMimeFormats(const QString &itemName, const QMap<QString, QByteArray> &extraFormats);
     void filterByKeyword(const QString &keyword);
-    void filterByType(ClipboardItem::ContentType type);
+    void filterByType(ContentType type);
     void setShortcutInfo();
     void cleanShortCutInfo();
     void loadFromSaveDir();
@@ -74,7 +74,6 @@ public:
     int currentPageNumber() const;
     int totalPageCount() const;
     void refreshThumbnailCache();
-    int maintainPreviewCache(ClipboardBoardService::PreviewCacheMaintenanceMode mode);
     QSet<QByteArray> loadAllFingerprints();
     void setFavoriteFingerprints(const QSet<QByteArray> &fingerprints);
 
@@ -235,14 +234,14 @@ private:
     mutable ClipboardItem selectedItemCache_;
 
     QString currentKeyword_;
-    ClipboardItem::ContentType currentTypeFilter_ = ClipboardItem::All;
+    ContentType currentTypeFilter_ = All;
     bool darkTheme_ = false;
     int currentPage_ = 0;
     int pageBaseOffset_ = 0;
     int loadedPage_ = -1;
     int loadedPageBaseOffset_ = -1;
     int loadedPageTotalItems_ = -1;
-    ClipboardItem::ContentType loadedPageTypeFilter_ = ClipboardItem::All;
+    ContentType loadedPageTypeFilter_ = All;
     QString loadedPageKeyword_;
     QSet<QString> loadedPageMatchedNames_;
 

@@ -7,10 +7,13 @@
 #include "ui_MPasteSettingsWidget.h"
 #include "utils/MPasteSettings.h"
 #include "utils/ThemeManager.h"
+#include "WindowBlurHelper.h"
+#include "BoardInternalHelpers.h"
 #include "ToggleSwitch.h"
 #include <QShowEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QGridLayout>
 #include <QGraphicsDropShadowEffect>
 #include <QApplication>
@@ -31,24 +34,10 @@ static const int BORDER_WIDTH = 2;
 static const int CORNER_RADIUS = 10;
 
 namespace {
-bool looksBrokenTranslation(const QString &text) {
-    if (text.isEmpty()) {
-        return true;
-    }
-
-    int suspiciousCount = 0;
-    for (const QChar ch : text) {
-        if (ch == QLatin1Char('?') || ch == QChar::ReplacementCharacter) {
-            ++suspiciousCount;
-        }
-    }
-    return suspiciousCount >= qMax(2, text.size() / 2);
-}
-
 QString uiText(const char *source, const QString &zhFallback) {
     const QString translated = QObject::tr(source);
     const QLocale locale = QLocale::system();
-    if (translated == QLatin1String(source) || looksBrokenTranslation(translated)) {
+    if (translated == QLatin1String(source) || BoardHelpers::looksBrokenTranslation(translated)) {
         if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
             return zhFallback;
         }
@@ -651,48 +640,6 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             QDesktopServices::openUrl(QUrl::fromLocalFile(path));
         });
 
-        auto *previewSep = new QFrame(this);
-        previewSep->setMaximumHeight(1);
-        previewSep->setFrameShape(QFrame::HLine);
-        grid->addWidget(previewSep, 16, 0, 1, 2);
-
-        previewCacheLabel_ = new QLabel(uiText("Current category preview cache", QStringLiteral("当前分类预览缓存")), this);
-        previewCacheLabel_->setMinimumHeight(44);
-        grid->addWidget(previewCacheLabel_, 17, 0);
-
-        auto *previewButtonsRow = new QWidget(this);
-        auto *previewButtonsLayout = new QHBoxLayout(previewButtonsRow);
-        previewButtonsLayout->setContentsMargins(0, 0, 0, 0);
-        previewButtonsLayout->setSpacing(6);
-        previewButtonsLayout->addStretch(1);
-
-        previewRepairButton_ = new QPushButton(uiText("Repair broken", QStringLiteral("修复损坏")), this);
-        previewRepairButton_->setMinimumSize(QSize(96, 36));
-        previewRepairButton_->setMaximumHeight(36);
-        previewButtonsLayout->addWidget(previewRepairButton_);
-
-        previewRebuildButton_ = new QPushButton(uiText("Rebuild", QStringLiteral("重建")), this);
-        previewRebuildButton_->setMinimumSize(QSize(84, 36));
-        previewRebuildButton_->setMaximumHeight(36);
-        previewButtonsLayout->addWidget(previewRebuildButton_);
-
-        previewClearButton_ = new QPushButton(uiText("Clear", QStringLiteral("清空")), this);
-        previewClearButton_->setMinimumSize(QSize(84, 36));
-        previewClearButton_->setMaximumHeight(36);
-        previewButtonsLayout->addWidget(previewClearButton_);
-
-        grid->addWidget(previewButtonsRow, 18, 1, Qt::AlignRight | Qt::AlignVCenter);
-
-        connect(previewRepairButton_, &QPushButton::clicked, this, [this]() {
-            emit previewCacheActionRequested(RepairBrokenPreviews);
-        });
-        connect(previewRebuildButton_, &QPushButton::clicked, this, [this]() {
-            emit previewCacheActionRequested(RebuildCurrentPreviews);
-        });
-        connect(previewClearButton_, &QPushButton::clicked, this, [this]() {
-            emit previewCacheActionRequested(ClearCurrentPreviews);
-        });
-
         grid->setContentsMargins(18, 14, 18, 14);
         grid->setHorizontalSpacing(14);
         grid->setVerticalSpacing(8);
@@ -705,10 +652,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->sep3->hide();
         ui->sep4->hide();
         syncSep->hide();
-        previewSep->hide();
 
         syncLabel_->setMinimumHeight(24);
-        previewCacheLabel_->setMinimumHeight(24);
         syncPathEdit_->setMinimumHeight(36);
         themeCombo_->setMinimumHeight(36);
         themeCombo_->setMaximumHeight(36);
@@ -723,16 +668,6 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->thumbnailPrefetchSpin->setMinimumHeight(36);
         ui->thumbnailPrefetchSpin->setMaximumHeight(36);
 
-        previewRepairButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        previewRebuildButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        previewClearButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        previewButtonsLayout->setSpacing(8);
-        if (QLayoutItem *leadingStretch = previewButtonsLayout->takeAt(0)) {
-            delete leadingStretch;
-        }
-        previewButtonsLayout->setStretch(0, 1);
-        previewButtonsLayout->setStretch(1, 1);
-        previewButtonsLayout->setStretch(2, 1);
         syncButtonsLayout->setSpacing(8);
 
         auto createTabGrid = [this](QWidget *parent) {
@@ -768,7 +703,6 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         generalLayout->addWidget(retentionWidget, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
         generalLayout->addWidget(ui->label_5, 4, 0);
         generalLayout->addWidget(ui->scaleWidget, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_preview_cache, 5, 0);
         generalLayout->addWidget(ui->thumbnailPrefetchSpin, 5, 1, Qt::AlignRight | Qt::AlignVCenter);
         generalLayout->setRowStretch(6, 1);
 
@@ -781,9 +715,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         maintenanceLayout->addWidget(syncLabel_, 0, 0, 1, 2);
         maintenanceLayout->addWidget(syncPathEdit_, 1, 0, 1, 2);
         maintenanceLayout->addWidget(syncButtonsRow, 2, 0, 1, 2);
-        maintenanceLayout->addWidget(previewCacheLabel_, 3, 0, 1, 2);
-        maintenanceLayout->addWidget(previewButtonsRow, 4, 0, 1, 2);
-        maintenanceLayout->setRowStretch(5, 1);
+        maintenanceLayout->setRowStretch(3, 1);
 
         grid->setContentsMargins(18, 14, 18, 14);
         grid->setHorizontalSpacing(0);
@@ -828,21 +760,31 @@ void MPasteSettingsWidget::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    QRectF r = rect().adjusted(0.5, 0.5, -0.5, -0.5);
+    const qreal radius = CORNER_RADIUS;
+    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
 
-    QConicalGradient grad(r.center(), 135);
-    grad.setColorAt(0.00, QColor("#4A90E2"));  // blue
-    grad.setColorAt(0.25, QColor("#1abc9c"));  // teal
-    grad.setColorAt(0.50, QColor("#fc9867"));  // orange
-    grad.setColorAt(0.75, QColor("#9B59B6"));  // purple
-    grad.setColorAt(1.00, QColor("#4A90E2"));  // blue (loop)
+    // Clear outside the rounded rect so corners are transparent
+    p.setCompositionMode(QPainter::CompositionMode_Clear);
+    p.fillRect(rect(), Qt::transparent);
+    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
-    QPen pen(QBrush(grad), BORDER_WIDTH);
-    p.setPen(pen);
-    p.setBrush(darkTheme_ ? QColor("#171B22") : QColor("#F3F3F3"));
-    p.drawRoundedRect(r.adjusted(BORDER_WIDTH / 2.0, BORDER_WIDTH / 2.0,
-                                 -BORDER_WIDTH / 2.0, -BORDER_WIDTH / 2.0),
-                      CORNER_RADIUS, CORNER_RADIUS);
+    // Fill the rounded rect with a near-transparent color so mouse
+    // events are captured (fully transparent areas pass through).
+    QPainterPath shape;
+    shape.addRoundedRect(r, radius, radius);
+    p.setClipPath(shape);
+    p.fillRect(rect(), QColor(0, 0, 0, 1));
+    p.setClipping(false);
+
+    if (darkTheme_) {
+        p.setPen(QPen(QColor(255, 255, 255, 40), 1.5));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r, radius, radius);
+    } else {
+        p.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r, radius, radius);
+    }
 }
 
 void MPasteSettingsWidget::mousePressEvent(QMouseEvent *event)
@@ -981,6 +923,7 @@ void MPasteSettingsWidget::accept()
 
 void MPasteSettingsWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     setStyleSheet(settingsStyleSheet(darkTheme_));
     update();
 }

@@ -3,6 +3,43 @@
 // pos: utils layer board service.
 // update: If I change, update this header block and my folder README.md.
 // note: Adds async thumbnail fetch for on-demand UI loading with bounded worker concurrency.
+//
+// Threading model
+// ---------------
+// Main-thread-only methods (called from the GUI/event-loop thread):
+//   - All public API methods except where noted below.
+//   - All slots (continueDeferredLoad, handleDeferredBatchRead).
+//   - All private helpers that mutate indexedItems_, indexedFilePaths_,
+//     pendingLoadFilePaths_, deferredLoadedItems_, and totalItemCount_.
+//
+// Worker-thread lambdas (run on QThread or QThreadPool):
+//   - startAsyncLoad:            Builds a LOCAL IndexedItemMeta list from disk;
+//                                does NOT read indexedItems_ or indexedFilePaths_.
+//   - startAsyncKeywordSearch:   Operates on a copied candidate list; does NOT
+//                                read service fields.
+//   - startRawReadBatch:         Reads files from a copied path list; does NOT
+//                                read service fields.
+//   - processPendingItemAsync:   Captures item data by value before dispatch.
+//                                Reads failedFullLoadPaths_ (race-benign hint)
+//                                and calls filePathForItem (reads const category_).
+//   - requestThumbnailAsync:     Same pattern as processPendingItemAsync.
+//
+// Fields accessed from worker threads:
+//   - category_ (immutable after construction -- safe).
+//   - failedFullLoadPaths_ (read from workers, written on main thread via
+//     invokeMethod callback -- benign race, worst case is a redundant rebuild).
+//
+// Cross-thread communication:
+//   All worker lambdas capture a QPointer<ClipboardBoardService> guard and
+//   deliver results back to the main thread via QMetaObject::invokeMethod
+//   with Qt::QueuedConnection.  The guard is checked both before posting and
+//   inside the queued callback to handle service destruction.
+//
+// indexLock_ (QReadWriteLock):
+//   Provided for future use if worker threads ever need direct read access to
+//   indexedItems_ / indexedFilePaths_.  Currently no worker reads these fields
+//   so no lock acquisitions are present -- all mutations and reads happen on
+//   the main thread.
 #ifndef MPASTE_CLIPBOARD_BOARD_SERVICE_H
 #define MPASTE_CLIPBOARD_BOARD_SERVICE_H
 
@@ -15,6 +52,7 @@
 #include <QStringList>
 #include <QObject>
 #include <QPixmap>
+#include <QReadWriteLock>
 
 #include <memory>
 #include <functional>
@@ -30,12 +68,6 @@ class ClipboardBoardService : public QObject {
     Q_OBJECT
 
 public:
-    enum PreviewCacheMaintenanceMode {
-        RepairBrokenPreviews = 0,
-        RebuildAllPreviews,
-        ClearAllPreviews
-    };
-
     struct IndexedItemMeta {
         QString filePath;
         QString name;
@@ -46,8 +78,8 @@ public:
         QList<QUrl> normalizedUrls;
         QByteArray fingerprint;
         QDateTime time;
-        ClipboardItem::ContentType contentType = ClipboardItem::Text;
-        ClipboardItem::PreviewKind previewKind = ClipboardItem::TextPreview;
+        ContentType contentType = Text;
+        ClipboardPreviewKind previewKind = TextPreview;
         quint64 mimeDataOffset = 0;
         bool pinned = false;
         bool hasThumbnailHint = false;
@@ -92,11 +124,11 @@ public:
     QString filePathForName(const QString &name) const;
     ClipboardItem loadItemLight(const QString &filePath, bool includeThumbnail = false);
     void refreshIndexedItemForPath(const QString &filePath);
-    int filteredItemCount(ClipboardItem::ContentType type,
+    int filteredItemCount(ContentType type,
                           const QString &keyword,
                           const QSet<QString> &matchedNames) const;
     QList<QPair<QString, ClipboardItem>> loadIndexedSlice(int offset, int count, bool includeThumbnail = false);
-    QList<QPair<QString, ClipboardItem>> loadFilteredIndexedSlice(ClipboardItem::ContentType type,
+    QList<QPair<QString, ClipboardItem>> loadFilteredIndexedSlice(ContentType type,
                                                                   const QString &keyword,
                                                                   const QSet<QString> &matchedNames,
                                                                   int offset,
@@ -108,8 +140,6 @@ public:
     void notifyItemAdded();
     bool moveIndexedItemToFront(const QString &name);
     void trimExpiredPendingItems(const QDateTime &cutoff);
-    int maintainPreviewCache(PreviewCacheMaintenanceMode mode);
-
     void processPendingItemAsync(const ClipboardItem &item, const QString &expectedName);
     void requestThumbnailAsync(const QString &expectedName, const QString &filePath);
     void startAsyncKeywordSearch(const QList<QPair<QString, quint64>> &candidates,
@@ -155,6 +185,7 @@ private:
     QList<QThread *> processingThreads_;
     std::unique_ptr<QThreadPool> thumbnailTaskPool_;
     QSet<QString> failedFullLoadPaths_;
+    mutable QReadWriteLock indexLock_;
     QList<IndexedItemMeta> indexedItems_;
     QStringList indexedFilePaths_;
     QStringList pendingLoadFilePaths_;

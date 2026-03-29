@@ -16,6 +16,7 @@
 #include <QDataStream>
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImageReader>
 #include <QScopedPointer>
@@ -612,19 +613,35 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
 }
 }
 
-bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) {
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return false;
-    }
-
-    // Generate and write a HiDPI-aware card thumbnail so list loads can avoid full image decode.
-    QPixmap thumbnail = item.hasThumbnail() ? item.thumbnail() : QPixmap();
-    if (thumbnail.isNull()) {
+bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
+                           const QImage &thumbnailOverride) {
+    // Resolve thumbnail: explicit override > item's thumbnail > generate
+    // from image data > preserve from existing file on disk.
+    QPixmap thumbnail;
+    if (!thumbnailOverride.isNull()) {
+        thumbnail = QPixmap::fromImage(thumbnailOverride);
+        thumbnail.setDevicePixelRatio(thumbnailOverride.devicePixelRatio());
+    } else if (item.hasThumbnail()) {
+        thumbnail = item.thumbnail();
+    } else {
         QPixmap fullImage = item.getImage();
         if (!fullImage.isNull()) {
             thumbnail = buildCardThumbnailPixmap(fullImage);
         }
+    }
+    // Last resort: read thumbnail from existing file before we overwrite it.
+    if (thumbnail.isNull() && QFileInfo::exists(filePath)) {
+        ClipboardItem existing = loadFromFileLight(filePath, true);
+        if (existing.hasThumbnail()) {
+            thumbnail = existing.thumbnail();
+        }
+    }
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        qWarning() << "[LocalSaver] saveToFile failed: path=" << filePath
+                    << "reason=cannot open for writing";
+        return false;
     }
 
     CurrentFormatHeader header;
@@ -644,40 +661,29 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
 
     QDataStream out(&file);
     const qint64 mimeDataOffsetPos = writeCurrentFormatHeader(out, header);
-    quint64 mimeDataOffset = 0;
 
-    // Record actual MIME data start
-    mimeDataOffset = static_cast<quint64>(file.pos());
+    quint64 mimeDataOffset = static_cast<quint64>(file.pos());
 
-    // Write MIME formats with dedup
-    const QMimeData* mimeData = item.getMimeData();
+    const QMimeData *mimeData = item.getMimeData();
     QScopedPointer<QMimeData> fallbackMime;
     if (!mimeData || !hasMeaningfulMimeData(mimeData)) {
         const QString fallbackText = item.getNormalizedText();
         const QList<QUrl> fallbackUrls = item.getNormalizedUrls();
         if (!fallbackText.isEmpty() || !fallbackUrls.isEmpty()) {
             fallbackMime.reset(new QMimeData);
-            if (!fallbackText.isEmpty()) {
-                fallbackMime->setText(fallbackText);
-            }
-            if (!fallbackUrls.isEmpty()) {
-                fallbackMime->setUrls(fallbackUrls);
-            }
+            if (!fallbackText.isEmpty()) fallbackMime->setText(fallbackText);
+            if (!fallbackUrls.isEmpty()) fallbackMime->setUrls(fallbackUrls);
             mimeData = fallbackMime.data();
         }
     }
     if (mimeData) {
         const QStringList formats = mimeData->formats();
         out << quint32(formats.size());
-
-        // Track unique data blobs by SHA1 hash.
         QMap<QByteArray, quint32> hashToIndex;
         quint32 nextUniqueIndex = 0;
-
         for (const QString &format : formats) {
             const QByteArray data = mimeData->data(format);
             const QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Sha1);
-
             auto it = hashToIndex.constFind(hash);
             if (it != hashToIndex.constEnd()) {
                 out << format << it.value() << QByteArray();
@@ -691,11 +697,19 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath) 
         out << quint32(0);
     }
 
-    file.seek(mimeDataOffsetPos);
+    if (!file.seek(mimeDataOffsetPos)) {
+        qWarning() << "[LocalSaver] saveToFile failed: path=" << filePath
+                    << "reason=seek failed, offset=" << mimeDataOffsetPos
+                    << "fileSize=" << file.size();
+    }
     out << mimeDataOffset;
-
     file.close();
-    return out.status() == QDataStream::Ok;
+    if (out.status() != QDataStream::Ok) {
+        qWarning() << "[LocalSaver] saveToFile failed: path=" << filePath
+                    << "reason=stream error, status=" << out.status();
+        return false;
+    }
+    return true;
 }
 
 namespace {
@@ -705,6 +719,8 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
                                 const QPixmap *thumbnailOverride) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
+                    << "reason=cannot open for reading";
         return false;
     }
 
@@ -717,6 +733,8 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
         || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
         || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4);
     if (!isCurrent || in.status() != QDataStream::Ok) {
+        qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
+                    << "reason=invalid format or stream error, status=" << in.status();
         return false;
     }
     Q_UNUSED(flags);
@@ -741,12 +759,17 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
     bool blobHasPayload = false;
     if (hasBlob) {
         if (!file.seek(static_cast<qint64>(header.mimeDataOffset))) {
+            qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
+                        << "reason=seek to MIME offset failed, offset=" << header.mimeDataOffset
+                        << "fileSize=" << fileSize;
             return false;
         }
         QDataStream blobIn(&file);
         quint32 formatCount = 0;
         blobIn >> formatCount;
         if (blobIn.status() != QDataStream::Ok) {
+            qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
+                        << "reason=stream error reading MIME format count, status=" << blobIn.status();
             return false;
         }
         QList<QByteArray> uniqueBlobs;
@@ -757,6 +780,8 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
             QByteArray data;
             blobIn >> format >> dataIndex >> data;
             if (blobIn.status() != QDataStream::Ok) {
+                qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
+                            << "reason=stream error reading MIME entry, status=" << blobIn.status();
                 return false;
             }
             if (!data.isEmpty()) {
@@ -771,12 +796,17 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
             }
         }
         if (!file.seek(static_cast<qint64>(header.mimeDataOffset))) {
+            qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
+                        << "reason=seek back to MIME offset failed, offset=" << header.mimeDataOffset
+                        << "fileSize=" << fileSize;
             return false;
         }
     }
 
     QSaveFile outFile(filePath);
     if (!outFile.open(QIODevice::WriteOnly)) {
+        qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
+                    << "reason=cannot open QSaveFile for writing";
         return false;
     }
 
@@ -833,6 +863,8 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
     out << quint64(blobStart);
 
     if (out.status() != QDataStream::Ok) {
+        qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
+                    << "reason=stream error after write, status=" << out.status();
         return false;
     }
 
@@ -851,6 +883,8 @@ bool LocalSaver::updateThumbnail(const QString &filePath, const QPixmap &thumbna
 ClipboardItem LocalSaver::loadFromFile(const QString &filePath) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "[LocalSaver] loadFromFile failed: path=" << filePath
+                    << "reason=cannot open for reading";
         return ClipboardItem();
     }
 
@@ -885,12 +919,12 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
 
     // Build a light-loaded ClipboardItem (no MIME data, no full image decode).
     ClipboardItem item;
-    ClipboardItem::ContentType effectiveType = static_cast<ClipboardItem::ContentType>(header.contentType);
+    ContentType effectiveType = static_cast<ContentType>(header.contentType);
     if (!header.thumbnail.isNull()
-        && effectiveType == ClipboardItem::Text
+        && effectiveType == Text
         && header.normalizedText.trimmed().isEmpty()
         && header.normalizedUrls.isEmpty()) {
-        effectiveType = ClipboardItem::Image;
+        effectiveType = Image;
     }
     {
         // Downscale icon to save memory — card header displays at ~40px.
@@ -917,11 +951,30 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
     }
     item.setThumbnailAvailableHint(!header.thumbnail.isNull());
     if (includeThumbnail && !header.thumbnail.isNull()) {
-        item.setThumbnail(header.thumbnail);
+        QPixmap thumb = header.thumbnail;
+        // QDataStream does not preserve devicePixelRatio.  The thumbnail
+        // may have been saved on a screen with a different DPR than the
+        // current one (e.g. synced from 1080p to 4K).  Rescale to the
+        // current screen's card preview size so it always displays at
+        // the correct logical dimensions.
+        const qreal currentDpr = maxThumbnailDevicePixelRatio();
+        const QSize targetPixelSize = QSize(kCardPreviewWidth, kCardPreviewHeight) * currentDpr;
+        if (thumb.size() != targetPixelSize) {
+            thumb = thumb.scaled(targetPixelSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        }
+        thumb.setDevicePixelRatio(currentDpr);
+        item.setThumbnail(thumb);
     }
     item.setSourceFilePath(filePath);
     item.setMimeDataFileOffset(header.mimeDataOffset);
     item.setFingerprintCache(header.fingerprint);
+    {
+        const QString capturedPath = filePath;
+        const quint64 capturedOffset = header.mimeDataOffset;
+        item.setMimeDataLoader([capturedPath, capturedOffset](ClipboardItem &self) {
+            LocalSaver::loadMimeSection(capturedPath, capturedOffset, self);
+        });
+    }
     item.setLightLoaded(
         effectiveType,
         header.normalizedText,
@@ -952,6 +1005,8 @@ ClipboardItem LocalSaver::loadFromRawDataLight(const QByteArray &rawData,
 ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath, bool includeThumbnail) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "[LocalSaver] loadFromFileLight failed: path=" << filePath
+                    << "reason=cannot open for reading";
         return ClipboardItem();
     }
 
@@ -972,10 +1027,15 @@ ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath, bool includ
 bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, ClipboardItem &item) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "[LocalSaver] loadMimeSection failed: path=" << filePath
+                    << "reason=cannot open for reading";
         return false;
     }
 
     if (!file.seek(static_cast<qint64>(offset))) {
+        qWarning() << "[LocalSaver] loadMimeSection failed: path=" << filePath
+                    << "reason=seek failed, offset=" << offset
+                    << "fileSize=" << file.size();
         file.close();
         return false;
     }
@@ -984,6 +1044,8 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     quint32 formatCount = 0;
     in >> formatCount;
     if (in.status() != QDataStream::Ok) {
+        qWarning() << "[LocalSaver] loadMimeSection failed: path=" << filePath
+                    << "reason=stream error reading format count, status=" << in.status();
         file.close();
         return false;
     }
@@ -1000,6 +1062,8 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
         QByteArray data;
         in >> format >> dataIndex >> data;
         if (in.status() != QDataStream::Ok) {
+            qWarning() << "[LocalSaver] loadMimeSection failed: path=" << filePath
+                        << "reason=stream error reading MIME entry, status=" << in.status();
             delete mimeData;
             file.close();
             return false;
@@ -1071,10 +1135,15 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "[LocalSaver] loadMimePayloads failed: path=" << filePath
+                    << "reason=cannot open for reading";
         return false;
     }
 
     if (!file.seek(static_cast<qint64>(offset))) {
+        qWarning() << "[LocalSaver] loadMimePayloads failed: path=" << filePath
+                    << "reason=seek failed, offset=" << offset
+                    << "fileSize=" << file.size();
         file.close();
         return false;
     }
@@ -1083,12 +1152,12 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
     quint32 formatCount = 0;
     in >> formatCount;
     if (in.status() != QDataStream::Ok) {
+        qWarning() << "[LocalSaver] loadMimePayloads failed: path=" << filePath
+                    << "reason=stream error reading format count, status=" << in.status();
         file.close();
         return false;
     }
 
-    qInfo().noquote() << QStringLiteral("[loadMimePayloads] file=%1 offset=%2 fileSize=%3 formatCount=%4 streamOk=%5")
-        .arg(filePath).arg(offset).arg(file.size()).arg(formatCount).arg(in.status() == QDataStream::Ok);
     constexpr quint32 kMaxPreviewHtmlBytes = 2 * 1024 * 1024;
     constexpr quint32 kMaxPreviewImageBytes = 12 * 1024 * 1024;
     QList<QByteArray> uniqueBlobs;
@@ -1100,6 +1169,8 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
         quint32 dataIndex = 0;
         in >> format >> dataIndex;
         if (in.status() != QDataStream::Ok) {
+            qWarning() << "[LocalSaver] loadMimePayloads failed: path=" << filePath
+                        << "reason=stream error reading MIME entry, status=" << in.status();
             file.close();
             return false;
         }
@@ -1109,8 +1180,6 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
         }
 
         const bool wantsHtml = htmlOut && htmlBytes.isEmpty() && format == QStringLiteral("text/html");
-        qInfo().noquote() << QStringLiteral("[loadMimePayloads] i=%1 format=%2 dataIndex=%3")
-            .arg(i).arg(format).arg(dataIndex);
         // Match standard image MIME types as well as Windows clipboard
         // wrappers like application/x-qt-windows-mime;value="PNG".
         bool isImageFormat = false;
@@ -1138,6 +1207,8 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
         const quint32 maxBytes = wantsHtml ? kMaxPreviewHtmlBytes
             : (wantsImage ? kMaxPreviewImageBytes : 0);
         if (!readByteArrayWithLimit(in, shouldRead ? maxBytes : 0, &data)) {
+            qWarning() << "[LocalSaver] loadMimePayloads failed: path=" << filePath
+                        << "reason=stream error reading MIME data blob, status=" << in.status();
             file.close();
             return false;
         }
@@ -1191,54 +1262,31 @@ bool LocalSaver::removeItem(const QString &filePath) {
 }
 
 QSize ClipboardItem::getImagePixelSize() const {
-    if (imageSizeCacheInitialized_) {
-        return imageSizeCache_;
+    if (imageSizeCache_) {
+        return *imageSizeCache_;
     }
 
-    if (imageCacheInitialized_ && !imageCache_.isNull()) {
-        imageSizeCache_ = imageCache_.size();
-        imageSizeCacheInitialized_ = true;
-        return imageSizeCache_;
+    if (imageCache_ && !imageCache_->isNull()) {
+        imageSizeCache_ = imageCache_->size();
+        return *imageSizeCache_;
     }
 
     if (!mimeDataLoaded_) {
         imageSizeCache_ = probeImageSizeFromMimeSection(sourceFilePath_, mimeDataFileOffset_);
-        imageSizeCacheInitialized_ = true;
-        return imageSizeCache_;
+        return *imageSizeCache_;
     }
 
-    imageSizeCache_ = probeImageSizeFromMimeData(mimeData_.data());
-    if (!imageSizeCache_.isValid()) {
+    QSize probed = probeImageSizeFromMimeData(mimeData_.data());
+    if (!probed.isValid()) {
         const QPixmap pixmap = getImage();
         if (!pixmap.isNull()) {
-            imageSizeCache_ = pixmap.size();
+            probed = pixmap.size();
         }
     }
-    imageSizeCacheInitialized_ = true;
-    return imageSizeCache_;
+    imageSizeCache_ = probed;
+    return *imageSizeCache_;
 }
 
-// Implementation of ClipboardItem::ensureMimeDataLoaded - placed here to avoid
-// circular dependency (ClipboardItem.h cannot include LocalSaver.h).
-void ClipboardItem::ensureMimeDataLoaded() {
-    if (mimeDataLoaded_) {
-        return;
-    }
-
-    mimeDataLoaded_ = true;
-
-    if (sourceFilePath_.isEmpty()) {
-        return;
-    }
-
-    LocalSaver::loadMimeSection(sourceFilePath_, mimeDataFileOffset_, *this);
-
-    // Invalidate caches that were built from light-loaded metadata.
-    imageCacheInitialized_ = false;
-    imageSizeCacheInitialized_ = false;
-    searchableTextCacheInitialized_ = false;
-    normalizedUrlsCacheInitialized_ = false;
-}
 
 bool ClipboardItem::containsDeep(const QString &keyword) const {
     if (keyword.isEmpty()) {

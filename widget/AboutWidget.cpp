@@ -10,6 +10,9 @@ AboutWidget::AboutWidget(QWidget *parent) :
     ui(new Ui::AboutWidget)
 {
     ui->setupUi(this);
+#ifdef MPASTE_VERSION
+    ui->label_2->setText(QStringLiteral("MPaste V%1").arg(QStringLiteral(MPASTE_VERSION)));
+#endif
 }
 
 AboutWidget::~AboutWidget()

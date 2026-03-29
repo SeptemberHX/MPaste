@@ -49,6 +49,7 @@ private:
     bool isDuplicateRecentCapture(const ClipboardItem &item, int wId) const;
     void rememberCapturedItem(const ClipboardItem &item, int wId);
     void fetchWpsImageAndEmit(const QMimeData *mimeData, const QUrl &url, int wId, quint64 captureToken);
+    bool hasDeferrableMimeFormats(const QMimeData *mimeData) const;
     void scheduleDeferredMimeCapture(const QString &itemName);
 
     static bool hasMeaningfulContent(const QMimeData *mimeData);

@@ -5,6 +5,8 @@
 #ifndef MPASTE_CLIPBOARDCARDDELEGATE_H
 #define MPASTE_CLIPBOARDCARDDELEGATE_H
 
+#include <memory>
+
 #include <QCache>
 #include <QColor>
 #include <QDateTime>
@@ -21,15 +23,17 @@
 #include <QUrl>
 
 #include "data/ClipboardItem.h"
+#include "CardTheme.h"
 #include "ClipboardBoardModel.h"
 
+class CardBodyRenderer;
 class QModelIndex;
 class QTimer;
 class QUrl;
 
 struct CardData {
-    ClipboardItem::ContentType contentType = ClipboardItem::All;
-    ClipboardItem::PreviewKind previewKind = ClipboardItem::TextPreview;
+    ContentType contentType = All;
+    ClipboardPreviewKind previewKind = TextPreview;
     ClipboardBoardModel::PreviewState previewState = ClipboardBoardModel::PreviewNotApplicable;
     QPixmap icon;
     QPixmap thumbnail;
@@ -54,6 +58,7 @@ public:
     explicit ClipboardCardDelegate(const QColor &borderColor, QObject *parent = nullptr);
     ~ClipboardCardDelegate() override;
 
+    const CardTheme &cachedTheme() const { return cachedTheme_; }
     void setLoadingPhase(int phase);
     void clearIntermediateCaches();
     void clearVisualCaches();
@@ -70,17 +75,7 @@ public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
-private:
-    struct FileIconRequest {
-        QString cacheKey;
-        QString filePath;
-        QSize targetLogicalSize;
-        qreal targetDpr = 1.0;
-        QPersistentModelIndex index;
-    };
-
-    QColor headerColorForIcon(const QPixmap &iconPixmap) const;
-    QPixmap headerIconForPixmap(const QPixmap &sourcePixmap, const QSize &targetLogicalSize, qreal targetDpr) const;
+    // Delegate-level cache accessors used by card body renderers.
     QPixmap linkFallbackPreview(const QUrl &url,
                                 const QString &title,
                                 const QSize &targetSize,
@@ -94,12 +89,27 @@ private:
                           const QSize &targetLogicalSize,
                           qreal targetDpr,
                           const QModelIndex &index) const;
+
+private:
+    struct FileIconRequest {
+        QString cacheKey;
+        QString filePath;
+        QSize targetLogicalSize;
+        qreal targetDpr = 1.0;
+        QPersistentModelIndex index;
+    };
+
+    const CardBodyRenderer &bodyRendererForType(ContentType type) const;
+
+    QColor headerColorForIcon(const QPixmap &iconPixmap) const;
+    QPixmap headerIconForPixmap(const QPixmap &sourcePixmap, const QSize &targetLogicalSize, qreal targetDpr) const;
     void paintCardContent(QPainter *painter, const QStyleOptionViewItem &option,
                           const QModelIndex &index, const CardData &card, int scale) const;
     void ensureFileIconTimer() const;
     void enqueueFileIconRequest(const FileIconRequest &request) const;
     void scheduleViewportUpdate(const QPersistentModelIndex &index) const;
 
+    CardTheme cachedTheme_;
     QColor borderColor_;
     int loadingPhase_ = 0;
     mutable QHash<quint64, QColor> headerColorCache_;
@@ -115,6 +125,15 @@ private:
     mutable QQueue<FileIconRequest> pendingFileIconRequests_;
     mutable QTimer *fileIconLoadTimer_ = nullptr;
     mutable QThreadPool previewTaskPool_;
+
+    // Body renderers (one per content type).
+    std::unique_ptr<CardBodyRenderer> imageRenderer_;
+    std::unique_ptr<CardBodyRenderer> officeRenderer_;
+    std::unique_ptr<CardBodyRenderer> richTextRenderer_;
+    std::unique_ptr<CardBodyRenderer> colorRenderer_;
+    std::unique_ptr<CardBodyRenderer> linkRenderer_;
+    std::unique_ptr<CardBodyRenderer> fileRenderer_;
+    std::unique_ptr<CardBodyRenderer> textRenderer_;
 };
 
 #endif // MPASTE_CLIPBOARDCARDDELEGATE_H

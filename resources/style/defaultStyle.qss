@@ -84,7 +84,9 @@ QWidget#clipboardBtnWidget QToolButton#clipboardButton:pressed,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:checked,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
     background-color: {{tab_checked_bg}};
-    border: 2px solid {{accent_blue}};
+    border-width: {{tab_border_width}};
+    border-style: solid;
+    border-color: {{tab_clipboard_border_color}};
 }
 
 QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
@@ -92,7 +94,9 @@ QWidget#clipboardBtnWidget QToolButton#staredButton:pressed,
 QWidget#clipboardBtnWidget QToolButton#staredButton:checked,
 QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
     background-color: {{tab_checked_bg}};
-    border: 2px solid {{accent_orange}};
+    border-width: {{tab_border_width}};
+    border-style: solid;
+    border-color: {{tab_starred_border_color}};
 }
 
 /* 类型过滤药丸样式 */
@@ -113,7 +117,9 @@ QWidget#typeBtnWidget QToolButton:hover,
 QWidget#typeBtnWidget QToolButton:pressed,
 QWidget#typeBtnWidget QToolButton:checked {
     background-color: {{type_checked_bg}};
-    border: 2px solid {{accent_blue}};
+    border-width: {{tab_border_width}};
+    border-style: solid;
+    border-color: {{type_checked_border_color}};
 }
 
 QToolButton#countArea:hover {

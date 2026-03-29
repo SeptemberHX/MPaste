@@ -34,67 +34,57 @@ QToolButton#fileTypeBtn {
     background-color: {{top_hover_bg}};
 }
 
-/* Input box */
+/* Input box — glass style */
 QLineEdit {
-    border-color: {{line_edit_border}};
-    background-color: {{line_edit_bg}};
+    border: 1.5px solid rgba(255, 255, 255, 18);
+    background-color: rgba(255, 255, 255, 10);
     color: {{text_primary}};
 }
 
 QLineEdit:focus {
-    border-color: {{line_edit_border_focus}};
+    border-color: rgba(74, 144, 226, 140);
 }
 
-/* Count badge */
+/* Count badge — glass pill */
 QToolButton#countArea {
-    background-color: {{badge_bg}};
+    background-color: rgba(255, 255, 255, 14);
     color: {{badge_text}};
-    border: 1px solid {{badge_border}};
+    border: 1px solid rgba(255, 255, 255, 22);
 }
 
 QToolButton#countArea:hover {
-    background-color: {{badge_bg_hover}};
-    border-color: {{badge_border_hover}};
+    background-color: rgba(255, 255, 255, 28);
+    border-color: rgba(255, 255, 255, 35);
 }
 
-/* Clipboard tabs */
+/* Clipboard tabs — glass style for dark mode */
 QWidget#clipboardBtnWidget QToolButton {
-    color: {{tab_text}};
-}
-QWidget#clipboardBtnWidget QToolButton:!checked {
-    color: {{tab_text}};
+    background-color: transparent;
+    border: none;
 }
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:hover,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:pressed,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:checked,
 QWidget#clipboardBtnWidget QToolButton#clipboardButton:focus {
-    background-color: {{tab_checked_bg}};
-    border: 2px solid {{accent_blue}};
+    background-color: rgba(255, 255, 255, 28);
+    border: 1px solid rgba(255, 255, 255, 36);
     color: {{tab_text}};
 }
-
 QWidget#clipboardBtnWidget QToolButton#staredButton:hover,
 QWidget#clipboardBtnWidget QToolButton#staredButton:pressed,
 QWidget#clipboardBtnWidget QToolButton#staredButton:checked,
 QWidget#clipboardBtnWidget QToolButton#staredButton:focus {
-    background-color: {{tab_checked_bg}};
-    border: 2px solid {{accent_orange}};
+    background-color: rgba(255, 255, 255, 28);
+    border: 1px solid rgba(255, 255, 255, 36);
     color: {{tab_text}};
 }
 
-/* Type filter pills */
-QWidget#typeBtnWidget QToolButton {
-    color: {{tab_text}};
-}
-QWidget#typeBtnWidget QToolButton:!checked {
-    color: {{tab_text}};
-}
-
+/* Type filter pills — glass style for dark mode */
 QWidget#typeBtnWidget QToolButton:hover,
 QWidget#typeBtnWidget QToolButton:pressed,
 QWidget#typeBtnWidget QToolButton:checked {
-    background-color: {{type_checked_bg}};
-    border: 2px solid {{accent_blue}};
+    background-color: rgba(255, 255, 255, 24);
+    border: 1px solid rgba(255, 255, 255, 32);
     color: {{tab_text}};
 }
 

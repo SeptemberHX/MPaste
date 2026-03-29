@@ -100,16 +100,16 @@ QString elideForLog(QString text, int maxLen = 48) {
     return text;
 }
 
-const char *contentTypeName(ClipboardItem::ContentType type) {
+const char *contentTypeName(ContentType type) {
     switch (type) {
-        case ClipboardItem::All: return "All";
-        case ClipboardItem::Text: return "Text";
-        case ClipboardItem::Link: return "Link";
-        case ClipboardItem::Image: return "Image";
-        case ClipboardItem::RichText: return "RichText";
-        case ClipboardItem::File: return "File";
-        case ClipboardItem::Color: return "Color";
-        case ClipboardItem::Office: return "Office";
+        case All: return "All";
+        case Text: return "Text";
+        case Link: return "Link";
+        case Image: return "Image";
+        case RichText: return "RichText";
+        case File: return "File";
+        case Color: return "Color";
+        case Office: return "Office";
     }
     return "Unknown";
 }
@@ -292,7 +292,9 @@ void ClipboardMonitor::captureClipboard() {
             .arg(QString::fromLatin1(contentTypeName(immediateItem.getContentType())))
             .arg(immediateItem.getName());
         emitCapturedItem(immediateItem, pendingWId_);
-        scheduleDeferredMimeCapture(immediateItem.getName());
+        if (hasDeferrableMimeFormats(mimeData)) {
+            scheduleDeferredMimeCapture(immediateItem.getName());
+        }
         return;
     }
 
@@ -303,7 +305,9 @@ void ClipboardMonitor::captureClipboard() {
             .arg(QString::fromLatin1(contentTypeName(immediateItem.getContentType())))
             .arg(immediateItem.getName());
         emitCapturedItem(immediateItem, pendingWId_);
-        scheduleDeferredMimeCapture(immediateItem.getName());
+        if (hasDeferrableMimeFormats(mimeData)) {
+            scheduleDeferredMimeCapture(immediateItem.getName());
+        }
         return;
     }
 
@@ -520,9 +524,32 @@ void ClipboardMonitor::emitCapturedItem(const ClipboardItem &item, int wId) {
     Q_EMIT clipboardUpdated(item, wId);
 }
 
+bool ClipboardMonitor::hasDeferrableMimeFormats(const QMimeData *mimeData) const {
+    if (!mimeData) {
+        return false;
+    }
+    static const QStringList alreadyCaptured = {
+        QStringLiteral("text/plain"),
+        QStringLiteral("text/html"),
+        QStringLiteral("text/uri-list"),
+    };
+    for (const QString &format : mimeData->formats()) {
+        if (alreadyCaptured.contains(format)) {
+            continue;
+        }
+        if (ClipboardItem::shouldCopyExtraMimeFormat(format)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void ClipboardMonitor::scheduleDeferredMimeCapture(const QString &itemName) {
     const quint64 token = captureToken_;
     const quint32 seq = lastSeqNumber_;
+    // Read extra MIME formats from the live clipboard.  This involves
+    // cross-process IPC to the source application and can block for
+    // seconds if the app is busy, so run it off the main thread.
     QTimer::singleShot(0, this, [this, token, seq, itemName]() {
         if (captureToken_ != token) {
             return;
@@ -544,10 +571,8 @@ void ClipboardMonitor::scheduleDeferredMimeCapture(const QString &itemName) {
             QStringLiteral("text/uri-list"),
         };
         for (const QString &format : mimeData->formats()) {
-            if (alreadyCaptured.contains(format)) {
-                continue;
-            }
-            if (!ClipboardItem::shouldCopyExtraMimeFormat(format)) {
+            if (alreadyCaptured.contains(format)
+                || !ClipboardItem::shouldCopyExtraMimeFormat(format)) {
                 continue;
             }
             const QByteArray data = mimeData->data(format);

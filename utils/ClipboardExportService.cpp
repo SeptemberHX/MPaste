@@ -106,17 +106,17 @@ QMimeData *buildMimeData(const ClipboardItem &item) {
     auto *mimeData = new QMimeData;
     copyRawFormats(mimeData, source);
 
-    const ClipboardItem::ContentType contentType = item.getContentType();
+    const ContentType contentType = item.getContentType();
     const QString normalizedText = item.getNormalizedText();
     const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
     const QString html = item.getHtml();
     const QColor color = item.getColor();
 
     switch (contentType) {
-        case ClipboardItem::Text:
+        case Text:
             setUtf8Text(mimeData, normalizedText);
             break;
-        case ClipboardItem::Link:
+        case Link:
             if (!normalizedUrls.isEmpty()) {
                 mimeData->setUrls(normalizedUrls);
             }
@@ -125,7 +125,7 @@ QMimeData *buildMimeData(const ClipboardItem &item) {
                 mimeData->setHtml(html);
             }
             break;
-        case ClipboardItem::RichText:
+        case RichText:
             if (!html.isEmpty()) {
                 mimeData->setHtml(html);
             }
@@ -134,7 +134,7 @@ QMimeData *buildMimeData(const ClipboardItem &item) {
                 mimeData->setUrls(normalizedUrls);
             }
             break;
-        case ClipboardItem::File:
+        case File:
             if (!normalizedUrls.isEmpty()) {
                 mimeData->setUrls(normalizedUrls);
                 setUtf8Text(mimeData, joinedUrlText(normalizedUrls));
@@ -142,8 +142,8 @@ QMimeData *buildMimeData(const ClipboardItem &item) {
                 setUtf8Text(mimeData, normalizedText);
             }
             break;
-        case ClipboardItem::Image:
-        case ClipboardItem::Office: {
+        case Image:
+        case Office: {
             const QPixmap pixmap = item.getImage();
             if (!pixmap.isNull()) {
                 materializeCanonicalImage(mimeData, pixmap);
@@ -156,13 +156,13 @@ QMimeData *buildMimeData(const ClipboardItem &item) {
             }
             break;
         }
-        case ClipboardItem::Color:
+        case Color:
             if (color.isValid()) {
                 mimeData->setColorData(color);
                 setUtf8Text(mimeData, color.name(QColor::HexRgb));
             }
             break;
-        case ClipboardItem::All:
+        case All:
             if (!html.isEmpty()) {
                 mimeData->setHtml(html);
             }

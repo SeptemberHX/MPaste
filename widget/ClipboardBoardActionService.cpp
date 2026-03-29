@@ -210,9 +210,9 @@ bool exportItemToFile(const ClipboardItem &item,
     }
 
     switch (item.getContentType()) {
-        case ClipboardItem::Text:
+        case Text:
             return writeUtf8File(filePath, item.getNormalizedText(), errorMessage);
-        case ClipboardItem::RichText: {
+        case RichText: {
             const QMimeData *mimeData = item.getMimeData();
             const QString html = mimeData ? mimeData->html() : QString();
             if (!mimeData || !mimeData->hasHtml()) {
@@ -223,7 +223,7 @@ bool exportItemToFile(const ClipboardItem &item,
             }
             return writeUtf8File(filePath, html, errorMessage);
         }
-        case ClipboardItem::Image: {
+        case Image: {
             item.getMimeData();
             const QPixmap pixmap = item.getImage();
             if (!pixmap.isNull() && pixmap.save(filePath)) {
