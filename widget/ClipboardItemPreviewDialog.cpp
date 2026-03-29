@@ -21,6 +21,7 @@
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPalette>
 #include <QTextBrowser>
 #include <QTextDocument>
@@ -37,6 +38,7 @@
 #include "data/ContentClassifier.h"
 #include "data/LocalSaver.h"
 #include "utils/ThemeManager.h"
+#include "WindowBlurHelper.h"
 #include "utils/ThumbnailBuilder.h"
 #include "BoardInternalHelpers.h"
 
@@ -185,7 +187,7 @@ QString previewStyleSheet(bool dark) {
     if (dark) {
         return QStringLiteral(R"(
             QFrame#previewCard {
-                background-color: rgba(26, 31, 38, 245);
+                background-color: transparent;
                 border: none;
                 border-radius: 18px;
             }
@@ -201,8 +203,8 @@ QString previewStyleSheet(bool dark) {
                 background: transparent;
             }
             QTextBrowser {
-                background-color: #1F242D;
-                border: 1px solid rgba(116, 154, 214, 40);
+                background-color: rgba(255, 255, 255, 10);
+                border: 1px solid rgba(255, 255, 255, 25);
                 border-radius: 14px;
                 padding: 12px;
                 color: #E6EDF5;
@@ -210,11 +212,11 @@ QString previewStyleSheet(bool dark) {
                 selection-background-color: rgba(74, 144, 226, 110);
             }
             QTextBrowser:focus {
-                border-color: rgba(116, 154, 214, 80);
+                border-color: rgba(255, 255, 255, 40);
             }
             QToolButton#closeButton {
-                background-color: #1F242D;
-                border: 1px solid rgba(116, 154, 214, 40);
+                background-color: rgba(255, 255, 255, 14);
+                border: 1px solid rgba(255, 255, 255, 25);
                 border-radius: 14px;
                 color: #C9D4E0;
                 font-size: 17px;
@@ -223,15 +225,15 @@ QString previewStyleSheet(bool dark) {
                 min-height: 28px;
             }
             QToolButton#closeButton:hover {
-                background-color: #27303A;
-                border-color: rgba(116, 154, 214, 80);
+                background-color: rgba(255, 255, 255, 28);
+                border-color: rgba(255, 255, 255, 40);
             }
         )");
     }
 
     return QStringLiteral(R"(
         QFrame#previewCard {
-            background-color: rgba(247, 250, 255, 245);
+            background-color: transparent;
             border: none;
             border-radius: 18px;
         }
@@ -247,8 +249,8 @@ QString previewStyleSheet(bool dark) {
             background: transparent;
         }
         QTextBrowser {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 18);
+            background-color: rgba(0, 0, 0, 8);
+            border: 1px solid rgba(0, 0, 0, 18);
             border-radius: 14px;
             padding: 12px;
             color: #1E2936;
@@ -259,8 +261,8 @@ QString previewStyleSheet(bool dark) {
             border-color: rgba(74, 144, 226, 30);
         }
         QToolButton#closeButton {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 16);
+            background-color: rgba(0, 0, 0, 8);
+            border: 1px solid rgba(0, 0, 0, 18);
             border-radius: 14px;
             color: #5E7084;
             font-size: 17px;
@@ -269,8 +271,8 @@ QString previewStyleSheet(bool dark) {
             min-height: 28px;
         }
         QToolButton#closeButton:hover {
-            background-color: #F7FAFF;
-            border-color: rgba(74, 144, 226, 24);
+            background-color: rgba(0, 0, 0, 16);
+            border-color: rgba(0, 0, 0, 25);
         }
     )");
 }
@@ -754,6 +756,7 @@ connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     }
 
     show();
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     raise();
     activateWindow();
 }
@@ -764,6 +767,7 @@ void ClipboardItemPreviewDialog::reject() {
 
 void ClipboardItemPreviewDialog::applyTheme(bool dark) {
     darkTheme_ = dark;
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     if (ui_.browser) {
         ui_.browser->setStyleSheet(QString());
     }
@@ -978,23 +982,30 @@ void ClipboardItemPreviewDialog::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    const qreal borderWidth = 3.0;
     const qreal radius = 18.0;
-    const QRectF outerRect = QRectF(rect()).adjusted(borderWidth / 2.0,
-                                                     borderWidth / 2.0,
-                                                     -borderWidth / 2.0,
-                                                     -borderWidth / 2.0);
+    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
 
-    QConicalGradient gradient(outerRect.center(), 135);
-    gradient.setColorAt(0.00, QColor("#4A90E2"));
-    gradient.setColorAt(0.25, QColor("#1abc9c"));
-    gradient.setColorAt(0.50, QColor("#fc9867"));
-    gradient.setColorAt(0.75, QColor("#9B59B6"));
-    gradient.setColorAt(1.00, QColor("#4A90E2"));
+    // Clear outside the rounded rect so corners are transparent
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+    painter.fillRect(rect(), Qt::transparent);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
-    painter.setPen(QPen(QBrush(gradient), borderWidth));
-    painter.setBrush(darkTheme_ ? QColor(26, 31, 38, 245) : QColor(247, 250, 255, 245));
-    painter.drawRoundedRect(outerRect, radius, radius);
+    // Fill with near-transparent color to capture mouse events
+    QPainterPath shape;
+    shape.addRoundedRect(r, radius, radius);
+    painter.setClipPath(shape);
+    painter.fillRect(rect(), QColor(0, 0, 0, 1));
+    painter.setClipping(false);
+
+    if (darkTheme_) {
+        painter.setPen(QPen(QColor(255, 255, 255, 40), 1.5));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(r, radius, radius);
+    } else {
+        painter.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(r, radius, radius);
+    }
 }
 
 void ClipboardItemPreviewDialog::mousePressEvent(QMouseEvent *event) {

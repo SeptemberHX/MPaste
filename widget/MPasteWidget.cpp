@@ -31,6 +31,7 @@
 #include <QStyleFactory>
 #include "utils/MPasteSettings.h"
 #include "utils/ThemeManager.h"
+#include "WindowBlurHelper.h"
 #include "utils/IconResolver.h"
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
@@ -564,8 +565,6 @@ MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
                 this, [this](int scale) {
                     applyScale(scale);
                 });
-        connect(ui_.settingsWidget, &MPasteSettingsWidget::previewCacheActionRequested,
-                this, &MPasteWidget::runPreviewCacheAction);
         connect(ui_.settingsWidget, &MPasteSettingsWidget::thumbnailPrefetchChanged,
                 this, [this](int) {
                     if (ui_.clipboardWidget) {
@@ -862,10 +861,7 @@ void MPasteWidget::initMenu() {
 void MPasteWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
 
-#ifdef Q_OS_WIN
-    const QColor tint = darkTheme_ ? QColor(30, 40, 55, 18) : QColor(231, 241, 244, 20);
-    enableBlurBehind((HWND)winId(), tint);
-#endif
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
 
     if (ui_.ui) {
         ui_.ui->menuButton->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), darkTheme_));
@@ -897,9 +893,13 @@ void MPasteWidget::applyTheme(bool dark) {
         ui_.ui->clipboardBtnWidget->setStyleSheet(glassTabStyle);
         ui_.ui->typeBtnWidget->setStyleSheet(glassTabStyle);
     } else if (ui_.ui) {
-        // Light mode: clear overrides, let QSS tokens take effect
-        ui_.ui->clipboardBtnWidget->setStyleSheet(QString());
-        ui_.ui->typeBtnWidget->setStyleSheet(QString());
+        // Light mode: glass style with dark tint
+        const QString lightGlassTabStyle = QStringLiteral(
+            "QToolButton { background-color: transparent; border: none; border-radius: 12px; }"
+            "QToolButton:hover { background-color: rgba(0,0,0,12); }"
+            "QToolButton:checked, QToolButton:pressed { background-color: rgba(0,0,0,22); }");
+        ui_.ui->clipboardBtnWidget->setStyleSheet(lightGlassTabStyle);
+        ui_.ui->typeBtnWidget->setStyleSheet(lightGlassTabStyle);
     }
 
     updatePageSelectorStyle();
@@ -1243,17 +1243,10 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
             p.setBrush(QColor(255, 255, 255, 10));
             p.drawRoundedRect(r, radius, radius);
         } else {
-            // Light: colorful gradient border
-            const qreal bw = 2.0;
-            r = r.adjusted(bw / 2, bw / 2, -bw / 2, -bw / 2);
-            QConicalGradient grad(r.center(), 135);
-            grad.setColorAt(0.00, QColor("#4A90E2"));
-            grad.setColorAt(0.25, QColor("#1abc9c"));
-            grad.setColorAt(0.50, QColor("#fc9867"));
-            grad.setColorAt(0.75, QColor("#9B59B6"));
-            grad.setColorAt(1.00, QColor("#4A90E2"));
-            p.setPen(QPen(QBrush(grad), bw));
-            p.setBrush(Qt::NoBrush);
+            // Light: glass pill container with dark tint
+            r = r.adjusted(0.5, 0.5, -0.5, -0.5);
+            p.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
+            p.setBrush(QColor(0, 0, 0, 8));
             p.drawRoundedRect(r, radius, radius);
         }
     }
@@ -1428,53 +1421,6 @@ void MPasteWidget::loadFromSaveDir() {
     ui_.clipboardWidget->setFavoriteFingerprints(ui_.staredWidget->loadAllFingerprints());
     ui_.staredWidget->loadFromSaveDirDeferred();
     ui_.clipboardWidget->loadFromSaveDirDeferred();
-}
-
-void MPasteWidget::runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheAction action) {
-    ScrollItemsWidget *boardWidget = currItemsWidget();
-    if (!boardWidget) {
-        return;
-    }
-
-    ClipboardBoardService::PreviewCacheMaintenanceMode mode = ClipboardBoardService::RepairBrokenPreviews;
-    QString actionLabel;
-    switch (action) {
-        case MPasteSettingsWidget::RepairBrokenPreviews:
-            mode = ClipboardBoardService::RepairBrokenPreviews;
-            actionLabel = menuText("Repair broken previews", QString::fromUtf16(u"\u4FEE\u590D\u635F\u574F\u9884\u89C8"));
-            break;
-        case MPasteSettingsWidget::RebuildCurrentPreviews:
-            mode = ClipboardBoardService::RebuildAllPreviews;
-            actionLabel = menuText("Rebuild current previews", QString::fromUtf16(u"\u91CD\u5EFA\u5F53\u524D\u9884\u89C8"));
-            break;
-        case MPasteSettingsWidget::ClearCurrentPreviews:
-            mode = ClipboardBoardService::ClearAllPreviews;
-            actionLabel = menuText("Clear current previews", QString::fromUtf16(u"\u6E05\u7A7A\u5F53\u524D\u9884\u89C8"));
-            break;
-    }
-
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    const int changedCount = boardWidget->maintainPreviewCache(mode);
-    QApplication::restoreOverrideCursor();
-
-    reloadHistoryBoards();
-
-    const QString boardLabel = ui_.buttonGroup && ui_.buttonGroup->checkedButton()
-        ? ui_.buttonGroup->checkedButton()->text()
-        : boardWidget->getCategory();
-    const QLocale locale = QLocale::system();
-    const bool zh = locale.language() == QLocale::Chinese
-        || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive);
-    const QString summary = changedCount > 0
-        ? (zh
-            ? QString::fromUtf16(u"\u5DF2\u5728 %1 \u4E2D\u66F4\u65B0 %2 \u4E2A\u6761\u76EE\u3002").arg(boardLabel).arg(changedCount)
-            : QStringLiteral("Updated %1 items in %2.").arg(changedCount).arg(boardLabel))
-        : (zh
-            ? QString::fromUtf16(u"%1 \u4E2D\u6CA1\u6709\u9700\u8981\u66F4\u65B0\u7684\u9884\u89C8\u6761\u76EE\u3002").arg(boardLabel)
-            : QStringLiteral("No preview entries needed updates in %1.").arg(boardLabel));
-    QMessageBox::information(ensureSettingsWidget(),
-                             menuText("Preview Cache", QString::fromUtf16(u"\u9884\u89C8\u7F13\u5B58")),
-                             QStringLiteral("%1\n%2").arg(actionLabel, summary));
 }
 
 void MPasteWidget::reloadHistoryBoards() {

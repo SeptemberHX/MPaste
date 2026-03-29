@@ -71,6 +71,19 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
 
     listView_->setModel(proxyModel_);
     listView_->setItemDelegate(cardDelegate_);
+
+    // Invalidate card cache when model data changes (pin, favorite, etc.)
+    connect(boardModel_, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex &topLeft, const QModelIndex &bottomRight) {
+        if (!cardDelegate_) return;
+        for (int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+            const QString name = boardModel_->data(boardModel_->index(row, 0),
+                                                   ClipboardBoardModel::NameRole).toString();
+            if (!name.isEmpty()) {
+                cardDelegate_->invalidateCard(name);
+            }
+        }
+    });
     listView_->setViewMode(QListView::IconMode);
     listView_->setFlow(QListView::LeftToRight);
     listView_->setWrapping(false);
@@ -1899,13 +1912,6 @@ int ScrollItemsWidget::getItemCount() {
 
 void ScrollItemsWidget::refreshThumbnailCache() {
     updateVisibleThumbnails();
-}
-
-int ScrollItemsWidget::maintainPreviewCache(ClipboardBoardService::PreviewCacheMaintenanceMode mode) {
-    if (!boardService_) {
-        return 0;
-    }
-    return boardService_->maintainPreviewCache(mode);
 }
 
 QSet<QByteArray> ScrollItemsWidget::loadAllFingerprints() {

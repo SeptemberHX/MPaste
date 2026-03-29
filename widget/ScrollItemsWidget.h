@@ -74,7 +74,6 @@ public:
     int currentPageNumber() const;
     int totalPageCount() const;
     void refreshThumbnailCache();
-    int maintainPreviewCache(ClipboardBoardService::PreviewCacheMaintenanceMode mode);
     QSet<QByteArray> loadAllFingerprints();
     void setFavoriteFingerprints(const QSet<QByteArray> &fingerprints);
 

@@ -85,7 +85,6 @@ private:
     void scheduleStartupWarmup();
     void reloadHistoryBoards();
     void syncHistoryBoardsIncremental();
-    void runPreviewCacheAction(MPasteSettingsWidget::PreviewCacheAction action);
     void updatePageSelector();
     void updatePageSelectorStyle();
 

@@ -207,12 +207,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="205"/>
-        <source>Preview cache</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../widget/MPasteSettingsWidget.cpp" line="784"/>
+        <location filename="../widget/MPasteSettingsWidget.cpp" line="729"/>
         <source>Auto-start is currently only supported on Windows.</source>
         <translation type="unfinished"></translation>
     </message>
