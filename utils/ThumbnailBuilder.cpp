@@ -110,6 +110,19 @@ QString simplifyHtmlForRendering(const QString &html) {
     const int len = html.size();
     while (i < len) {
         if (html[i] == QLatin1Char('<')) {
+            // Skip HTML comments (<!--...-->).
+            if (i + 3 < len && html[i + 1] == QLatin1Char('!')
+                && html[i + 2] == QLatin1Char('-') && html[i + 3] == QLatin1Char('-')) {
+                int commentEnd = html.indexOf(QStringLiteral("-->"), i + 4);
+                i = (commentEnd >= 0) ? commentEnd + 3 : len;
+                continue;
+            }
+            // Skip <!DOCTYPE ...> declarations.
+            if (i + 1 < len && html[i + 1] == QLatin1Char('!')) {
+                int tagEnd = html.indexOf(QLatin1Char('>'), i);
+                i = (tagEnd >= 0) ? tagEnd + 1 : len;
+                continue;
+            }
             int tagEnd = html.indexOf(QLatin1Char('>'), i);
             if (tagEnd < 0) break;
             int nameStart = i + 1;
@@ -138,9 +151,25 @@ QString simplifyHtmlForRendering(const QString &html) {
                     result += tagStr;
                 }
             } else if (html[i + 1] != QLatin1Char('/')) {
-                // Dropped block-level tags (e.g. custom web components)
-                // are replaced with <br> to preserve visual line breaks.
-                result += QStringLiteral("<br>");
+                // Only replace dropped *block-level* tags with <br> to
+                // preserve visual line breaks.  Head-section tags (meta,
+                // style, link, title, script) and inline elements are
+                // silently dropped so they don't inject blank lines at
+                // the top of the rendered preview.
+                static const QSet<QString> headOrInline = {
+                    QStringLiteral("meta"), QStringLiteral("style"),
+                    QStringLiteral("link"), QStringLiteral("title"),
+                    QStringLiteral("script"), QStringLiteral("noscript"),
+                    QStringLiteral("img"), QStringLiteral("svg"),
+                    QStringLiteral("input"), QStringLiteral("button"),
+                    QStringLiteral("select"), QStringLiteral("textarea"),
+                    QStringLiteral("label"), QStringLiteral("object"),
+                    QStringLiteral("embed"), QStringLiteral("iframe"),
+                    QStringLiteral("template"), QStringLiteral("slot"),
+                };
+                if (!headOrInline.contains(tagName)) {
+                    result += QStringLiteral("<br>");
+                }
             }
             i = tagEnd + 1;
         } else {
