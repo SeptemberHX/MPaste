@@ -40,13 +40,15 @@ namespace CardRenderUtils {
                         const QFont &font, const QColor &color, Qt::Alignment alignment,
                         Qt::TextElideMode elideMode = Qt::ElideRight);
     void drawWrappedText(QPainter *painter, const QRect &rect, const QString &text,
-                         const QFont &font, const QColor &color);
+                         const QFont &font, const QColor &color,
+                         qreal lineSpacing = 0);
     void drawCoverPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &pixmap,
                          const QString &debugName = QString(), const QSize &debugImageSize = QSize());
     void drawContainPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &pixmap);
     void drawManagedVisualPreview(QPainter *painter, const QRect &rect, const CardData &card,
                                   int scale, bool darkTheme, int loadingPhase, bool containMode);
     QString previewTextForCard(const CardData &card);
+    bool looksLikeCode(const QString &text);
     void clearCoverPixmapCache();
 }
 

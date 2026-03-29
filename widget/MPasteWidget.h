@@ -117,6 +117,7 @@ private:
         QWidget *pageSelectorWidget = nullptr;
         QLabel *pagePrefixLabel = nullptr;
         QComboBox *pageComboBox = nullptr;
+        QLabel *pageNumberLabel = nullptr;
         QLabel *pageTotalLabel = nullptr;
         QLabel *pageSuffixLabel = nullptr;
 

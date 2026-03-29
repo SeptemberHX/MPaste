@@ -139,6 +139,7 @@ public:
     const QList<IndexedItemMeta> &indexedItemsMeta() const { return indexedItems_; }
     void notifyItemAdded();
     bool moveIndexedItemToFront(const QString &name);
+    void updateIndexedItemTime(const QString &name, const QDateTime &time);
     void trimExpiredPendingItems(const QDateTime &cutoff);
     void processPendingItemAsync(const ClipboardItem &item, const QString &expectedName);
     void requestThumbnailAsync(const QString &expectedName, const QString &filePath);

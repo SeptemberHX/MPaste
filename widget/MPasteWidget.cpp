@@ -26,7 +26,9 @@
 #include <QPainterPath>
 #include <QMessageBox>
 #include <QLabel>
+#include <QAbstractItemView>
 #include <QComboBox>
+#include <QStyledItemDelegate>
 #include <QStyle>
 #include <QStyleFactory>
 #include "utils/MPasteSettings.h"
@@ -120,6 +122,205 @@ private:
     int dividerX_ = 0;
     int dividerInset_ = 3;
     bool paintFrame_ = true;
+};
+
+// Glass dropdown popup for the page selector — replaces QComboBox whose
+// dropdown fails to render item text on Windows Tool windows.
+class GlassPagePopup final : public QWidget {
+    Q_OBJECT
+public:
+    explicit GlassPagePopup(QWidget *parent = nullptr)
+        : QWidget(parent, Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint) {
+        setAttribute(Qt::WA_TranslucentBackground);
+        setMouseTracking(true);
+    }
+
+    void setPages(int totalPages, int currentPage) {
+        totalPages_ = qMax(1, totalPages);
+        currentPage_ = qBound(1, currentPage, totalPages_);
+        hoveredPage_ = -1;
+        scrollY_ = 0;
+        recalcSize();
+        // Scroll so the current page is visible.
+        ensurePageVisible(currentPage_);
+    }
+
+    void popup(const QPoint &globalPos) {
+        move(globalPos);
+        show();
+        WindowBlurHelper::enableBlurBehind(this, dark_);
+        raise();
+    }
+
+    void setDark(bool dark) { dark_ = dark; }
+
+signals:
+    void pageSelected(int page);
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+
+        const QRectF r = QRectF(rect()).adjusted(1, 1, -1, -1);
+        const QColor bg = dark_ ? QColor(30, 36, 48, 1) : QColor(245, 245, 248, 1);
+        const QColor border = dark_ ? QColor(255, 255, 255, 30) : QColor(0, 0, 0, 22);
+        p.setPen(QPen(border, 1));
+        p.setBrush(bg);
+        p.drawRoundedRect(r, 10, 10);
+
+        const QColor textColor = dark_ ? QColor(230, 237, 245) : QColor(30, 41, 54);
+        const QColor hoverBg = dark_ ? QColor(255, 255, 255, 24) : QColor(0, 0, 0, 14);
+        const QColor currentBg = QColor(74, 144, 226, dark_ ? 90 : 60);
+
+        QFont font;
+        font.setPixelSize(13);
+        font.setWeight(QFont::DemiBold);
+        p.setFont(font);
+
+        // Clip to content area to prevent cells from bleeding into rounded corners.
+        p.setClipRect(QRect(kPad, kPad, width() - kPad * 2, height() - kPad * 2));
+
+        const int cols = columns();
+        for (int i = 0; i < totalPages_; ++i) {
+            const int page = i + 1;
+            const QRect cell = cellRect(i, cols);
+            if (cell.bottom() < kPad || cell.top() > height() - kPad) {
+                continue; // Off-screen — skip.
+            }
+            if (page == currentPage_) {
+                p.setPen(Qt::NoPen);
+                p.setBrush(currentBg);
+                p.drawRoundedRect(cell.adjusted(1, 1, -1, -1), 6, 6);
+            } else if (page == hoveredPage_) {
+                p.setPen(Qt::NoPen);
+                p.setBrush(hoverBg);
+                p.drawRoundedRect(cell.adjusted(1, 1, -1, -1), 6, 6);
+            }
+            p.setPen(textColor);
+            p.drawText(cell, Qt::AlignCenter, QString::number(page));
+        }
+
+        // Scrollbar indicator when content overflows.
+        if (needsScroll()) {
+            p.setClipping(false);
+            const int totalContentH = totalRows() * kCellH;
+            const int viewH = visibleHeight();
+            const int trackH = viewH - 4;
+            const int thumbH = qMax(12, trackH * viewH / totalContentH);
+            const int thumbY = kPad + 2 + (trackH - thumbH) * scrollY_ / maxScroll();
+            const int trackX = width() - kPad;
+            p.setPen(Qt::NoPen);
+            p.setBrush(dark_ ? QColor(255, 255, 255, 36) : QColor(0, 0, 0, 28));
+            p.drawRoundedRect(QRectF(trackX, thumbY, 3, thumbH), 1.5, 1.5);
+        }
+    }
+
+    void mouseMoveEvent(QMouseEvent *event) override {
+        const int page = pageAtPos(event->pos());
+        if (page != hoveredPage_) {
+            hoveredPage_ = page;
+            update();
+        }
+    }
+
+    void mousePressEvent(QMouseEvent *event) override {
+        const int page = pageAtPos(event->pos());
+        if (page > 0) {
+            emit pageSelected(page);
+        }
+        close();
+    }
+
+    void wheelEvent(QWheelEvent *event) override {
+        if (!needsScroll()) return;
+        const int delta = event->angleDelta().y();
+        scrollY_ = qBound(0, scrollY_ - (delta > 0 ? kCellH : -kCellH), maxScroll());
+        hoveredPage_ = pageAtPos(mapFromGlobal(QCursor::pos()));
+        update();
+        event->accept();
+    }
+
+    void leaveEvent(QEvent *) override {
+        hoveredPage_ = -1;
+        update();
+    }
+
+private:
+    static constexpr int kCellW = 38;
+    static constexpr int kCellH = 30;
+    static constexpr int kPad = 6;
+    static constexpr int kMaxVisibleRows = 4;
+
+    int columns() const {
+        if (totalPages_ <= 5) return qMax(1, totalPages_);
+        if (totalPages_ <= 20) return 5;
+        return 6;
+    }
+
+    int totalRows() const {
+        const int cols = columns();
+        return (totalPages_ + cols - 1) / cols;
+    }
+
+    int visibleHeight() const {
+        return qMin(totalRows(), kMaxVisibleRows) * kCellH;
+    }
+
+    bool needsScroll() const { return totalRows() > kMaxVisibleRows; }
+
+    int maxScroll() const {
+        return qMax(0, totalRows() * kCellH - visibleHeight());
+    }
+
+    void recalcSize() {
+        const int cols = columns();
+        const int scrollbarW = needsScroll() ? 5 : 0;
+        resize(cols * kCellW + kPad * 2 + scrollbarW,
+               visibleHeight() + kPad * 2);
+    }
+
+    void ensurePageVisible(int page) {
+        if (!needsScroll()) return;
+        const int cols = columns();
+        const int row = (page - 1) / cols;
+        const int rowTop = row * kCellH;
+        const int rowBot = rowTop + kCellH;
+        const int viewH = visibleHeight();
+        if (rowTop < scrollY_) {
+            scrollY_ = rowTop;
+        } else if (rowBot > scrollY_ + viewH) {
+            scrollY_ = rowBot - viewH;
+        }
+        scrollY_ = qBound(0, scrollY_, maxScroll());
+    }
+
+    QRect cellRect(int index, int cols) const {
+        const int col = index % cols;
+        const int row = index / cols;
+        return QRect(kPad + col * kCellW,
+                     kPad + row * kCellH - scrollY_,
+                     kCellW, kCellH);
+    }
+
+    int pageAtPos(const QPoint &pos) const {
+        const int cols = columns();
+        const int col = (pos.x() - kPad) / kCellW;
+        const int row = (pos.y() - kPad + scrollY_) / kCellH;
+        if (col < 0 || col >= cols || row < 0
+            || pos.x() < kPad || pos.y() < kPad
+            || pos.x() > width() - kPad || pos.y() > height() - kPad) {
+            return -1;
+        }
+        const int index = row * cols + col;
+        return (index >= 0 && index < totalPages_) ? index + 1 : -1;
+    }
+
+    int totalPages_ = 1;
+    int currentPage_ = 1;
+    int hoveredPage_ = -1;
+    int scrollY_ = 0;
+    bool dark_ = false;
 };
 
 ClipboardItem rehydrateClipboardItem(const ClipboardItem &item) {
@@ -447,15 +648,18 @@ void MPasteWidget::initUI() {
     ui_.pagePrefixLabel->setAlignment(Qt::AlignCenter);
     ui_.pagePrefixLabel->setFixedWidth(14);
 
+    // Hidden QComboBox kept for compatibility with updatePageSelector() which
+    // reads its count/index.  The visible control is pageNumberLabel.
     ui_.pageComboBox = new QComboBox(ui_.pageSelectorWidget);
-    ui_.pageComboBox->setEditable(false);
-    ui_.pageComboBox->setInsertPolicy(QComboBox::NoInsert);
-    ui_.pageComboBox->setMaxVisibleItems(18);
-    ui_.pageComboBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    ui_.pageComboBox->setMinimumContentsLength(2);
+    ui_.pageComboBox->hide();
     ui_.pageComboBox->addItem(QStringLiteral("1"), 1);
     ui_.pageComboBox->setCurrentIndex(0);
-    ui_.pageComboBox->setFixedWidth(48);
+
+    ui_.pageNumberLabel = new QLabel(QStringLiteral("1"), ui_.pageSelectorWidget);
+    ui_.pageNumberLabel->setAlignment(Qt::AlignCenter);
+    ui_.pageNumberLabel->setCursor(Qt::PointingHandCursor);
+    ui_.pageNumberLabel->setFixedWidth(28);
+    ui_.pageNumberLabel->installEventFilter(this);
 
     ui_.pageTotalLabel = new QLabel(QStringLiteral("/ 1"), ui_.pageSelectorWidget);
     ui_.pageTotalLabel->setAlignment(Qt::AlignCenter);
@@ -466,7 +670,7 @@ void MPasteWidget::initUI() {
     ui_.pageSuffixLabel->setFixedWidth(14);
 
     pageLayout->addWidget(ui_.pagePrefixLabel);
-    pageLayout->addWidget(ui_.pageComboBox);
+    pageLayout->addWidget(ui_.pageNumberLabel);
     pageLayout->addWidget(ui_.pageTotalLabel);
     pageLayout->addWidget(ui_.pageSuffixLabel);
     ui_.pageSelectorWidget->setFixedWidth(110);
@@ -1008,6 +1212,9 @@ void MPasteWidget::setupConnections() {
         if (ScrollItemsWidget *board = currItemsWidget()) {
             board->setCurrentPageNumber(index + 1);
         }
+        if (ui_.pageNumberLabel) {
+            ui_.pageNumberLabel->setText(QString::number(index + 1));
+        }
     });
 
     connect(ui_.ui->firstButton, &QPushButton::clicked, this, [this]() {
@@ -1059,17 +1266,31 @@ void MPasteWidget::clipboardActivityObserved(int wId) {
 }
 
 void MPasteWidget::clipboardUpdated(const ClipboardItem &nItem, int wId) {
-    if (!pasteController_->isPasting()) {
-        const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
-        qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated wId=%1 isPasting=%2 added=%3 %4")
-            .arg(wId)
-            .arg(pasteController_->isPasting())
-            .arg(added)
-            .arg(widgetItemSummary(nItem));
+    if (pasteController_->isPasting()) {
+        return;
+    }
 
-        if (added) {
-            clipboard_.copiedWhenHide = true;
-        }
+    // Suppress echo from our own clipboard write: if the captured item
+    // has the same fingerprint as the item we just pasted, skip the add
+    // to avoid creating a duplicate that pushes the original down.
+    const QByteArray pastedFp = pasteController_->lastPastedFingerprint();
+    if (!pastedFp.isEmpty() && nItem.fingerprint() == pastedFp) {
+        pasteController_->clearLastPastedFingerprint();
+        qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated suppressed echo wId=%1 fp=%2")
+            .arg(wId)
+            .arg(QString::fromLatin1(pastedFp.toHex().left(12)));
+        return;
+    }
+
+    const bool added = ui_.clipboardWidget->addAndSaveItem(nItem);
+    qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated wId=%1 isPasting=%2 added=%3 %4")
+        .arg(wId)
+        .arg(pasteController_->isPasting())
+        .arg(added)
+        .arg(widgetItemSummary(nItem));
+
+    if (added) {
+        clipboard_.copiedWhenHide = true;
     }
 }
 
@@ -1173,9 +1394,12 @@ bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
         return false;
     }
 
-    QTimer::singleShot(50, this, [this, board]() {
+    const QString itemName = selectedItem->getName();
+    qInfo().noquote() << QStringLiteral("[shortcut-paste] index=%1 itemName=%2")
+        .arg(shortcutIndex).arg(itemName);
+    QTimer::singleShot(50, this, [this, board, itemName]() {
         hideAndPaste();
-        board->moveSelectedToFirst();
+        board->moveItemByNameToFirst(itemName);
         currItemsWidget()->cleanShortCutInfo();
     });
     return true;
@@ -1264,6 +1488,27 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
             }
         }
     }
+
+    if (watched == ui_.pageNumberLabel && event->type() == QEvent::MouseButtonPress) {
+        ScrollItemsWidget *board = currItemsWidget();
+        const int totalPages = board ? board->totalPageCount() : 0;
+        const int currentPage = board ? board->currentPageNumber() : 1;
+        if (totalPages > 1) {
+            auto *popup = new GlassPagePopup(this);
+            popup->setAttribute(Qt::WA_DeleteOnClose);
+            popup->setDark(darkTheme_);
+            popup->setPages(totalPages, currentPage);
+            connect(popup, &GlassPagePopup::pageSelected, this, [this](int page) {
+                ui_.pageComboBox->setCurrentIndex(page - 1);
+            });
+            const QPoint pos = ui_.pageNumberLabel->mapToGlobal(
+                QPoint(0, -popup->sizeHint().height() - 4));
+            popup->popup(QPoint(pos.x() - popup->width() / 2 + ui_.pageNumberLabel->width() / 2,
+                                ui_.pageNumberLabel->mapToGlobal(QPoint(0, 0)).y() - popup->height() - 4));
+        }
+        return true;
+    }
+
     return QObject::eventFilter(watched, event);
 }
 
@@ -1486,49 +1731,20 @@ void MPasteWidget::updatePageSelectorStyle() {
     const QString text = darkTheme_ ? QStringLiteral("#F2F6FB") : QStringLiteral("#2C3E50");
     const QString divider = darkTheme_ ? QStringLiteral("rgba(242, 246, 251, 110)")
                                        : QStringLiteral("rgba(44, 62, 80, 96)");
-    const QString arrow = darkTheme_
-        ? QStringLiteral(":/resources/resources/page_chevron_light.svg")
-        : QStringLiteral(":/resources/resources/page_chevron.svg");
     if (auto *pill = static_cast<PageSelectorPill *>(ui_.pageSelectorWidget)) {
         ui_.pageSelectorWidget->layout()->activate();
         pill->setColors(QColor(background), QColor(border), QColor(divider));
         pill->setCornerRadius(radius);
         pill->setDividerInset(3);
-        pill->setDividerPosition(ui_.pageComboBox->geometry().right() + 4);
+        pill->setDividerPosition(ui_.pageNumberLabel->geometry().right() + 4);
         pill->setPaintFrame(false);
     }
-    ui_.pageComboBox->setStyleSheet(QStringLiteral(
-        "QComboBox {"
-        " background: transparent;"
-        " border: none;"
-        " color: %1;"
-        " padding: 0;"
-        " font-size: 13px;"
-        " font-weight: 700;"
-        "}"
-        "QComboBox::drop-down {"
-        " subcontrol-origin: padding;"
-        " subcontrol-position: top right;"
-        " width: 6px;"
-        " border: none;"
-        " background: transparent;"
-        "}"
-        "QComboBox::down-arrow {"
-        " width: 5px;"
-        " height: 3px;"
-        " image: url(%2);"
-        "}"
-        "QComboBox QAbstractItemView {"
-        " background-color: %3;"
-        " border: 1px solid %4;"
-        " color: %5;"
-        " selection-background-color: %6;"
-        " selection-color: %5;"
-        "}").arg(text, arrow,
-                 darkTheme_ ? QStringLiteral("#1E232B") : QStringLiteral("#FFFFFF"),
-                 darkTheme_ ? QStringLiteral("#2C3440") : QStringLiteral("#E5E5E5"),
-                 darkTheme_ ? QStringLiteral("#F2F6FB") : QStringLiteral("#1A1A1A"),
-                 darkTheme_ ? QStringLiteral("rgba(28, 34, 44, 235)") : QStringLiteral("#E5E5E5")));
+    const QString hoverBg = darkTheme_ ? QStringLiteral("rgba(255, 255, 255, 22)") : QStringLiteral("rgba(0, 0, 0, 12)");
+    const QString hoverColor = darkTheme_ ? QStringLiteral("#4A90E2") : QStringLiteral("#2A6FC9");
+    ui_.pageNumberLabel->setStyleSheet(QStringLiteral(
+        "QLabel { color: %1; font-size: 13px; font-weight: 700; background: transparent;"
+        " border-radius: 4px; padding: 1px 3px; }"
+        "QLabel:hover { color: %2; background: %3; }").arg(text, hoverColor, hoverBg));
     const QString secondary = darkTheme_ ? QStringLiteral("rgba(242, 246, 251, 185)")
                                          : QStringLiteral("rgba(44, 62, 80, 185)");
     ui_.pagePrefixLabel->setStyleSheet(QStringLiteral(
@@ -1566,10 +1782,12 @@ void MPasteWidget::updatePageSelector() {
     ui_.pageComboBox->blockSignals(false);
     ui_.pageTotalLabel->setText(QStringLiteral("/ %1").arg(totalPages));
 
-    const QFontMetrics comboMetrics(ui_.pageComboBox->font());
-    const int comboTextWidth = comboMetrics.horizontalAdvance(QString::number(clampedTotalPages));
-    const int comboWidth = qMax(24, comboTextWidth + 12);
-    ui_.pageComboBox->setFixedWidth(comboWidth);
+    const int displayPage = qBound(1, currentPage > 0 ? currentPage : 1, clampedTotalPages);
+    ui_.pageNumberLabel->setText(QString::number(displayPage));
+
+    const QFontMetrics labelMetrics(ui_.pageNumberLabel->font());
+    const int labelWidth = qMax(20, labelMetrics.horizontalAdvance(QString::number(clampedTotalPages)) + 8);
+    ui_.pageNumberLabel->setFixedWidth(labelWidth);
 
     const QFontMetrics totalMetrics(ui_.pageTotalLabel->font());
     const int totalWidth = qMax(26, totalMetrics.horizontalAdvance(QStringLiteral("/ %1").arg(totalPages)) + 4);
@@ -1581,7 +1799,7 @@ void MPasteWidget::updatePageSelector() {
         ui_.pageSelectorWidget->setFixedWidth(margins.left()
                                               + ui_.pagePrefixLabel->width()
                                               + spacing
-                                              + comboWidth
+                                              + labelWidth
                                               + spacing
                                               + totalWidth
                                               + spacing
@@ -1683,3 +1901,5 @@ void MPasteWidget::debugKeyState() {
              << "Active Window:" << QApplication::activeWindow();
 #endif
 }
+
+#include "MPasteWidget.moc"

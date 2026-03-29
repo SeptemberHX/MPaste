@@ -716,7 +716,9 @@ namespace {
 bool rewriteCurrentFormatHeader(const QString &filePath,
                                 const QString *aliasOverride,
                                 const bool *pinnedOverride,
-                                const QPixmap *thumbnailOverride) {
+                                const QPixmap *thumbnailOverride,
+                                const QDateTime *timeOverride = nullptr,
+                                const QString *nameOverride = nullptr) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
@@ -752,6 +754,12 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
     }
     if (thumbnailOverride) {
         header.thumbnail = *thumbnailOverride;
+    }
+    if (timeOverride && timeOverride->isValid()) {
+        header.time = *timeOverride;
+    }
+    if (nameOverride && !nameOverride->isEmpty()) {
+        header.name = *nameOverride;
     }
 
     const qint64 fileSize = file.size();
@@ -874,6 +882,71 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
 
 bool LocalSaver::updateMetadata(const QString &filePath, const QString &alias, bool pinned) {
     return rewriteCurrentFormatHeader(filePath, &alias, &pinned, nullptr);
+}
+
+bool LocalSaver::updateTimestamp(const QString &filePath, const QDateTime &time, const QString &name) {
+    // Lightweight header-only rewrite that doesn't parse or touch the
+    // MIME blob.  This succeeds even when the MIME section is damaged.
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    QDataStream in(&file);
+    quint32 version = 0, flags = 0;
+    QString magic;
+    in >> magic >> version >> flags;
+    const bool isCurrent = (magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
+        || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
+        || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4);
+    if (!isCurrent || in.status() != QDataStream::Ok) {
+        return false;
+    }
+
+    CurrentFormatHeader header;
+    if (!readCurrentFormatHeader(in, version, header)) {
+        return false;
+    }
+
+    // Apply overrides.
+    if (time.isValid()) header.time = time;
+    if (!name.isEmpty()) header.name = name;
+
+    // Read everything from mimeDataOffset onward as raw bytes.
+    const qint64 mimeStart = static_cast<qint64>(header.mimeDataOffset);
+    QByteArray mimeBlob;
+    if (mimeStart > 0 && mimeStart < file.size()) {
+        file.seek(mimeStart);
+        mimeBlob = file.readAll();
+    }
+    file.close();
+
+    // Rewrite: header + raw MIME blob at the same offset.
+    QSaveFile outFile(filePath);
+    if (!outFile.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+    QDataStream out(&outFile);
+    writeCurrentFormatHeader(out, header);
+
+    // Patch mimeDataOffset to the actual position after the new header.
+    const qint64 newMimeStart = outFile.pos();
+    if (!mimeBlob.isEmpty()) {
+        outFile.write(mimeBlob);
+    }
+    // Seek back to overwrite the mimeDataOffset field.
+    // It's the last quint64 before the MIME blob.
+    const qint64 offsetFieldPos = newMimeStart - static_cast<qint64>(sizeof(quint64));
+    if (offsetFieldPos > 0) {
+        outFile.seek(offsetFieldPos);
+        QDataStream patchOut(&outFile);
+        patchOut << static_cast<quint64>(newMimeStart);
+    }
+
+    if (out.status() != QDataStream::Ok) {
+        return false;
+    }
+    return outFile.commit();
 }
 
 bool LocalSaver::updateThumbnail(const QString &filePath, const QPixmap &thumbnail) {

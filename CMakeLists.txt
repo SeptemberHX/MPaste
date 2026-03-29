@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.7)
 set(_VERSION_MAJOR 0)
 set(_VERSION_MINOR 7)
-set(_VERSION_PATCH 1)
+set(_VERSION_PATCH 2)
 set(VERSION "${_VERSION_MAJOR}.${_VERSION_MINOR}.${_VERSION_PATCH}")
 project(MPaste)
 

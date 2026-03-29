@@ -21,6 +21,8 @@
 #include "data/CardPreviewMetrics.h"
 #include "data/ContentClassifier.h"
 #include "utils/MPasteSettings.h"
+#include "utils/MxGraphRenderer.h"
+#include "utils/ThemeManager.h"
 
 namespace ThumbnailBuilder {
 
@@ -45,6 +47,7 @@ QString richTextThumbnailStyleSheet() {
         "html, body { margin: 0 !important; width: 100% !important; max-width: 100% !important; }"
         "body {"
         " padding: 12px 12px 0 12px !important;"
+        " font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', 'Noto Sans', sans-serif !important;"
         " font-size: 15px !important;"
         " line-height: 1.38 !important;"
         " }"
@@ -108,6 +111,19 @@ QString simplifyHtmlForRendering(const QString &html) {
     const int len = html.size();
     while (i < len) {
         if (html[i] == QLatin1Char('<')) {
+            // Skip HTML comments (<!--...-->).
+            if (i + 3 < len && html[i + 1] == QLatin1Char('!')
+                && html[i + 2] == QLatin1Char('-') && html[i + 3] == QLatin1Char('-')) {
+                int commentEnd = html.indexOf(QStringLiteral("-->"), i + 4);
+                i = (commentEnd >= 0) ? commentEnd + 3 : len;
+                continue;
+            }
+            // Skip <!DOCTYPE ...> declarations.
+            if (i + 1 < len && html[i + 1] == QLatin1Char('!')) {
+                int tagEnd = html.indexOf(QLatin1Char('>'), i);
+                i = (tagEnd >= 0) ? tagEnd + 1 : len;
+                continue;
+            }
             int tagEnd = html.indexOf(QLatin1Char('>'), i);
             if (tagEnd < 0) break;
             int nameStart = i + 1;
@@ -136,9 +152,25 @@ QString simplifyHtmlForRendering(const QString &html) {
                     result += tagStr;
                 }
             } else if (html[i + 1] != QLatin1Char('/')) {
-                // Dropped block-level tags (e.g. custom web components)
-                // are replaced with <br> to preserve visual line breaks.
-                result += QStringLiteral("<br>");
+                // Only replace dropped *block-level* tags with <br> to
+                // preserve visual line breaks.  Head-section tags (meta,
+                // style, link, title, script) and inline elements are
+                // silently dropped so they don't inject blank lines at
+                // the top of the rendered preview.
+                static const QSet<QString> headOrInline = {
+                    QStringLiteral("meta"), QStringLiteral("style"),
+                    QStringLiteral("link"), QStringLiteral("title"),
+                    QStringLiteral("script"), QStringLiteral("noscript"),
+                    QStringLiteral("img"), QStringLiteral("svg"),
+                    QStringLiteral("input"), QStringLiteral("button"),
+                    QStringLiteral("select"), QStringLiteral("textarea"),
+                    QStringLiteral("label"), QStringLiteral("object"),
+                    QStringLiteral("embed"), QStringLiteral("iframe"),
+                    QStringLiteral("template"), QStringLiteral("slot"),
+                };
+                if (!headOrInline.contains(tagName)) {
+                    result += QStringLiteral("<br>");
+                }
             }
             i = tagEnd + 1;
         } else {
@@ -418,7 +450,7 @@ QImage buildTextPreviewImage(const QString &text, qreal targetDpr, int itemScale
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
 
-    QFont font;
+    QFont font(QStringLiteral("Microsoft YaHei UI"));
     font.setPointSize(qMax(9, 10 * itemScale / 100));
     painter.setFont(font);
     painter.setPen(QColor(40, 40, 40));
@@ -449,7 +481,7 @@ QImage buildFileListPreviewImage(const QList<QUrl> &urls, qreal targetDpr, int i
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
 
-    QFont font;
+    QFont font(QStringLiteral("Microsoft YaHei UI"));
     font.setPointSize(qMax(9, 10 * itemScale / 100));
     painter.setFont(font);
     painter.setPen(QColor(40, 40, 40));
@@ -511,6 +543,17 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     const QString html = mimeData->html();
     if (html.isEmpty()) {
         return QPixmap();
+    }
+
+    if (MxGraphRenderer::isMxGraphContent(html) || MxGraphRenderer::isMxGraphContent(item.getNormalizedText())) {
+        const int itemScale = MPasteSettings::getInst()->getItemScale();
+        const qreal dpr = maxScreenDevicePixelRatio();
+        const QImage mxImage = buildMxGraphThumbnailImage(html, item.getNormalizedText(), dpr, itemScale);
+        if (!mxImage.isNull()) {
+            QPixmap px = QPixmap::fromImage(mxImage);
+            px.setDevicePixelRatio(dpr);
+            return px;
+        }
     }
 
     const QSize logicalSize = previewLogicalSize(MPasteSettings::getInst()->getItemScale());
@@ -623,6 +666,15 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
         return QImage();
     }
 
+    // draw.io mxGraphModel content: render the diagram instead of the
+    // invisible HTML wrapper (transparent text, 0px font).
+    if (MxGraphRenderer::isMxGraphContent(html)) {
+        const QImage mxImage = buildMxGraphThumbnailImage(html, QString(), thumbnailDpr, itemScale);
+        if (!mxImage.isNull()) {
+            return mxImage;
+        }
+    }
+
     const QString &truncatedHtml = html;
 
     const QSize logicalSize = previewLogicalSize(itemScale);
@@ -674,6 +726,27 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
     }
     snapshot.setDevicePixelRatio(thumbnailDpr);
     return snapshot;
+}
+
+bool isMxGraphRichText(const QString &html, const QString &normalizedText) {
+    return MxGraphRenderer::isMxGraphContent(html)
+        || MxGraphRenderer::isMxGraphContent(normalizedText);
+}
+
+QImage buildMxGraphThumbnailImage(const QString &html, const QString &normalizedText, qreal targetDpr, int itemScale) {
+    // Try to extract the XML from HTML first, then from normalized text.
+    QString xml = MxGraphRenderer::extractMxGraphXml(html);
+    if (xml.isEmpty()) {
+        xml = MxGraphRenderer::extractMxGraphXml(normalizedText);
+    }
+    if (xml.isEmpty()) {
+        return {};
+    }
+
+    const QSize logicalSize = previewLogicalSize(itemScale);
+    const QSize pixelSize = logicalSize * targetDpr;
+    const bool dark = ThemeManager::instance()->isDark();
+    return MxGraphRenderer::render(xml, pixelSize, targetDpr, dark);
 }
 
 ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {

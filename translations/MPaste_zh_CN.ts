@@ -300,119 +300,119 @@
         <translation type="vanished">?? MIME ??</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="89"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="114"/>
         <source>Paste as Plain Text</source>
         <translation type="unfinished">??????</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="101"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="126"/>
         <source>Details</source>
         <translation type="unfinished">??</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="113"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="138"/>
         <source>Open Containing Folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="125"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="150"/>
         <source>Alias</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="163"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="188"/>
         <source>Save</source>
         <translation type="unfinished">保存</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="171"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="196"/>
         <source>Delete</source>
         <translation type="unfinished">删除</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="179"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="204"/>
         <source>Delete Selected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="68"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="69"/>
         <source>Plain Text</source>
         <translation type="unfinished">纯文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="70"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="71"/>
         <source>Link</source>
         <translation type="unfinished">链接</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="72"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="73"/>
         <source>Image</source>
         <translation type="unfinished">图片</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="74"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="75"/>
         <source>Office Shape</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="76"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="77"/>
         <source>Rich Text</source>
         <translation type="unfinished">富文本</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="79"/>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="111"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="80"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="112"/>
         <source>Files</source>
         <translation type="unfinished">文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="80"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="81"/>
         <source>File</source>
         <translation type="unfinished">文件</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="82"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="83"/>
         <source>Color</source>
         <translation type="unfinished">颜色</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="86"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="87"/>
         <source>Item</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="94"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="95"/>
         <source>Pixels</source>
         <translation type="unfinished">像素</translation>
     </message>
     <message>
-        <location filename="../widget/ClipboardCardDelegate.cpp" line="98"/>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="99"/>
         <source>Characters</source>
         <translation type="unfinished">字符</translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="353"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="379"/>
         <source>Rich text preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="356"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="382"/>
         <source>Image preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="358"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="384"/>
         <source>Office shape preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="135"/>
         <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="136"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="137"/>
         <source>Loading</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="161"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="162"/>
         <source>Preview unavailable</source>
         <translation type="unfinished"></translation>
     </message>

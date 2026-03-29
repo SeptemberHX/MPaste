@@ -240,6 +240,13 @@ bool ClipboardBoardModel::updateItem(int row, const ClipboardItem &item) {
         return false;
     }
 
+    if (existing.getTime() > item.getTime() && roles.contains(TimeRole)) {
+        qWarning().noquote() << QStringLiteral("[model] TIME REGRESSED row=%1 name=%2 old=%3 new=%4")
+            .arg(row).arg(item.getName())
+            .arg(existing.getTime().toString(Qt::ISODate))
+            .arg(item.getTime().toString(Qt::ISODate));
+    }
+
     const QString previousName = existing.getName();
     entries_[row].item = item;
     if (previousName != item.getName()) {

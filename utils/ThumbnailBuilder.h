@@ -47,6 +47,9 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
 QPixmap buildCardThumbnail(const ClipboardItem &item);
 QPixmap buildRichTextThumbnail(const ClipboardItem &item);
 
+bool isMxGraphRichText(const QString &html, const QString &normalizedText);
+QImage buildMxGraphThumbnailImage(const QString &html, const QString &normalizedText, qreal targetDpr, int itemScale);
+
 ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source);
 
 // QTextDocument subclass that blocks all remote resource loading.

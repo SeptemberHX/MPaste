@@ -6,6 +6,7 @@
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QLinearGradient>
+#include <QTextLayout>
 #include <QObject>
 #include <QUrl>
 
@@ -196,7 +197,8 @@ void CardRenderUtils::drawElidedText(QPainter *painter, const QRect &rect, const
 }
 
 void CardRenderUtils::drawWrappedText(QPainter *painter, const QRect &rect, const QString &text,
-                                       const QFont &font, const QColor &color) {
+                                       const QFont &font, const QColor &color,
+                                       qreal lineSpacing) {
     if (text.isEmpty() || rect.isEmpty()) {
         return;
     }
@@ -204,7 +206,31 @@ void CardRenderUtils::drawWrappedText(QPainter *painter, const QRect &rect, cons
     painter->save();
     painter->setFont(font);
     painter->setPen(color);
-    painter->drawText(rect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, text);
+
+    if (lineSpacing <= 0) {
+        painter->drawText(rect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, text);
+    } else {
+        QTextLayout layout(text, font, painter->device());
+        QTextOption option;
+        option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        layout.setTextOption(option);
+
+        const QFontMetricsF fm(font);
+        const qreal lineH = fm.height() * lineSpacing;
+
+        layout.beginLayout();
+        qreal y = 0;
+        while (true) {
+            QTextLine line = layout.createLine();
+            if (!line.isValid() || y + lineH > rect.height()) break;
+            line.setLineWidth(rect.width());
+            line.setPosition(QPointF(0, y));
+            y += lineH;
+        }
+        layout.endLayout();
+        layout.draw(painter, rect.topLeft());
+    }
+
     painter->restore();
 }
 
@@ -361,4 +387,91 @@ QString CardRenderUtils::previewTextForCard(const CardData &card) {
             break;
     }
     return card.normalizedText.trimmed();
+}
+
+bool CardRenderUtils::looksLikeCode(const QString &text) {
+    if (text.size() < 10 || text.size() > 50000) {
+        return false;
+    }
+
+    // Sample the first ~2000 chars for speed.
+    const QString sample = text.left(2000);
+    const QStringList lines = sample.split(QLatin1Char('\n'));
+    if (lines.size() < 2) {
+        return false;
+    }
+
+    int codeSignals = 0;
+
+    // 1. Leading indentation (spaces/tabs) on multiple lines.
+    int indentedLines = 0;
+    for (const QString &line : lines) {
+        if (!line.isEmpty() && (line[0] == QLatin1Char(' ') || line[0] == QLatin1Char('\t'))) {
+            ++indentedLines;
+        }
+    }
+    if (indentedLines * 3 >= lines.size()) {
+        ++codeSignals; // >=33% lines indented
+    }
+
+    // 2. Common syntax patterns.
+    static const QStringList patterns = {
+        QStringLiteral("function "), QStringLiteral("def "),
+        QStringLiteral("class "), QStringLiteral("import "),
+        QStringLiteral("const "), QStringLiteral("let "),
+        QStringLiteral("var "), QStringLiteral("return "),
+        QStringLiteral("if ("), QStringLiteral("if("),
+        QStringLiteral("for ("), QStringLiteral("for("),
+        QStringLiteral("while ("), QStringLiteral("while("),
+        QStringLiteral("switch ("), QStringLiteral("switch("),
+        QStringLiteral("#include"), QStringLiteral("#define"),
+        QStringLiteral("#pragma"), QStringLiteral("#ifndef"),
+        QStringLiteral("public:"), QStringLiteral("private:"),
+        QStringLiteral("protected:"), QStringLiteral("namespace "),
+        QStringLiteral("package "), QStringLiteral("struct "),
+        QStringLiteral("enum "), QStringLiteral("interface "),
+        QStringLiteral("impl "), QStringLiteral("fn "),
+        QStringLiteral("pub fn"), QStringLiteral("async "),
+        QStringLiteral("await "), QStringLiteral("=> {"),
+        QStringLiteral("-> {"), QStringLiteral("SELECT "),
+        QStringLiteral("FROM "), QStringLiteral("WHERE "),
+        QStringLiteral("CREATE TABLE"),
+    };
+    int patternHits = 0;
+    for (const QString &pat : patterns) {
+        if (sample.contains(pat)) {
+            ++patternHits;
+        }
+    }
+    if (patternHits >= 2) {
+        codeSignals += 2;
+    } else if (patternHits >= 1) {
+        ++codeSignals;
+    }
+
+    // 3. Bracket/brace density.
+    int braces = 0;
+    for (const QChar &ch : sample) {
+        if (ch == QLatin1Char('{') || ch == QLatin1Char('}')
+            || ch == QLatin1Char('[') || ch == QLatin1Char(']')) {
+            ++braces;
+        }
+    }
+    if (braces >= 4) {
+        ++codeSignals;
+    }
+
+    // 4. Semicolons at line endings.
+    int semiLines = 0;
+    for (const QString &line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.endsWith(QLatin1Char(';'))) {
+            ++semiLines;
+        }
+    }
+    if (semiLines * 4 >= lines.size()) {
+        ++codeSignals; // >=25% lines end with ;
+    }
+
+    return codeSignals >= 2;
 }

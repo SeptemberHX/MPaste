@@ -47,6 +47,7 @@
 #include "cardrenderer/TextCardBody.h"
 #include "utils/MPasteSettings.h"
 #include "utils/ThemeManager.h"
+#include "utils/MxGraphRenderer.h"
 
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
@@ -1188,7 +1189,13 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         painter->drawPixmap(pinRect, pinPixmap(pinRect.size(), darkTheme));
     }
     const QString typeLabel = typeLabelForCard(card);
-    const QString timeLabel = QLocale::system().toString(card.time, QLocale::ShortFormat);
+    QString timeLabel = QLocale::system().toString(card.time, QLocale::ShortFormat);
+    if (card.contentType == RichText && MxGraphRenderer::isMxGraphContent(card.normalizedText)) {
+        timeLabel += QStringLiteral(" \u00B7 draw.io");
+    } else if ((card.contentType == Text || card.contentType == RichText)
+               && CardRenderUtils::looksLikeCode(card.normalizedText)) {
+        timeLabel += QStringLiteral(" \u00B7 Code");
+    }
     const QString aliasLabel = card.alias.trimmed();
     if (!aliasLabel.isEmpty()) {
         CardRenderUtils::drawElidedText(painter, typeRect, aliasLabel, typeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
