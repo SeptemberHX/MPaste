@@ -1616,6 +1616,7 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     qInfo().noquote() << QStringLiteral("[startup] MPasteWidget showEvent elapsedMs=%1 visible=%2")
         .arg(misc_.startupPerfTimer.isValid() ? misc_.startupPerfTimer.elapsed() : -1)
         .arg(isVisible());
+    stopKeepAliveTimer();
     activateWindow();
     raise();
     setFocus();
@@ -1631,6 +1632,7 @@ void MPasteWidget::hideEvent(QHideEvent *event) {
             board->hideHoverTools();
         }
     }
+    startKeepAliveTimer();
 }
 
 void MPasteWidget::setupSyncWatcher() {
@@ -1870,6 +1872,83 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
 
         animation->start(QAbstractAnimation::DeleteWhenStopped);
     }
+}
+
+void MPasteWidget::startKeepAliveTimer() {
+#ifdef Q_OS_WIN
+    // Tell Windows to keep a reasonable minimum working set so that the
+    // process memory is not aggressively paged out during long idle periods.
+    // This is the primary mechanism to prevent the multi-second freeze when
+    // the user invokes the hotkey after hours of inactivity.
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        // Use current working set as the minimum, capped to a sane range.
+        const SIZE_T current = pmc.WorkingSetSize;
+        const SIZE_T minWS = qBound<SIZE_T>(20ULL * 1024 * 1024, current, 200ULL * 1024 * 1024);
+        const SIZE_T maxWS = qMax<SIZE_T>(minWS * 2, 400ULL * 1024 * 1024);
+        SetProcessWorkingSetSize(GetCurrentProcess(), minWS, maxWS);
+    }
+
+    if (!keepAliveTimer_) {
+        keepAliveTimer_ = new QTimer(this);
+        keepAliveTimer_->setTimerType(Qt::VeryCoarseTimer);
+        connect(keepAliveTimer_, &QTimer::timeout, this, &MPasteWidget::touchWorkingSet);
+    }
+    keepAliveTimer_->start(KEEPALIVE_INTERVAL_MS);
+#endif
+}
+
+void MPasteWidget::stopKeepAliveTimer() {
+#ifdef Q_OS_WIN
+    // Restore default working set policy so the OS can reclaim memory
+    // while the widget is visible and actively used.
+    SetProcessWorkingSetSize(GetCurrentProcess(), static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1));
+#endif
+    if (keepAliveTimer_) {
+        keepAliveTimer_->stop();
+    }
+}
+
+void MPasteWidget::touchWorkingSet() {
+#ifdef Q_OS_WIN
+    // Walk key data structures to fault their pages back in, preventing
+    // Windows from trimming them even with the minimum working set set.
+    volatile char sink = 0;
+
+    auto touchWidget = [&sink](ScrollItemsWidget *w) {
+        if (!w) return;
+        auto *model = w->boardModel();
+        if (!model) return;
+        const int rows = model->rowCount();
+        const int step = qMax(1, rows / 16);
+        for (int i = 0; i < rows; i += step) {
+            const ClipboardItem *item = model->itemPtrAt(i);
+            if (item) {
+                const QString &name = item->getName();
+                if (!name.isEmpty()) {
+                    sink += name.at(0).unicode();
+                }
+                // Touch thumbnail pixmap data if present.
+                if (item->hasThumbnail()) {
+                    const QPixmap &px = item->thumbnail();
+                    sink += reinterpret_cast<const volatile char *>(&px)[0];
+                }
+            }
+        }
+        // Touch the widget's own object tree.
+        sink += reinterpret_cast<const volatile char *>(w)[0];
+    };
+
+    touchWidget(ui_.clipboardWidget);
+    touchWidget(ui_.staredWidget);
+
+    // Touch this widget and its UI object.
+    sink += reinterpret_cast<const volatile char *>(this)[0];
+    if (ui_.ui) {
+        sink += reinterpret_cast<const volatile char *>(ui_.ui)[0];
+    }
+    Q_UNUSED(sink);
+#endif
 }
 
 void MPasteWidget::dumpMemoryStats() {

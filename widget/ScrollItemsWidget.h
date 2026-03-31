@@ -89,6 +89,7 @@ public:
     bool handleWheelScroll(QWheelEvent *event);
     void applyTheme(bool dark);
     ClipboardBoardService *boardServiceRef() const { return boardService_; }
+    ClipboardBoardModel *boardModel() const { return boardModel_; }
     QString memoryStats() const;
 
     bool eventFilter(QObject *watched, QEvent *event) override;

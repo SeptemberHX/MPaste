@@ -201,6 +201,7 @@ bool PlatformRelated::revealInFileManager(const QList<QUrl> &urls) {
 #elif defined(_WIN32)
 
 #include <windows.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <objbase.h>
 #include <QPixmap>
@@ -500,6 +501,27 @@ QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
 
     if (!hIcon) {
         hIcon = (HICON)GetClassLongPtr(hwnd, GCLP_HICONSM);
+    }
+
+    // Fallback: extract icon from the process executable file.
+    if (!hIcon) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid) {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc) {
+                WCHAR exePath[MAX_PATH] = {};
+                DWORD pathLen = MAX_PATH;
+                if (QueryFullProcessImageNameW(hProc, 0, exePath, &pathLen) && pathLen > 0) {
+                    HICON exeIcon = nullptr;
+                    if (ExtractIconExW(exePath, 0, &exeIcon, nullptr, 1) >= 1 && exeIcon) {
+                        hIcon = exeIcon;
+                        ownedIcon = true;
+                    }
+                }
+                CloseHandle(hProc);
+            }
+        }
     }
 
     if (!hIcon) {

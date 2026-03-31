@@ -902,7 +902,8 @@ void MPasteSettingsWidget::accept()
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                   QSettings::NativeFormat);
     if (autoStartSwitch_->isChecked()) {
-        reg.setValue("MPaste", QDir::toNativeSeparators(qApp->applicationFilePath()));
+        const QString exePath = QDir::toNativeSeparators(qApp->applicationFilePath());
+        reg.setValue("MPaste", QStringLiteral("\"%1\"").arg(exePath));
     } else {
         reg.remove("MPaste");
     }

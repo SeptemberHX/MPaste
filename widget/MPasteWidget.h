@@ -162,7 +162,13 @@ private:
     } misc_;
 
     static constexpr int HIDE_ANIMATION_TIME = 50;
+    static constexpr int KEEPALIVE_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
 
+    void startKeepAliveTimer();
+    void stopKeepAliveTimer();
+    void touchWorkingSet();
+
+    QTimer *keepAliveTimer_ = nullptr;
     bool darkTheme_ = false;
 };
 
