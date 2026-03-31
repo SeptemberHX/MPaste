@@ -214,6 +214,17 @@ public:
         mimeData_->setData(format, data);
     }
 
+    void reclassifyContentType() {
+        if (mimeData_) {
+            cachedContentType_ = ContentClassifier::classifyLight(
+                mimeData_.data(), getNormalizedText(), getNormalizedUrls());
+            cachedPreviewKind_ = PreviewClassifier::classifyLight(
+                cachedContentType_, getNormalizedText(),
+                hasThumbnailHint(), mimeData_.data(),
+                hasFastImagePayload());
+        }
+    }
+
     bool hasThumbnail() const { return !thumbnail_.isNull(); }
     bool hasThumbnailHint() const { return thumbnailAvailableHint_ || !thumbnail_.isNull(); }
     const QPixmap& thumbnail() const { return thumbnail_; }

@@ -4,6 +4,7 @@
 // update: 修改本文件时，同步更新文件头注释与根目录 README.md。
 #include <QApplication>
 #include <iostream>
+#include <QElapsedTimer>
 #include <QFontDatabase>
 #include <QScreen>
 #include <qsurfaceformat.h>
@@ -178,6 +179,9 @@ int main(int argc, char* argv[]) {
         };
 
         auto showWidget = [&widget, &isShowingWidget](bool immediateForAltHotkey = false) {
+            QElapsedTimer wakeTimer;
+            wakeTimer.start();
+
             WId focusWinId = PlatformRelated::previousActiveWindow();
             if (!focusWinId) {
                 focusWinId = PlatformRelated::currActiveWindow();
@@ -196,9 +200,13 @@ int main(int argc, char* argv[]) {
 
             isShowingWidget = true;
 
+            qInfo().noquote() << QStringLiteral("[wake] showWidget prep done: %1 ms").arg(wakeTimer.elapsed());
+
             const int showDelayMs = immediateForAltHotkey ? 0 : 50;
-            QTimer::singleShot(showDelayMs, [&widget, currentScreen]() {
+            QTimer::singleShot(showDelayMs, [&widget, currentScreen, wakeTimer]() {
+                qInfo().noquote() << QStringLiteral("[wake] timer fired: %1 ms").arg(wakeTimer.elapsed());
                 widget.setVisibleWithAnnimation(true);
+                qInfo().noquote() << QStringLiteral("[wake] setVisibleWithAnnimation done: %1 ms").arg(wakeTimer.elapsed());
                 widget.raise();
                 widget.activateWindow();
                 widget.move(currentScreen->geometry().x(),
@@ -207,6 +215,7 @@ int main(int argc, char* argv[]) {
                           widget.height());
 
                 PlatformRelated::activateWindow(widget.winId());
+                qInfo().noquote() << QStringLiteral("[wake] showWidget complete: %1 ms").arg(wakeTimer.elapsed());
             });
         };
 
@@ -224,6 +233,7 @@ int main(int argc, char* argv[]) {
 
 
         auto toggleWidget = [&widget, &isShowingWidget, showWidget, shortcutUsesAlt]() {
+            qInfo().noquote() << QStringLiteral("[wake] toggleWidget entered");
             const bool altHotkey = shortcutUsesAlt();
             if (widget.isVisible() || isShowingWidget) {
                 auto hideWidget = [&widget, &isShowingWidget]() {

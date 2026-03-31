@@ -1612,17 +1612,20 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
 }
 
 void MPasteWidget::showEvent(QShowEvent *event) {
+    QElapsedTimer t; t.start();
     QWidget::showEvent(event);
-    qInfo().noquote() << QStringLiteral("[startup] MPasteWidget showEvent elapsedMs=%1 visible=%2")
-        .arg(misc_.startupPerfTimer.isValid() ? misc_.startupPerfTimer.elapsed() : -1)
-        .arg(isVisible());
+    qInfo().noquote() << QStringLiteral("[wake] showEvent: QWidget::showEvent %1 ms").arg(t.elapsed());
     stopKeepAliveTimer();
+    qInfo().noquote() << QStringLiteral("[wake] showEvent: stopKeepAliveTimer %1 ms").arg(t.elapsed());
     activateWindow();
     raise();
     setFocus();
+    qInfo().noquote() << QStringLiteral("[wake] showEvent: activate/raise/focus %1 ms").arg(t.elapsed());
     if (syncWatcher_ && syncWatcher_->checkPendingReload()) {
         syncHistoryBoardsIncremental();
+        qInfo().noquote() << QStringLiteral("[wake] showEvent: syncIncremental %1 ms").arg(t.elapsed());
     }
+    qInfo().noquote() << QStringLiteral("[wake] showEvent total: %1 ms").arg(t.elapsed());
 }
 
 void MPasteWidget::hideEvent(QHideEvent *event) {
@@ -1829,8 +1832,10 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == isVisible()) return;
 
     if (visible) {
+        QElapsedTimer t; t.start();
         setWindowOpacity(0);
         show();
+        qInfo().noquote() << QStringLiteral("[wake] setVisibleWithAnnimation: show() took %1 ms").arg(t.elapsed());
         if (clipboard_.copiedWhenHide) {
             ui_.clipboardWidget->scrollToFirst();
             clipboard_.copiedWhenHide = false;

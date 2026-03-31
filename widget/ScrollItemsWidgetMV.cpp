@@ -1467,6 +1467,7 @@ void ScrollItemsWidget::mergeDeferredMimeFormats(const QString &itemName, const 
                 for (auto it = extraFormats.cbegin(); it != extraFormats.cend(); ++it) {
                     item.setMimeFormat(it.key(), it.value());
                 }
+                item.reclassifyContentType();
                 boardService_->saveItemQuiet(item);
             }
         }
@@ -1477,7 +1478,17 @@ void ScrollItemsWidget::mergeDeferredMimeFormats(const QString &itemName, const 
     for (auto it = extraFormats.cbegin(); it != extraFormats.cend(); ++it) {
         item.setMimeFormat(it.key(), it.value());
     }
+
+    // Re-classify: the deferred formats may include Office-specific
+    // markers (e.g. PowerPoint Internal Shapes) that weren't available
+    // during the initial lightweight capture.
+    item.reclassifyContentType();
+
     boardModel_->updateItem(row, item);
+
+    if (cardDelegate_) {
+        cardDelegate_->invalidateCard(itemName);
+    }
 
     if (boardService_) {
         boardService_->saveItemQuiet(item);

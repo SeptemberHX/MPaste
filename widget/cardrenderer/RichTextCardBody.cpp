@@ -8,12 +8,9 @@ void RichTextCardBody::paint(QPainter *painter, const CardBodyContext &ctx) cons
             && ctx.card.thumbnail.isNull()
             && !ctx.card.normalizedText.trimmed().isEmpty());
     if (!shouldFallbackToText) {
-        // Rich text thumbnails are rendered at exactly bodyRect size,
-        // so draw directly without cover/contain scaling to avoid
-        // any cropping of the left/right edges.
         if (ctx.card.previewState == ClipboardBoardModel::PreviewReady && !ctx.card.thumbnail.isNull()) {
             const QRect drawRect = ctx.bodyRect.adjusted(4, 0, -4, 0);
-            painter->drawPixmap(drawRect.topLeft(), ctx.card.thumbnail);
+            CardRenderUtils::drawContainPixmap(painter, drawRect, ctx.card.thumbnail);
         } else {
             CardRenderUtils::drawManagedVisualPreview(painter, ctx.bodyRect, ctx.card,
                                                       ctx.scale, ctx.darkTheme, ctx.loadingPhase, false);
