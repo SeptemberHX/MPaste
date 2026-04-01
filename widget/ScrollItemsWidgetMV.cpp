@@ -1932,10 +1932,6 @@ int ScrollItemsWidget::getItemCount() {
     return itemCountForDisplay();
 }
 
-void ScrollItemsWidget::refreshThumbnailCache() {
-    updateVisibleThumbnails();
-}
-
 QSet<QByteArray> ScrollItemsWidget::loadAllFingerprints() {
     if (!boardService_) {
         return {};

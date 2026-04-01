@@ -268,12 +268,14 @@ ClipboardBoardService::IncrementalSyncResult ClipboardBoardService::syncIndexInc
     const QFileInfoList fileInfos = dir.entryInfoList(
         QStringList() << QStringLiteral("*.mpaste"), QDir::Files);
 
+    // Build the set of all .mpaste file paths on disk using only the
+    // directory listing — do NOT open every file to check its format,
+    // as that is extremely expensive for large histories (O(N) file I/O
+    // on the main thread).
     QSet<QString> diskPaths;
     diskPaths.reserve(fileInfos.size());
     for (const QFileInfo &info : fileInfos) {
-        if (LocalSaver::isCurrentFormatFile(info.filePath())) {
-            diskPaths.insert(info.filePath());
-        }
+        diskPaths.insert(info.filePath());
     }
 
     // Find removed: in index but not on disk.
@@ -284,10 +286,13 @@ ClipboardBoardService::IncrementalSyncResult ClipboardBoardService::syncIndexInc
         }
     }
 
-    // Find added: on disk but not in index.
+    // Find added: on disk but not in index.  Only validate the format
+    // of genuinely new files (typically just a handful per wake).
     for (const QString &path : diskPaths) {
         if (!indexedSet.contains(path)) {
-            result.addedPaths.append(path);
+            if (LocalSaver::isCurrentFormatFile(path)) {
+                result.addedPaths.append(path);
+            }
         }
     }
 

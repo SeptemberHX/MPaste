@@ -199,16 +199,6 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
        </widget>
       </item>
 
-      <!-- Row 11: Thumbnail prefetch -->
-      <item row="11" column="1" alignment="Qt::AlignRight|Qt::AlignVCenter">
-       <widget class="QSpinBox" name="thumbnailPrefetchSpin">
-        <property name="minimumSize"><size><width>80</width><height>32</height></size></property>
-        <property name="minimum"><number>10</number></property>
-        <property name="maximum"><number>200</number></property>
-        <property name="value"><number>50</number></property>
-       </widget>
-      </item>
-
      </layout>
     </widget>
    </item>

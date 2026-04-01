@@ -33,7 +33,6 @@ signals:
     void themeChanged();
     void saveDirChanged();
     void itemScaleChanged(int itemScale);
-    void thumbnailPrefetchChanged(int count);
     void historyViewModeChanged();
 
 public slots:

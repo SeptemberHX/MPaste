@@ -73,7 +73,6 @@ public:
     void setCurrentPageNumber(int pageNumber);
     int currentPageNumber() const;
     int totalPageCount() const;
-    void refreshThumbnailCache();
     QSet<QByteArray> loadAllFingerprints();
     void setFavoriteFingerprints(const QSet<QByteArray> &fingerprints);
 

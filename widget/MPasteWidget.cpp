@@ -769,15 +769,6 @@ MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
                 this, [this](int scale) {
                     applyScale(scale);
                 });
-        connect(ui_.settingsWidget, &MPasteSettingsWidget::thumbnailPrefetchChanged,
-                this, [this](int) {
-                    if (ui_.clipboardWidget) {
-                        ui_.clipboardWidget->refreshThumbnailCache();
-                    }
-                    if (ui_.staredWidget) {
-                        ui_.staredWidget->refreshThumbnailCache();
-                    }
-                });
     }
     return ui_.settingsWidget;
 }

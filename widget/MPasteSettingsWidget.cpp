@@ -665,9 +665,6 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->daySpinBox->setMaximumHeight(36);
         ui->shortcutEdit->setMinimumHeight(36);
         ui->shortcutEdit->setMaximumHeight(36);
-        ui->thumbnailPrefetchSpin->setMinimumHeight(36);
-        ui->thumbnailPrefetchSpin->setMaximumHeight(36);
-
         syncButtonsLayout->setSpacing(8);
 
         auto createTabGrid = [this](QWidget *parent) {
@@ -703,8 +700,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         generalLayout->addWidget(retentionWidget, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
         generalLayout->addWidget(ui->label_5, 4, 0);
         generalLayout->addWidget(ui->scaleWidget, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->thumbnailPrefetchSpin, 5, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->setRowStretch(6, 1);
+        generalLayout->setRowStretch(5, 1);
 
         shortcutsLayout->addWidget(ui->label_4, 0, 0);
         shortcutsLayout->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
@@ -826,9 +822,6 @@ void MPasteSettingsWidget::loadSettings()
     }
     ui->itemScaleSlider->setValue(settings->getItemScale());
     ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
-    if (ui->thumbnailPrefetchSpin) {
-        ui->thumbnailPrefetchSpin->setValue(settings->getThumbnailPrefetchCount());
-    }
     toggleSwitch_->setChecked(settings->isPlaySound());
     if (themeCombo_) {
         const int index = themeCombo_->findData(static_cast<int>(settings->getThemeMode()));
@@ -854,7 +847,6 @@ void MPasteSettingsWidget::accept()
     const int oldRetentionValue = settings->getHistoryRetentionValue();
     const auto oldRetentionUnit = settings->getHistoryRetentionUnit();
     const int oldScale = settings->getItemScale();
-    const int oldPrefetch = settings->getThumbnailPrefetchCount();
     const int newRetentionValue = ui->daySpinBox->value();
     const auto newRetentionUnit = retentionUnitCombo_
         ? static_cast<MPasteSettings::HistoryRetentionUnit>(retentionUnitCombo_->currentData().toInt())
@@ -873,10 +865,6 @@ void MPasteSettingsWidget::accept()
     }
     const int newScale = ui->itemScaleSlider->value();
     settings->setItemScale(newScale);
-    if (ui->thumbnailPrefetchSpin) {
-        settings->setThumbnailPrefetchCount(ui->thumbnailPrefetchSpin->value());
-    }
-    const int newPrefetch = settings->getThumbnailPrefetchCount();
     settings->setPlaySound(toggleSwitch_->isChecked());
     if (themeCombo_) {
         const auto mode = static_cast<MPasteSettings::ThemeMode>(themeCombo_->currentData().toInt());
@@ -915,9 +903,6 @@ void MPasteSettingsWidget::accept()
     }
     if (oldScale != newScale) {
         emit itemScaleChanged(newScale);
-    }
-    if (oldPrefetch != newPrefetch) {
-        emit thumbnailPrefetchChanged(newPrefetch);
     }
     QDialog::accept();
 }
