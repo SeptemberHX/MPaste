@@ -940,24 +940,12 @@ void ClipboardItemPreviewDialog::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    const qreal radius = 18.0;
-    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
-
-    // Clear outside the rounded rect so corners are transparent
-    painter.setCompositionMode(QPainter::CompositionMode_Clear);
-    painter.fillRect(rect(), Qt::transparent);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-
-    // Fill the rounded rect with the dialog background
-    QPainterPath shape;
-    shape.addRoundedRect(r, radius, radius);
-    painter.setClipPath(shape);
-    // Use a near-transparent fill so the blur-behind shows through
-    painter.fillRect(rect(), QColor(0, 0, 0, 1));
-    painter.setClipping(false);
+    // Match the DWM DWMWCP_ROUND corner radius (~8px on Windows 11)
+    const qreal radius = 8.0;
+    QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
 
     if (darkTheme_) {
-        painter.setPen(QPen(QColor(255, 255, 255, 40), 1.5));
+        painter.setPen(QPen(QColor(255, 255, 255, 40), 1.0));
     } else {
         painter.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
     }
