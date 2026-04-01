@@ -909,7 +909,7 @@ void MPasteSettingsWidget::accept()
 
 void MPasteSettingsWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_, CORNER_RADIUS);
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     setStyleSheet(settingsStyleSheet(darkTheme_));
     update();
 }

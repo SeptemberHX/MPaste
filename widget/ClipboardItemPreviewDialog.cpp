@@ -718,7 +718,7 @@ connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     }
 
     show();
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_, 18);
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     raise();
     activateWindow();
 }
@@ -729,7 +729,7 @@ void ClipboardItemPreviewDialog::reject() {
 
 void ClipboardItemPreviewDialog::applyTheme(bool dark) {
     darkTheme_ = dark;
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_, 18);
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     if (ui_.browser) {
         ui_.browser->setStyleSheet(QString());
     }

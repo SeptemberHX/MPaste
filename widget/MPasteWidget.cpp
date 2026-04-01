@@ -148,7 +148,7 @@ public:
     void popup(const QPoint &globalPos) {
         move(globalPos);
         show();
-        WindowBlurHelper::enableBlurBehind(this, dark_, 10);
+        WindowBlurHelper::enableBlurBehind(this, dark_);
         raise();
     }
 
@@ -1056,7 +1056,7 @@ void MPasteWidget::initMenu() {
 void MPasteWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
 
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_, 10);
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
 
     if (ui_.ui) {
         ui_.ui->menuButton->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), darkTheme_));
