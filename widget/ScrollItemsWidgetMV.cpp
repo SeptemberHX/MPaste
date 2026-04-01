@@ -162,7 +162,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
         }
         if (isBoardUiVisible()) {
             refreshContentWidthHint();
-            primeVisibleThumbnailsSync();
+            requestVisibleThumbnails();
             scheduleThumbnailUpdate();
         }
     });
@@ -978,7 +978,7 @@ void ScrollItemsWidget::scheduleThumbnailUpdate() {
     // No-op: cardPixmapCache_ manages all rendering.
 }
 
-void ScrollItemsWidget::primeVisibleThumbnailsSync() {
+void ScrollItemsWidget::requestVisibleThumbnails() {
     if (!boardService_ || !boardModel_ || !proxyModel_ || !listView_ || !isBoardUiVisible()) {
         return;
     }
