@@ -4,7 +4,7 @@
 #include <QWidget>
 
 namespace WindowBlurHelper {
-    void enableBlurBehind(QWidget *widget, bool dark);
+    void enableBlurBehind(QWidget *widget, bool dark, int cornerRadius = 0);
 }
 
 #endif // MPASTE_WINDOWBLURHELPER_H

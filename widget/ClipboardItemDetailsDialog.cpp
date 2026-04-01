@@ -511,7 +511,7 @@ void ClipboardItemDetailsDialog::paintEvent(QPaintEvent *) {
 
 void ClipboardItemDetailsDialog::applyTheme(bool dark) {
     darkTheme_ = dark;
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_, 18);
     if (ui_.card) {
         ui_.card->setStyleSheet(detailsStyleSheet(darkTheme_));
     } else {
@@ -788,7 +788,7 @@ void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item, int sequenc
     }
 
     show();
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_, 18);
     raise();
     activateWindow();
 }

@@ -41,7 +41,7 @@ DWORD accentColorFromArgb(const QColor &color) {
 } // anonymous namespace
 #endif
 
-void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
+void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark, int cornerRadius) {
 #ifdef Q_OS_WIN
     if (!widget) return;
     HWND hwnd = reinterpret_cast<HWND>(widget->winId());
@@ -49,8 +49,19 @@ void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
     MARGINS margins = {-1, -1, -1, -1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
 
-    DWORD preference = 2; // DWMWCP_ROUND
+    // Disable DWM's own corner rounding — we clip the window to our
+    // own rounded shape via SetWindowRgn so the blur layer and the
+    // painted border share the same corner radius.
+    DWORD preference = 1; // DWMWCP_DONOTROUND
     DwmSetWindowAttribute(hwnd, 33, &preference, sizeof(preference));
+
+    if (cornerRadius > 0) {
+        const int w = widget->width();
+        const int h = widget->height();
+        const int d = cornerRadius * 2;
+        HRGN rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, d, d);
+        SetWindowRgn(hwnd, rgn, TRUE);
+    }
 
     auto user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) return;
@@ -74,5 +85,6 @@ void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
 #else
     Q_UNUSED(widget);
     Q_UNUSED(dark);
+    Q_UNUSED(cornerRadius);
 #endif
 }

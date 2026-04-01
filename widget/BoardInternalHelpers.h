@@ -86,7 +86,7 @@ inline void applyMenuTheme(QMenu *menu) {
 
     // Apply blur after the menu is shown (connect once).
     QObject::connect(menu, &QMenu::aboutToShow, menu, [menu, dark]() {
-        WindowBlurHelper::enableBlurBehind(menu, dark);
+        WindowBlurHelper::enableBlurBehind(menu, dark, 10);
     });
 }
 
