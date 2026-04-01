@@ -978,6 +978,17 @@ void ScrollItemsWidget::scheduleThumbnailUpdate() {
     // No-op: cardPixmapCache_ manages all rendering.
 }
 
+int ScrollItemsWidget::estimateVisibleCardCount() const {
+    if (!listView_) {
+        return 0;
+    }
+    const int gridWidth = qMax(1, listView_->gridSize().width());
+    const int vpWidth = (listView_->viewport() && listView_->viewport()->width() > 0)
+        ? listView_->viewport()->width()
+        : 800;
+    return qMax(1, vpWidth / gridWidth + 2);
+}
+
 void ScrollItemsWidget::requestVisibleThumbnails() {
     if (!boardService_ || !boardModel_ || !proxyModel_ || !listView_ || !isBoardUiVisible()) {
         return;
@@ -988,9 +999,8 @@ void ScrollItemsWidget::requestVisibleThumbnails() {
         return;
     }
 
+    const int visibleCount = estimateVisibleCardCount();
     const QRect viewportRect = listView_->viewport()->rect();
-    const int gridWidth = qMax(1, listView_->gridSize().width());
-    const int visibleCount = qMax(1, viewportRect.width() / gridWidth + 2);
     const QModelIndex leftIndex = listView_->indexAt(QPoint(viewportRect.left() + 1, viewportRect.center().y()));
     const int startRow = leftIndex.isValid() ? leftIndex.row() : 0;
     const int endRow = qMin(proxyCount - 1, startRow + visibleCount - 1);
@@ -1147,12 +1157,8 @@ void ScrollItemsWidget::preRenderAndCleanup() {
     }
 
     // Pre-render only the visible number of cards so the first show()
-    // does not stall on cache misses.  Estimate visible count from
-    // the viewport width and card grid size.
-    const int gridWidth = qMax(1, listView_->gridSize().width());
-    const int viewportWidth = qMax(gridWidth, listView_->viewport() ? listView_->viewport()->width() : 800);
-    const int visibleCount = viewportWidth / gridWidth + 2;
-    const int preRenderCount = qMin(boardModel_->rowCount(), visibleCount);
+    // does not stall on cache misses.
+    const int preRenderCount = qMin(boardModel_->rowCount(), estimateVisibleCardCount());
 
     if (preRenderCount > 0) {
         QStyleOptionViewItem baseOption;

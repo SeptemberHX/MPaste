@@ -184,6 +184,7 @@ private:
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;
     bool isBoardUiVisible() const;
     void scheduleThumbnailUpdate();
+    int estimateVisibleCardCount() const;
     void requestVisibleThumbnails();
     void updateVisibleThumbnails();
     bool shouldManageThumbnail(const ClipboardItem &item) const;
