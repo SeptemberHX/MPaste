@@ -125,7 +125,7 @@ int main(int argc, char* argv[]) {
 
     if (singleApp.isPrimaryInstance()) {
         app.setApplicationName("MPaste");
-        app.setWindowIcon(QIcon::fromTheme("mpaste"));
+        app.setWindowIcon(QIcon(":/resources/resources/mpaste.svg"));
         QNetworkProxyFactory::setUseSystemConfiguration(true);
 
         // Load translations

@@ -3,12 +3,19 @@
 import struct
 import sys
 import os
+import io
 
 def read_uint32(f):
     d = f.read(4)
     if len(d) < 4:
         raise EOFError
     return struct.unpack('>I', d)[0]
+
+def read_int32(f):
+    d = f.read(4)
+    if len(d) < 4:
+        raise EOFError
+    return struct.unpack('>i', d)[0]
 
 def read_qstring(f):
     length = read_uint32(f)
@@ -23,30 +30,74 @@ def read_qbytearray(f):
         return None
     return f.read(length)
 
-def skip_qimage(f):
-    """Skip a QDataStream-serialized QImage and return a summary string."""
+def skip_png_stream(f):
+    """Skip a raw PNG stream by parsing its chunk structure.
+    Returns (width, height, byte_count)."""
     start = f.tell()
-    w = struct.unpack('>i', f.read(4))[0]
-    h = struct.unpack('>i', f.read(4))[0]
+    sig = f.read(8)
+    if sig != b'\x89PNG\r\n\x1a\n':
+        raise ValueError(f"Bad PNG signature at 0x{start:x}")
+    w = h = 0
+    while True:
+        chunk_len_data = f.read(4)
+        if len(chunk_len_data) < 4:
+            break
+        chunk_len = struct.unpack('>I', chunk_len_data)[0]
+        chunk_type = f.read(4)
+        if chunk_type == b'IHDR' and chunk_len >= 8:
+            w = struct.unpack('>I', f.read(4))[0]
+            h = struct.unpack('>I', f.read(4))[0]
+            f.seek(chunk_len - 8, 1)  # skip rest of IHDR
+        else:
+            f.seek(chunk_len, 1)
+        f.read(4)  # CRC
+        if chunk_type == b'IEND':
+            break
+    byte_count = f.tell() - start
+    return w, h, byte_count
+
+def skip_qpixmap(f):
+    """Skip a QDataStream-serialized QPixmap (Qt 6.8 format).
+
+    Qt 6.8 default DataStream version serialises QPixmap as:
+      - qint32(0) for null  (4 bytes total)
+      - qint32(1) + raw PNG stream for non-null
+    Returns a human-readable summary string.
+    """
+    start = f.tell()
+    marker = read_int32(f)
+    if marker == 0:
+        return f"null (at 0x{start:x})"
+    if marker == 1:
+        w, h, png_bytes = skip_png_stream(f)
+        return f"{w}x{h} PNG {png_bytes:,} bytes (at 0x{start:x})"
+    # Unknown marker — might be an older format; try QImage fallback
+    f.seek(start)
+    return skip_qimage_legacy(f)
+
+def skip_qimage_legacy(f):
+    """Skip a legacy QDataStream-serialized QImage (Qt 5 / early Qt 6)."""
+    start = f.tell()
+    w = read_int32(f)
+    h = read_int32(f)
     if w <= 0 or h <= 0:
         return f"null (at 0x{start:x})"
-    depth = struct.unpack('>i', f.read(4))[0]
-    _color_count = struct.unpack('>i', f.read(4))[0]
-    fmt = struct.unpack('>i', f.read(4))[0]
-    bytes_per_line = struct.unpack('>i', f.read(4))[0]
+    depth = read_int32(f)
+    _color_count = read_int32(f)
+    fmt = read_int32(f)
+    bytes_per_line = read_int32(f)
     pixel_data_size = bytes_per_line * h
     f.seek(pixel_data_size, 1)
-    return f"{w}x{h} depth={depth} fmt={fmt} pixels={pixel_data_size} bytes (at 0x{start:x})"
+    return f"{w}x{h} depth={depth} fmt={fmt} pixels={pixel_data_size:,} bytes (at 0x{start:x})"
 
 def inspect(path):
-    with open(path, 'rb') as f:
-        data = f.read()
+    with open(path, 'rb') as fh:
+        data = fh.read()
     size = len(data)
     print(f"File: {path}")
     print(f"Size: {size:,} bytes")
     print()
 
-    import io
     f = io.BytesIO(data)
 
     magic = read_qstring(f)
@@ -67,10 +118,10 @@ def inspect(path):
     name = read_qstring(f)
     print(f"Name: {name}")
 
-    icon_info = skip_qimage(f)
+    icon_info = skip_qpixmap(f)
     print(f"Icon: {icon_info}")
 
-    favicon_info = skip_qimage(f)
+    favicon_info = skip_qpixmap(f)
     print(f"Favicon: {favicon_info}")
 
     title = read_qstring(f)
@@ -106,7 +157,7 @@ def inspect(path):
     fingerprint = read_qbytearray(f)
     print(f"Fingerprint: {fingerprint.hex()[:24] if fingerprint else '(null)'}...")
 
-    thumbnail_info = skip_qimage(f)
+    thumbnail_info = skip_qpixmap(f)
     print(f"Thumbnail: {thumbnail_info}")
 
     mime_offset = struct.unpack('>Q', f.read(8))[0]
@@ -123,37 +174,22 @@ def inspect(path):
         payload = read_qbytearray(f)
         pl = len(payload) if payload else 0
         total_payload += pl
-        print(f"  [{i:2d}] {fmt_name} => {pl:,} bytes")
+        label = fmt_name or "(null)"
+        if label == "text/html" and payload:
+            html_preview = payload.decode('utf-8', errors='replace')[:120].replace('\n', '\\n')
+            print(f"  [{i:2d}] {label} => {pl:,} bytes  preview: {html_preview}")
+        else:
+            print(f"  [{i:2d}] {label} => {pl:,} bytes")
     print(f"  Total MIME payload: {total_payload:,} bytes")
     print(f"  File position after MIME: 0x{f.tell():x} ({f.tell():,})")
-
-    # Look for embedded content
-    print()
-    png_sig = b'\x89PNG\r\n\x1a\n'
-    idx = 0
-    pngs = []
-    while True:
-        idx = data.find(png_sig, idx)
-        if idx < 0: break
-        iend = data.find(b'IEND', idx)
-        png_size = (iend + 8 - idx) if iend >= 0 else -1
-        pngs.append((idx, png_size))
-        idx += 1
-    if pngs:
-        print(f"Embedded PNGs: {len(pngs)}")
-        for i, (p, s) in enumerate(pngs):
-            print(f"  PNG #{i} at 0x{p:x}: {s:,} bytes" if s > 0 else f"  PNG #{i} at 0x{p:x}: unknown size")
-
-    svg_idx = data.find(b'<svg')
-    if svg_idx >= 0:
-        svg_end = data.find(b'</svg>', svg_idx)
-        if svg_end >= 0:
-            print(f"Embedded SVG at 0x{svg_idx:x}: {svg_end + 6 - svg_idx:,} bytes")
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print(f"Usage: {sys.argv[0]} <file.mpaste>")
         sys.exit(1)
     for path in sys.argv[1:]:
-        inspect(path)
+        try:
+            inspect(path)
+        except Exception as e:
+            print(f"Error: {e}")
         print()

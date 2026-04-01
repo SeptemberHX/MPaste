@@ -594,6 +594,10 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
     pendingThumbnailNames_.remove(expectedName);
     if (item.hasThumbnail()) {
         missingThumbnailNames_.remove(expectedName);
+    } else if (usesManagedVisualPreviewCard(item)) {
+        // Thumbnail generation failed — mark as missing so the card
+        // falls back to text instead of staying on "Loading" forever.
+        missingThumbnailNames_.insert(expectedName);
     }
     const int row = boardModel_->rowForName(expectedName);
     if (row >= 0) {
@@ -1007,6 +1011,8 @@ void ScrollItemsWidget::primeVisibleThumbnailsSync() {
             ? boardService_->filePathForName(item->getName())
             : item->sourceFilePath();
         if (filePath.isEmpty()) {
+            missingThumbnailNames_.insert(item->getName());
+            syncPreviewStateForRow(sourceRow);
             continue;
         }
 
@@ -1019,6 +1025,11 @@ void ScrollItemsWidget::primeVisibleThumbnailsSync() {
             }
             boardModel_->updateItem(sourceRow, loaded);
             syncPreviewStateForRow(sourceRow);
+        } else {
+            // Sync load failed — fall back to async rebuild so the card
+            // does not stay stuck on the "Loading" placeholder forever.
+            desiredThumbnailNames_.insert(item->getName());
+            requestThumbnailForItem(*item);
         }
     }
 }
@@ -1081,6 +1092,7 @@ void ScrollItemsWidget::applyManagedThumbnailNames(const QSet<QString> &desiredN
     }
 
     managedThumbnailNames_ = desiredNames;
+    desiredThumbnailNames_ = desiredNames;
 }
 
 void ScrollItemsWidget::setVisibleLoadingThumbnailNames(const QSet<QString> &names) {
@@ -1485,6 +1497,7 @@ void ScrollItemsWidget::mergeDeferredMimeFormats(const QString &itemName, const 
     item.reclassifyContentType();
 
     boardModel_->updateItem(row, item);
+    syncPreviewStateForRow(row);
 
     if (cardDelegate_) {
         cardDelegate_->invalidateCard(itemName);
