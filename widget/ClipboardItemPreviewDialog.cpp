@@ -718,6 +718,7 @@ connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     }
 
     show();
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     raise();
     activateWindow();
 }
@@ -728,6 +729,7 @@ void ClipboardItemPreviewDialog::reject() {
 
 void ClipboardItemPreviewDialog::applyTheme(bool dark) {
     darkTheme_ = dark;
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     if (ui_.browser) {
         ui_.browser->setStyleSheet(QString());
     }
@@ -946,14 +948,20 @@ void ClipboardItemPreviewDialog::paintEvent(QPaintEvent *) {
     painter.fillRect(rect(), Qt::transparent);
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
-    // Fill the rounded rect with a solid background
+    // Fill the rounded rect with the dialog background
+    QPainterPath shape;
+    shape.addRoundedRect(r, radius, radius);
+    painter.setClipPath(shape);
+    // Use a near-transparent fill so the blur-behind shows through
+    painter.fillRect(rect(), QColor(0, 0, 0, 1));
+    painter.setClipping(false);
+
     if (darkTheme_) {
         painter.setPen(QPen(QColor(255, 255, 255, 40), 1.5));
-        painter.setBrush(QColor(26, 32, 44, 245));
     } else {
         painter.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
-        painter.setBrush(QColor(247, 250, 255, 245));
     }
+    painter.setBrush(Qt::NoBrush);
     painter.drawRoundedRect(r, radius, radius);
 }
 
