@@ -8,6 +8,8 @@
 #include <QDialog>
 #include <QPoint>
 
+class QToolButton;
+
 namespace Ui {
 class AboutWidget;
 }
@@ -23,11 +25,13 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
 
 private:
     Ui::AboutWidget *ui;
+    QToolButton *closeButton_ = nullptr;
     QPoint dragPos_;
     bool darkTheme_ = false;
 };
