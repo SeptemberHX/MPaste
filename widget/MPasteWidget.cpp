@@ -767,10 +767,6 @@ MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
                 this, [this](int scale) {
                     applyScale(scale);
                 });
-        connect(ui_.settingsWidget, &MPasteSettingsWidget::blurOpacityChanged,
-                this, [this](int) {
-                    applyTheme(darkTheme_);
-                });
     }
     return ui_.settingsWidget;
 }
@@ -1061,7 +1057,7 @@ void MPasteWidget::initMenu() {
 void MPasteWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
 
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_, MPasteSettings::getInst()->getBlurOpacity());
+    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
 
     if (ui_.ui) {
         ui_.ui->menuButton->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), darkTheme_));

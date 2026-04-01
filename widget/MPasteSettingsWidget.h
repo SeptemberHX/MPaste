@@ -8,8 +8,6 @@
 #include <QDialog>
 #include <QPoint>
 
-class QSlider;
-
 class ToggleSwitch;
 class QLabel;
 class QComboBox;
@@ -35,7 +33,6 @@ signals:
     void themeChanged();
     void saveDirChanged();
     void itemScaleChanged(int itemScale);
-    void blurOpacityChanged(int opacity);
     void historyViewModeChanged();
 
 public slots:
@@ -62,9 +59,6 @@ private:
     QLineEdit *syncPathEdit_ = nullptr;
     QPushButton *syncOpenButton_ = nullptr;
     QPushButton *syncChangeButton_ = nullptr;
-    QLabel *blurOpacityLabel_ = nullptr;
-    QSlider *blurOpacitySlider_ = nullptr;
-    QLabel *blurOpacityValueLabel_ = nullptr;
     QPoint dragPos_;
     bool darkTheme_ = false;
 };

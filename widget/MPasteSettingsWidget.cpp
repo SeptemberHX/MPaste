@@ -704,29 +704,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         generalLayout->addWidget(retentionWidget, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
         generalLayout->addWidget(ui->label_5, 4, 0);
         generalLayout->addWidget(ui->scaleWidget, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
-#ifdef Q_OS_WIN
-        blurOpacityLabel_ = new QLabel(uiText("Blur opacity", QStringLiteral("磨砂透明度")), generalPage);
-        blurOpacityLabel_->setMinimumHeight(44);
-        auto *blurWidget = new QWidget(generalPage);
-        blurWidget->setAttribute(Qt::WA_TranslucentBackground);
-        auto *blurLayout = new QHBoxLayout(blurWidget);
-        blurLayout->setContentsMargins(0, 0, 0, 0);
-        blurLayout->setSpacing(6);
-        blurOpacitySlider_ = new QSlider(Qt::Horizontal, blurWidget);
-        blurOpacitySlider_->setMinimum(0);
-        blurOpacitySlider_->setMaximum(100);
-        blurOpacitySlider_->setMinimumWidth(120);
-        blurOpacityValueLabel_ = new QLabel(blurWidget);
-        blurOpacityValueLabel_->setMinimumWidth(36);
-        blurOpacityValueLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        blurLayout->addWidget(blurOpacitySlider_);
-        blurLayout->addWidget(blurOpacityValueLabel_);
-        generalLayout->addWidget(blurOpacityLabel_, 5, 0);
-        generalLayout->addWidget(blurWidget, 5, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->setRowStretch(6, 1);
-#else
         generalLayout->setRowStretch(5, 1);
-#endif
 
         shortcutsLayout->addWidget(ui->label_4, 0, 0);
         shortcutsLayout->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
@@ -760,13 +738,6 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     connect(ui->itemScaleSlider, &QSlider::valueChanged, this, [this](int value) {
         ui->scaleValueLabel->setText(QString("%1%").arg(value));
     });
-    if (blurOpacitySlider_) {
-        connect(blurOpacitySlider_, &QSlider::valueChanged, this, [this](int value) {
-            if (blurOpacityValueLabel_) {
-                blurOpacityValueLabel_->setText(QStringLiteral("%1%").arg(value));
-            }
-        });
-    }
 
     // Card shadow
     auto *shadow = new QGraphicsDropShadowEffect(ui->generalCard);
@@ -863,10 +834,6 @@ void MPasteSettingsWidget::loadSettings()
     if (syncPathEdit_) {
         syncPathEdit_->setText(QDir::cleanPath(settings->getSaveDir()));
     }
-    if (blurOpacitySlider_) {
-        blurOpacitySlider_->setValue(settings->getBlurOpacity());
-        blurOpacityValueLabel_->setText(QStringLiteral("%1%").arg(settings->getBlurOpacity()));
-    }
     applyTheme(ThemeManager::instance()->isDark());
 
 #ifdef Q_OS_WIN
@@ -902,10 +869,6 @@ void MPasteSettingsWidget::accept()
     }
     const int newScale = ui->itemScaleSlider->value();
     settings->setItemScale(newScale);
-    const int oldBlurOpacity = settings->getBlurOpacity();
-    if (blurOpacitySlider_) {
-        settings->setBlurOpacity(blurOpacitySlider_->value());
-    }
     settings->setPlaySound(toggleSwitch_->isChecked());
     if (themeCombo_) {
         const auto mode = static_cast<MPasteSettings::ThemeMode>(themeCombo_->currentData().toInt());
@@ -944,9 +907,6 @@ void MPasteSettingsWidget::accept()
     }
     if (oldScale != newScale) {
         emit itemScaleChanged(newScale);
-    }
-    if (oldBlurOpacity != settings->getBlurOpacity()) {
-        emit blurOpacityChanged(settings->getBlurOpacity());
     }
     QDialog::accept();
 }

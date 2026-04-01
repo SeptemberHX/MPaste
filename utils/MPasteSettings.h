@@ -61,8 +61,6 @@ public:
 
     int getItemScale() const;
     void setItemScale(int itemScale);
-    int getBlurOpacity() const;
-    void setBlurOpacity(int opacity);
     bool isPlaySound() const;
     void setPlaySound(bool playSound);
 
@@ -103,7 +101,6 @@ private:
     PasteShortcutMode pasteShortcutMode;
     QString shortcutStr;
     int itemScale;
-    int blurOpacity;
     bool playSound;
     ThemeMode themeMode;
     HistoryViewMode historyViewMode;

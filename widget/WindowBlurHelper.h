@@ -4,8 +4,7 @@
 #include <QWidget>
 
 namespace WindowBlurHelper {
-    // opacity: 0 = fully transparent blur, 100 = more opaque tint (default 40)
-    void enableBlurBehind(QWidget *widget, bool dark, int opacity = 40);
+    void enableBlurBehind(QWidget *widget, bool dark);
 }
 
 #endif // MPASTE_WINDOWBLURHELPER_H
