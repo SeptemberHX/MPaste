@@ -1146,9 +1146,22 @@ void ScrollItemsWidget::preRenderAndCleanup() {
         return;
     }
 
-    // Cards are rendered on-demand in paint() and cached in a bounded
-    // cardPixmapCache.  No bulk pre-render needed — just clean up
-    // intermediate data from the load phase.
+    // Pre-render only the visible number of cards so the first show()
+    // does not stall on cache misses.  Estimate visible count from
+    // the viewport width and card grid size.
+    const int gridWidth = qMax(1, listView_->gridSize().width());
+    const int viewportWidth = qMax(gridWidth, listView_->viewport() ? listView_->viewport()->width() : 800);
+    const int visibleCount = viewportWidth / gridWidth + 2;
+    const int preRenderCount = qMin(boardModel_->rowCount(), visibleCount);
+
+    if (preRenderCount > 0) {
+        QStyleOptionViewItem baseOption;
+        baseOption.decorationSize = QSize(
+            qRound(listView_->devicePixelRatioF()),
+            qRound(listView_->devicePixelRatioF()));
+        cardDelegate_->preRenderAll(boardModel_, baseOption, preRenderCount);
+    }
+
     managedThumbnailNames_.clear();
     cardDelegate_->clearIntermediateCaches();
     setVisibleLoadingThumbnailNames({});
