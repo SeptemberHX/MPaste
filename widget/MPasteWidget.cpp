@@ -726,8 +726,6 @@ void MPasteWidget::initUI() {
 AboutWidget *MPasteWidget::ensureAboutWidget() {
     if (!ui_.aboutWidget) {
         ui_.aboutWidget = new AboutWidget(this);
-        ui_.aboutWidget->setWindowFlag(Qt::Tool);
-        ui_.aboutWidget->setWindowTitle("MPaste About");
         ui_.aboutWidget->hide();
     }
     return ui_.aboutWidget;
@@ -1009,6 +1007,9 @@ void MPasteWidget::initMenu() {
         int y = (screenGeometry.height() - aboutWidget->height()) / 2;
         aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
         aboutWidget->show();
+        aboutWidget->applyTheme(darkTheme_);
+        aboutWidget->raise();
+        aboutWidget->activateWindow();
     });
 
     ui_.settingsAction = new QAction(
