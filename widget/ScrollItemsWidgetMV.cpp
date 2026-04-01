@@ -1016,21 +1016,11 @@ void ScrollItemsWidget::primeVisibleThumbnailsSync() {
             continue;
         }
 
-        ClipboardItem loaded = boardService_->loadItemLight(filePath, true);
-        if (!loaded.getName().isEmpty() && loaded.hasThumbnail()) {
-            // Preserve in-memory time if it was updated by moveItemToFirst
-            // (the disk file may still have the original capture time).
-            if (item->getTime() > loaded.getTime()) {
-                loaded.setTime(item->getTime());
-            }
-            boardModel_->updateItem(sourceRow, loaded);
-            syncPreviewStateForRow(sourceRow);
-        } else {
-            // Sync load failed — fall back to async rebuild so the card
-            // does not stay stuck on the "Loading" placeholder forever.
-            desiredThumbnailNames_.insert(item->getName());
-            requestThumbnailForItem(*item);
-        }
+        // Load thumbnails asynchronously so the showEvent path is not
+        // blocked by disk I/O.  Cards show a loading placeholder until
+        // the thumbnailReady signal delivers the pixmap.
+        desiredThumbnailNames_.insert(item->getName());
+        requestThumbnailForItem(*item);
     }
 }
 
