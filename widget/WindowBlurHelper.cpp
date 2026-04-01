@@ -41,7 +41,7 @@ DWORD accentColorFromArgb(const QColor &color) {
 } // anonymous namespace
 #endif
 
-void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
+void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark, int opacity) {
 #ifdef Q_OS_WIN
     if (!widget) return;
     HWND hwnd = reinterpret_cast<HWND>(widget->winId());
@@ -58,7 +58,10 @@ void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
         GetProcAddress(user32, "SetWindowCompositionAttribute"));
     if (!setWCA) return;
 
-    const QColor tint = dark ? QColor(30, 40, 55, 18) : QColor(231, 241, 244, 20);
+    // Map opacity 0..100 to alpha range for the tint color.
+    // 0 = nearly transparent (alpha ~5), 100 = heavily tinted (alpha ~200).
+    const int alpha = qBound(5, opacity * 200 / 100, 200);
+    const QColor tint = dark ? QColor(30, 40, 55, alpha) : QColor(231, 241, 244, alpha);
     DWORD tintVal = accentColorFromArgb(tint);
 
     ACCENT_POLICY accent{};
@@ -74,5 +77,6 @@ void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
 #else
     Q_UNUSED(widget);
     Q_UNUSED(dark);
+    Q_UNUSED(opacity);
 #endif
 }

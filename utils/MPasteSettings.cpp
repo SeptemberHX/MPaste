@@ -53,6 +53,7 @@ MPasteSettings::MPasteSettings()
     this->pasteShortcutMode = AutoPasteShortcut;
     this->shortcutStr = "Alt+Q";
     this->itemScale = 100;
+    this->blurOpacity = 40;
     this->playSound = true;
     this->themeMode = ThemeDark;
     this->historyViewMode = ViewModePaged;
@@ -114,6 +115,7 @@ void MPasteSettings::loadSettings() {
     this->pasteShortcutMode = static_cast<PasteShortcutMode>(settings.value("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode)).toInt());
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
     this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
+    this->blurOpacity = settings.value("main/blurOpacity", this->blurOpacity).toInt();
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
     this->themeMode = static_cast<ThemeMode>(
         settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
@@ -132,6 +134,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode));
     settings.setValue("main/shortcut", this->shortcutStr);
     settings.setValue("main/itemScale", this->itemScale);
+    settings.setValue("main/blurOpacity", this->blurOpacity);
     settings.setValue("main/playSound", this->playSound);
     settings.setValue("main/themeMode", static_cast<int>(this->themeMode));
     settings.setValue("main/historyViewMode", static_cast<int>(this->historyViewMode));
@@ -195,6 +198,14 @@ int MPasteSettings::getItemScale() const {
 
 void MPasteSettings::setItemScale(int itemScale) {
     MPasteSettings::itemScale = itemScale;
+}
+
+int MPasteSettings::getBlurOpacity() const {
+    return blurOpacity;
+}
+
+void MPasteSettings::setBlurOpacity(int opacity) {
+    blurOpacity = qBound(0, opacity, 100);
 }
 
 bool MPasteSettings::isPlaySound() const {
