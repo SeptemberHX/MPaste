@@ -60,7 +60,7 @@ inline void applyMenuTheme(QMenu *menu) {
         "QMenu {"
         " background-color: %1;"
         " border: 1px solid %2;"
-        " border-radius: 10px;"
+        " border-radius: 8px;"
         " padding: 6px 0px;"
         " color: %3;"
         " font-size: 13px;"

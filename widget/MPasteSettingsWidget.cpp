@@ -31,7 +31,7 @@
 #include <QDesktopServices>
 
 static const int BORDER_WIDTH = 2;
-static const int CORNER_RADIUS = 10;
+static const int CORNER_RADIUS = 8;
 
 namespace {
 QString uiText(const char *source, const QString &zhFallback) {

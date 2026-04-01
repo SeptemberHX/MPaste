@@ -167,7 +167,7 @@ protected:
         const QColor border = dark_ ? QColor(255, 255, 255, 30) : QColor(0, 0, 0, 22);
         p.setPen(QPen(border, 1));
         p.setBrush(bg);
-        p.drawRoundedRect(r, 10, 10);
+        p.drawRoundedRect(r, 8, 8);
 
         const QColor textColor = dark_ ? QColor(230, 237, 245) : QColor(30, 41, 54);
         const QColor hoverBg = dark_ ? QColor(255, 255, 255, 24) : QColor(0, 0, 0, 14);
@@ -1556,8 +1556,8 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    const qreal radius = 10.0;
-    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
+    const qreal radius = 8.0;
+    QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
 
     // Clear to transparent so DWM acrylic shows through
     p.setCompositionMode(QPainter::CompositionMode_Clear);

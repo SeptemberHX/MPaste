@@ -491,7 +491,7 @@ void ClipboardItemDetailsDialog::paintEvent(QPaintEvent *) {
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     const qreal borderWidth = 3.0;
-    const qreal radius = 18.0;
+    const qreal radius = 8.0;
     const QRectF outerRect = QRectF(rect()).adjusted(borderWidth / 2.0,
                                                      borderWidth / 2.0,
                                                      -borderWidth / 2.0,
