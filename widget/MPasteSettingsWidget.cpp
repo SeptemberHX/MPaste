@@ -73,19 +73,21 @@ static QString settingsStyleSheet(bool dark) {
             }
 
             QFrame#generalCard {
-                background-color: rgba(30, 35, 43, 180);
-                border: 1px solid #2B3440;
-                border-radius: 8px;
+                background-color: transparent;
+                border: none;
             }
 
             QTabWidget::pane {
-                border: 1px solid #2B3440;
+                border: 1px solid rgba(255, 255, 255, 18);
                 border-radius: 8px;
-                background-color: rgba(30, 35, 43, 180);
+                background-color: rgba(30, 35, 43, 160);
                 margin-top: 8px;
             }
+            QTabWidget > QWidget {
+                background: transparent;
+            }
             QTabBar::tab {
-                background: #252B34;
+                background: rgba(37, 43, 52, 180);
                 color: #B8C5D4;
                 border: 1px solid #2F3945;
                 border-bottom: none;
@@ -291,19 +293,21 @@ static QString settingsStyleSheet(bool dark) {
         }
 
         QFrame#generalCard {
-            background-color: rgba(255, 255, 255, 180);
-            border: 1px solid #E5E5E5;
-            border-radius: 8px;
+            background-color: transparent;
+            border: none;
         }
 
         QTabWidget::pane {
-            border: 1px solid #E5E5E5;
+            border: 1px solid rgba(0, 0, 0, 12);
             border-radius: 8px;
-            background-color: rgba(255, 255, 255, 180);
+            background-color: rgba(255, 255, 255, 160);
             margin-top: 8px;
         }
+        QTabWidget > QWidget {
+            background: transparent;
+        }
         QTabBar::tab {
-            background: #F5F7FA;
+            background: rgba(245, 247, 250, 180);
             color: #5B6572;
             border: 1px solid #E2E8F0;
             border-bottom: none;
