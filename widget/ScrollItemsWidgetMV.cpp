@@ -1159,6 +1159,12 @@ void ScrollItemsWidget::preRenderAndCleanup() {
     // Pre-render only the visible number of cards so the first show()
     // does not stall on cache misses.
     const int preRenderCount = qMin(boardModel_->rowCount(), estimateVisibleCardCount());
+    qInfo().noquote() << QStringLiteral("[preRender] modelRows=%1 visibleEst=%2 preRender=%3 gridW=%4 vpW=%5")
+        .arg(boardModel_->rowCount())
+        .arg(estimateVisibleCardCount())
+        .arg(preRenderCount)
+        .arg(listView_->gridSize().width())
+        .arg(listView_->viewport() ? listView_->viewport()->width() : -1);
 
     if (preRenderCount > 0) {
         QStyleOptionViewItem baseOption;
