@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.7)
 set(_VERSION_MAJOR 0)
 set(_VERSION_MINOR 7)
-set(_VERSION_PATCH 2)
+set(_VERSION_PATCH 3)
 set(VERSION "${_VERSION_MAJOR}.${_VERSION_MINOR}.${_VERSION_PATCH}")
 project(MPaste)
 
@@ -87,6 +87,10 @@ else()
     set(PLATFORM_SPECIFIC_SOURCES "")
 endif()
 
+if(WIN32)
+    set(WIN_RC_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/mpaste.rc")
+endif()
+
 if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_executable(${BIN_NAME}
             WIN32
@@ -94,6 +98,7 @@ if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
             ${INTERFACES}
             ${PLATFORM_SPECIFIC_SOURCES}
             ${QM_FILES}
+            ${WIN_RC_FILE}
     )
 else()
     add_executable(${BIN_NAME}
@@ -101,6 +106,7 @@ else()
             ${INTERFACES}
             ${PLATFORM_SPECIFIC_SOURCES}
             ${QM_FILES}
+            $<$<PLATFORM_ID:Windows>:${WIN_RC_FILE}>
     )
 endif()
 

@@ -61,9 +61,6 @@ public:
 
     int getItemScale() const;
     void setItemScale(int itemScale);
-    int getThumbnailPrefetchCount() const;
-    void setThumbnailPrefetchCount(int count);
-
     bool isPlaySound() const;
     void setPlaySound(bool playSound);
 
@@ -104,7 +101,6 @@ private:
     PasteShortcutMode pasteShortcutMode;
     QString shortcutStr;
     int itemScale;
-    int thumbnailPrefetchCount;
     bool playSound;
     ThemeMode themeMode;
     HistoryViewMode historyViewMode;

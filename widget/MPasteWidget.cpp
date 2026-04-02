@@ -167,7 +167,7 @@ protected:
         const QColor border = dark_ ? QColor(255, 255, 255, 30) : QColor(0, 0, 0, 22);
         p.setPen(QPen(border, 1));
         p.setBrush(bg);
-        p.drawRoundedRect(r, 10, 10);
+        p.drawRoundedRect(r, 8, 8);
 
         const QColor textColor = dark_ ? QColor(230, 237, 245) : QColor(30, 41, 54);
         const QColor hoverBg = dark_ ? QColor(255, 255, 255, 24) : QColor(0, 0, 0, 14);
@@ -726,8 +726,6 @@ void MPasteWidget::initUI() {
 AboutWidget *MPasteWidget::ensureAboutWidget() {
     if (!ui_.aboutWidget) {
         ui_.aboutWidget = new AboutWidget(this);
-        ui_.aboutWidget->setWindowFlag(Qt::Tool);
-        ui_.aboutWidget->setWindowTitle("MPaste About");
         ui_.aboutWidget->hide();
     }
     return ui_.aboutWidget;
@@ -768,15 +766,6 @@ MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
         connect(ui_.settingsWidget, &MPasteSettingsWidget::itemScaleChanged,
                 this, [this](int scale) {
                     applyScale(scale);
-                });
-        connect(ui_.settingsWidget, &MPasteSettingsWidget::thumbnailPrefetchChanged,
-                this, [this](int) {
-                    if (ui_.clipboardWidget) {
-                        ui_.clipboardWidget->refreshThumbnailCache();
-                    }
-                    if (ui_.staredWidget) {
-                        ui_.staredWidget->refreshThumbnailCache();
-                    }
                 });
     }
     return ui_.settingsWidget;
@@ -1018,6 +1007,9 @@ void MPasteWidget::initMenu() {
         int y = (screenGeometry.height() - aboutWidget->height()) / 2;
         aboutWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
         aboutWidget->show();
+        aboutWidget->applyTheme(darkTheme_);
+        aboutWidget->raise();
+        aboutWidget->activateWindow();
     });
 
     ui_.settingsAction = new QAction(
@@ -1565,8 +1557,8 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    const qreal radius = 10.0;
-    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
+    const qreal radius = 8.0;
+    QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
 
     // Clear to transparent so DWM acrylic shows through
     p.setCompositionMode(QPainter::CompositionMode_Clear);
@@ -1612,16 +1604,20 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
 }
 
 void MPasteWidget::showEvent(QShowEvent *event) {
+    QElapsedTimer t; t.start();
     QWidget::showEvent(event);
-    qInfo().noquote() << QStringLiteral("[startup] MPasteWidget showEvent elapsedMs=%1 visible=%2")
-        .arg(misc_.startupPerfTimer.isValid() ? misc_.startupPerfTimer.elapsed() : -1)
-        .arg(isVisible());
+    qInfo().noquote() << QStringLiteral("[wake] showEvent: QWidget::showEvent %1 ms").arg(t.elapsed());
+    stopKeepAliveTimer();
+    qInfo().noquote() << QStringLiteral("[wake] showEvent: stopKeepAliveTimer %1 ms").arg(t.elapsed());
     activateWindow();
     raise();
     setFocus();
+    qInfo().noquote() << QStringLiteral("[wake] showEvent: activate/raise/focus %1 ms").arg(t.elapsed());
     if (syncWatcher_ && syncWatcher_->checkPendingReload()) {
         syncHistoryBoardsIncremental();
+        qInfo().noquote() << QStringLiteral("[wake] showEvent: syncIncremental %1 ms").arg(t.elapsed());
     }
+    qInfo().noquote() << QStringLiteral("[wake] showEvent total: %1 ms").arg(t.elapsed());
 }
 
 void MPasteWidget::hideEvent(QHideEvent *event) {
@@ -1631,6 +1627,7 @@ void MPasteWidget::hideEvent(QHideEvent *event) {
             board->hideHoverTools();
         }
     }
+    startKeepAliveTimer();
 }
 
 void MPasteWidget::setupSyncWatcher() {
@@ -1827,8 +1824,10 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == isVisible()) return;
 
     if (visible) {
+        QElapsedTimer t; t.start();
         setWindowOpacity(0);
         show();
+        qInfo().noquote() << QStringLiteral("[wake] setVisibleWithAnnimation: show() took %1 ms").arg(t.elapsed());
         if (clipboard_.copiedWhenHide) {
             ui_.clipboardWidget->scrollToFirst();
             clipboard_.copiedWhenHide = false;
@@ -1870,6 +1869,83 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
 
         animation->start(QAbstractAnimation::DeleteWhenStopped);
     }
+}
+
+void MPasteWidget::startKeepAliveTimer() {
+#ifdef Q_OS_WIN
+    // Tell Windows to keep a reasonable minimum working set so that the
+    // process memory is not aggressively paged out during long idle periods.
+    // This is the primary mechanism to prevent the multi-second freeze when
+    // the user invokes the hotkey after hours of inactivity.
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        // Use current working set as the minimum, capped to a sane range.
+        const SIZE_T current = pmc.WorkingSetSize;
+        const SIZE_T minWS = qBound<SIZE_T>(20ULL * 1024 * 1024, current, 200ULL * 1024 * 1024);
+        const SIZE_T maxWS = qMax<SIZE_T>(minWS * 2, 400ULL * 1024 * 1024);
+        SetProcessWorkingSetSize(GetCurrentProcess(), minWS, maxWS);
+    }
+
+    if (!keepAliveTimer_) {
+        keepAliveTimer_ = new QTimer(this);
+        keepAliveTimer_->setTimerType(Qt::VeryCoarseTimer);
+        connect(keepAliveTimer_, &QTimer::timeout, this, &MPasteWidget::touchWorkingSet);
+    }
+    keepAliveTimer_->start(KEEPALIVE_INTERVAL_MS);
+#endif
+}
+
+void MPasteWidget::stopKeepAliveTimer() {
+#ifdef Q_OS_WIN
+    // Restore default working set policy so the OS can reclaim memory
+    // while the widget is visible and actively used.
+    SetProcessWorkingSetSize(GetCurrentProcess(), static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1));
+#endif
+    if (keepAliveTimer_) {
+        keepAliveTimer_->stop();
+    }
+}
+
+void MPasteWidget::touchWorkingSet() {
+#ifdef Q_OS_WIN
+    // Walk key data structures to fault their pages back in, preventing
+    // Windows from trimming them even with the minimum working set set.
+    volatile char sink = 0;
+
+    auto touchWidget = [&sink](ScrollItemsWidget *w) {
+        if (!w) return;
+        auto *model = w->boardModel();
+        if (!model) return;
+        const int rows = model->rowCount();
+        const int step = qMax(1, rows / 16);
+        for (int i = 0; i < rows; i += step) {
+            const ClipboardItem *item = model->itemPtrAt(i);
+            if (item) {
+                const QString &name = item->getName();
+                if (!name.isEmpty()) {
+                    sink += name.at(0).unicode();
+                }
+                // Touch thumbnail pixmap data if present.
+                if (item->hasThumbnail()) {
+                    const QPixmap &px = item->thumbnail();
+                    sink += reinterpret_cast<const volatile char *>(&px)[0];
+                }
+            }
+        }
+        // Touch the widget's own object tree.
+        sink += reinterpret_cast<const volatile char *>(w)[0];
+    };
+
+    touchWidget(ui_.clipboardWidget);
+    touchWidget(ui_.staredWidget);
+
+    // Touch this widget and its UI object.
+    sink += reinterpret_cast<const volatile char *>(this)[0];
+    if (ui_.ui) {
+        sink += reinterpret_cast<const volatile char *>(ui_.ui)[0];
+    }
+    Q_UNUSED(sink);
+#endif
 }
 
 void MPasteWidget::dumpMemoryStats() {

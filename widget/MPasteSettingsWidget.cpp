@@ -31,7 +31,7 @@
 #include <QDesktopServices>
 
 static const int BORDER_WIDTH = 2;
-static const int CORNER_RADIUS = 10;
+static const int CORNER_RADIUS = 8;
 
 namespace {
 QString uiText(const char *source, const QString &zhFallback) {
@@ -73,19 +73,21 @@ static QString settingsStyleSheet(bool dark) {
             }
 
             QFrame#generalCard {
-                background-color: #1E232B;
-                border: 1px solid #2B3440;
-                border-radius: 8px;
+                background-color: transparent;
+                border: none;
             }
 
             QTabWidget::pane {
-                border: 1px solid #2B3440;
+                border: 1px solid rgba(255, 255, 255, 18);
                 border-radius: 8px;
-                background-color: #1E232B;
+                background-color: rgba(30, 35, 43, 160);
                 margin-top: 8px;
             }
+            QTabWidget > QWidget {
+                background: transparent;
+            }
             QTabBar::tab {
-                background: #252B34;
+                background: rgba(37, 43, 52, 180);
                 color: #B8C5D4;
                 border: 1px solid #2F3945;
                 border-bottom: none;
@@ -291,19 +293,21 @@ static QString settingsStyleSheet(bool dark) {
         }
 
         QFrame#generalCard {
-            background-color: #FFFFFF;
-            border: 1px solid #E5E5E5;
-            border-radius: 8px;
+            background-color: transparent;
+            border: none;
         }
 
         QTabWidget::pane {
-            border: 1px solid #E5E5E5;
+            border: 1px solid rgba(0, 0, 0, 12);
             border-radius: 8px;
-            background-color: #FFFFFF;
+            background-color: rgba(255, 255, 255, 160);
             margin-top: 8px;
         }
+        QTabWidget > QWidget {
+            background: transparent;
+        }
         QTabBar::tab {
-            background: #F5F7FA;
+            background: rgba(245, 247, 250, 180);
             color: #5B6572;
             border: 1px solid #E2E8F0;
             border-bottom: none;
@@ -665,9 +669,6 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->daySpinBox->setMaximumHeight(36);
         ui->shortcutEdit->setMinimumHeight(36);
         ui->shortcutEdit->setMaximumHeight(36);
-        ui->thumbnailPrefetchSpin->setMinimumHeight(36);
-        ui->thumbnailPrefetchSpin->setMaximumHeight(36);
-
         syncButtonsLayout->setSpacing(8);
 
         auto createTabGrid = [this](QWidget *parent) {
@@ -703,8 +704,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         generalLayout->addWidget(retentionWidget, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
         generalLayout->addWidget(ui->label_5, 4, 0);
         generalLayout->addWidget(ui->scaleWidget, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->thumbnailPrefetchSpin, 5, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->setRowStretch(6, 1);
+        generalLayout->setRowStretch(5, 1);
 
         shortcutsLayout->addWidget(ui->label_4, 0, 0);
         shortcutsLayout->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
@@ -826,9 +826,6 @@ void MPasteSettingsWidget::loadSettings()
     }
     ui->itemScaleSlider->setValue(settings->getItemScale());
     ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
-    if (ui->thumbnailPrefetchSpin) {
-        ui->thumbnailPrefetchSpin->setValue(settings->getThumbnailPrefetchCount());
-    }
     toggleSwitch_->setChecked(settings->isPlaySound());
     if (themeCombo_) {
         const int index = themeCombo_->findData(static_cast<int>(settings->getThemeMode()));
@@ -854,7 +851,6 @@ void MPasteSettingsWidget::accept()
     const int oldRetentionValue = settings->getHistoryRetentionValue();
     const auto oldRetentionUnit = settings->getHistoryRetentionUnit();
     const int oldScale = settings->getItemScale();
-    const int oldPrefetch = settings->getThumbnailPrefetchCount();
     const int newRetentionValue = ui->daySpinBox->value();
     const auto newRetentionUnit = retentionUnitCombo_
         ? static_cast<MPasteSettings::HistoryRetentionUnit>(retentionUnitCombo_->currentData().toInt())
@@ -873,10 +869,6 @@ void MPasteSettingsWidget::accept()
     }
     const int newScale = ui->itemScaleSlider->value();
     settings->setItemScale(newScale);
-    if (ui->thumbnailPrefetchSpin) {
-        settings->setThumbnailPrefetchCount(ui->thumbnailPrefetchSpin->value());
-    }
-    const int newPrefetch = settings->getThumbnailPrefetchCount();
     settings->setPlaySound(toggleSwitch_->isChecked());
     if (themeCombo_) {
         const auto mode = static_cast<MPasteSettings::ThemeMode>(themeCombo_->currentData().toInt());
@@ -902,7 +894,8 @@ void MPasteSettingsWidget::accept()
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                   QSettings::NativeFormat);
     if (autoStartSwitch_->isChecked()) {
-        reg.setValue("MPaste", QDir::toNativeSeparators(qApp->applicationFilePath()));
+        const QString exePath = QDir::toNativeSeparators(qApp->applicationFilePath());
+        reg.setValue("MPaste", QStringLiteral("\"%1\"").arg(exePath));
     } else {
         reg.remove("MPaste");
     }
@@ -914,9 +907,6 @@ void MPasteSettingsWidget::accept()
     }
     if (oldScale != newScale) {
         emit itemScaleChanged(newScale);
-    }
-    if (oldPrefetch != newPrefetch) {
-        emit thumbnailPrefetchChanged(newPrefetch);
     }
     QDialog::accept();
 }

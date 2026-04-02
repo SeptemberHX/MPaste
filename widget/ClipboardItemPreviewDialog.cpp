@@ -188,11 +188,6 @@ struct PreviewPayload {
 QString previewStyleSheet(bool dark) {
     if (dark) {
         return QStringLiteral(R"(
-            QFrame#previewCard {
-                background-color: transparent;
-                border: none;
-                border-radius: 18px;
-            }
             QLabel#previewTitle {
                 color: #E6EDF5;
                 font-size: 22px;
@@ -234,11 +229,6 @@ QString previewStyleSheet(bool dark) {
     }
 
     return QStringLiteral(R"(
-        QFrame#previewCard {
-            background-color: transparent;
-            border: none;
-            border-radius: 18px;
-        }
         QLabel#previewTitle {
             color: #1E2936;
             font-size: 22px;
@@ -418,58 +408,7 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     setAttribute(Qt::WA_TranslucentBackground);
     resize(kPreviewDialogWidth, kPreviewDialogHeight);
 
-    auto *rootLayout = new QVBoxLayout(this);
-    rootLayout->setContentsMargins(3, 3, 3, 3);
-
-    auto *card = new QFrame(this);
-    card->setObjectName(QStringLiteral("previewCard"));
-    card->setStyleSheet(QStringLiteral(R"(
-        QFrame#previewCard {
-            background-color: rgba(247, 250, 255, 245);
-            border: none;
-            border-radius: 18px;
-        }
-        QLabel#previewTitle {
-            color: #1E2936;
-            font-size: 22px;
-            font-weight: 700;
-            background: transparent;
-        }
-        QLabel#previewSubtitle {
-            color: #5E7084;
-            font-size: 14px;
-            background: transparent;
-        }
-        QTextBrowser {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 18);
-            border-radius: 14px;
-            padding: 12px;
-            color: #1E2936;
-            font-size: 16px;
-            selection-background-color: rgba(74, 144, 226, 76);
-        }
-        QTextBrowser:focus {
-            border-color: rgba(74, 144, 226, 30);
-        }
-        QToolButton#closeButton {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 16);
-            border-radius: 14px;
-            color: #5E7084;
-            font-size: 17px;
-            font-weight: 700;
-            min-width: 28px;
-            min-height: 28px;
-        }
-        QToolButton#closeButton:hover {
-            background-color: #F7FAFF;
-            border-color: rgba(74, 144, 226, 24);
-        }
-    )"));
-    rootLayout->addWidget(card);
-
-    auto *cardLayout = new QVBoxLayout(card);
+    auto *cardLayout = new QVBoxLayout(this);
     cardLayout->setContentsMargins(16, 14, 16, 16);
     cardLayout->setSpacing(12);
 
@@ -481,16 +420,16 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     titleLayout->setContentsMargins(0, 0, 0, 0);
     titleLayout->setSpacing(2);
 
-    ui_.titleLabel = new QLabel(card);
+    ui_.titleLabel = new QLabel(this);
     ui_.titleLabel->setObjectName(QStringLiteral("previewTitle"));
     titleLayout->addWidget(ui_.titleLabel);
 
-    ui_.subtitleLabel = new QLabel(card);
+    ui_.subtitleLabel = new QLabel(this);
     ui_.subtitleLabel->setObjectName(QStringLiteral("previewSubtitle"));
     ui_.subtitleLabel->setWordWrap(true);
     titleLayout->addWidget(ui_.subtitleLabel);
 
-    ui_.closeButton = new QToolButton(card);
+    ui_.closeButton = new QToolButton(this);
     ui_.closeButton->setObjectName(QStringLiteral("closeButton"));
     ui_.closeButton->setText(QStringLiteral("×"));
     ui_.closeButton->setCursor(Qt::PointingHandCursor);
@@ -500,7 +439,7 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     headerLayout->addWidget(ui_.closeButton, 0, Qt::AlignTop);
     cardLayout->addLayout(headerLayout);
 
-    ui_.browser = new OfflineTextBrowser(card);
+    ui_.browser = new OfflineTextBrowser(this);
     QFont previewFont = ui_.browser->font();
     previewFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
     previewFont.setPointSize(kPreviewBodyFontSize);
@@ -518,13 +457,13 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     ui_.browser->viewport()->installEventFilter(this);
     ui_.browser->viewport()->setCursor(Qt::ArrowCursor);
 
-    ui_.imageLabel = new QLabel(card);
+    ui_.imageLabel = new QLabel(this);
     ui_.imageLabel->setAlignment(Qt::AlignCenter);
     ui_.imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     ui_.imageLabel->setBackgroundRole(QPalette::Base);
     ui_.imageLabel->setFocusPolicy(Qt::NoFocus);
 
-    ui_.imageScrollArea = new QScrollArea(card);
+    ui_.imageScrollArea = new QScrollArea(this);
     ui_.imageScrollArea->setFrameShape(QFrame::NoFrame);
     ui_.imageScrollArea->setWidgetResizable(false);
     ui_.imageScrollArea->setAlignment(Qt::AlignCenter);
@@ -537,7 +476,7 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     }
     ui_.imageScrollArea->viewport()->installEventFilter(this);
 
-    auto *contentHost = new QWidget(card);
+    auto *contentHost = new QWidget(this);
     ui_.contentLayout = new QStackedLayout(contentHost);
     ui_.contentLayout->setContentsMargins(0, 0, 0, 0);
     ui_.contentLayout->addWidget(ui_.browser);
@@ -794,11 +733,7 @@ void ClipboardItemPreviewDialog::applyTheme(bool dark) {
     if (ui_.browser) {
         ui_.browser->setStyleSheet(QString());
     }
-    if (QWidget *card = findChild<QWidget*>(QStringLiteral("previewCard"))) {
-        card->setStyleSheet(previewStyleSheet(darkTheme_));
-    } else {
-        setStyleSheet(previewStyleSheet(darkTheme_));
-    }
+    setStyleSheet(previewStyleSheet(darkTheme_));
     update();
 }
 
@@ -1005,30 +940,17 @@ void ClipboardItemPreviewDialog::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    const qreal radius = 18.0;
-    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
-
-    // Clear outside the rounded rect so corners are transparent
-    painter.setCompositionMode(QPainter::CompositionMode_Clear);
-    painter.fillRect(rect(), Qt::transparent);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-
-    // Fill with near-transparent color to capture mouse events
-    QPainterPath shape;
-    shape.addRoundedRect(r, radius, radius);
-    painter.setClipPath(shape);
-    painter.fillRect(rect(), QColor(0, 0, 0, 1));
-    painter.setClipping(false);
+    // Match the DWM DWMWCP_ROUND corner radius (~8px on Windows 11)
+    const qreal radius = 8.0;
+    QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
 
     if (darkTheme_) {
-        painter.setPen(QPen(QColor(255, 255, 255, 40), 1.5));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(r, radius, radius);
+        painter.setPen(QPen(QColor(255, 255, 255, 40), 1.0));
     } else {
         painter.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(r, radius, radius);
     }
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(r, radius, radius);
 }
 
 void ClipboardItemPreviewDialog::mousePressEvent(QMouseEvent *event) {

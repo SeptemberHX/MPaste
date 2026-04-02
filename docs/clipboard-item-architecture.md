@@ -46,7 +46,7 @@ model 中的 ClipboardItem 只持有 Level 0 + Level 1 数据。`normalizedText`
 | **File (多文件)** | 不生成 | — | 文件图标 + 文件名列表 | 粘贴 |
 | **Color** | 不生成 | — | `drawRoundedRect` + 色值文本 | 粘贴 |
 
-**需要 thumbnail 管理（`shouldManageThumbnail`）的类型**：Image、Office、Link、RichText-VisualPreview。缩略图在 `processPendingItemAsync` 后台生成、持久化到 `.mpaste` 文件，通过 `primeVisibleThumbnailsSync` / `updateVisibleThumbnails` 按可见区域加载/卸载。
+**需要 thumbnail 管理（`shouldManageThumbnail`）的类型**：Image、Office、Link、RichText-VisualPreview。缩略图在 `processPendingItemAsync` 后台生成、持久化到 `.mpaste` 文件，通过 `requestVisibleThumbnails` / `updateVisibleThumbnails` 按可见区域异步加载/卸载。
 
 **不需要 thumbnail 管理的类型**：Text、RichText-TextPreview、File、Color。卡片渲染足够轻量（截断文本、系统图标、纯色块），不值得引入 thumbnail 管理开销。
 
@@ -100,9 +100,9 @@ model 中的 ClipboardItem 只持有 Level 0 + Level 1 数据。`normalizedText`
   │         └─ loadFromFileLight(path, false)  ← 只读 Level 0 元数据
   │              ※ 不读缩略图、不读 MIME 数据
   │
-  ├─ primeVisibleThumbnailsSync() — 可见区域的缩略图同步预加载
+  ├─ requestVisibleThumbnails() — 可见区域的缩略图异步请求
   │    └─ 对 shouldManageThumbnail() 的类型:
-  │         └─ loadFromFileLight(path, true)  ← 读 Level 0 + 缩略图
+  │         └─ requestThumbnailForItem() → requestThumbnailAsync() (后台线程)
   │              └─ updateItem → model 拿到缩略图
   │
   ├─ updateVisibleThumbnails() (80ms 防抖)

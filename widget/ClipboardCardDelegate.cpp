@@ -693,15 +693,16 @@ QString ClipboardCardDelegate::cacheMemoryStats() const {
     return lines.join(QLatin1Char('\n'));
 }
 
-void ClipboardCardDelegate::preRenderAll(QAbstractItemModel *model, const QStyleOptionViewItem &baseOption) {
+void ClipboardCardDelegate::preRenderAll(QAbstractItemModel *model, const QStyleOptionViewItem &baseOption, int maxRows) {
     if (!model) {
         return;
     }
     const int scale = MPasteSettings::getInst()->getItemScale();
     const QSize outerSize = cardOuterSizeForScale(scale);
     const qreal paintDpr = qMax(1.0, static_cast<qreal>(baseOption.decorationSize.width()));
+    const int rowCount = maxRows > 0 ? qMin(maxRows, model->rowCount()) : model->rowCount();
 
-    for (int row = 0; row < model->rowCount(); ++row) {
+    for (int row = 0; row < rowCount; ++row) {
         const QModelIndex index = model->index(row, 0);
         const QString name = index.data(ClipboardBoardModel::NameRole).toString();
         if (name.isEmpty() || cardPixmapCache_.contains(name)) {

@@ -85,6 +85,80 @@ QString richTextThumbnailStyleSheet() {
         "}");
 }
 
+// Neutralize near-black and near-white inline colors so that text
+// remains readable on both light and dark card backgrounds.
+// Replaces color values where all RGB components are <= darkThresh
+// with darkReplace, and >= lightThresh with lightReplace.
+QString neutralizeExtremeColors(const QString &tagStr) {
+    static const auto nearBlack = [](int r, int g, int b) {
+        return r <= 0x30 && g <= 0x30 && b <= 0x30;
+    };
+    static const auto nearWhite = [](int r, int g, int b) {
+        return r >= 0xE0 && g >= 0xE0 && b >= 0xE0;
+    };
+    static const QString darkReplace  = QStringLiteral("#444444");
+    static const QString lightReplace = QStringLiteral("#CCCCCC");
+
+    // Match color property values in style attributes and <font color=""> attrs.
+    // Covers: #RGB, #RRGGBB, rgb(r,g,b), named black/white.
+    static const QRegularExpression colorValueRx(
+        QStringLiteral(R"((?:(?:[\s;:"']|^)color\s*[:=]\s*["']?\s*)(#[0-9a-fA-F]{3,6}|rgb\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)|black|white))"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    QString result = tagStr;
+    int offset = 0;
+    QRegularExpressionMatchIterator it = colorValueRx.globalMatch(result);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        const QString val = m.captured(1);
+        const int valStart = m.capturedStart(1) + offset;
+        int r = -1, g = -1, b = -1;
+
+        if (val.compare(QStringLiteral("black"), Qt::CaseInsensitive) == 0) {
+            r = g = b = 0;
+        } else if (val.compare(QStringLiteral("white"), Qt::CaseInsensitive) == 0) {
+            r = g = b = 255;
+        } else if (val.startsWith(QLatin1Char('#'))) {
+            const QString hex = val.mid(1);
+            if (hex.size() == 3) {
+                bool ok;
+                r = hex.mid(0, 1).toInt(&ok, 16) * 17; if (!ok) continue;
+                g = hex.mid(1, 1).toInt(&ok, 16) * 17; if (!ok) continue;
+                b = hex.mid(2, 1).toInt(&ok, 16) * 17; if (!ok) continue;
+            } else if (hex.size() == 6) {
+                bool ok;
+                r = hex.mid(0, 2).toInt(&ok, 16); if (!ok) continue;
+                g = hex.mid(2, 2).toInt(&ok, 16); if (!ok) continue;
+                b = hex.mid(4, 2).toInt(&ok, 16); if (!ok) continue;
+            }
+        } else if (val.startsWith(QStringLiteral("rgb"), Qt::CaseInsensitive)) {
+            static const QRegularExpression rgbRx(QStringLiteral(R"(rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\))"),
+                                                  QRegularExpression::CaseInsensitiveOption);
+            const QRegularExpressionMatch rm = rgbRx.match(val);
+            if (rm.hasMatch()) {
+                r = rm.captured(1).toInt();
+                g = rm.captured(2).toInt();
+                b = rm.captured(3).toInt();
+            }
+        }
+
+        if (r < 0) continue;
+
+        QString replacement;
+        if (nearBlack(r, g, b)) {
+            replacement = darkReplace;
+        } else if (nearWhite(r, g, b)) {
+            replacement = lightReplace;
+        } else {
+            continue;
+        }
+
+        result.replace(valStart, val.size(), replacement);
+        offset += replacement.size() - val.size();
+    }
+    return result;
+}
+
 // Keep only basic text-formatting tags, drop everything that could
 // trigger resource loading or heavy layout (images, styles, SVGs,
 // shadow DOM templates, scripts, etc.).
@@ -149,6 +223,7 @@ QString simplifyHtmlForRendering(const QString &html) {
                         QStringLiteral("(?:src|srcset)\\s*=\\s*[\"'][^\"']*[\"']"),
                         QRegularExpression::CaseInsensitiveOption);
                     tagStr.replace(remoteSrc, QString());
+                    tagStr = neutralizeExtremeColors(tagStr);
                     result += tagStr;
                 }
             } else if (html[i + 1] != QLatin1Char('/')) {

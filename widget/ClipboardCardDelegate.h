@@ -67,7 +67,7 @@ public:
     int cachedCardCount() const { return cardPixmapCache_.size(); }
     int cachedCardMaxCost() const { return cardPixmapCache_.maxCost(); }
     QString cacheMemoryStats() const;
-    void preRenderAll(QAbstractItemModel *model, const QStyleOptionViewItem &baseOption);
+    void preRenderAll(QAbstractItemModel *model, const QStyleOptionViewItem &baseOption, int maxRows = -1);
     void drawSelectionBorder(QPainter *painter, const QStyleOptionViewItem &option,
                              bool selected, int scale) const;
     void drawShortcutOverlay(QPainter *painter, const QStyleOptionViewItem &option,

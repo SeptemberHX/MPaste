@@ -271,20 +271,19 @@ void ClipboardPasteController::pasteToTarget(WId targetWindow) {
 
 #ifdef Q_OS_WIN
     auto *altReleaseTimer = new QTimer(this);
-    auto *pollCount = new int(0);
+    int pollCount = 0;
     altReleaseTimer->setInterval(10);
-    connect(altReleaseTimer, &QTimer::timeout, this, [altReleaseTimer, pollCount, restoreFocusAndPaste]() {
+    connect(altReleaseTimer, &QTimer::timeout, this, [altReleaseTimer, pollCount, restoreFocusAndPaste]() mutable {
         const bool altReleased = (GetAsyncKeyState(VK_MENU) & 0x8000) == 0;
-        const bool timedOut = *pollCount >= 50;
+        const bool timedOut = pollCount >= 50;
         if (altReleased || timedOut) {
             altReleaseTimer->stop();
             altReleaseTimer->deleteLater();
-            delete pollCount;
             restoreFocusAndPaste();
             return;
         }
 
-        ++(*pollCount);
+        ++pollCount;
     });
     altReleaseTimer->start();
 #else

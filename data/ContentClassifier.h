@@ -26,6 +26,7 @@ struct ContentTraits {
     bool hasVector = false;
     bool hasOle = false;
     bool hasOleNative = false;
+    bool hasExplicitOfficeApp = false;
     bool hasBitmap = false;
     bool hasImage = false;
     bool hasText = false;
@@ -92,6 +93,11 @@ inline ContentTraits analyze(const QMimeData *mimeData) {
                 || lower.contains(QStringLiteral("excel"))
                 || lower.contains(QStringLiteral("word"))) {
                 traits.hasOle = true;
+            }
+            if (lower.contains(QStringLiteral("powerpoint"))
+                || lower.contains(QStringLiteral("excel"))
+                || lower.contains(QStringLiteral("word"))) {
+                traits.hasExplicitOfficeApp = true;
             }
             if (lower.contains(QStringLiteral("object descriptor"))
                 || lower.contains(QStringLiteral("embedded object"))
@@ -324,6 +330,11 @@ inline bool shouldTreatOfficePayloadAsType(const ContentTraits &traits) {
         return false;
     }
     if (traits.hasVector) {
+        return true;
+    }
+    // Explicit Office app formats (PowerPoint/Excel/Word internal data)
+    // are always Office, even when bitmap formats are also present.
+    if (traits.hasExplicitOfficeApp) {
         return true;
     }
     if (traits.hasOleNative && !traits.hasBitmap) {

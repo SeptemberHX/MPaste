@@ -254,7 +254,7 @@ void ScrollItemsWidget::setCurrentPageNumber(int pageNumber) {
     syncPageWindow(true);
     if (isBoardUiVisible()) {
         refreshContentWidthHint();
-        primeVisibleThumbnailsSync();
+        requestVisibleThumbnails();
         scheduleThumbnailUpdate();
     }
 }
@@ -300,7 +300,7 @@ void ScrollItemsWidget::applyFilters() {
     syncPageWindow(true);
     if (isBoardUiVisible()) {
         refreshContentWidthHint();
-        primeVisibleThumbnailsSync();
+        requestVisibleThumbnails();
         scheduleThumbnailUpdate();
     }
     emit itemCountChanged(itemCountForDisplay());

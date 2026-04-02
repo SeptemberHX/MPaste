@@ -73,7 +73,6 @@ public:
     void setCurrentPageNumber(int pageNumber);
     int currentPageNumber() const;
     int totalPageCount() const;
-    void refreshThumbnailCache();
     QSet<QByteArray> loadAllFingerprints();
     void setFavoriteFingerprints(const QSet<QByteArray> &fingerprints);
 
@@ -89,6 +88,7 @@ public:
     bool handleWheelScroll(QWheelEvent *event);
     void applyTheme(bool dark);
     ClipboardBoardService *boardServiceRef() const { return boardService_; }
+    ClipboardBoardModel *boardModel() const { return boardModel_; }
     QString memoryStats() const;
 
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -184,7 +184,8 @@ private:
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;
     bool isBoardUiVisible() const;
     void scheduleThumbnailUpdate();
-    void primeVisibleThumbnailsSync();
+    int estimateVisibleCardCount() const;
+    void requestVisibleThumbnails();
     void updateVisibleThumbnails();
     bool shouldManageThumbnail(const ClipboardItem &item) const;
     void requestThumbnailForItem(const ClipboardItem &item);

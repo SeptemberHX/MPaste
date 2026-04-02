@@ -34,6 +34,9 @@ constexpr quint32 kLocalSaverVersionV6 = 6;
 const QString kLocalSaverMagicV6 = QStringLiteral("MPASTE_CLIP_V6");
 constexpr quint32 kLocalSaverFlagsV6 = 0;
 
+// Forward declaration — defined below the anonymous namespace.
+qreal maxThumbnailDevicePixelRatio();
+
 bool hasMeaningfulMimeData(const QMimeData *mimeData) {
     if (!mimeData) {
         return false;
@@ -135,6 +138,14 @@ bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHead
         header.normalizedUrls << QUrl(urlStr);
     }
     in >> header.fingerprint >> header.thumbnail >> header.mimeDataOffset;
+    // QDataStream does not preserve QPixmap devicePixelRatio.
+    // Restore it so thumbnails render crisply on high-DPI screens.
+    if (!header.thumbnail.isNull() && header.thumbnail.devicePixelRatio() == 1.0) {
+        const qreal dpr = maxThumbnailDevicePixelRatio();
+        if (dpr > 1.0) {
+            header.thumbnail.setDevicePixelRatio(dpr);
+        }
+    }
     return in.status() == QDataStream::Ok && !header.name.isEmpty();
 }
 

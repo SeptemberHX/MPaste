@@ -5,22 +5,35 @@
 #ifndef ABOUTWIDGET_H
 #define ABOUTWIDGET_H
 
-#include <QWidget>
+#include <QDialog>
+#include <QPoint>
+
+class QToolButton;
 
 namespace Ui {
 class AboutWidget;
 }
 
-class AboutWidget : public QWidget
+class AboutWidget : public QDialog
 {
     Q_OBJECT
 
 public:
     explicit AboutWidget(QWidget *parent = nullptr);
     ~AboutWidget();
+    void applyTheme(bool dark);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
 
 private:
     Ui::AboutWidget *ui;
+    QToolButton *closeButton_ = nullptr;
+    QPoint dragPos_;
+    bool darkTheme_ = false;
 };
 
 #endif // ABOUTWIDGET_H
