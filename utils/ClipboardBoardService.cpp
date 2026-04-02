@@ -841,7 +841,8 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             || (contentType == RichText && previewKind == VisualPreview))
         ? item.imagePayloadBytesFast()
         : QByteArray();
-    const QString richHtml = (contentType == RichText && previewKind == VisualPreview)
+    const QString richHtml = ((contentType == RichText && previewKind == VisualPreview)
+            || contentType == Office)
         ? item.getHtml()
         : QString();
     const QSize imageSize = item.isMimeDataLoaded()
@@ -867,7 +868,8 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             QByteArray imagePayload;
             LocalSaver::loadMimePayloads(sourceFilePath,
                                          mimeOffset,
-                                         (contentType == RichText && previewKind == VisualPreview) ? &htmlPayload : nullptr,
+                                         ((contentType == RichText && previewKind == VisualPreview)
+                                             || contentType == Office) ? &htmlPayload : nullptr,
                                          (contentType == Image
                                             || contentType == Office
                                             || (contentType == RichText && previewKind == VisualPreview)) ? &imagePayload : nullptr);
@@ -882,6 +884,9 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
         if ((contentType == Image || contentType == Office)
             && !resolvedImageBytes.isEmpty()) {
             result.thumbnailImage = ThumbnailBuilder::buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr, itemScale);
+        } else if (contentType == Office
+                   && !resolvedHtml.isEmpty()) {
+            result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
         } else if (contentType == RichText
                    && previewKind == VisualPreview
                    && !resolvedHtml.isEmpty()) {
@@ -1020,6 +1025,49 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                             preparedItem.setThumbnail(thumbnail);
                             generatedThumbnail = preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
                             refreshedRichText = true;
+                        }
+                    }
+
+                    if (!generatedThumbnail) {
+                        ClipboardItem fullItem = saver.loadFromFile(filePath);
+                        if (!fullItem.getName().isEmpty()) {
+                            preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
+                            generatedThumbnail = !preparedItem.thumbnail().isNull()
+                                && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
+                            refreshedRichText = !preparedItem.thumbnail().isNull();
+                        }
+                    }
+
+                    if (!generatedThumbnail && !refreshedRichText) {
+                        rebuildFailed = true;
+                    }
+                } else if (type == Office) {
+                    QString htmlPayload;
+                    QByteArray imagePayload;
+                    if (LocalSaver::loadMimePayloads(filePath,
+                                                     loaded.mimeDataFileOffset(),
+                                                     &htmlPayload,
+                                                     &imagePayload)) {
+                        const qreal thumbnailDpr = ThumbnailBuilder::maxScreenDevicePixelRatio();
+                        const int itemScale = MPasteSettings::getInst()->getItemScale();
+                        QImage thumbnailImage;
+                        if (!imagePayload.isEmpty()) {
+                            thumbnailImage = ThumbnailBuilder::buildCardThumbnailImageFromBytes(imagePayload,
+                                                                                                thumbnailDpr,
+                                                                                                itemScale);
+                        }
+                        if (thumbnailImage.isNull() && !htmlPayload.isEmpty()) {
+                            thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(htmlPayload,
+                                                                                                   imagePayload,
+                                                                                                   thumbnailDpr,
+                                                                                                   itemScale);
+                        }
+                        if (!thumbnailImage.isNull()) {
+                            QPixmap thumbnail = QPixmap::fromImage(thumbnailImage);
+                            thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
+                            preparedItem.setThumbnail(thumbnail);
+                            generatedThumbnail = preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
+                            refreshedRichText = !preparedItem.thumbnail().isNull();
                         }
                     }
 

@@ -313,6 +313,9 @@ PreviewPayload buildPreviewPayload(ContentType contentType,
                 payload.kind = PreviewKind::Image;
                 payload.image = image;
                 payload.imageUrl = QStringLiteral("preview-image://clipboard-item");
+            } else if (!html.isEmpty()) {
+                payload.kind = PreviewKind::Html;
+                payload.html = html;
             } else {
                 payload.kind = PreviewKind::PlainText;
                 payload.text = unavailableText();
@@ -521,7 +524,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
 
     const QString normalizedText = item.getNormalizedText();
     const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
-    const QString html = contentType == RichText ? item.getHtml() : QString();
+    const QString html = (contentType == RichText || contentType == Office) ? item.getHtml() : QString();
     const QByteArray imageBytes = (contentType == Image
             || contentType == Office
             || contentType == RichText)
@@ -588,7 +591,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 QString htmlPayload;
                 QByteArray imagePayload;
                 LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset,
-                    resolvedType == RichText ? &htmlPayload : nullptr,
+                    (resolvedType == RichText || resolvedType == Office) ? &htmlPayload : nullptr,
                     &imagePayload);
                 if (!htmlPayload.isEmpty()) {
                     resolvedHtml = htmlPayload;
@@ -618,7 +621,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
             QString htmlPayload;
             QByteArray imagePayload;
             LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset,
-                resolvedType == RichText ? &htmlPayload : nullptr,
+                (resolvedType == RichText || resolvedType == Office) ? &htmlPayload : nullptr,
                 &imagePayload);
             if (resolvedHtml.isEmpty() && !htmlPayload.isEmpty()) {
                 resolvedHtml = htmlPayload;
