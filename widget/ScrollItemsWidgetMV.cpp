@@ -569,12 +569,27 @@ void ScrollItemsWidget::handleLoadedItems(const QList<QPair<QString, ClipboardIt
         return;
     }
 
+    const bool wasEmpty = boardModel_->rowCount() == 0;
+
     for (const auto &payload : items) {
         appendLoadedItem(payload.first, payload.second);
     }
 
     if (shouldEvictPages()) {
         reloadCurrentPageItems(false);
+    }
+
+    // Pre-render visible cards on the very first batch so the initial
+    // show() does not stall on cold cache misses.
+    if (wasEmpty && cardDelegate_ && listView_ && boardModel_->rowCount() > 0) {
+        const int preRenderCount = qMin(boardModel_->rowCount(), estimateVisibleCardCount());
+        if (preRenderCount > 0) {
+            QStyleOptionViewItem baseOption;
+            baseOption.decorationSize = QSize(
+                qRound(listView_->devicePixelRatioF()),
+                qRound(listView_->devicePixelRatioF()));
+            cardDelegate_->preRenderAll(boardModel_, baseOption, preRenderCount);
+        }
     }
 
     emit itemCountChanged(itemCountForDisplay());
@@ -1154,24 +1169,6 @@ void ScrollItemsWidget::releaseItemPixmaps(int row) {
 void ScrollItemsWidget::preRenderAndCleanup() {
     if (!boardModel_ || !cardDelegate_ || !listView_ || !proxyModel_) {
         return;
-    }
-
-    // Pre-render only the visible number of cards so the first show()
-    // does not stall on cache misses.
-    const int preRenderCount = qMin(boardModel_->rowCount(), estimateVisibleCardCount());
-    qInfo().noquote() << QStringLiteral("[preRender] modelRows=%1 visibleEst=%2 preRender=%3 gridW=%4 vpW=%5")
-        .arg(boardModel_->rowCount())
-        .arg(estimateVisibleCardCount())
-        .arg(preRenderCount)
-        .arg(listView_->gridSize().width())
-        .arg(listView_->viewport() ? listView_->viewport()->width() : -1);
-
-    if (preRenderCount > 0) {
-        QStyleOptionViewItem baseOption;
-        baseOption.decorationSize = QSize(
-            qRound(listView_->devicePixelRatioF()),
-            qRound(listView_->devicePixelRatioF()));
-        cardDelegate_->preRenderAll(boardModel_, baseOption, preRenderCount);
     }
 
     managedThumbnailNames_.clear();
