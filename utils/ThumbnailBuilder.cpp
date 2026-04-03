@@ -42,14 +42,17 @@ QSize previewLogicalSize(int itemScale) {
                  qMax(1, kCardPreviewHeight * scale / 100));
 }
 
-QString richTextThumbnailStyleSheet() {
+QString richTextThumbnailStyleSheet(int itemScale) {
+    const int scale = qMax(50, itemScale);
+    const int bodyPaddingX = qMax(8, 12 * scale / 100);
+    const int baseFontPx = qMax(12, 14 * scale / 100);
     return QStringLiteral(
         "html, body { margin: 0 !important; width: 100% !important; max-width: 100% !important; }"
         "body {"
-        " padding: 12px 12px 0 12px !important;"
+        " padding: %1px %1px 0 %1px !important;"
         " font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', 'Noto Sans', sans-serif !important;"
-        " font-size: 15px !important;"
-        " line-height: 1.38 !important;"
+        " font-size: %2px !important;"
+        " line-height: 1.34 !important;"
         " }"
         "body * {"
         " margin: 0 !important;"
@@ -82,7 +85,29 @@ QString richTextThumbnailStyleSheet() {
         " white-space: pre-wrap !important;"
         " overflow-wrap: anywhere !important;"
         " word-break: break-word !important;"
-        "}");
+        "}")
+        .arg(bodyPaddingX)
+        .arg(baseFontPx);
+}
+
+QString normalizeInlineTypography(QString tagStr) {
+    // Rich text copied from Word/WPS often carries inline font-size /
+    // line-height styles that make thumbnail previews look oversized
+    // compared with plain-text cards.
+    static const QRegularExpression typographyDecl(
+        QStringLiteral(R"((?:^|;)\s*(?:font-size|line-height|mso-[a-z-]+)\s*:\s*[^;\"']*;?)"),
+        QRegularExpression::CaseInsensitiveOption);
+    tagStr.replace(typographyDecl, QStringLiteral(";"));
+
+    static const QRegularExpression emptyStyleAttrSingle(
+        QStringLiteral(R"(\sstyle\s*=\s*'[\s;]*')"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression emptyStyleAttrDouble(
+        QStringLiteral(R"(\sstyle\s*=\s*"[\s;]*")"),
+        QRegularExpression::CaseInsensitiveOption);
+    tagStr.remove(emptyStyleAttrSingle);
+    tagStr.remove(emptyStyleAttrDouble);
+    return tagStr;
 }
 
 // Neutralize near-black and near-white inline colors so that text
@@ -224,6 +249,7 @@ QString simplifyHtmlForRendering(const QString &html) {
                         QRegularExpression::CaseInsensitiveOption);
                     tagStr.replace(remoteSrc, QString());
                     tagStr = neutralizeExtremeColors(tagStr);
+                    tagStr = normalizeInlineTypography(tagStr);
                     result += tagStr;
                 }
             } else if (html[i + 1] != QLatin1Char('/')) {
@@ -256,9 +282,9 @@ QString simplifyHtmlForRendering(const QString &html) {
     return result;
 }
 
-QString richTextHtmlForThumbnail(QString html) {
+QString richTextHtmlForThumbnail(QString html, int itemScale) {
     html = simplifyHtmlForRendering(html);
-    const QString styleTag = QStringLiteral("<style>%1</style>").arg(richTextThumbnailStyleSheet());
+    const QString styleTag = QStringLiteral("<style>%1</style>").arg(richTextThumbnailStyleSheet(itemScale));
     const QRegularExpression headCloseRegex(QStringLiteral(R"(</head\s*>)"), QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch headCloseMatch = headCloseRegex.match(html);
     if (headCloseMatch.hasMatch()) {
@@ -286,7 +312,8 @@ QString richTextHtmlForThumbnail(QString html) {
 void configureRichTextThumbnailDocument(QTextDocument &document,
                                         const QString &html,
                                         const QString &imageSource,
-                                        const QByteArray &imageBytes) {
+                                        const QByteArray &imageBytes,
+                                        int itemScale) {
     document.setDocumentMargin(0);
     QTextOption option = document.defaultTextOption();
     option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
@@ -304,7 +331,7 @@ void configureRichTextThumbnailDocument(QTextDocument &document,
 
     // Apply the thumbnail stylesheet via setDefaultStyleSheet (lower
     // priority than inline styles, so colors/formatting are preserved).
-    document.setDefaultStyleSheet(richTextThumbnailStyleSheet());
+    document.setDefaultStyleSheet(richTextThumbnailStyleSheet(itemScale));
     document.setHtml(simplifyHtmlForRendering(html));
 }
 
@@ -653,7 +680,8 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     const QString imageSource = ContentClassifier::firstHtmlImageSource(html);
     const QByteArray imageBytes = item.imagePayloadBytesFast();
     OfflineTextDocument document;
-    configureRichTextThumbnailDocument(document, html, imageSource, imageBytes);
+    configureRichTextThumbnailDocument(document, html, imageSource, imageBytes,
+                                       MPasteSettings::getInst()->getItemScale());
     document.setPageSize(layoutSize);
     document.setTextWidth(layoutSize.width());
 
@@ -772,7 +800,7 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
 
     const QString imageSource = ContentClassifier::firstHtmlImageSource(truncatedHtml);
     OfflineTextDocument document;
-    configureRichTextThumbnailDocument(document, truncatedHtml, imageSource, imageBytes);
+    configureRichTextThumbnailDocument(document, truncatedHtml, imageSource, imageBytes, itemScale);
     document.setPageSize(layoutSize);
     document.setTextWidth(layoutSize.width());
 
@@ -834,7 +862,12 @@ ClipboardItem prepareItemForDisplayAndSave(const ClipboardItem &source) {
     }
     if (!item.hasThumbnail() && (item.getContentType() == Image
                                  || item.getContentType() == Office)) {
-        const QPixmap thumbnail = buildCardThumbnail(item);
+        QPixmap thumbnail = buildCardThumbnail(item);
+        if (thumbnail.isNull()
+            && item.getContentType() == Office
+            && !item.getHtml().isEmpty()) {
+            thumbnail = buildRichTextThumbnail(item);
+        }
         if (!thumbnail.isNull()) {
             item.setThumbnail(thumbnail);
         }

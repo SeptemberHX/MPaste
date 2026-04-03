@@ -19,14 +19,15 @@ namespace ThumbnailBuilder {
 
 QSize previewLogicalSize(int itemScale);
 qreal htmlPreviewZoom(qreal devicePixelRatio);
-QString richTextThumbnailStyleSheet();
+QString richTextThumbnailStyleSheet(int itemScale);
 QString simplifyHtmlForRendering(const QString &html);
-QString richTextHtmlForThumbnail(QString html);
+QString richTextHtmlForThumbnail(QString html, int itemScale);
 
 void configureRichTextThumbnailDocument(QTextDocument &document,
                                         const QString &html,
                                         const QString &imageSource,
-                                        const QByteArray &imageBytes);
+                                        const QByteArray &imageBytes,
+                                        int itemScale);
 
 qreal maxScreenDevicePixelRatio();
 

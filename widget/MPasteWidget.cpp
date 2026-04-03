@@ -1617,6 +1617,11 @@ void MPasteWidget::showEvent(QShowEvent *event) {
         syncHistoryBoardsIncremental();
         qInfo().noquote() << QStringLiteral("[wake] showEvent: syncIncremental %1 ms").arg(t.elapsed());
     }
+    // Show "Loading..." if data is still being loaded from disk,
+    // so the panel is not blank on very early wake.
+    if (auto *board = currItemsWidget()) {
+        board->updateLoadingOverlay();
+    }
     qInfo().noquote() << QStringLiteral("[wake] showEvent total: %1 ms").arg(t.elapsed());
 }
 

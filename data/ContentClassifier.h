@@ -337,7 +337,9 @@ inline bool shouldTreatOfficePayloadAsType(const ContentTraits &traits) {
     if (traits.hasExplicitOfficeApp) {
         return true;
     }
-    if (traits.hasOleNative && !traits.hasBitmap) {
+    // Native OLE/object-descriptor payloads are Office-like even when
+    // the source app also exposes bitmap/html fallbacks.
+    if (traits.hasOleNative) {
         return true;
     }
     return false;
@@ -388,6 +390,9 @@ inline ContentType classify(const QMimeData *mimeData,
             : shouldTreatHtmlPayloadAsImage(mimeData, normalizedText);
         if (htmlImageLike) {
             return shouldTreatOfficePayloadAsType(traits) ? Office : Image;
+        }
+        if (shouldTreatOfficePayloadAsType(traits)) {
+            return Office;
         }
         QString text = normalizedText.trimmed();
         if (!text.contains(QLatin1Char('\n'))

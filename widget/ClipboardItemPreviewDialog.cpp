@@ -303,19 +303,28 @@ PreviewPayload buildPreviewPayload(ContentType contentType,
             break;
         }
         case Office: {
-            // Prefer the full-resolution image from MIME data over the
-            // low-res card thumbnail used as fallback.
-            QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
-            if (image.isNull() && !fallbackImage.isNull()) {
-                image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
-            }
-            if (!image.isNull()) {
-                payload.kind = PreviewKind::Image;
-                payload.image = image;
-                payload.imageUrl = QStringLiteral("preview-image://clipboard-item");
-            } else {
+            // Prefer rich text or plain text so the user can select/copy
+            // content.  Fall back to the image only for shape-only items
+            // (e.g. PowerPoint diagrams) that carry no readable text.
+            if (!html.isEmpty() && !normalizedText.trimmed().isEmpty()) {
+                payload.kind = PreviewKind::Html;
+                payload.html = html;
+            } else if (!normalizedText.trimmed().isEmpty()) {
                 payload.kind = PreviewKind::PlainText;
-                payload.text = unavailableText();
+                payload.text = normalizedText;
+            } else {
+                QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
+                if (image.isNull() && !fallbackImage.isNull()) {
+                    image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
+                }
+                if (!image.isNull()) {
+                    payload.kind = PreviewKind::Image;
+                    payload.image = image;
+                    payload.imageUrl = QStringLiteral("preview-image://clipboard-item");
+                } else {
+                    payload.kind = PreviewKind::PlainText;
+                    payload.text = unavailableText();
+                }
             }
             break;
         }
@@ -521,7 +530,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
 
     const QString normalizedText = item.getNormalizedText();
     const QList<QUrl> normalizedUrls = item.getNormalizedUrls();
-    const QString html = contentType == RichText ? item.getHtml() : QString();
+    const QString html = (contentType == RichText || contentType == Office) ? item.getHtml() : QString();
     const QByteArray imageBytes = (contentType == Image
             || contentType == Office
             || contentType == RichText)
@@ -588,7 +597,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 QString htmlPayload;
                 QByteArray imagePayload;
                 LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset,
-                    resolvedType == RichText ? &htmlPayload : nullptr,
+                    (resolvedType == RichText || resolvedType == Office) ? &htmlPayload : nullptr,
                     &imagePayload);
                 if (!htmlPayload.isEmpty()) {
                     resolvedHtml = htmlPayload;
@@ -618,7 +627,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
             QString htmlPayload;
             QByteArray imagePayload;
             LocalSaver::loadMimePayloads(sourceFilePath, mimeOffset,
-                resolvedType == RichText ? &htmlPayload : nullptr,
+                (resolvedType == RichText || resolvedType == Office) ? &htmlPayload : nullptr,
                 &imagePayload);
             if (resolvedHtml.isEmpty() && !htmlPayload.isEmpty()) {
                 resolvedHtml = htmlPayload;
