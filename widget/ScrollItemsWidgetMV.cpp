@@ -998,9 +998,16 @@ int ScrollItemsWidget::estimateVisibleCardCount() const {
         return 0;
     }
     const int gridWidth = qMax(1, listView_->gridSize().width());
-    const int vpWidth = (listView_->viewport() && listView_->viewport()->width() > 0)
-        ? listView_->viewport()->width()
-        : 800;
+    int vpWidth = listView_->viewport() ? listView_->viewport()->width() : 0;
+    // When the window is hidden the viewport is tiny; fall back to
+    // primary screen width so startup pre-render covers enough cards.
+    if (vpWidth < gridWidth) {
+        if (QScreen *screen = QGuiApplication::primaryScreen()) {
+            vpWidth = screen->availableSize().width();
+        } else {
+            vpWidth = 1920;
+        }
+    }
     return qMax(1, vpWidth / gridWidth + 2);
 }
 
