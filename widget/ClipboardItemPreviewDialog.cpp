@@ -303,22 +303,28 @@ PreviewPayload buildPreviewPayload(ContentType contentType,
             break;
         }
         case Office: {
-            // Prefer the full-resolution image from MIME data over the
-            // low-res card thumbnail used as fallback.
-            QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
-            if (image.isNull() && !fallbackImage.isNull()) {
-                image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
-            }
-            if (!image.isNull()) {
-                payload.kind = PreviewKind::Image;
-                payload.image = image;
-                payload.imageUrl = QStringLiteral("preview-image://clipboard-item");
-            } else if (!html.isEmpty()) {
+            // Prefer rich text or plain text so the user can select/copy
+            // content.  Fall back to the image only for shape-only items
+            // (e.g. PowerPoint diagrams) that carry no readable text.
+            if (!html.isEmpty() && !normalizedText.trimmed().isEmpty()) {
                 payload.kind = PreviewKind::Html;
                 payload.html = html;
-            } else {
+            } else if (!normalizedText.trimmed().isEmpty()) {
                 payload.kind = PreviewKind::PlainText;
-                payload.text = unavailableText();
+                payload.text = normalizedText;
+            } else {
+                QImage image = loadPreviewImageFromBytes(imageBytes, QSize(), devicePixelRatio);
+                if (image.isNull() && !fallbackImage.isNull()) {
+                    image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
+                }
+                if (!image.isNull()) {
+                    payload.kind = PreviewKind::Image;
+                    payload.image = image;
+                    payload.imageUrl = QStringLiteral("preview-image://clipboard-item");
+                } else {
+                    payload.kind = PreviewKind::PlainText;
+                    payload.text = unavailableText();
+                }
             }
             break;
         }
