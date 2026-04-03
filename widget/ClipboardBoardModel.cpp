@@ -113,10 +113,8 @@ QVariant ClipboardBoardModel::data(const QModelIndex &index, int role) const {
         case PinnedRole:
             return entry.item.isPinned();
         case NormalizedTextRole: {
-            // Return only enough chars for the card preview area (~3-5
-            // lines).  Full text is read on demand for paste/preview.
             const QString &text = entry.item.getNormalizedText();
-            return text.size() > 200 ? text.left(200) : text;
+            return text.size() > 500 ? text.left(500) : text;
         }
         case TextLengthRole:
             return entry.item.getNormalizedText().size();
