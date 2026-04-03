@@ -87,6 +87,7 @@ public:
     QList<ClipboardItem> allItems();
     bool handleWheelScroll(QWheelEvent *event);
     void applyTheme(bool dark);
+    void updateLoadingOverlay();
     ClipboardBoardService *boardServiceRef() const { return boardService_; }
     ClipboardBoardModel *boardModel() const { return boardModel_; }
     QString memoryStats() const;
@@ -192,7 +193,6 @@ private:
     void applyManagedThumbnailNames(const QSet<QString> &desiredNames);
     void setVisibleLoadingThumbnailNames(const QSet<QString> &names);
     void updateThumbnailViewport(const QSet<QString> &names);
-    void updateLoadingOverlay();
     void updateSelectionState();
     void releaseItemPixmaps(int row);
 
