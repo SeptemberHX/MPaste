@@ -23,6 +23,8 @@
 #include <QScreen>
 #include <QSaveFile>
 
+#include "utils/OcrService.h"
+
 namespace {
 constexpr quint32 kLocalSaverVersionV4 = 4;
 const QString kLocalSaverMagicV4 = QStringLiteral("MPASTE_CLIP_V4");
@@ -1341,6 +1343,8 @@ bool LocalSaver::isCurrentFormatFile(const QString &filePath) {
 }
 
 bool LocalSaver::removeItem(const QString &filePath) {
+    // Also remove OCR sidecar if present.
+    OcrService::removeSidecar(filePath);
     QFile file(filePath);
     return file.remove();
 }

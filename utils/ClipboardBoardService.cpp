@@ -28,6 +28,7 @@
 
 #include "data/LocalSaver.h"
 #include "utils/MPasteSettings.h"
+#include "utils/OcrService.h"
 #include "utils/ThumbnailBuilder.h"
 
 namespace {
@@ -67,6 +68,11 @@ ClipboardBoardService::IndexedItemMeta buildIndexedItemMeta(const QString &fileP
     }
     for (const QUrl &url : meta.normalizedUrls) {
         searchParts << (url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyEncoded));
+    }
+    // Include cached OCR text in the search index if available.
+    const OcrService::Result ocrResult = OcrService::readSidecar(filePath);
+    if (ocrResult.status == OcrService::Ready && !ocrResult.text.isEmpty()) {
+        searchParts << ocrResult.text.left(512);
     }
     meta.searchableText = searchParts.join(QLatin1Char('\n')).toLower();
     return meta;

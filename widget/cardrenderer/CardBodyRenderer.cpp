@@ -381,6 +381,9 @@ QString CardRenderUtils::previewTextForCard(const CardData &card) {
         case Image:
             return QObject::tr("Image preview");
         case Office:
+            if (!card.normalizedText.trimmed().isEmpty()) {
+                return card.normalizedText.trimmed();
+            }
             return QObject::tr("Office shape preview");
         case Text:
         case All:

@@ -728,9 +728,18 @@ bool ScrollItemsWidget::filterShowsVisualPreviewCards() const {
 
 bool ScrollItemsWidget::usesManagedVisualPreviewCard(const ClipboardItem &item) const {
     const ContentType type = item.getContentType();
-    return type == Image
-        || type == Office
-        || (type == RichText && item.getPreviewKind() == VisualPreview);
+    if (type == Image) {
+        return true;
+    }
+    if (type == Office) {
+        // Office items with text but no thumbnail hint (e.g. MathType)
+        // should use text preview instead of waiting for a visual thumbnail.
+        if (!item.hasThumbnailHint() && !item.getNormalizedText().isEmpty()) {
+            return false;
+        }
+        return true;
+    }
+    return type == RichText && item.getPreviewKind() == VisualPreview;
 }
 
 ClipboardBoardModel::PreviewState ScrollItemsWidget::previewStateForItem(const ClipboardItem &item) const {

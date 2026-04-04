@@ -162,6 +162,13 @@ void ScrollItemsWidget::populateSingleSelectionMenu(QMenu *menu, const QModelInd
         });
     }
 
+    if (contentType == Image || contentType == Office) {
+        menu->addAction(IconResolver::themedIcon(QStringLiteral("text_plain"), dark),
+                        tr("Extract Text (OCR)"), [this, item]() {
+            emit ocrRequested(item);
+        });
+    }
+
     const bool isPinned = item.isPinned();
     menu->addAction(IconResolver::themedIcon(QStringLiteral("pin"), dark),
                     pinActionLabel(isPinned),

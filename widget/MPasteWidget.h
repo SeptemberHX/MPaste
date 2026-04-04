@@ -20,6 +20,7 @@
 #include <QComboBox>
 
 #include "utils/ClipboardMonitor.h"
+#include "utils/OcrService.h"
 #include "data/ClipboardItem.h"
 #include "data/LocalSaver.h"
 #include "AboutWidget.h"
@@ -153,6 +154,7 @@ private:
     } loading_;
 
     CopySoundPlayer *copySoundPlayer_ = nullptr;
+    OcrService *ocrService_ = nullptr;
 
     struct {
         QList<int> numKeyList;

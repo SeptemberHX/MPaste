@@ -1139,6 +1139,70 @@ void MPasteWidget::setupConnections() {
             }
         });
 
+        connect(boardWidget, &ScrollItemsWidget::ocrRequested,
+        this, [this, boardWidget](const ClipboardItem &item) {
+            if (!ocrService_) {
+                ocrService_ = new OcrService(this);
+                connect(ocrService_, &OcrService::ocrFinished,
+                        this, [this](const QString &itemName, const OcrService::Result &result) {
+                    qInfo() << "[ocr] finished item=" << itemName
+                            << "status=" << result.status
+                            << "textLen=" << result.text.length()
+                            << "error=" << result.errorMessage;
+                    if (result.status == OcrService::Ready) {
+                        // Write sidecar and refresh the search index on
+                        // whichever board owns this item.
+                        for (auto *w : ui_.boardWidgetMap.values()) {
+                            auto *bs = w->boardServiceRef();
+                            if (!bs) continue;
+                            const QString filePath = bs->filePathForName(itemName);
+                            if (QFile::exists(filePath)) {
+                                OcrService::writeSidecar(filePath, result);
+                                bs->refreshIndexedItemForPath(filePath);
+                            }
+                        }
+                    }
+                    // Show result to user.
+                    const QString title = result.status == OcrService::Ready
+                        ? tr("OCR Result") : tr("OCR Failed");
+                    const QString body = result.status == OcrService::Ready
+                        ? result.text : result.errorMessage;
+                    QMessageBox::information(this, title, body);
+                });
+            }
+            // Try the in-memory item first (handles newly captured
+            // items whose .mpaste may not exist yet), then fall back
+            // to a full reload from disk.
+            QImage image;
+            {
+                ClipboardItem memItem(item);
+                memItem.ensureMimeDataLoaded();
+                image = memItem.getImage().toImage();
+                if (image.isNull()) {
+                    image = memItem.thumbnail().toImage();
+                }
+            }
+            if (image.isNull()) {
+                auto *bs = boardWidget->boardServiceRef();
+                if (bs) {
+                    const QString fp = bs->filePathForName(item.getName());
+                    if (QFile::exists(fp)) {
+                        LocalSaver saver;
+                        ClipboardItem diskItem = saver.loadFromFile(fp);
+                        image = diskItem.getImage().toImage();
+                        if (image.isNull()) {
+                            image = diskItem.thumbnail().toImage();
+                        }
+                    }
+                }
+            }
+            if (image.isNull()) {
+                QMessageBox::warning(this, tr("OCR"), tr("No image data available for OCR."));
+                return;
+            }
+            ocrService_->requestOcr(item.getName(), image);
+        });
+
         connect(boardWidget, &ScrollItemsWidget::itemCountChanged, this, [this, boardWidget](int itemCount) {
             if (ui_.buttonGroup->checkedButton()->property("category").toString() == boardWidget->getCategory()) {
                 this->updateItemCount(itemCount);

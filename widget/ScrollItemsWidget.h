@@ -107,6 +107,7 @@ signals:
     void itemCountChanged(int itemCount);
     void itemStared(const ClipboardItem &item);
     void itemUnstared(const ClipboardItem &item);
+    void ocrRequested(const ClipboardItem &item);
     void aliasChanged(const QByteArray &fingerprint, const QString &alias);
     void localPersistenceChanged();
     void selectionStateChanged();

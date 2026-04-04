@@ -1193,6 +1193,8 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     QString timeLabel = QLocale::system().toString(card.time, QLocale::ShortFormat);
     if (card.contentType == RichText && MxGraphRenderer::isMxGraphContent(card.normalizedText)) {
         timeLabel += QStringLiteral(" \u00B7 draw.io");
+    } else if (!card.title.isEmpty() && card.contentType == Office) {
+        timeLabel += QStringLiteral(" \u00B7 ") + card.title;
     } else if ((card.contentType == Text || card.contentType == RichText)
                && CardRenderUtils::looksLikeCode(card.normalizedText)) {
         timeLabel += QStringLiteral(" \u00B7 Code");
