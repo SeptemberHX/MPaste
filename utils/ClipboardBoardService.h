@@ -27,7 +27,7 @@
 // Fields accessed from worker threads:
 //   - category_ (immutable after construction -- safe).
 //   - failedFullLoadPaths_ (read from workers, written on main thread via
-//     invokeMethod callback -- benign race, worst case is a redundant rebuild).
+//     invokeMethod callback -- guarded by failedFullLoadMutex_).
 //
 // Cross-thread communication:
 //   All worker lambdas capture a QPointer<ClipboardBoardService> guard and
@@ -52,6 +52,7 @@
 #include <QStringList>
 #include <QObject>
 #include <QPixmap>
+#include <QMutex>
 #include <QReadWriteLock>
 
 #include <memory>
@@ -140,7 +141,7 @@ public:
     void notifyItemAdded();
     bool moveIndexedItemToFront(const QString &name);
     void updateIndexedItemTime(const QString &name, const QDateTime &time);
-    void trimExpiredPendingItems(const QDateTime &cutoff);
+    QStringList trimExpiredItems(const QDateTime &cutoff);
     void processPendingItemAsync(const ClipboardItem &item, const QString &expectedName);
     void requestThumbnailAsync(const QString &expectedName, const QString &filePath);
     void startAsyncKeywordSearch(const QList<QPair<QString, quint64>> &candidates,
@@ -186,6 +187,7 @@ private:
     QList<QThread *> processingThreads_;
     std::unique_ptr<QThreadPool> thumbnailTaskPool_;
     QSet<QString> failedFullLoadPaths_;
+    mutable QMutex failedFullLoadMutex_;
     mutable QReadWriteLock indexLock_;
     QList<IndexedItemMeta> indexedItems_;
     QStringList indexedFilePaths_;

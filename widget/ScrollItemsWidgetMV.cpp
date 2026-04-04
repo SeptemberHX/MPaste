@@ -916,6 +916,23 @@ void ScrollItemsWidget::trimExpiredItems() {
     if (category == MPasteSettings::STAR_CATEGORY_NAME || !boardService_) {
         return;
     }
+
+    const QDateTime cutoff = MPasteSettings::getInst()->historyRetentionCutoff();
+    const QStringList removedPaths = boardService_->trimExpiredItems(cutoff);
+    if (!removedPaths.isEmpty() && boardModel_) {
+        for (const QString &path : removedPaths) {
+            const QString name = QFileInfo(path).completeBaseName();
+            const int row = boardModel_->rowForName(name);
+            if (row >= 0) {
+                if (cardDelegate_) {
+                    cardDelegate_->invalidateCard(name);
+                }
+                boardModel_->removeItemAt(row);
+            }
+        }
+        emit itemCountChanged(itemCountForDisplay());
+    }
+
     setFirstVisibleItemSelected();
 }
 

@@ -40,7 +40,7 @@ void MPasteSettings::setSaveDir(const QString &dir) {
 
 MPasteSettings::MPasteSettings()
     : saveDir(QDir::homePath() + QDir::separator() +  ".MPaste")
-    , maxSize(500)
+    , maxSize(-1)
     , historyRetentionValue(30)
     , historyRetentionUnit(RetentionDays)
     , proxyType(QNetworkProxy::NoProxy)
@@ -105,7 +105,11 @@ int MPasteSettings::getPort() const {
 void MPasteSettings::loadSettings() {
     QSettings settings("MPaste", "MPaste");
 
-    this->maxSize = settings.value("main/historySize", this->maxSize).toInt();
+    // maxSize is no longer configurable via UI; remove stale registry
+    // key and keep the field at its default (-1 = disabled).
+    if (settings.contains("main/historySize")) {
+        settings.remove("main/historySize");
+    }
     this->historyRetentionValue = settings.value("main/historyRetentionValue", this->historyRetentionValue).toInt();
     this->historyRetentionUnit = static_cast<HistoryRetentionUnit>(
         settings.value("main/historyRetentionUnit", static_cast<int>(this->historyRetentionUnit)).toInt());
@@ -124,7 +128,7 @@ void MPasteSettings::loadSettings() {
 void MPasteSettings::saveSettings() {
     QSettings settings("MPaste", "MPaste");
 
-    settings.setValue("main/historySize", this->maxSize);
+    // maxSize is no longer persisted — only retention-based cleanup is active.
     settings.setValue("main/historyRetentionValue", this->historyRetentionValue);
     settings.setValue("main/historyRetentionUnit", static_cast<int>(this->historyRetentionUnit));
     settings.setValue("main/saveDir", this->saveDir);

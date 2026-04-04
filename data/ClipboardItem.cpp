@@ -220,7 +220,9 @@ QString ClipboardItem::buildSearchableText() const {
 
 QByteArray ClipboardItem::buildFingerprint() const {
     QCryptographicHash hash(QCryptographicHash::Sha1);
-    hash.addData(QByteArray::number(static_cast<int>(getContentType())));
+    // NOTE: contentType is intentionally excluded from the fingerprint
+    // so that the same content produces the same hash regardless of
+    // how it is later classified (e.g. Text vs RichText).
 
     if (!mimeData_) {
         return hash.result();
