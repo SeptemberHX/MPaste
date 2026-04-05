@@ -7,7 +7,6 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QProcess>
-#include <QStandardPaths>
 #include <QTemporaryFile>
 #include <QThread>
 
@@ -28,6 +27,9 @@ void OcrService::requestOcr(const QString &itemName, const QImage &image) {
         emit ocrFinished(itemName, r);
         return;
     }
+
+    qInfo() << "[ocr] requestOcr item=" << itemName
+            << "imageSize=" << image.size();
 
     QPointer<OcrService> guard(this);
     QThread *thread = QThread::create([guard, itemName, image]() {
@@ -117,31 +119,21 @@ bool OcrService::removeSidecar(const QString &mpastePath) {
 OcrService::Result OcrService::runOcrWindows(const QImage &image) {
     Result result;
 
-    // Save image to a temp file.
-    QTemporaryFile tempFile(QDir::tempPath() + QStringLiteral("/mpaste_ocr_XXXXXX.png"));
-    tempFile.setAutoRemove(true);
-    if (!tempFile.open()) {
-        result.status = Failed;
-        result.errorMessage = QStringLiteral("cannot create temp file");
-        return result;
-    }
-    if (!image.save(&tempFile, "PNG")) {
+    // Save image to a regular temp file (not QTemporaryFile, which on
+    // Windows sets FILE_FLAG_DELETE_ON_CLOSE and removes the file
+    // as soon as it is closed — before PowerShell can read it).
+    const QString tempFilePath = QDir::tempPath() + QStringLiteral("/mpaste_ocr_")
+        + QString::number(QCoreApplication::applicationPid()) + QStringLiteral(".png");
+    if (!image.save(tempFilePath, "PNG")) {
         result.status = Failed;
         result.errorMessage = QStringLiteral("cannot save image to temp file");
         return result;
     }
-    tempFile.close();
 
-    // Write a PowerShell script to a temp file and execute it.
+    // Build PowerShell script and pass via -EncodedCommand (base64
+    // UTF-16LE) to avoid temp-file and escaping issues.
     // Uses Windows.Media.Ocr (built-in since Windows 10 1809).
-    QTemporaryFile psFile(QDir::tempPath() + QStringLiteral("/mpaste_ocr_XXXXXX.ps1"));
-    psFile.setAutoRemove(false);
-    if (!psFile.open()) {
-        result.status = Failed;
-        result.errorMessage = QStringLiteral("cannot create ps1 temp file");
-        return result;
-    }
-    const QString imagePath = QDir::toNativeSeparators(tempFile.fileName());
+    const QString imagePath = QDir::toNativeSeparators(tempFilePath);
     const QString script = QStringLiteral(
         "Add-Type -AssemblyName System.Runtime.WindowsRuntime\n"
         "$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime]\n"
@@ -160,26 +152,40 @@ OcrService::Result OcrService::runOcrWindows(const QImage &image) {
         "$ras = [System.IO.WindowsRuntimeStreamExtensions]::AsRandomAccessStream($stream)\n"
         "$decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($ras)) ([Windows.Graphics.Imaging.BitmapDecoder])\n"
         "$bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])\n"
-        "$engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()\n"
-        "if ($engine -eq $null) { Write-Error 'OCR engine not available'; exit 1 }\n"
-        "$result = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])\n"
+        "# Try all available OCR languages, keep the result with the most text.\n"
+        "$bestText = ''\n"
+        "$langs = [Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages\n"
+        "foreach ($lang in $langs) {\n"
+        "    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)\n"
+        "    if ($engine -ne $null) {\n"
+        "        $r = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])\n"
+        "        if ($r.Text.Length -gt $bestText.Length) { $bestText = $r.Text }\n"
+        "    }\n"
+        "}\n"
         "$stream.Dispose()\n"
-        "Write-Output $result.Text\n"
-    ).arg(QString(imagePath).replace(QLatin1Char('\''), QStringLiteral("''")));
-    psFile.write(script.toUtf8());
-    psFile.close();
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
+        "[Console]::Write($bestText)\n"
+    ).arg(imagePath);
+
+    // -EncodedCommand expects base64 of UTF-16LE bytes.
+    const QByteArray utf16(reinterpret_cast<const char *>(script.utf16()),
+                           script.size() * 2);
+    const QString encoded = QString::fromLatin1(utf16.toBase64());
 
     QProcess proc;
     proc.setProgram(QStringLiteral("powershell.exe"));
     proc.setArguments({
         QStringLiteral("-NoProfile"),
         QStringLiteral("-NonInteractive"),
-        QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
-        QStringLiteral("-File"), QDir::toNativeSeparators(psFile.fileName())
+        QStringLiteral("-EncodedCommand"), encoded
     });
     proc.start();
     const bool finished = proc.waitForFinished(30000);
-    QFile::remove(psFile.fileName()); // clean up ps1 temp file
+    QFile::remove(tempFilePath);
+    const QString stderrOut = QString::fromUtf8(proc.readAllStandardError()).trimmed();
+    if (!stderrOut.isEmpty()) {
+        qInfo().noquote() << "[ocr] powershell:" << stderrOut;
+    }
 
     if (!finished) {
         result.status = Failed;
@@ -189,10 +195,9 @@ OcrService::Result OcrService::runOcrWindows(const QImage &image) {
 
     if (proc.exitCode() != 0) {
         result.status = Failed;
-        result.errorMessage = QString::fromUtf8(proc.readAllStandardError()).trimmed();
-        if (result.errorMessage.isEmpty()) {
-            result.errorMessage = QStringLiteral("OCR process exited with code %1").arg(proc.exitCode());
-        }
+        result.errorMessage = stderrOut.isEmpty()
+            ? QStringLiteral("OCR process exited with code %1").arg(proc.exitCode())
+            : stderrOut;
         return result;
     }
 

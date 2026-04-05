@@ -5,6 +5,7 @@
 // note: Added theme application, dark mode propagation, tray menu theming, robust paste rehydration, and alias sync.
 #include <QScrollBar>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QResizeEvent>
 #include <QDateTime>
 #include <QDir>
@@ -24,8 +25,13 @@
 #include <QWindow>
 #include <QPainter>
 #include <QPainterPath>
+#include <QClipboard>
+#include <QFrame>
 #include <QMessageBox>
 #include <QLabel>
+#include <QPushButton>
+#include <QTextEdit>
+#include <QToolButton>
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QStyledItemDelegate>
@@ -1162,39 +1168,42 @@ void MPasteWidget::setupConnections() {
                             }
                         }
                     }
-                    // Show result to user.
-                    const QString title = result.status == OcrService::Ready
-                        ? tr("OCR Result") : tr("OCR Failed");
-                    const QString body = result.status == OcrService::Ready
-                        ? result.text : result.errorMessage;
-                    QMessageBox::information(this, title, body);
+                    // Show result in a preview-style dialog.
+                    if (result.status != OcrService::Ready || result.text.isEmpty()) {
+                        const QString msg = result.text.isEmpty()
+                            ? tr("No text recognized in this image.")
+                            : result.errorMessage;
+                        QMessageBox::warning(this, tr("OCR"), msg);
+                        return;
+                    }
+                    showOcrResultDialog(result.text);
                 });
             }
-            // Try the in-memory item first (handles newly captured
-            // items whose .mpaste may not exist yet), then fall back
-            // to a full reload from disk.
+            // Load the full item from disk first (loadFromFile sets
+            // mimeDataLoaded_=true so getImage() returns the real
+            // payload, not just the icon/thumbnail).  Fall back to
+            // the in-memory item for freshly captured entries that
+            // haven't been saved yet.
             QImage image;
-            {
+            auto *bs = boardWidget->boardServiceRef();
+            if (bs) {
+                const QString fp = bs->filePathForName(item.getName());
+                if (QFile::exists(fp)) {
+                    LocalSaver saver;
+                    ClipboardItem diskItem = saver.loadFromFile(fp);
+                    image = diskItem.getImage().toImage();
+                }
+            }
+            if (image.isNull() || (image.width() <= 64 && image.height() <= 64)) {
                 ClipboardItem memItem(item);
                 memItem.ensureMimeDataLoaded();
-                image = memItem.getImage().toImage();
-                if (image.isNull()) {
-                    image = memItem.thumbnail().toImage();
+                QImage memImage = memItem.getImage().toImage();
+                if (!memImage.isNull() && memImage.width() > image.width()) {
+                    image = memImage;
                 }
             }
             if (image.isNull()) {
-                auto *bs = boardWidget->boardServiceRef();
-                if (bs) {
-                    const QString fp = bs->filePathForName(item.getName());
-                    if (QFile::exists(fp)) {
-                        LocalSaver saver;
-                        ClipboardItem diskItem = saver.loadFromFile(fp);
-                        image = diskItem.getImage().toImage();
-                        if (image.isNull()) {
-                            image = diskItem.thumbnail().toImage();
-                        }
-                    }
-                }
+                image = item.thumbnail().toImage();
             }
             if (image.isNull()) {
                 QMessageBox::warning(this, tr("OCR"), tr("No image data available for OCR."));
@@ -2045,6 +2054,150 @@ void MPasteWidget::debugKeyState() {
              << "Is Visible:" << isVisible()
              << "Active Window:" << QApplication::activeWindow();
 #endif
+}
+
+// Minimal QDialog subclass that paints a transparent fill so mouse
+// events are not passed through the translucent window.
+class OcrResultDialog : public QDialog {
+public:
+    bool dark = false;
+    QPoint dragOffset_;
+    using QDialog::QDialog;
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        const qreal r = 8.0;
+        QRectF rect = QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        p.setPen(QPen(dark ? QColor(255,255,255,40) : QColor(0,0,0,25), 1.0));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(rect, r, r);
+        // Fill with alpha=1 to capture mouse events.
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0, 0, 0, 1));
+        p.drawRoundedRect(rect, r, r);
+    }
+    void mousePressEvent(QMouseEvent *e) override {
+        if (e->button() == Qt::LeftButton) {
+            dragOffset_ = e->globalPosition().toPoint() - frameGeometry().topLeft();
+            e->accept();
+        }
+    }
+    void mouseMoveEvent(QMouseEvent *e) override {
+        if (e->buttons() & Qt::LeftButton) {
+            move(e->globalPosition().toPoint() - dragOffset_);
+            e->accept();
+        }
+    }
+    void keyPressEvent(QKeyEvent *e) override {
+        if (e->key() == Qt::Key_Escape) { close(); return; }
+        QDialog::keyPressEvent(e);
+    }
+};
+
+void MPasteWidget::showOcrResultDialog(const QString &text) {
+    const bool dark = MPasteSettings::getInst()->isDarkTheme();
+
+    auto *dialog = new OcrResultDialog(this);
+    dialog->dark = dark;
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setAttribute(Qt::WA_TranslucentBackground);
+    dialog->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
+    dialog->setModal(false);
+    dialog->resize(720, 520);
+
+    auto *layout = new QVBoxLayout(dialog);
+    layout->setContentsMargins(16, 14, 16, 16);
+    layout->setSpacing(12);
+
+    // Header
+    auto *headerLayout = new QHBoxLayout;
+    auto *titleLabel = new QLabel(tr("Recognized Text"), dialog);
+    titleLabel->setObjectName(QStringLiteral("previewTitle"));
+    headerLayout->addWidget(titleLabel, 1);
+
+    auto *copyBtn = new QToolButton(dialog);
+    copyBtn->setObjectName(QStringLiteral("closeButton"));
+    copyBtn->setText(QStringLiteral("\u2398")); // copy icon
+    copyBtn->setToolTip(tr("Copy to Clipboard"));
+    copyBtn->setCursor(Qt::PointingHandCursor);
+    connect(copyBtn, &QToolButton::clicked, dialog, [text, copyBtn]() {
+        QGuiApplication::clipboard()->setText(text);
+        copyBtn->setText(QStringLiteral("\u2713"));
+        QTimer::singleShot(1200, copyBtn, [copyBtn]() {
+            if (copyBtn) copyBtn->setText(QStringLiteral("\u2398"));
+        });
+    });
+    headerLayout->addWidget(copyBtn, 0, Qt::AlignTop);
+
+    auto *closeBtn = new QToolButton(dialog);
+    closeBtn->setObjectName(QStringLiteral("closeButton"));
+    closeBtn->setText(QStringLiteral("\u00D7"));
+    closeBtn->setCursor(Qt::PointingHandCursor);
+    connect(closeBtn, &QToolButton::clicked, dialog, &QDialog::close);
+    headerLayout->addWidget(closeBtn, 0, Qt::AlignTop);
+
+    layout->addLayout(headerLayout);
+
+    // Text content — all widgets must have transparent backgrounds
+    // so the DWM acrylic blur shows through.
+    auto *textEdit = new QTextEdit(dialog);
+    textEdit->setReadOnly(true);
+    textEdit->setPlainText(text);
+    textEdit->setLineWrapMode(QTextEdit::WidgetWidth);
+    textEdit->setFrameShape(QFrame::NoFrame);
+    textEdit->setObjectName(QStringLiteral("ocrTextEdit"));
+    layout->addWidget(textEdit, 1);
+
+    // Stylesheet — all backgrounds transparent, only blur provides bg.
+    const QString textColor = dark ? QStringLiteral("#E6EDF5") : QStringLiteral("#1E2936");
+    const QString subtextColor = dark ? QStringLiteral("#9AA7B5") : QStringLiteral("#5E7084");
+    const QString borderColor = dark ? QStringLiteral("rgba(255,255,255,25)")
+                                     : QStringLiteral("rgba(0,0,0,18)");
+    const QString btnBg = dark ? QStringLiteral("rgba(255,255,255,14)")
+                               : QStringLiteral("rgba(0,0,0,8)");
+    const QString btnHoverBg = dark ? QStringLiteral("rgba(255,255,255,28)")
+                                    : QStringLiteral("rgba(0,0,0,16)");
+    const QString selBg = dark ? QStringLiteral("rgba(74,144,226,110)")
+                               : QStringLiteral("rgba(74,144,226,76)");
+
+    dialog->setStyleSheet(QStringLiteral(
+        "QLabel#previewTitle {"
+        "  color: %1; font-size: 22px; font-weight: 700; background: transparent;"
+        "}"
+        "QTextEdit#ocrTextEdit {"
+        "  background-color: transparent; border: none;"
+        "  color: %1; font-size: 15px;"
+        "  selection-background-color: %2;"
+        "  padding: 8px;"
+        "}"
+        "QToolButton#closeButton {"
+        "  background-color: %3; border: 1px solid %4;"
+        "  border-radius: 14px; color: %5;"
+        "  font-size: 17px; font-weight: 700;"
+        "  min-width: 28px; min-height: 28px;"
+        "}"
+        "QToolButton#closeButton:hover {"
+        "  background-color: %6; border-color: %4;"
+        "}"
+    ).arg(textColor, selBg, btnBg, borderColor, subtextColor, btnHoverBg));
+
+    // Center on screen.
+    QScreen *screen = nullptr;
+    if (auto *w = window()->windowHandle()) {
+        screen = w->screen();
+    }
+    if (!screen) screen = QGuiApplication::screenAt(QCursor::pos());
+    if (!screen) screen = QGuiApplication::primaryScreen();
+    if (screen) {
+        const QRect geo = screen->availableGeometry();
+        dialog->move(geo.center() - QPoint(dialog->width() / 2, dialog->height() / 2));
+    }
+
+    dialog->show();
+    WindowBlurHelper::enableBlurBehind(dialog, dark);
+    dialog->raise();
+    dialog->activateWindow();
 }
 
 #include "MPasteWidget.moc"

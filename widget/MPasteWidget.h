@@ -104,6 +104,7 @@ private:
     ScrollItemsWidget* currItemsWidget();
     void setupSyncWatcher();
     void applyScale(int scale);
+    void showOcrResultDialog(const QString &text);
 
 private:
     struct {
