@@ -424,17 +424,17 @@
         <translation type="unfinished">字符</translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="379"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="390"/>
         <source>Rich text preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="382"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="393"/>
         <source>Image preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="387"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="398"/>
         <source>Office shape preview</source>
         <translation type="unfinished"></translation>
     </message>

@@ -207,29 +207,40 @@ void CardRenderUtils::drawWrappedText(QPainter *painter, const QRect &rect, cons
     painter->setFont(font);
     painter->setPen(color);
 
-    if (lineSpacing <= 0) {
-        painter->drawText(rect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, text);
-    } else {
-        QTextLayout layout(text, font, painter->device());
-        QTextOption option;
-        option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-        layout.setTextOption(option);
+    // Always use QTextLayout for consistent line spacing control.
+    // QPainter::drawText with TextWordWrap can produce overlapping
+    // lines on certain fonts / DPI configurations.
+    const qreal effectiveSpacing = lineSpacing > 0 ? lineSpacing : 1.2;
+    QTextLayout layout(text, font, painter->device());
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    layout.setTextOption(option);
 
-        const QFontMetricsF fm(font);
-        const qreal lineH = fm.height() * lineSpacing;
+    const QFontMetricsF fm(font);
+    const qreal minLineH = fm.height() * effectiveSpacing;
 
-        layout.beginLayout();
-        qreal y = 0;
-        while (true) {
-            QTextLine line = layout.createLine();
-            if (!line.isValid() || y + lineH > rect.height()) break;
-            line.setLineWidth(rect.width());
-            line.setPosition(QPointF(0, y));
-            y += lineH;
+    // First pass: create and position lines that fit.
+    // Track how many lines were successfully positioned.
+    layout.beginLayout();
+    qreal y = 0;
+    int lineCount = 0;
+    while (true) {
+        QTextLine line = layout.createLine();
+        if (!line.isValid()) break;
+        line.setLineWidth(rect.width());
+        const qreal lineH = qMax(line.height() * effectiveSpacing, minLineH);
+        if (y + lineH > rect.height()) {
+            // This line doesn't fit.  Move it far offscreen so
+            // layout.draw() won't paint it over the first line.
+            line.setPosition(QPointF(0, rect.height() + 9999));
+            break;
         }
-        layout.endLayout();
-        layout.draw(painter, rect.topLeft());
+        line.setPosition(QPointF(0, y));
+        y += lineH;
+        ++lineCount;
     }
+    layout.endLayout();
+    layout.draw(painter, rect.topLeft());
 
     painter->restore();
 }
