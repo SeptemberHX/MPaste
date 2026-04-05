@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.7.5
+
+### OCR
+
+- Added manual OCR via right-click "Extract Text (OCR)" on Image and Office items.
+- Windows backend: uses built-in Windows.Media.Ocr (PowerShell), tries all installed languages and picks the best result. Strips extra spaces between CJK characters.
+- Baidu OCR API backend: supports `general_basic` endpoint with CHN_ENG mixed recognition (500 free calls/day). Configurable in settings.
+- OCR result displayed in a frosted-glass dialog with copy-to-clipboard button, preserving original formatting (spaces, newlines).
+- Results cached in `.ocr.json` sidecar files — re-clicking OCR shows cached result instantly.
+- OCR text merged into the search index so recognized text is searchable.
+- Auto OCR: optional setting to automatically OCR image items on capture (background, no UI popups). Shows "· OCR..." indicator on cards during processing.
+- Settings UI: OCR backend selector (Windows Built-in / Baidu OCR API), API Key / Secret Key fields, auto-OCR toggle.
+
+### MathType / Equation Support
+
+- Detect MathType clipboard formats (including Qt's Windows MIME wrappers) and label cards with "· MathType" next to the timestamp.
+- Extract MathML content as text preview with XML tag/annotation stripping, invisible Unicode operator removal, and UTF-16LE encoding support.
+- Office cards without thumbnails (e.g. MathType) now fall back to text preview instead of showing infinite "Loading".
+- Recognize OLE/vector-only clipboards (e.g. MathType with MetaFilePict + Embed Source but no standard text/image) in clipboard monitor.
+
+### Fixes
+
+- **Fingerprint stability**: removed contentType from hash so identical content produces the same fingerprint regardless of classification (e.g. Text vs RichText).
+- **History cleanup**: implemented time-based retention using settings cutoff; disabled stale `maxSize=200` registry key and cleaned it up on startup.
+- **Data race**: guarded `failedFullLoadPaths_` with QMutex between worker threads (read) and main thread (write).
+- **inspect_mpaste.py**: fixed ContentType enum mapping to match `ContentType.h` (Link/RichText and Image/Color were swapped).
+- **Corrupt MIME files**: warn once per file instead of flooding logs; set empty QMimeData on load failure so the loader is never retried.
+- **OG image scaling**: cover-crop oversized OG images before saving as thumbnails to prevent aspect ratio distortion on reload.
+- **Favorites sync**: wait for starred board's `deferredLoadCompleted` before reading fingerprints, so clipboard board gets fresh favorite markers.
+- **SyncWatcher**: `suppressReloadUntil` now actually checked in `scheduleSyncReload`.
+- **Link preview navigation stall**: debounce OG fetch (150ms) during rapid arrow-key scrolling; skip fetch for items that already have title/thumbnail.
+
+### Startup Performance
+
+- Stream first page of items during async disk scan so cards appear immediately instead of waiting for the full scan to complete. Files sorted by modification time (newest first).
+
+### Architecture
+
+- Extracted `ClipboardAppController` from `MPasteWidget` — owns ClipboardMonitor, ClipboardPasteController, CopySoundPlayer, OcrService, SyncWatcher. Sealed interface: no internal objects exposed.
+- Split `MPasteWidget.cpp` (2300→842 lines) into `MPasteWidget.cpp`, `MPasteWidgetUI.cpp`, `MPasteWidgetKeys.cpp`.
+- Split `ClipboardBoardService.cpp` (1476→855 lines) into core, IO, and async files with `ClipboardBoardServiceInternal.h` for shared helpers.
+- Split `ScrollItemsWidgetMV.cpp` (2360→1581 lines) into core, thumbnails, and actions files.
+- Deduplicated `rehydrateClipboardItem` into `ClipboardItem::rehydrate()` static method.
+- Tightened rich text card line spacing from default to 1.1x.
+- Documented core invariants: paint() no-IO rule, getImage() vs thumbnail() semantics, ensureMimeDataLoaded() restrictions, service file split routing.
+
 ## 0.7.4
 
 ### Performance
