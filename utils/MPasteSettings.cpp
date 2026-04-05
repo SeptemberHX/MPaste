@@ -44,6 +44,7 @@ MPasteSettings::MPasteSettings()
     , historyRetentionValue(30)
     , historyRetentionUnit(RetentionDays)
     , proxyType(QNetworkProxy::NoProxy)
+    , ocrBackend(OcrWindowsBuiltin)
 {
     this->proxyType = QNetworkProxy::HttpProxy;
     this->proxyHost = "127.0.0.1";
@@ -123,6 +124,11 @@ void MPasteSettings::loadSettings() {
         settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
     this->historyViewMode = static_cast<HistoryViewMode>(
         settings.value("main/historyViewMode", static_cast<int>(this->historyViewMode)).toInt());
+    this->ocrBackend = static_cast<OcrBackend>(
+        settings.value("ocr/backend", static_cast<int>(this->ocrBackend)).toInt());
+    this->baiduOcrApiKey = settings.value("ocr/baiduApiKey").toString();
+    this->baiduOcrSecretKey = settings.value("ocr/baiduSecretKey").toString();
+    this->autoOcr = settings.value("ocr/autoOcr", false).toBool();
 }
 
 void MPasteSettings::saveSettings() {
@@ -139,6 +145,10 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/playSound", this->playSound);
     settings.setValue("main/themeMode", static_cast<int>(this->themeMode));
     settings.setValue("main/historyViewMode", static_cast<int>(this->historyViewMode));
+    settings.setValue("ocr/backend", static_cast<int>(this->ocrBackend));
+    settings.setValue("ocr/baiduApiKey", this->baiduOcrApiKey);
+    settings.setValue("ocr/baiduSecretKey", this->baiduOcrSecretKey);
+    settings.setValue("ocr/autoOcr", this->autoOcr);
 }
 
 bool MPasteSettings::isAutoPaste() const {
@@ -251,6 +261,15 @@ bool MPasteSettings::isDarkTheme() const {
     const QColor windowColor = QGuiApplication::palette().color(QPalette::Window);
     return windowColor.lightness() < 128;
 }
+
+MPasteSettings::OcrBackend MPasteSettings::getOcrBackend() const { return ocrBackend; }
+void MPasteSettings::setOcrBackend(OcrBackend backend) { ocrBackend = backend; }
+const QString &MPasteSettings::getBaiduOcrApiKey() const { return baiduOcrApiKey; }
+void MPasteSettings::setBaiduOcrApiKey(const QString &key) { baiduOcrApiKey = key; }
+const QString &MPasteSettings::getBaiduOcrSecretKey() const { return baiduOcrSecretKey; }
+void MPasteSettings::setBaiduOcrSecretKey(const QString &key) { baiduOcrSecretKey = key; }
+bool MPasteSettings::isAutoOcr() const { return autoOcr; }
+void MPasteSettings::setAutoOcr(bool enabled) { autoOcr = enabled; }
 
 bool MPasteSettings::isTerminalTitle(const QString &title) {
     return this->terminalNames.contains(title);

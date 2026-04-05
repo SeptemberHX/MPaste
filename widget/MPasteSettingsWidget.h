@@ -59,6 +59,14 @@ private:
     QLineEdit *syncPathEdit_ = nullptr;
     QPushButton *syncOpenButton_ = nullptr;
     QPushButton *syncChangeButton_ = nullptr;
+    QLabel *ocrLabel_ = nullptr;
+    QComboBox *ocrBackendCombo_ = nullptr;
+    QLabel *autoOcrLabel_ = nullptr;
+    ToggleSwitch *autoOcrSwitch_ = nullptr;
+    QLabel *baiduApiKeyLabel_ = nullptr;
+    QLineEdit *baiduApiKeyEdit_ = nullptr;
+    QLabel *baiduSecretKeyLabel_ = nullptr;
+    QLineEdit *baiduSecretKeyEdit_ = nullptr;
     QPoint dragPos_;
     bool darkTheme_ = false;
 };

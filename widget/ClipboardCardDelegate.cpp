@@ -665,6 +665,20 @@ void ClipboardCardDelegate::invalidateCard(const QString &name) {
     cardPixmapCache_.remove(name);
 }
 
+void ClipboardCardDelegate::markOcrPending(const QString &name) {
+    ocrPendingNames_.insert(name);
+    invalidateCard(name);
+}
+
+void ClipboardCardDelegate::clearOcrPending(const QString &name) {
+    ocrPendingNames_.remove(name);
+    invalidateCard(name);
+}
+
+bool ClipboardCardDelegate::isOcrPending(const QString &name) const {
+    return ocrPendingNames_.contains(name);
+}
+
 QString ClipboardCardDelegate::cacheMemoryStats() const {
     // Estimate bytes for a QCache<QString, QPixmap>.
     auto estimateCache = [](const QCache<QString, QPixmap> &cache) -> qint64 {
@@ -1198,6 +1212,9 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     } else if ((card.contentType == Text || card.contentType == RichText)
                && CardRenderUtils::looksLikeCode(card.normalizedText)) {
         timeLabel += QStringLiteral(" \u00B7 Code");
+    }
+    if (isOcrPending(card.name)) {
+        timeLabel += QStringLiteral(" \u00B7 OCR...");
     }
     const QString aliasLabel = card.alias.trimmed();
     if (!aliasLabel.isEmpty()) {

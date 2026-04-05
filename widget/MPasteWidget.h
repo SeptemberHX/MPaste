@@ -11,7 +11,9 @@
 #include <QHBoxLayout>
 #include <QMimeData>
 #include <QMenu>
+#include <QPointer>
 #include <QPropertyAnimation>
+#include <QSet>
 #include <QSystemTrayIcon>
 #include <QElapsedTimer>
 #include <QHideEvent>
@@ -104,6 +106,7 @@ private:
     ScrollItemsWidget* currItemsWidget();
     void setupSyncWatcher();
     void applyScale(int scale);
+    void ensureOcrService();
     void showOcrResultDialog(const QString &text);
 
 private:
@@ -156,6 +159,8 @@ private:
 
     CopySoundPlayer *copySoundPlayer_ = nullptr;
     OcrService *ocrService_ = nullptr;
+    QPointer<QDialog> ocrLoadingDialog_;
+    QSet<QString> manualOcrItems_;
 
     struct {
         QList<int> numKeyList;

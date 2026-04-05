@@ -44,6 +44,7 @@
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
 #include "BoardInternalHelpers.h"
+#include "ClipboardCardDelegate.h"
 #include "CopySoundPlayer.h"
 #include "SyncWatcher.h"
 #include "ClipboardPasteController.h"
@@ -53,6 +54,44 @@
 #include <windows.h>
 #include <psapi.h>
 #endif
+
+// Minimal QDialog subclass that paints a transparent fill so mouse
+// events are not passed through the translucent window.
+class OcrResultDialog : public QDialog {
+public:
+    bool dark = false;
+    QPoint dragOffset_;
+    using QDialog::QDialog;
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        const qreal r = 8.0;
+        QRectF rect = QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        p.setPen(QPen(dark ? QColor(255,255,255,40) : QColor(0,0,0,25), 1.0));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(rect, r, r);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0, 0, 0, 1));
+        p.drawRoundedRect(rect, r, r);
+    }
+    void mousePressEvent(QMouseEvent *e) override {
+        if (e->button() == Qt::LeftButton) {
+            dragOffset_ = e->globalPosition().toPoint() - frameGeometry().topLeft();
+            e->accept();
+        }
+    }
+    void mouseMoveEvent(QMouseEvent *e) override {
+        if (e->buttons() & Qt::LeftButton) {
+            move(e->globalPosition().toPoint() - dragOffset_);
+            e->accept();
+        }
+    }
+    void keyPressEvent(QKeyEvent *e) override {
+        if (e->key() == Qt::Key_Escape) { close(); return; }
+        QDialog::keyPressEvent(e);
+    }
+};
 
 namespace {
 QString menuText(const char *source, const QString &zhFallback) {
@@ -1147,37 +1186,18 @@ void MPasteWidget::setupConnections() {
 
         connect(boardWidget, &ScrollItemsWidget::ocrRequested,
         this, [this, boardWidget](const ClipboardItem &item) {
-            if (!ocrService_) {
-                ocrService_ = new OcrService(this);
-                connect(ocrService_, &OcrService::ocrFinished,
-                        this, [this](const QString &itemName, const OcrService::Result &result) {
-                    qInfo() << "[ocr] finished item=" << itemName
-                            << "status=" << result.status
-                            << "textLen=" << result.text.length()
-                            << "error=" << result.errorMessage;
-                    if (result.status == OcrService::Ready) {
-                        // Write sidecar and refresh the search index on
-                        // whichever board owns this item.
-                        for (auto *w : ui_.boardWidgetMap.values()) {
-                            auto *bs = w->boardServiceRef();
-                            if (!bs) continue;
-                            const QString filePath = bs->filePathForName(itemName);
-                            if (QFile::exists(filePath)) {
-                                OcrService::writeSidecar(filePath, result);
-                                bs->refreshIndexedItemForPath(filePath);
-                            }
-                        }
-                    }
-                    // Show result in a preview-style dialog.
-                    if (result.status != OcrService::Ready || result.text.isEmpty()) {
-                        const QString msg = result.text.isEmpty()
-                            ? tr("No text recognized in this image.")
-                            : result.errorMessage;
-                        QMessageBox::warning(this, tr("OCR"), msg);
+            ensureOcrService();
+            // Check if OCR result already exists in sidecar cache.
+            {
+                auto *bs = boardWidget->boardServiceRef();
+                if (bs) {
+                    const QString fp = bs->filePathForName(item.getName());
+                    const OcrService::Result cached = OcrService::readSidecar(fp);
+                    if (cached.status == OcrService::Ready && !cached.text.isEmpty()) {
+                        showOcrResultDialog(cached.text);
                         return;
                     }
-                    showOcrResultDialog(result.text);
-                });
+                }
             }
             // Load the full item from disk first (loadFromFile sets
             // mimeDataLoaded_=true so getImage() returns the real
@@ -1209,6 +1229,42 @@ void MPasteWidget::setupConnections() {
                 QMessageBox::warning(this, tr("OCR"), tr("No image data available for OCR."));
                 return;
             }
+            // Show loading dialog.
+            if (ocrLoadingDialog_) {
+                ocrLoadingDialog_->close();
+            }
+            {
+                const bool dark = MPasteSettings::getInst()->isDarkTheme();
+                auto *dlg = new OcrResultDialog(this);
+                dlg->dark = dark;
+                dlg->setAttribute(Qt::WA_DeleteOnClose);
+                dlg->setAttribute(Qt::WA_TranslucentBackground);
+                dlg->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
+                dlg->setModal(false);
+                dlg->resize(320, 120);
+
+                auto *lay = new QVBoxLayout(dlg);
+                lay->setAlignment(Qt::AlignCenter);
+                auto *label = new QLabel(tr("Recognizing..."), dlg);
+                label->setAlignment(Qt::AlignCenter);
+                const QString color = dark ? QStringLiteral("#E6EDF5") : QStringLiteral("#1E2936");
+                label->setStyleSheet(QStringLiteral("color: %1; font-size: 18px; background: transparent;").arg(color));
+                lay->addWidget(label);
+
+                QScreen *screen = nullptr;
+                if (auto *w = window()->windowHandle()) screen = w->screen();
+                if (!screen) screen = QGuiApplication::screenAt(QCursor::pos());
+                if (!screen) screen = QGuiApplication::primaryScreen();
+                if (screen) {
+                    const QRect geo = screen->availableGeometry();
+                    dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+                }
+                dlg->show();
+                WindowBlurHelper::enableBlurBehind(dlg, dark);
+                dlg->raise();
+                ocrLoadingDialog_ = dlg;
+            }
+            manualOcrItems_.insert(item.getName());
             ocrService_->requestOcr(item.getName(), image);
         });
 
@@ -1356,6 +1412,39 @@ void MPasteWidget::clipboardUpdated(const ClipboardItem &nItem, int wId) {
 
     if (added) {
         clipboard_.copiedWhenHide = true;
+
+        // Auto OCR for image items when enabled in settings.
+        const ContentType ct = nItem.getContentType();
+        if ((ct == Image || ct == Office)
+            && MPasteSettings::getInst()->isAutoOcr()) {
+            // Check if sidecar already exists (avoid re-OCR).
+            auto *bs = ui_.clipboardWidget->boardServiceRef();
+            const QString fp = bs ? bs->filePathForName(nItem.getName()) : QString();
+            if (!fp.isEmpty() && OcrService::readSidecar(fp).status == OcrService::None) {
+                ensureOcrService();
+                // Get image for OCR.
+                QImage image;
+                {
+                    ClipboardItem memItem(nItem);
+                    memItem.ensureMimeDataLoaded();
+                    image = memItem.getImage().toImage();
+                }
+                if (image.isNull() || (image.width() <= 64 && image.height() <= 64)) {
+                    if (QFile::exists(fp)) {
+                        LocalSaver saver;
+                        ClipboardItem diskItem = saver.loadFromFile(fp);
+                        image = diskItem.getImage().toImage();
+                    }
+                }
+                if (!image.isNull()) {
+                    qInfo() << "[ocr] auto-ocr for" << nItem.getName();
+                    if (auto *d = ui_.clipboardWidget->cardDelegateRef()) {
+                        d->markOcrPending(nItem.getName());
+                    }
+                    ocrService_->requestOcr(nItem.getName(), image);
+                }
+            }
+        }
     }
 }
 
@@ -2056,44 +2145,68 @@ void MPasteWidget::debugKeyState() {
 #endif
 }
 
-// Minimal QDialog subclass that paints a transparent fill so mouse
-// events are not passed through the translucent window.
-class OcrResultDialog : public QDialog {
-public:
-    bool dark = false;
-    QPoint dragOffset_;
-    using QDialog::QDialog;
-protected:
-    void paintEvent(QPaintEvent *) override {
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        const qreal r = 8.0;
-        QRectF rect = QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        p.setPen(QPen(dark ? QColor(255,255,255,40) : QColor(0,0,0,25), 1.0));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(rect, r, r);
-        // Fill with alpha=1 to capture mouse events.
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0, 0, 0, 1));
-        p.drawRoundedRect(rect, r, r);
+void MPasteWidget::ensureOcrService() {
+    if (ocrService_) {
+        return;
     }
-    void mousePressEvent(QMouseEvent *e) override {
-        if (e->button() == Qt::LeftButton) {
-            dragOffset_ = e->globalPosition().toPoint() - frameGeometry().topLeft();
-            e->accept();
+    ocrService_ = new OcrService(this);
+    connect(ocrService_, &OcrService::ocrFinished,
+            this, [this](const QString &itemName, const OcrService::Result &result) {
+        qInfo() << "[ocr] finished item=" << itemName
+                << "status=" << result.status
+                << "textLen=" << result.text.length()
+                << "error=" << result.errorMessage;
+        if (result.status == OcrService::Ready) {
+            bool written = false;
+            for (auto *w : ui_.boardWidgetMap.values()) {
+                auto *bs = w->boardServiceRef();
+                if (!bs) continue;
+                const QString filePath = bs->filePathForName(itemName);
+                if (QFile::exists(filePath)) {
+                    OcrService::writeSidecar(filePath, result);
+                    bs->refreshIndexedItemForPath(filePath);
+                    written = true;
+                }
+            }
+            // If the .mpaste file hasn't been saved yet (async save
+            // in progress), retry after a short delay.
+            if (!written && !result.text.isEmpty()) {
+                QTimer::singleShot(2000, this, [this, itemName, result]() {
+                    for (auto *w : ui_.boardWidgetMap.values()) {
+                        auto *bs = w->boardServiceRef();
+                        if (!bs) continue;
+                        const QString filePath = bs->filePathForName(itemName);
+                        if (QFile::exists(filePath)) {
+                            OcrService::writeSidecar(filePath, result);
+                            bs->refreshIndexedItemForPath(filePath);
+                        }
+                    }
+                });
+            }
         }
-    }
-    void mouseMoveEvent(QMouseEvent *e) override {
-        if (e->buttons() & Qt::LeftButton) {
-            move(e->globalPosition().toPoint() - dragOffset_);
-            e->accept();
+        // Clear OCR-pending indicator on the card.
+        for (auto *w : ui_.boardWidgetMap.values()) {
+            if (auto *d = w->cardDelegateRef()) {
+                d->clearOcrPending(itemName);
+            }
         }
-    }
-    void keyPressEvent(QKeyEvent *e) override {
-        if (e->key() == Qt::Key_Escape) { close(); return; }
-        QDialog::keyPressEvent(e);
-    }
-};
+        const bool manual = manualOcrItems_.remove(itemName);
+        if (manual) {
+            if (ocrLoadingDialog_) {
+                ocrLoadingDialog_->close();
+                ocrLoadingDialog_ = nullptr;
+            }
+            if (result.status != OcrService::Ready || result.text.isEmpty()) {
+                const QString msg = result.status == OcrService::Failed
+                    ? result.errorMessage
+                    : tr("No text recognized in this image.");
+                QMessageBox::warning(this, tr("OCR"), msg);
+                return;
+            }
+            showOcrResultDialog(result.text);
+        }
+    });
+}
 
 void MPasteWidget::showOcrResultDialog(const QString &text) {
     const bool dark = MPasteSettings::getInst()->isDarkTheme();

@@ -62,6 +62,9 @@ public:
     void setLoadingPhase(int phase);
     void clearIntermediateCaches();
     void clearVisualCaches();
+    void markOcrPending(const QString &name);
+    void clearOcrPending(const QString &name);
+    bool isOcrPending(const QString &name) const;
     bool isCardCached(const QString &name) const;
     void invalidateCard(const QString &name);
     int cachedCardCount() const { return cardPixmapCache_.size(); }
@@ -134,6 +137,7 @@ private:
     std::unique_ptr<CardBodyRenderer> linkRenderer_;
     std::unique_ptr<CardBodyRenderer> fileRenderer_;
     std::unique_ptr<CardBodyRenderer> textRenderer_;
+    QSet<QString> ocrPendingNames_;
 };
 
 #endif // MPASTE_CLIPBOARDCARDDELEGATE_H

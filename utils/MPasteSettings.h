@@ -21,6 +21,7 @@ public:
     enum HistoryRetentionUnit { RetentionDays = 0, RetentionWeeks, RetentionMonths };
     enum ThemeMode { ThemeSystem = 0, ThemeLight, ThemeDark };
     enum HistoryViewMode { ViewModePaged = 0, ViewModeContinuous };
+    enum OcrBackend { OcrWindowsBuiltin = 0, OcrBaiduApi = 1 };
 
     static MPasteSettings* getInst();
 
@@ -71,6 +72,15 @@ public:
     void setHistoryViewMode(HistoryViewMode mode);
     bool isDarkTheme() const;
 
+    OcrBackend getOcrBackend() const;
+    void setOcrBackend(OcrBackend backend);
+    const QString &getBaiduOcrApiKey() const;
+    void setBaiduOcrApiKey(const QString &key);
+    const QString &getBaiduOcrSecretKey() const;
+    void setBaiduOcrSecretKey(const QString &key);
+    bool isAutoOcr() const;
+    void setAutoOcr(bool enabled);
+
     bool isTerminalTitle(const QString &title);
 
     int getCurrFocusWinId() const;
@@ -104,6 +114,10 @@ private:
     bool playSound;
     ThemeMode themeMode;
     HistoryViewMode historyViewMode;
+    OcrBackend ocrBackend;
+    QString baiduOcrApiKey;
+    QString baiduOcrSecretKey;
+    bool autoOcr = false;
 
     int currFocusWinId;
 

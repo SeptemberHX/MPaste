@@ -1,14 +1,24 @@
 #include "OcrService.h"
 
+#include <QBuffer>
 #include <QCoreApplication>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QProcess>
+#include <QUrlQuery>
+
+#include "MPasteSettings.h"
 #include <QTemporaryFile>
 #include <QThread>
+#include <QTimer>
 
 // ---------------------------------------------------------------------------
 // Async dispatch
@@ -31,13 +41,25 @@ void OcrService::requestOcr(const QString &itemName, const QImage &image) {
     qInfo() << "[ocr] requestOcr item=" << itemName
             << "imageSize=" << image.size();
 
+    // Read backend config on the main thread before dispatching.
+    const auto *settings = MPasteSettings::getInst();
+    const auto backend = settings->getOcrBackend();
+    const QString baiduApiKey = settings->getBaiduOcrApiKey();
+    const QString baiduSecretKey = settings->getBaiduOcrSecretKey();
+
     QPointer<OcrService> guard(this);
-    QThread *thread = QThread::create([guard, itemName, image]() {
+    QThread *thread = QThread::create([guard, itemName, image, backend, baiduApiKey, baiduSecretKey]() {
+        Result result;
+        if (backend == MPasteSettings::OcrBaiduApi
+            && !baiduApiKey.isEmpty() && !baiduSecretKey.isEmpty()) {
+            result = runOcrBaidu(image, baiduApiKey, baiduSecretKey);
+        } else {
 #ifdef Q_OS_WIN
-        Result result = runOcrWindows(image);
+            result = runOcrWindows(image);
 #else
-        Result result = runOcrLinux(image);
+            result = runOcrLinux(image);
 #endif
+        }
         if (guard) {
             QMetaObject::invokeMethod(guard.data(), [guard, itemName, result]() {
                 if (guard) {
@@ -109,6 +131,37 @@ bool OcrService::removeSidecar(const QString &mpastePath) {
     }
     return QFile::remove(path);
 }
+
+// ---------------------------------------------------------------------------
+// Post-processing helpers
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Remove spaces inserted between CJK characters by Windows OCR.
+// Keeps spaces between Latin/digit words intact.
+QString removeCjkSpaces(const QString &text) {
+    if (text.isEmpty()) return text;
+    QString out;
+    out.reserve(text.size());
+    for (int i = 0; i < text.size(); ++i) {
+        const QChar ch = text.at(i);
+        if (ch == QLatin1Char(' ') && i > 0 && i + 1 < text.size()) {
+            const QChar prev = text.at(i - 1);
+            const QChar next = text.at(i + 1);
+            // Skip space if either neighbor is CJK.
+            const bool prevCjk = prev.unicode() >= 0x2E80;
+            const bool nextCjk = next.unicode() >= 0x2E80;
+            if (prevCjk || nextCjk) {
+                continue;
+            }
+        }
+        out.append(ch);
+    }
+    return out;
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Windows backend — PowerShell + Windows.Media.Ocr
@@ -202,7 +255,7 @@ OcrService::Result OcrService::runOcrWindows(const QImage &image) {
     }
 
     result.status = Ready;
-    result.text = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+    result.text = removeCjkSpaces(QString::fromUtf8(proc.readAllStandardOutput()).trimmed());
     return result;
 }
 
@@ -252,3 +305,120 @@ OcrService::Result OcrService::runOcrLinux(const QImage &image) {
 }
 
 #endif // !Q_OS_WIN
+
+// ---------------------------------------------------------------------------
+// Baidu OCR API backend (cross-platform)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Synchronous HTTP helper for use on worker threads.
+QByteArray syncHttpPost(const QUrl &url, const QByteArray &body,
+                        const QByteArray &contentType, int timeoutMs = 15000) {
+    QNetworkAccessManager nam;
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::ContentTypeHeader, contentType);
+    QNetworkReply *reply = nam.post(req, body);
+
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QTimer timer;
+    timer.setSingleShot(true);
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(timeoutMs);
+    loop.exec();
+
+    QByteArray result;
+    if (reply->isFinished() && reply->error() == QNetworkReply::NoError) {
+        result = reply->readAll();
+    }
+    reply->deleteLater();
+    return result;
+}
+
+} // namespace
+
+OcrService::Result OcrService::runOcrBaidu(const QImage &image,
+                                            const QString &apiKey,
+                                            const QString &secretKey) {
+    Result result;
+
+    // Step 1: Get access token (credentials in POST body).
+    QUrl tokenUrl(QStringLiteral("https://aip.baidubce.com/oauth/2.0/token"));
+    QUrlQuery tokenBody;
+    tokenBody.addQueryItem(QStringLiteral("grant_type"), QStringLiteral("client_credentials"));
+    tokenBody.addQueryItem(QStringLiteral("client_id"), apiKey);
+    tokenBody.addQueryItem(QStringLiteral("client_secret"), secretKey);
+    const QByteArray tokenResp = syncHttpPost(tokenUrl,
+                                               tokenBody.query(QUrl::FullyEncoded).toUtf8(),
+                                               "application/x-www-form-urlencoded");
+    if (tokenResp.isEmpty()) {
+        result.status = Failed;
+        result.errorMessage = QStringLiteral("Failed to get Baidu access token (network error)");
+        return result;
+    }
+    const QJsonDocument tokenDoc = QJsonDocument::fromJson(tokenResp);
+    const QString accessToken = tokenDoc.object().value(QStringLiteral("access_token")).toString();
+    if (accessToken.isEmpty()) {
+        result.status = Failed;
+        result.errorMessage = QStringLiteral("Baidu token error: ")
+            + tokenDoc.object().value(QStringLiteral("error_description")).toString();
+        return result;
+    }
+
+    // Step 2: Encode image to base64.
+    QByteArray imageBytes;
+    {
+        QBuffer buf(&imageBytes);
+        buf.open(QIODevice::WriteOnly);
+        // Scale down very large images to stay within the 4 MB API limit.
+        QImage scaled = image;
+        if (scaled.width() > 4096 || scaled.height() > 4096) {
+            scaled = scaled.scaled(4096, 4096, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        scaled.save(&buf, "PNG");
+    }
+    const QByteArray base64Image = imageBytes.toBase64();
+
+    // Step 3: Call OCR API.
+    // Use general_basic (标准版, 500 free calls/day) instead of
+    // accurate_basic (高精度版) which has stricter QPS limits.
+    QUrl ocrUrl(QStringLiteral("https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic"));
+    QUrlQuery ocrQuery;
+    ocrQuery.addQueryItem(QStringLiteral("access_token"), accessToken);
+    ocrUrl.setQuery(ocrQuery);
+
+    // Build the POST body manually — QUrlQuery double-encodes the
+    // base64 payload which Baidu rejects.
+    QByteArray ocrBodyData = "image=" + QUrl::toPercentEncoding(base64Image)
+        + "&language_type=CHN_ENG&detect_direction=true";
+    const QByteArray ocrResp = syncHttpPost(ocrUrl, ocrBodyData,
+                                             "application/x-www-form-urlencoded",
+                                             30000);
+    if (ocrResp.isEmpty()) {
+        result.status = Failed;
+        result.errorMessage = QStringLiteral("Baidu OCR request failed (network error)");
+        return result;
+    }
+
+    // Step 4: Parse response.
+    const QJsonDocument ocrDoc = QJsonDocument::fromJson(ocrResp);
+    const QJsonObject ocrObj = ocrDoc.object();
+    if (ocrObj.contains(QStringLiteral("error_code"))) {
+        result.status = Failed;
+        result.errorMessage = QStringLiteral("Baidu OCR error %1: %2")
+            .arg(ocrObj.value(QStringLiteral("error_code")).toInt())
+            .arg(ocrObj.value(QStringLiteral("error_msg")).toString());
+        return result;
+    }
+
+    const QJsonArray wordsResult = ocrObj.value(QStringLiteral("words_result")).toArray();
+    QStringList lines;
+    for (const QJsonValue &v : wordsResult) {
+        lines << v.toObject().value(QStringLiteral("words")).toString();
+    }
+
+    result.status = Ready;
+    result.text = lines.join(QStringLiteral("\n"));
+    return result;
+}

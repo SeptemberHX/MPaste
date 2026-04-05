@@ -55,6 +55,9 @@ signals:
 private:
     static Result runOcrWindows(const QImage &image);
     static Result runOcrLinux(const QImage &image);
+    static Result runOcrBaidu(const QImage &image,
+                              const QString &apiKey,
+                              const QString &secretKey);
 };
 
 #endif // MPASTE_OCR_SERVICE_H

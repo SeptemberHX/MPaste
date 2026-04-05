@@ -89,6 +89,7 @@ public:
     void applyTheme(bool dark);
     void updateLoadingOverlay();
     ClipboardBoardService *boardServiceRef() const { return boardService_; }
+    ClipboardCardDelegate *cardDelegateRef() const { return cardDelegate_; }
     ClipboardBoardModel *boardModel() const { return boardModel_; }
     QString memoryStats() const;
 

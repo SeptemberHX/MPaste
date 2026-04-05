@@ -1276,6 +1276,19 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
         return;
     }
 
+    // For Image/Office items, check the indexed searchableText
+    // (which includes OCR sidecar text) directly instead of
+    // reading MIME data from disk.
+    const QString lowerKeyword = currentKeyword_.toLower();
+    const auto &indexedMeta = boardService_->indexedItemsMeta();
+    for (const auto &meta : indexedMeta) {
+        if (meta.contentType == Image || meta.contentType == Office) {
+            if (meta.searchableText.contains(lowerKeyword)) {
+                asyncKeywordMatchedNames_.insert(meta.name);
+            }
+        }
+    }
+
     QList<QPair<QString, quint64>> candidates;
     const QList<ClipboardItem> items = boardModel_->items();
     for (const ClipboardItem &item : items) {
@@ -1292,6 +1305,10 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
     }
 
     if (candidates.isEmpty()) {
+        // Still need to notify the proxy that matches changed.
+        if (filterProxyModel_) {
+            filterProxyModel_->setAsyncMatchedNames(asyncKeywordMatchedNames_);
+        }
         return;
     }
 

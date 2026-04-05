@@ -72,7 +72,7 @@ ClipboardBoardService::IndexedItemMeta buildIndexedItemMeta(const QString &fileP
     // Include cached OCR text in the search index if available.
     const OcrService::Result ocrResult = OcrService::readSidecar(filePath);
     if (ocrResult.status == OcrService::Ready && !ocrResult.text.isEmpty()) {
-        searchParts << ocrResult.text.left(512);
+        searchParts << ocrResult.text;
     }
     meta.searchableText = searchParts.join(QLatin1Char('\n')).toLower();
     return meta;
