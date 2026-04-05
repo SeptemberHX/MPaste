@@ -89,6 +89,12 @@ void SyncWatcher::scheduleSyncReload() {
     if (!reloadTimer_) {
         return;
     }
+    // Honour the suppress window requested by the controller after
+    // a local persistence change (e.g. save, delete, alias update).
+    if (suppressReloadUntilMs_ > 0
+        && QDateTime::currentMSecsSinceEpoch() < suppressReloadUntilMs_) {
+        return;
+    }
     // Ignore directory changes caused by our own file writes.
     if ((clipboardService_ && clipboardService_->hasRecentInternalWrite())
         || (starService_ && starService_->hasRecentInternalWrite())) {

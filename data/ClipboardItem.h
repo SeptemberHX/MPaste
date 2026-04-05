@@ -105,6 +105,7 @@ public:
     ClipboardItem() = default;
 
     static ClipboardItem createLightweight(const QPixmap &icon, const QMimeData *mimeData);
+    static ClipboardItem rehydrate(const ClipboardItem &item);
 
     ClipboardItem(const ClipboardItem &other);
     ClipboardItem& operator=(const ClipboardItem &other);

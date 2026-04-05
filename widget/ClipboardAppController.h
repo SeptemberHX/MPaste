@@ -54,6 +54,13 @@ signals:
     /// this to hideAndPaste).
     void pasteRequested();
 
+    /// OCR result ready — manual trigger only; auto-OCR is silent.
+    void ocrCompleted(const QString &text);
+    /// OCR failed or returned empty — manual trigger only.
+    void ocrFailed(const QString &errorMessage);
+    /// Manual OCR started — show loading indicator.
+    void ocrStarted();
+
     /// Forwarded from boards so MPasteWidget can update the status bar.
     void boardItemCountChanged(const QString &category, int count);
     void boardSelectionStateChanged(const QString &category);
@@ -67,7 +74,6 @@ private:
     void initClipboard();
     void initSound();
     void ensureOcrService();
-    void showOcrResultDialog(const QString &text);
     void handleOcrRequest(ScrollItemsWidget *boardWidget, const ClipboardItem &item);
 
     QWidget *parentWidget_;
@@ -81,7 +87,6 @@ private:
     OcrService *ocrService_ = nullptr;
     SyncWatcher *syncWatcher_ = nullptr;
 
-    QPointer<QDialog> ocrLoadingDialog_;
     QSet<QString> manualOcrItems_;
     bool copiedWhenHide_ = false;
 };

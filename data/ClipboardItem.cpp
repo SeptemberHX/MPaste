@@ -5,10 +5,15 @@
 #include "ClipboardItem.h"
 #include "ClipboardItemUrlParser.h"
 #include "ClipboardItemImageDecoder.h"
+#include "LocalSaver.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QDir>
+#include <QFileInfo>
 #include <QRegularExpression>
+
+#include "utils/MPasteSettings.h"
 
 #include <algorithm>
 #include <cstring>
@@ -712,6 +717,43 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
                                                                item.hasFastImagePayload());
     item.mimeDataLoaded_ = false;
     return item;
+}
+
+// --- Rehydrate ---
+
+ClipboardItem ClipboardItem::rehydrate(const ClipboardItem &item) {
+    if (item.getName().isEmpty()) {
+        return {};
+    }
+    LocalSaver saver;
+    const QString sourceFilePath = item.sourceFilePath();
+    if (!sourceFilePath.isEmpty() && QFileInfo::exists(sourceFilePath)) {
+        ClipboardItem loaded = saver.loadFromFile(sourceFilePath);
+        if (!loaded.getName().isEmpty()) {
+            return loaded;
+        }
+    }
+    const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
+    if (rootDir.isEmpty()) {
+        return {};
+    }
+    const QStringList categories = {
+        MPasteSettings::STAR_CATEGORY_NAME,
+        MPasteSettings::CLIPBOARD_CATEGORY_NAME
+    };
+    for (const QString &category : categories) {
+        const QString filePath = QDir::cleanPath(rootDir + QDir::separator()
+                                                 + category + QDir::separator()
+                                                 + item.getName() + ".mpaste");
+        if (!QFileInfo::exists(filePath)) {
+            continue;
+        }
+        ClipboardItem loaded = saver.loadFromFile(filePath);
+        if (!loaded.getName().isEmpty()) {
+            return loaded;
+        }
+    }
+    return {};
 }
 
 // --- Search ---

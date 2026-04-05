@@ -1,20 +1,10 @@
 #include "ClipboardAppController.h"
 
-#include <QClipboard>
-#include <QCursor>
+#include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
-#include <QFrame>
-#include <QGuiApplication>
-#include <QLabel>
-#include <QMessageBox>
-#include <QMouseEvent>
-#include <QPainter>
-#include <QScreen>
-#include <QTextEdit>
 #include <QTimer>
-#include <QToolButton>
-#include <QVBoxLayout>
 
 #include "ClipboardCardDelegate.h"
 #include "CopySoundPlayer.h"
@@ -22,51 +12,13 @@
 #include "SyncWatcher.h"
 #include "utils/ClipboardBoardService.h"
 #include "ClipboardPasteController.h"
-#include "WindowBlurHelper.h"
 #include "data/LocalSaver.h"
 #include "utils/ClipboardMonitor.h"
 #include "utils/MPasteSettings.h"
 #include "utils/OcrService.h"
 
-// ---------------------------------------------------------------------------
-// OcrResultDialog — frosted-glass dialog for manual OCR results
-// ---------------------------------------------------------------------------
-
-class OcrResultDialog : public QDialog {
-public:
-    bool dark = false;
-    QPoint dragOffset_;
-    using QDialog::QDialog;
-protected:
-    void paintEvent(QPaintEvent *) override {
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        const qreal r = 8.0;
-        QRectF rect = QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        p.setPen(QPen(dark ? QColor(255,255,255,40) : QColor(0,0,0,25), 1.0));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(rect, r, r);
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0, 0, 0, 1));
-        p.drawRoundedRect(rect, r, r);
-    }
-    void mousePressEvent(QMouseEvent *e) override {
-        if (e->button() == Qt::LeftButton) {
-            dragOffset_ = e->globalPosition().toPoint() - frameGeometry().topLeft();
-            e->accept();
-        }
-    }
-    void mouseMoveEvent(QMouseEvent *e) override {
-        if (e->buttons() & Qt::LeftButton) {
-            move(e->globalPosition().toPoint() - dragOffset_);
-            e->accept();
-        }
-    }
-    void keyPressEvent(QKeyEvent *e) override {
-        if (e->key() == Qt::Key_Escape) { close(); return; }
-        QDialog::keyPressEvent(e);
-    }
-};
+// OcrResultDialog class moved to MPasteWidget.cpp — the controller
+// only emits ocrStarted/ocrCompleted/ocrFailed signals.
 
 // ---------------------------------------------------------------------------
 // Helper functions (moved from MPasteWidget.cpp)
@@ -93,40 +45,7 @@ QString widgetItemSummary(const ClipboardItem &item) {
         .arg(item.getNormalizedUrls().size());
 }
 
-ClipboardItem rehydrateClipboardItem(const ClipboardItem &item) {
-    if (item.getName().isEmpty()) {
-        return {};
-    }
-    LocalSaver saver;
-    const QString sourceFilePath = item.sourceFilePath();
-    if (!sourceFilePath.isEmpty() && QFileInfo::exists(sourceFilePath)) {
-        ClipboardItem loaded = saver.loadFromFile(sourceFilePath);
-        if (!loaded.getName().isEmpty()) {
-            return loaded;
-        }
-    }
-    const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
-    if (rootDir.isEmpty()) {
-        return {};
-    }
-    const QStringList categories = {
-        MPasteSettings::STAR_CATEGORY_NAME,
-        MPasteSettings::CLIPBOARD_CATEGORY_NAME
-    };
-    for (const QString &category : categories) {
-        const QString filePath = QDir::cleanPath(rootDir + QDir::separator()
-                                                 + category + QDir::separator()
-                                                 + item.getName() + ".mpaste");
-        if (!QFileInfo::exists(filePath)) {
-            continue;
-        }
-        ClipboardItem loaded = saver.loadFromFile(filePath);
-        if (!loaded.getName().isEmpty()) {
-            return loaded;
-        }
-    }
-    return {};
-}
+// rehydrateClipboardItem is now ClipboardItem::rehydrate().
 
 bool hasUsableMimeData(ClipboardItem item) {
     const QMimeData *mimeData = item.getMimeData();
@@ -261,7 +180,7 @@ void ClipboardAppController::connectBoardSignals(ScrollItemsWidget *boardWidget)
             this, [this](const ClipboardItem &item) {
         ClipboardItem updatedItem(item);
         if (!hasUsableMimeData(updatedItem)) {
-            ClipboardItem rehydrated = rehydrateClipboardItem(updatedItem);
+            ClipboardItem rehydrated = ClipboardItem::rehydrate(updatedItem);
             if (!rehydrated.getName().isEmpty()) {
                 updatedItem = rehydrated;
             }
@@ -442,18 +361,14 @@ void ClipboardAppController::ensureOcrService() {
         }
         const bool manual = manualOcrItems_.remove(itemName);
         if (manual) {
-            if (ocrLoadingDialog_) {
-                ocrLoadingDialog_->close();
-                ocrLoadingDialog_ = nullptr;
-            }
             if (result.status != OcrService::Ready || result.text.isEmpty()) {
                 const QString msg = result.status == OcrService::Failed
                     ? result.errorMessage
                     : tr("No text recognized in this image.");
-                QMessageBox::warning(parentWidget_, tr("OCR"), msg);
+                emit ocrFailed(msg);
                 return;
             }
-            showOcrResultDialog(result.text);
+            emit ocrCompleted(result.text);
         }
     });
 }
@@ -467,7 +382,7 @@ void ClipboardAppController::handleOcrRequest(ScrollItemsWidget *boardWidget, co
             const QString fp = bs->filePathForName(item.getName());
             const OcrService::Result cached = OcrService::readSidecar(fp);
             if (cached.status == OcrService::Ready && !cached.text.isEmpty()) {
-                showOcrResultDialog(cached.text);
+                emit ocrCompleted(cached.text);
                 return;
             }
         }
@@ -495,144 +410,12 @@ void ClipboardAppController::handleOcrRequest(ScrollItemsWidget *boardWidget, co
         image = item.thumbnail().toImage();
     }
     if (image.isNull()) {
-        QMessageBox::warning(parentWidget_, tr("OCR"), tr("No image data available for OCR."));
+        emit ocrFailed(tr("No image data available for OCR."));
         return;
     }
-    // Show loading dialog.
-    if (ocrLoadingDialog_) {
-        ocrLoadingDialog_->close();
-    }
-    {
-        const bool dark = MPasteSettings::getInst()->isDarkTheme();
-        auto *dlg = new OcrResultDialog(parentWidget_);
-        dlg->dark = dark;
-        dlg->setAttribute(Qt::WA_DeleteOnClose);
-        dlg->setAttribute(Qt::WA_TranslucentBackground);
-        dlg->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
-        dlg->setModal(false);
-        dlg->resize(320, 120);
-
-        auto *lay = new QVBoxLayout(dlg);
-        lay->setAlignment(Qt::AlignCenter);
-        auto *label = new QLabel(tr("Recognizing..."), dlg);
-        label->setAlignment(Qt::AlignCenter);
-        const QString color = dark ? QStringLiteral("#E6EDF5") : QStringLiteral("#1E2936");
-        label->setStyleSheet(QStringLiteral("color: %1; font-size: 18px; background: transparent;").arg(color));
-        lay->addWidget(label);
-
-        QScreen *screen = nullptr;
-        if (auto *w = parentWidget_->window()->windowHandle()) screen = w->screen();
-        if (!screen) screen = QGuiApplication::screenAt(QCursor::pos());
-        if (!screen) screen = QGuiApplication::primaryScreen();
-        if (screen) {
-            const QRect geo = screen->availableGeometry();
-            dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
-        }
-        dlg->show();
-        WindowBlurHelper::enableBlurBehind(dlg, dark);
-        dlg->raise();
-        ocrLoadingDialog_ = dlg;
-    }
+    emit ocrStarted();
     manualOcrItems_.insert(item.getName());
     ocrService_->requestOcr(item.getName(), image);
 }
 
-void ClipboardAppController::showOcrResultDialog(const QString &text) {
-    const bool dark = MPasteSettings::getInst()->isDarkTheme();
-
-    auto *dialog = new OcrResultDialog(parentWidget_);
-    dialog->dark = dark;
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setAttribute(Qt::WA_TranslucentBackground);
-    dialog->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
-    dialog->setModal(false);
-    dialog->resize(720, 520);
-
-    auto *layout = new QVBoxLayout(dialog);
-    layout->setContentsMargins(16, 14, 16, 16);
-    layout->setSpacing(12);
-
-    auto *headerLayout = new QHBoxLayout;
-    auto *titleLabel = new QLabel(tr("Recognized Text"), dialog);
-    titleLabel->setObjectName(QStringLiteral("previewTitle"));
-    headerLayout->addWidget(titleLabel, 1);
-
-    auto *copyBtn = new QToolButton(dialog);
-    copyBtn->setObjectName(QStringLiteral("closeButton"));
-    copyBtn->setText(QStringLiteral("\u2398"));
-    copyBtn->setToolTip(tr("Copy to Clipboard"));
-    copyBtn->setCursor(Qt::PointingHandCursor);
-    connect(copyBtn, &QToolButton::clicked, dialog, [text, copyBtn]() {
-        QGuiApplication::clipboard()->setText(text);
-        copyBtn->setText(QStringLiteral("\u2713"));
-        QTimer::singleShot(1200, copyBtn, [copyBtn]() {
-            if (copyBtn) copyBtn->setText(QStringLiteral("\u2398"));
-        });
-    });
-    headerLayout->addWidget(copyBtn, 0, Qt::AlignTop);
-
-    auto *closeBtn = new QToolButton(dialog);
-    closeBtn->setObjectName(QStringLiteral("closeButton"));
-    closeBtn->setText(QStringLiteral("\u00D7"));
-    closeBtn->setCursor(Qt::PointingHandCursor);
-    connect(closeBtn, &QToolButton::clicked, dialog, &QDialog::close);
-    headerLayout->addWidget(closeBtn, 0, Qt::AlignTop);
-
-    layout->addLayout(headerLayout);
-
-    auto *textEdit = new QTextEdit(dialog);
-    textEdit->setReadOnly(true);
-    textEdit->setPlainText(text);
-    textEdit->setLineWrapMode(QTextEdit::WidgetWidth);
-    textEdit->setFrameShape(QFrame::NoFrame);
-    textEdit->setObjectName(QStringLiteral("ocrTextEdit"));
-    layout->addWidget(textEdit, 1);
-
-    const QString textColor = dark ? QStringLiteral("#E6EDF5") : QStringLiteral("#1E2936");
-    const QString subtextColor = dark ? QStringLiteral("#9AA7B5") : QStringLiteral("#5E7084");
-    const QString borderColor = dark ? QStringLiteral("rgba(255,255,255,25)")
-                                     : QStringLiteral("rgba(0,0,0,18)");
-    const QString btnBg = dark ? QStringLiteral("rgba(255,255,255,14)")
-                               : QStringLiteral("rgba(0,0,0,8)");
-    const QString btnHoverBg = dark ? QStringLiteral("rgba(255,255,255,28)")
-                                    : QStringLiteral("rgba(0,0,0,16)");
-    const QString selBg = dark ? QStringLiteral("rgba(74,144,226,110)")
-                               : QStringLiteral("rgba(74,144,226,76)");
-
-    dialog->setStyleSheet(QStringLiteral(
-        "QLabel#previewTitle {"
-        "  color: %1; font-size: 22px; font-weight: 700; background: transparent;"
-        "}"
-        "QTextEdit#ocrTextEdit {"
-        "  background-color: transparent; border: none;"
-        "  color: %1; font-size: 15px;"
-        "  selection-background-color: %2;"
-        "  padding: 8px;"
-        "}"
-        "QToolButton#closeButton {"
-        "  background-color: %3; border: 1px solid %4;"
-        "  border-radius: 14px; color: %5;"
-        "  font-size: 17px; font-weight: 700;"
-        "  min-width: 28px; min-height: 28px;"
-        "}"
-        "QToolButton#closeButton:hover {"
-        "  background-color: %6; border-color: %4;"
-        "}"
-    ).arg(textColor, selBg, btnBg, borderColor, subtextColor, btnHoverBg));
-
-    QScreen *screen = nullptr;
-    if (auto *w = parentWidget_->window()->windowHandle()) {
-        screen = w->screen();
-    }
-    if (!screen) screen = QGuiApplication::screenAt(QCursor::pos());
-    if (!screen) screen = QGuiApplication::primaryScreen();
-    if (screen) {
-        const QRect geo = screen->availableGeometry();
-        dialog->move(geo.center() - QPoint(dialog->width() / 2, dialog->height() / 2));
-    }
-
-    dialog->show();
-    WindowBlurHelper::enableBlurBehind(dialog, dark);
-    dialog->raise();
-    dialog->activateWindow();
-}
+// showOcrResultDialog moved to MPasteWidget — the controller only emits signals.

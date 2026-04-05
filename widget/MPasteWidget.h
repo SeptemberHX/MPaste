@@ -95,6 +95,7 @@ private:
 
     ScrollItemsWidget* currItemsWidget();
     void applyScale(int scale);
+    void showOcrResultDialog(const QString &text);
 
 private:
     struct {
@@ -132,6 +133,7 @@ private:
     } ui_;
 
     ClipboardAppController *controller_ = nullptr;
+    QPointer<QDialog> ocrLoadingDialog_;
 
     struct {
         bool startupWarmupScheduled = false;

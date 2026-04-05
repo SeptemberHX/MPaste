@@ -22,44 +22,7 @@
 
 namespace {
 
-ClipboardItem rehydrateClipboardItemForPaste(const ClipboardItem &item) {
-    if (item.getName().isEmpty()) {
-        return {};
-    }
-
-    LocalSaver saver;
-    const QString sourceFilePath = item.sourceFilePath();
-    if (!sourceFilePath.isEmpty() && QFileInfo::exists(sourceFilePath)) {
-        ClipboardItem loaded = saver.loadFromFile(sourceFilePath);
-        if (!loaded.getName().isEmpty()) {
-            return loaded;
-        }
-    }
-
-    const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
-    if (rootDir.isEmpty()) {
-        return {};
-    }
-
-    const QStringList categories = {
-        MPasteSettings::STAR_CATEGORY_NAME,
-        MPasteSettings::CLIPBOARD_CATEGORY_NAME
-    };
-    for (const QString &category : categories) {
-        const QString filePath = QDir::cleanPath(rootDir + QDir::separator()
-                                                 + category + QDir::separator()
-                                                 + item.getName() + ".mpaste");
-        if (!QFileInfo::exists(filePath)) {
-            continue;
-        }
-        ClipboardItem loaded = saver.loadFromFile(filePath);
-        if (!loaded.getName().isEmpty()) {
-            return loaded;
-        }
-    }
-
-    return {};
-}
+// rehydrateClipboardItem logic is now in ClipboardItem::rehydrate().
 
 QString elideLogText(QString text, int maxLen = 48) {
     text.replace(QLatin1Char('\n'), QLatin1Char(' '));
@@ -142,7 +105,7 @@ bool ClipboardPasteController::setClipboard(const ClipboardItem &item, bool plai
     QMimeData *mimeData = plainText ? createPlainTextMimeData(item)
                                     : ClipboardExportService::buildMimeData(item);
     if (!mimeData && !plainText) {
-        const ClipboardItem rehydrated = rehydrateClipboardItemForPaste(item);
+        const ClipboardItem rehydrated = ClipboardItem::rehydrate(item);
         if (!rehydrated.getName().isEmpty()) {
             mimeData = ClipboardExportService::buildMimeData(rehydrated);
             if (!mimeData) {
