@@ -4,6 +4,22 @@
 // update: If I change, update this header block and my folder README.md.
 // note: Adds async thumbnail fetch for on-demand UI loading with bounded worker concurrency.
 //
+// Implementation split
+// --------------------
+// The implementation is spread across 3 .cpp files:
+//   - ClipboardBoardService.cpp    (core) — constructor, index management,
+//     loading/scheduling, query methods, deferred load internals.
+//   - ClipboardBoardServiceIO.cpp  (persistence) — save, delete, file
+//     paths, deferred save.  All disk write operations live here.
+//   - ClipboardBoardServiceAsync.cpp (background) — thumbnail processing,
+//     thumbnail fetch, keyword search, thread management.  All worker-
+//     thread creation lives here.
+//
+// When adding new functionality:
+//   - Disk I/O → IO file.
+//   - Background/async work → Async file.
+//   - Index queries or load scheduling → core file.
+//
 // Threading model
 // ---------------
 // Main-thread-only methods (called from the GUI/event-loop thread):

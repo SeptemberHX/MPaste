@@ -1008,6 +1008,10 @@ void ClipboardCardDelegate::drawShortcutOverlay(QPainter *painter, const QStyleO
                    Qt::AlignCenter);
 }
 
+// INVARIANT: paint() must NEVER trigger disk I/O.  All data comes from
+// the model (in-memory) or the cardPixmapCache_.  Thumbnails and MIME
+// payloads are loaded asynchronously elsewhere; paint() only reads
+// what is already available.
 void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     if (!painter || !index.isValid()) {
         return;

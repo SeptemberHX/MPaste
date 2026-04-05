@@ -167,6 +167,10 @@ public:
         return *normalizedUrlsCache_;
     }
 
+    /// Return the full-resolution image from MIME data.
+    /// REQUIRES full-load (ensureMimeDataLoaded).  If the item is
+    /// light-loaded and has no loader, returns the thumbnail instead.
+    /// Callers in the paint() path must NOT use this — use thumbnail().
     QPixmap getImage() const;
 
     QSize getImagePixelSize() const;
@@ -229,6 +233,9 @@ public:
 
     bool hasThumbnail() const { return !thumbnail_.isNull(); }
     bool hasThumbnailHint() const { return thumbnailAvailableHint_ || !thumbnail_.isNull(); }
+    /// Pre-generated card preview image.  Safe to call from paint() —
+    /// never triggers I/O.  This is NOT the full-resolution image;
+    /// use getImage() for that (requires full-load).
     const QPixmap& thumbnail() const { return thumbnail_; }
     void setThumbnail(const QPixmap &thumb) {
         thumbnail_ = thumb;
@@ -270,6 +277,10 @@ public:
         mimeDataLoader_ = std::move(loader);
     }
 
+    /// Trigger lazy MIME load from disk.  MUST NOT be called from
+    /// paint() or any rendering path — it performs synchronous file I/O.
+    /// Safe to call from: context menu actions, paste, OCR, export,
+    /// details dialog, and background processing threads.
     void ensureMimeDataLoaded() {
         if (mimeDataLoaded_) return;
         mimeDataLoaded_ = true;
