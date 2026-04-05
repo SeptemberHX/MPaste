@@ -20,6 +20,7 @@
 #include "CopySoundPlayer.h"
 #include "ScrollItemsWidget.h"
 #include "SyncWatcher.h"
+#include "utils/ClipboardBoardService.h"
 #include "ClipboardPasteController.h"
 #include "WindowBlurHelper.h"
 #include "data/LocalSaver.h"
@@ -367,8 +368,18 @@ void ClipboardAppController::clipboardUpdated(const ClipboardItem &nItem, int wI
 // ---------------------------------------------------------------------------
 
 void ClipboardAppController::loadFromSaveDir() {
-    clipboardWidget_->setFavoriteFingerprints(staredWidget_->loadAllFingerprints());
+    // Start the starred board load first.  Once its async index build
+    // completes, read the fingerprints and apply them to the clipboard
+    // board so favorite markers are always based on the fresh index.
     staredWidget_->loadFromSaveDirDeferred();
+
+    auto *starService = staredWidget_->boardServiceRef();
+    if (starService) {
+        connect(starService, &ClipboardBoardService::deferredLoadCompleted, this, [this]() {
+            clipboardWidget_->setFavoriteFingerprints(staredWidget_->loadAllFingerprints());
+        }, Qt::SingleShotConnection);
+    }
+
     clipboardWidget_->loadFromSaveDirDeferred();
 }
 
