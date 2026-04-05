@@ -170,7 +170,7 @@ ClipboardAppController::~ClipboardAppController() {
 
 void ClipboardAppController::initClipboard() {
     monitor_ = new ClipboardMonitor();
-    pasteController_ = new ClipboardPasteController(monitor_, parentWidget_);
+    pasteController_ = new ClipboardPasteController(monitor_, this);
 
     connect(monitor_, &ClipboardMonitor::clipboardActivityObserved,
             this, &ClipboardAppController::clipboardActivityObserved);
@@ -186,7 +186,7 @@ void ClipboardAppController::initSound() {
     copySoundPlayer_ = new CopySoundPlayer(
         MPasteSettings::getInst()->isPlaySound(),
         QUrl(QStringLiteral("qrc:/resources/resources/sound.mp3")),
-        parentWidget_);
+        this);
 }
 
 void ClipboardAppController::setupSyncWatcher() {

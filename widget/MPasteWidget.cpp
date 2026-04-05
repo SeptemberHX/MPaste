@@ -723,7 +723,7 @@ MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
                 this, &MPasteWidget::reloadHistoryBoards);
         connect(ui_.settingsWidget, &MPasteSettingsWidget::saveDirChanged,
                 this, [this]() {
-                    // SyncWatcher is managed by the controller; just reload boards.
+                    controller_->setupSyncWatcher();
                     reloadHistoryBoards();
                 });
         connect(ui_.settingsWidget, &MPasteSettingsWidget::itemScaleChanged,

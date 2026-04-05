@@ -44,6 +44,7 @@ public:
     void loadFromSaveDir();
     void syncHistoryBoardsIncremental();
     void onWidgetShown();
+    void setupSyncWatcher();
 
     // --- Board signal wiring ---
     void connectBoardSignals(ScrollItemsWidget *boardWidget);
@@ -65,7 +66,6 @@ private slots:
 private:
     void initClipboard();
     void initSound();
-    void setupSyncWatcher();
     void ensureOcrService();
     void showOcrResultDialog(const QString &text);
     void handleOcrRequest(ScrollItemsWidget *boardWidget, const ClipboardItem &item);
