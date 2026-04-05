@@ -22,6 +22,7 @@
 #include <QScopedPointer>
 #include <QScreen>
 #include <QSaveFile>
+#include <QSet>
 
 #include "utils/OcrService.h"
 
@@ -1067,7 +1068,11 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
         const QString capturedPath = filePath;
         const quint64 capturedOffset = header.mimeDataOffset;
         item.setMimeDataLoader([capturedPath, capturedOffset](ClipboardItem &self) {
-            LocalSaver::loadMimeSection(capturedPath, capturedOffset, self);
+            if (!LocalSaver::loadMimeSection(capturedPath, capturedOffset, self)) {
+                // Set an empty but valid QMimeData so the item is not
+                // left without MIME data and the loader is not retried.
+                self.setMimeData(new QMimeData);
+            }
         });
     }
     item.setLightLoaded(
@@ -1120,17 +1125,25 @@ ClipboardItem LocalSaver::loadFromFileLight(const QString &filePath, bool includ
 }
 
 bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, ClipboardItem &item) {
+    // Suppress repeated warnings for the same file — corrupt files are
+    // retried on every lazy-load and would otherwise flood the log.
+    static QSet<QString> reportedPaths;
+    auto warnOnce = [&](const char *reason, auto ...extra) {
+        if (!reportedPaths.contains(filePath)) {
+            reportedPaths.insert(filePath);
+            qWarning().noquote() << QStringLiteral("[LocalSaver] loadMimeSection failed: path=%1 reason=%2")
+                .arg(filePath, QLatin1String(reason));
+        }
+    };
+
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "[LocalSaver] loadMimeSection failed: path=" << filePath
-                    << "reason=cannot open for reading";
+        warnOnce("cannot open for reading");
         return false;
     }
 
     if (!file.seek(static_cast<qint64>(offset))) {
-        qWarning() << "[LocalSaver] loadMimeSection failed: path=" << filePath
-                    << "reason=seek failed, offset=" << offset
-                    << "fileSize=" << file.size();
+        warnOnce("seek failed");
         file.close();
         return false;
     }
@@ -1139,8 +1152,7 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     quint32 formatCount = 0;
     in >> formatCount;
     if (in.status() != QDataStream::Ok) {
-        qWarning() << "[LocalSaver] loadMimeSection failed: path=" << filePath
-                    << "reason=stream error reading format count, status=" << in.status();
+        warnOnce("stream error reading format count");
         file.close();
         return false;
     }
@@ -1157,8 +1169,7 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
         QByteArray data;
         in >> format >> dataIndex >> data;
         if (in.status() != QDataStream::Ok) {
-            qWarning() << "[LocalSaver] loadMimeSection failed: path=" << filePath
-                        << "reason=stream error reading MIME entry, status=" << in.status();
+            warnOnce("stream error reading MIME entry");
             delete mimeData;
             file.close();
             return false;

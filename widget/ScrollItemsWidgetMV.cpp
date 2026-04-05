@@ -383,7 +383,6 @@ void ScrollItemsWidget::setCurrentProxyIndex(const QModelIndex &index) {
 }
 
 void ScrollItemsWidget::handleCurrentIndexChanged(const QModelIndex &current, const QModelIndex &previous) {
-    Q_UNUSED(current);
     Q_UNUSED(previous);
 
     ensureLinkPreviewForIndex(current);
@@ -454,6 +453,22 @@ void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
 }
 
 void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex) {
+    // Debounce: during rapid arrow-key scrolling, defer the expensive
+    // OpenGraphFetcher creation until the user stops on an item.
+    pendingLinkPreviewIndex_ = QPersistentModelIndex(proxyIndex);
+    if (!linkPreviewDebounceTimer_) {
+        linkPreviewDebounceTimer_ = new QTimer(this);
+        linkPreviewDebounceTimer_->setSingleShot(true);
+        linkPreviewDebounceTimer_->setInterval(150);
+        connect(linkPreviewDebounceTimer_, &QTimer::timeout, this, [this]() {
+            if (!pendingLinkPreviewIndex_.isValid()) return;
+            executeLinkPreviewFetch(pendingLinkPreviewIndex_);
+        });
+    }
+    linkPreviewDebounceTimer_->start();
+}
+
+void ScrollItemsWidget::executeLinkPreviewFetch(const QModelIndex &proxyIndex) {
     if (!proxyModel_ || !boardModel_ || !proxyIndex.isValid()) {
         return;
     }
@@ -465,6 +480,10 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
 
     ClipboardItem item = boardModel_->itemAt(sourceRow);
     if (item.getContentType() != Link) {
+        return;
+    }
+    // Skip if we already have OG data (title or preview image).
+    if (!item.getTitle().isEmpty() || item.hasThumbnail()) {
         return;
     }
 
@@ -494,9 +513,12 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
     }
     pendingLinkPreviewUrls_.insert(requestKey);
 
-    const QByteArray fingerprint = item.fingerprint();
+    // Use item name instead of fingerprint for the callback lookup —
+    // fingerprint() computes SHA1 synchronously and adds ~15ms latency
+    // to arrow-key navigation.
+    const QString itemName = item.getName();
     auto *fetcher = new OpenGraphFetcher(url, this);
-    connect(fetcher, &OpenGraphFetcher::finished, this, [this, fetcher, requestKey, fingerprint, linkText](const OpenGraphItem &ogItem) {
+    connect(fetcher, &OpenGraphFetcher::finished, this, [this, fetcher, requestKey, itemName, linkText](const OpenGraphItem &ogItem) {
         pendingLinkPreviewUrls_.remove(requestKey);
         fetcher->deleteLater();
 
@@ -504,7 +526,7 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
             return;
         }
 
-        const int row = boardModel_->rowForFingerprint(fingerprint);
+        const int row = boardModel_->rowForName(itemName);
         if (row < 0) {
             return;
         }

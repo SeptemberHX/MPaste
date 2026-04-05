@@ -163,6 +163,7 @@ private:
     void updateContentWidthHint();
     void updateEdgeFadeOverlays();
     void ensureLinkPreviewForIndex(const QModelIndex &proxyIndex);
+    void executeLinkPreviewFetch(const QModelIndex &proxyIndex);
     void createHoverActionBar();
     void populateSingleSelectionMenu(QMenu *menu, const QModelIndex &proxyIndex, const ClipboardItem &item);
     void populateMultiSelectionMenu(QMenu *menu, const QList<ClipboardItem> &selection);
@@ -223,6 +224,8 @@ private:
     QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;
     QSet<QString> pendingLinkPreviewUrls_;
+    QTimer *linkPreviewDebounceTimer_ = nullptr;
+    QModelIndex pendingLinkPreviewIndex_;
     QSet<QString> pendingThumbnailNames_;
     QSet<QString> missingThumbnailNames_;
     QSet<QString> desiredThumbnailNames_;

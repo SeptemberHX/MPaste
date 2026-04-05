@@ -149,6 +149,7 @@ public:
         const_cast<ClipboardItem*>(this)->ensureMimeDataLoaded();
         return mimeData_.data();
     }
+    void setMimeData(QMimeData *data) { mimeData_.reset(data); }
     QString getText() const { return mimeData_ ? mimeData_->text() : QString(); }
     QString getNormalizedText() const {
         if (!mimeDataLoaded_) {
