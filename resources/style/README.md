@@ -17,7 +17,7 @@ update: 修改本目录文件时，同步更新本 README。
 ## 文件说明
 
 - `defaultStyle.qss`：应用默认样式表。
-- `darkStyle.qss`???????????
+- `darkStyle.qss`：深色主题叠加样式，用于覆写默认外观。
 - `README.md`：当前目录说明文档。
 
 ## 维护约定
@@ -27,10 +27,10 @@ update: 修改本目录文件时，同步更新本 README。
 - 若本目录结构或职责发生变化，请同步更新本 README。
 
 ## Recent Notes
-- ??????? `{{token}}` ???????????? ThemeManager ???????
+- 主题样式统一使用 `{{token}}` 占位符，并由 ThemeManager 在运行时完成替换。
 - `defaultStyle.qss` 和 `darkStyle.qss` 现在移除了 Qt 样式表不支持的 `text-transform`、`outline` 和 `QLineEdit::placeholder` 写法，减少启动时的 stylesheet parse 警告。
 
-- ?? `darkStyle.qss`???????????????????
+- 新增 `darkStyle.qss`，用于集中维护深色主题覆盖样式。
 
 - `defaultStyle.qss` 现在把 `countArea` 调整为更轻的半透明胶囊徽标。
 - 默认样式现在为主窗口溢出菜单按钮与 `QMenu` 提供了更统一的玻璃化外观。

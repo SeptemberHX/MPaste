@@ -2,6 +2,19 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_CN">
 <context>
+    <name>ClipboardAppController</name>
+    <message>
+        <location filename="../widget/ClipboardAppController.cpp" line="383"/>
+        <source>No text recognized in this image.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/ClipboardAppController.cpp" line="429"/>
+        <source>No image data available for OCR.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ClipboardItemDetailsDialog</name>
     <message>
         <source>Clipboard Item Details</source>
@@ -157,7 +170,7 @@
 <context>
     <name>MPasteSettings</name>
     <message>
-        <location filename="../utils/MPasteSettings.cpp" line="60"/>
+        <location filename="../utils/MPasteSettings.cpp" line="61"/>
         <source>Terminal</source>
         <translatorcomment>已 top-panel 显示为准</translatorcomment>
         <translation type="unfinished">终端</translation>
@@ -207,7 +220,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.cpp" line="729"/>
+        <location filename="../widget/MPasteSettingsWidget.cpp" line="769"/>
         <source>Auto-start is currently only supported on Windows.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -279,6 +292,26 @@
         <location filename="../widget/MPasteWidget.ui" line="410"/>
         <source>File</source>
         <translation>文件</translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteWidget.cpp" line="227"/>
+        <source>Recognizing...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteWidget.cpp" line="257"/>
+        <source>OCR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteWidget.cpp" line="752"/>
+        <source>Recognized Text</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widget/MPasteWidget.cpp" line="759"/>
+        <source>Copy to Clipboard</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -401,7 +434,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="384"/>
+        <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="387"/>
         <source>Office shape preview</source>
         <translation type="unfinished"></translation>
     </message>
@@ -423,6 +456,11 @@
         <location filename="../widget/BoardContextMenu.cpp" line="143"/>
         <source>Preview</source>
         <translation type="unfinished">预览</translation>
+    </message>
+    <message>
+        <location filename="../widget/BoardContextMenu.cpp" line="167"/>
+        <source>Extract Text (OCR)</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Delete</source>
