@@ -314,6 +314,22 @@ void ClipboardAppController::onWidgetShown() {
 }
 
 // ---------------------------------------------------------------------------
+// Sealed interface delegations
+// ---------------------------------------------------------------------------
+
+bool ClipboardAppController::setClipboard(const ClipboardItem &item, bool plainText) {
+    return pasteController_->setClipboard(item, plainText);
+}
+
+void ClipboardAppController::pasteToTarget(WId targetWindow) {
+    pasteController_->pasteToTarget(targetWindow);
+}
+
+void ClipboardAppController::primeCurrentClipboard() {
+    monitor_->primeCurrentClipboard();
+}
+
+// ---------------------------------------------------------------------------
 // OCR
 // ---------------------------------------------------------------------------
 

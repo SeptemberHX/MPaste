@@ -18,7 +18,6 @@
 #include "utils/MPasteSettings.h"
 #include "ScrollItemsWidget.h"
 #include "ClipboardItemPreviewDialog.h"
-#include "ClipboardPasteController.h"
 #include "ClipboardAppController.h"
 #include "WindowBlurHelper.h"
 #include "BoardInternalHelpers.h"
@@ -135,7 +134,7 @@ void MPasteWidget::handleEnterKey(bool plainText) {
 
     auto *board = currItemsWidget();
     const ClipboardItem *selectedItem = board->selectedByEnter();
-    if (selectedItem && controller_->pasteController()->setClipboard(*selectedItem, plainText)) {
+    if (selectedItem && controller_->setClipboard(*selectedItem, plainText)) {
         hideAndPaste();
         board->moveSelectedToFirst();
     }
@@ -167,7 +166,7 @@ bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
 
     auto *board = currItemsWidget();
     const ClipboardItem *selectedItem = board->selectedByShortcut(shortcutIndex);
-    if (!selectedItem || !controller_->pasteController()->setClipboard(*selectedItem, plainText)) {
+    if (!selectedItem || !controller_->setClipboard(*selectedItem, plainText)) {
         return false;
     }
 

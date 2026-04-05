@@ -29,7 +29,6 @@
 #include "ScrollItemsWidget.h"
 
 class ClipboardAppController;
-class ClipboardPasteController;
 
 namespace Ui {
 class MPasteWidget;

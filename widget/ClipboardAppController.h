@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QSet>
+#include <qwindowdefs.h>
 
 #include "data/ClipboardItem.h"
 
@@ -33,14 +34,14 @@ public:
         QObject *parent = nullptr);
     ~ClipboardAppController() override;
 
-    // --- Accessors for MPasteWidget ---
-    ClipboardPasteController *pasteController() const { return pasteController_; }
+    // --- Sealed interface (no internal objects exposed) ---
     bool copiedWhenHide() const { return copiedWhenHide_; }
     void clearCopiedWhenHide() { copiedWhenHide_ = false; }
-    SyncWatcher *syncWatcher() const { return syncWatcher_; }
-    ClipboardMonitor *monitor() const { return monitor_; }
 
-    // --- Actions ---
+    bool setClipboard(const ClipboardItem &item, bool plainText = false);
+    void pasteToTarget(WId targetWindow);
+    void primeCurrentClipboard();
+
     void loadFromSaveDir();
     void syncHistoryBoardsIncremental();
     void onWidgetShown();

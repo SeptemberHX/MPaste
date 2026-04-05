@@ -46,9 +46,6 @@
 #include "BoardInternalHelpers.h"
 #include "ClipboardAppController.h"
 #include "ClipboardCardDelegate.h"
-#include "utils/ClipboardMonitor.h"
-#include "SyncWatcher.h"
-#include "ClipboardPasteController.h"
 #include "utils/PlatformRelated.h"
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -368,7 +365,7 @@ void MPasteWidget::scheduleStartupWarmup() {
         auto *boardService = ui_.clipboardWidget->boardServiceRef();
         if (boardService) {
             connect(boardService, &ClipboardBoardService::deferredLoadCompleted, this, [this]() {
-                controller_->monitor()->primeCurrentClipboard();
+                controller_->primeCurrentClipboard();
                 qInfo().noquote() << QStringLiteral("[startup] deferred primeCurrentClipboard done elapsedMs=%1").arg(misc_.startupPerfTimer.elapsed());
                 loading_.startupWarmupCompleted = true;
             }, Qt::SingleShotConnection);
@@ -456,7 +453,7 @@ void MPasteWidget::setupConnections() {
 
 // clipboardActivityObserved and clipboardUpdated moved to ClipboardAppController.
 
-// Clipboard write and URL handling are now delegated to controller_->pasteController().
+// Clipboard write and URL handling are delegated to the controller.
 
 ScrollItemsWidget *MPasteWidget::currItemsWidget() {
     if (!ui_.buttonGroup) {
@@ -477,7 +474,7 @@ void MPasteWidget::hideAndPaste() {
 
     hide();
 
-    controller_->pasteController()->pasteToTarget(previousWId);
+    controller_->pasteToTarget(previousWId);
 }
 void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == isVisible()) return;
@@ -595,9 +592,6 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     setFocus();
     qInfo().noquote() << QStringLiteral("[wake] showEvent: activate/raise/focus %1 ms").arg(t.elapsed());
     controller_->onWidgetShown();
-    if (auto *sw = controller_->syncWatcher()) {
-        Q_UNUSED(sw); // sync already handled by onWidgetShown
-    }
     // Show "Loading..." if data is still being loaded from disk,
     // so the panel is not blank on very early wake.
     if (auto *board = currItemsWidget()) {
