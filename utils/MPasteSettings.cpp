@@ -40,10 +40,11 @@ void MPasteSettings::setSaveDir(const QString &dir) {
 
 MPasteSettings::MPasteSettings()
     : saveDir(QDir::homePath() + QDir::separator() +  ".MPaste")
-    , maxSize(500)
+    , maxSize(-1)
     , historyRetentionValue(30)
     , historyRetentionUnit(RetentionDays)
     , proxyType(QNetworkProxy::NoProxy)
+    , ocrBackend(OcrWindowsBuiltin)
 {
     this->proxyType = QNetworkProxy::HttpProxy;
     this->proxyHost = "127.0.0.1";
@@ -105,7 +106,11 @@ int MPasteSettings::getPort() const {
 void MPasteSettings::loadSettings() {
     QSettings settings("MPaste", "MPaste");
 
-    this->maxSize = settings.value("main/historySize", this->maxSize).toInt();
+    // maxSize is no longer configurable via UI; remove stale registry
+    // key and keep the field at its default (-1 = disabled).
+    if (settings.contains("main/historySize")) {
+        settings.remove("main/historySize");
+    }
     this->historyRetentionValue = settings.value("main/historyRetentionValue", this->historyRetentionValue).toInt();
     this->historyRetentionUnit = static_cast<HistoryRetentionUnit>(
         settings.value("main/historyRetentionUnit", static_cast<int>(this->historyRetentionUnit)).toInt());
@@ -119,12 +124,17 @@ void MPasteSettings::loadSettings() {
         settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
     this->historyViewMode = static_cast<HistoryViewMode>(
         settings.value("main/historyViewMode", static_cast<int>(this->historyViewMode)).toInt());
+    this->ocrBackend = static_cast<OcrBackend>(
+        settings.value("ocr/backend", static_cast<int>(this->ocrBackend)).toInt());
+    this->baiduOcrApiKey = settings.value("ocr/baiduApiKey").toString();
+    this->baiduOcrSecretKey = settings.value("ocr/baiduSecretKey").toString();
+    this->autoOcr = settings.value("ocr/autoOcr", false).toBool();
 }
 
 void MPasteSettings::saveSettings() {
     QSettings settings("MPaste", "MPaste");
 
-    settings.setValue("main/historySize", this->maxSize);
+    // maxSize is no longer persisted — only retention-based cleanup is active.
     settings.setValue("main/historyRetentionValue", this->historyRetentionValue);
     settings.setValue("main/historyRetentionUnit", static_cast<int>(this->historyRetentionUnit));
     settings.setValue("main/saveDir", this->saveDir);
@@ -135,6 +145,10 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/playSound", this->playSound);
     settings.setValue("main/themeMode", static_cast<int>(this->themeMode));
     settings.setValue("main/historyViewMode", static_cast<int>(this->historyViewMode));
+    settings.setValue("ocr/backend", static_cast<int>(this->ocrBackend));
+    settings.setValue("ocr/baiduApiKey", this->baiduOcrApiKey);
+    settings.setValue("ocr/baiduSecretKey", this->baiduOcrSecretKey);
+    settings.setValue("ocr/autoOcr", this->autoOcr);
 }
 
 bool MPasteSettings::isAutoPaste() const {
@@ -247,6 +261,15 @@ bool MPasteSettings::isDarkTheme() const {
     const QColor windowColor = QGuiApplication::palette().color(QPalette::Window);
     return windowColor.lightness() < 128;
 }
+
+MPasteSettings::OcrBackend MPasteSettings::getOcrBackend() const { return ocrBackend; }
+void MPasteSettings::setOcrBackend(OcrBackend backend) { ocrBackend = backend; }
+const QString &MPasteSettings::getBaiduOcrApiKey() const { return baiduOcrApiKey; }
+void MPasteSettings::setBaiduOcrApiKey(const QString &key) { baiduOcrApiKey = key; }
+const QString &MPasteSettings::getBaiduOcrSecretKey() const { return baiduOcrSecretKey; }
+void MPasteSettings::setBaiduOcrSecretKey(const QString &key) { baiduOcrSecretKey = key; }
+bool MPasteSettings::isAutoOcr() const { return autoOcr; }
+void MPasteSettings::setAutoOcr(bool enabled) { autoOcr = enabled; }
 
 bool MPasteSettings::isTerminalTitle(const QString &title) {
     return this->terminalNames.contains(title);

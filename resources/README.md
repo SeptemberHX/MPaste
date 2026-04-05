@@ -32,11 +32,8 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## Recent Notes
 
-- ????????????????`*_light.svg`??????????????
-- `resources/style/darkStyle.qss` ?????????????
-
+- 新增了深色主题下使用的 `*_light.svg` 亮色图标变体，用于提升图标对比度。
+- `resources/style/darkStyle.qss` 现在承载深色主题的额外样式覆盖。
 - 新增了 `menu_more.svg`、`settings.svg`、`info.svg` 和 `quit.svg`，用于主窗口溢出菜单与图标按钮。
-
-- Added rename icon variants (ename.svg, ename_light.svg) for context menu actions.
-
+- Added rename icon variants (`rename.svg`, `rename_light.svg`) for context menu actions.
 - Added `page_chevron.svg` and `page_chevron_light.svg` for pagination controls.

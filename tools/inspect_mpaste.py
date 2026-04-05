@@ -138,7 +138,7 @@ def inspect(path):
             print(f"Pinned: {pinned}")
 
     content_type = read_uint32(f)
-    type_names = {0:'All', 1:'Text', 2:'RichText', 3:'Link', 4:'Color', 5:'Image', 6:'File', 7:'Office'}
+    type_names = {0:'All', 1:'Text', 2:'Link', 3:'Image', 4:'RichText', 5:'File', 6:'Color', 7:'Office'}
     print(f"ContentType: {content_type} ({type_names.get(content_type, 'Unknown')})")
 
     normalized_text = read_qstring(f)

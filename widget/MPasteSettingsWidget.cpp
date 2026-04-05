@@ -715,7 +715,47 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         maintenanceLayout->addWidget(syncLabel_, 0, 0, 1, 2);
         maintenanceLayout->addWidget(syncPathEdit_, 1, 0, 1, 2);
         maintenanceLayout->addWidget(syncButtonsRow, 2, 0, 1, 2);
-        maintenanceLayout->setRowStretch(3, 1);
+
+        // OCR settings
+        ocrLabel_ = new QLabel(uiText("OCR Backend", QStringLiteral("OCR 引擎")), maintenancePage);
+        ocrBackendCombo_ = new QComboBox(maintenancePage);
+        ocrBackendCombo_->setMinimumSize(QSize(200, 36));
+        ocrBackendCombo_->setMaximumHeight(36);
+        ocrBackendCombo_->addItem(uiText("Windows Built-in", QStringLiteral("Windows 内置")), 0);
+        ocrBackendCombo_->addItem(uiText("Baidu OCR API", QStringLiteral("百度 OCR API")), 1);
+
+        baiduApiKeyLabel_ = new QLabel(QStringLiteral("API Key"), maintenancePage);
+        baiduApiKeyEdit_ = new QLineEdit(maintenancePage);
+        baiduApiKeyEdit_->setMinimumHeight(36);
+        baiduApiKeyEdit_->setPlaceholderText(uiText("Enter Baidu API Key", QStringLiteral("输入百度 API Key")));
+
+        baiduSecretKeyLabel_ = new QLabel(QStringLiteral("Secret Key"), maintenancePage);
+        baiduSecretKeyEdit_ = new QLineEdit(maintenancePage);
+        baiduSecretKeyEdit_->setMinimumHeight(36);
+        baiduSecretKeyEdit_->setEchoMode(QLineEdit::Password);
+        baiduSecretKeyEdit_->setPlaceholderText(uiText("Enter Baidu Secret Key", QStringLiteral("输入百度 Secret Key")));
+
+        auto updateBaiduFieldsVisibility = [this]() {
+            const bool isBaidu = ocrBackendCombo_->currentData().toInt() == 1;
+            baiduApiKeyLabel_->setVisible(isBaidu);
+            baiduApiKeyEdit_->setVisible(isBaidu);
+            baiduSecretKeyLabel_->setVisible(isBaidu);
+            baiduSecretKeyEdit_->setVisible(isBaidu);
+        };
+        connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, updateBaiduFieldsVisibility);
+
+        autoOcrLabel_ = new QLabel(uiText("Auto OCR for images", QStringLiteral("图片自动 OCR")), maintenancePage);
+        autoOcrSwitch_ = new ToggleSwitch(maintenancePage);
+
+        maintenanceLayout->addWidget(ocrLabel_, 3, 0);
+        maintenanceLayout->addWidget(ocrBackendCombo_, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
+        maintenanceLayout->addWidget(baiduApiKeyLabel_, 4, 0);
+        maintenanceLayout->addWidget(baiduApiKeyEdit_, 4, 1);
+        maintenanceLayout->addWidget(baiduSecretKeyLabel_, 5, 0);
+        maintenanceLayout->addWidget(baiduSecretKeyEdit_, 5, 1);
+        maintenanceLayout->addWidget(autoOcrLabel_, 6, 0);
+        maintenanceLayout->addWidget(autoOcrSwitch_, 6, 1, Qt::AlignRight | Qt::AlignVCenter);
+        maintenanceLayout->setRowStretch(7, 1);
 
         grid->setContentsMargins(18, 14, 18, 14);
         grid->setHorizontalSpacing(0);
@@ -834,6 +874,27 @@ void MPasteSettingsWidget::loadSettings()
     if (syncPathEdit_) {
         syncPathEdit_->setText(QDir::cleanPath(settings->getSaveDir()));
     }
+    if (ocrBackendCombo_) {
+        const int index = ocrBackendCombo_->findData(static_cast<int>(settings->getOcrBackend()));
+        ocrBackendCombo_->setCurrentIndex(index >= 0 ? index : 0);
+    }
+    if (baiduApiKeyEdit_) {
+        baiduApiKeyEdit_->setText(settings->getBaiduOcrApiKey());
+    }
+    if (baiduSecretKeyEdit_) {
+        baiduSecretKeyEdit_->setText(settings->getBaiduOcrSecretKey());
+    }
+    if (autoOcrSwitch_) {
+        autoOcrSwitch_->setChecked(settings->isAutoOcr());
+    }
+    // Trigger visibility update for Baidu fields.
+    if (ocrBackendCombo_) {
+        const bool isBaidu = ocrBackendCombo_->currentData().toInt() == 1;
+        if (baiduApiKeyLabel_) baiduApiKeyLabel_->setVisible(isBaidu);
+        if (baiduApiKeyEdit_) baiduApiKeyEdit_->setVisible(isBaidu);
+        if (baiduSecretKeyLabel_) baiduSecretKeyLabel_->setVisible(isBaidu);
+        if (baiduSecretKeyEdit_) baiduSecretKeyEdit_->setVisible(isBaidu);
+    }
     applyTheme(ThemeManager::instance()->isDark());
 
 #ifdef Q_OS_WIN
@@ -888,6 +949,19 @@ void MPasteSettingsWidget::accept()
             settings->setSaveDir(newDir);
             emit saveDirChanged();
         }
+    }
+
+    if (ocrBackendCombo_) {
+        settings->setOcrBackend(static_cast<MPasteSettings::OcrBackend>(ocrBackendCombo_->currentData().toInt()));
+    }
+    if (baiduApiKeyEdit_) {
+        settings->setBaiduOcrApiKey(baiduApiKeyEdit_->text().trimmed());
+    }
+    if (baiduSecretKeyEdit_) {
+        settings->setBaiduOcrSecretKey(baiduSecretKeyEdit_->text().trimmed());
+    }
+    if (autoOcrSwitch_) {
+        settings->setAutoOcr(autoOcrSwitch_->isChecked());
     }
 
 #ifdef Q_OS_WIN

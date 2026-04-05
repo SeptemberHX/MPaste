@@ -20,8 +20,8 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardMonitor.h` / `ClipboardMonitor.cpp`：系统剪贴板监听与采集逻辑。
 - `HotKeyManager.h` / `HotKeyManager.cpp`：全局快捷键注册与管理。
 - `MPasteSettings.h` / `MPasteSettings.cpp`：运行配置、持久化设置与默认值管理。
-- `ThemeManager.h` / `ThemeManager.cpp`????????????????????
-- `IconResolver.h` / `IconResolver.cpp`???????/???????
+- `ThemeManager.h` / `ThemeManager.cpp`：统一管理应用主题切换、调色板更新与 QSS token 替换。
+- `IconResolver.h` / `IconResolver.cpp`：解析亮色 / 暗色图标资源并提供主题化图标。
 - `OpenGraphFetcher.h` / `OpenGraphFetcher.cpp`：抓取网页 Open Graph 元数据，供链接卡片预览使用。
 - `PlatformRelated.h` / `PlatformRelated.cpp`：平台相关辅助能力，例如粘贴注入、窗口行为和系统交互。
 - `ClipboardExportService.h` / `ClipboardExportService.cpp`：剪贴板导出服务，提供 `buildMimeData()` 用于从条目构建导出载荷。

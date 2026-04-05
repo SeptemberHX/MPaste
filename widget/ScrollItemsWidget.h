@@ -89,6 +89,7 @@ public:
     void applyTheme(bool dark);
     void updateLoadingOverlay();
     ClipboardBoardService *boardServiceRef() const { return boardService_; }
+    ClipboardCardDelegate *cardDelegateRef() const { return cardDelegate_; }
     ClipboardBoardModel *boardModel() const { return boardModel_; }
     QString memoryStats() const;
 
@@ -107,6 +108,7 @@ signals:
     void itemCountChanged(int itemCount);
     void itemStared(const ClipboardItem &item);
     void itemUnstared(const ClipboardItem &item);
+    void ocrRequested(const ClipboardItem &item);
     void aliasChanged(const QByteArray &fingerprint, const QString &alias);
     void localPersistenceChanged();
     void selectionStateChanged();
@@ -161,6 +163,7 @@ private:
     void updateContentWidthHint();
     void updateEdgeFadeOverlays();
     void ensureLinkPreviewForIndex(const QModelIndex &proxyIndex);
+    void executeLinkPreviewFetch(const QModelIndex &proxyIndex);
     void createHoverActionBar();
     void populateSingleSelectionMenu(QMenu *menu, const QModelIndex &proxyIndex, const ClipboardItem &item);
     void populateMultiSelectionMenu(QMenu *menu, const QList<ClipboardItem> &selection);
@@ -221,6 +224,8 @@ private:
     QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;
     QSet<QString> pendingLinkPreviewUrls_;
+    QTimer *linkPreviewDebounceTimer_ = nullptr;
+    QModelIndex pendingLinkPreviewIndex_;
     QSet<QString> pendingThumbnailNames_;
     QSet<QString> missingThumbnailNames_;
     QSet<QString> desiredThumbnailNames_;

@@ -665,6 +665,20 @@ void ClipboardCardDelegate::invalidateCard(const QString &name) {
     cardPixmapCache_.remove(name);
 }
 
+void ClipboardCardDelegate::markOcrPending(const QString &name) {
+    ocrPendingNames_.insert(name);
+    invalidateCard(name);
+}
+
+void ClipboardCardDelegate::clearOcrPending(const QString &name) {
+    ocrPendingNames_.remove(name);
+    invalidateCard(name);
+}
+
+bool ClipboardCardDelegate::isOcrPending(const QString &name) const {
+    return ocrPendingNames_.contains(name);
+}
+
 QString ClipboardCardDelegate::cacheMemoryStats() const {
     // Estimate bytes for a QCache<QString, QPixmap>.
     auto estimateCache = [](const QCache<QString, QPixmap> &cache) -> qint64 {
@@ -994,6 +1008,10 @@ void ClipboardCardDelegate::drawShortcutOverlay(QPainter *painter, const QStyleO
                    Qt::AlignCenter);
 }
 
+// INVARIANT: paint() must NEVER trigger disk I/O.  All data comes from
+// the model (in-memory) or the cardPixmapCache_.  Thumbnails and MIME
+// payloads are loaded asynchronously elsewhere; paint() only reads
+// what is already available.
 void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     if (!painter || !index.isValid()) {
         return;
@@ -1193,9 +1211,14 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     QString timeLabel = QLocale::system().toString(card.time, QLocale::ShortFormat);
     if (card.contentType == RichText && MxGraphRenderer::isMxGraphContent(card.normalizedText)) {
         timeLabel += QStringLiteral(" \u00B7 draw.io");
+    } else if (!card.title.isEmpty() && card.contentType == Office) {
+        timeLabel += QStringLiteral(" \u00B7 ") + card.title;
     } else if ((card.contentType == Text || card.contentType == RichText)
                && CardRenderUtils::looksLikeCode(card.normalizedText)) {
         timeLabel += QStringLiteral(" \u00B7 Code");
+    }
+    if (isOcrPending(card.name)) {
+        timeLabel += QStringLiteral(" \u00B7 OCR...");
     }
     const QString aliasLabel = card.alias.trimmed();
     if (!aliasLabel.isEmpty()) {

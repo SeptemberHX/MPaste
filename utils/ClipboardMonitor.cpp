@@ -353,6 +353,14 @@ bool ClipboardMonitor::hasMeaningfulContent(const QMimeData *mimeData) {
     hasContent = hasContent || mimeData->hasImage();
     hasContent = hasContent || mimeData->hasUrls();
     hasContent = hasContent || mimeData->hasColor();
+
+    // Check for OLE/vector/MathML formats that lack standard MIME types
+    // (e.g. MathType clipboard with MetaFilePict + Embed Source only).
+    if (!hasContent) {
+        const ContentClassifier::ContentTraits traits = ContentClassifier::analyze(mimeData);
+        hasContent = traits.hasVector || traits.hasOle;
+    }
+
     return hasContent;
 }
 

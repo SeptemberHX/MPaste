@@ -1,9 +1,9 @@
 // input: Depends on ClipboardBoardService.h, LocalSaver, MPasteSettings, and Qt IO/threading utilities.
-// output: Implements board persistence, deferred loading, thumbnail processing, and keyword search routines.
-// pos: utils layer board service implementation.
+// output: Implements core board service: construction, index management, loading, queries, and deferred load internals.
+// pos: utils layer board service implementation (core).
 // update: If I change, update this header block and my folder README.md.
-// note: Thumbnail decode now accepts Qt serialized image payloads, uses shared card preview metrics, respects data-layer preview kind for rich text, trims rich-text margins, backfills missing on-disk thumbnails on demand, and uses bounded worker concurrency.
 #include "ClipboardBoardService.h"
+#include "ClipboardBoardServiceInternal.h"
 
 #include <algorithm>
 #include <numeric>
@@ -16,20 +16,38 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
-#include <QImage>
-#include <QPixmap>
+#include <QMutexLocker>
 #include <QPointer>
 #include <QThread>
 #include <QThreadPool>
 #include <QTimer>
-#include <QUrl>
 #include <QRunnable>
 
 #include "data/LocalSaver.h"
 #include "utils/MPasteSettings.h"
-#include "utils/ThumbnailBuilder.h"
+#include "utils/OcrService.h"
 
 namespace {
+
+QDateTime itemTimestampForFile(const QFileInfo &info) {
+    bool ok = false;
+    const qint64 epochMs = info.completeBaseName().toLongLong(&ok);
+    if (ok && epochMs > 0) {
+        const QDateTime parsed = QDateTime::fromMSecsSinceEpoch(epochMs);
+        if (parsed.isValid()) {
+            return parsed;
+        }
+    }
+    return info.lastModified();
+}
+
+bool isExpiredForCutoff(const QFileInfo &info, const QDateTime &cutoff) {
+    return cutoff.isValid() && itemTimestampForFile(info) < cutoff;
+}
+
+} // namespace
+
+// --- Shared helper definitions (declared in ClipboardBoardServiceInternal.h) ---
 
 ClipboardBoardService::IndexedItemMeta buildIndexedItemMeta(const QString &filePath,
                                                             const ClipboardItem &item) {
@@ -67,6 +85,11 @@ ClipboardBoardService::IndexedItemMeta buildIndexedItemMeta(const QString &fileP
     for (const QUrl &url : meta.normalizedUrls) {
         searchParts << (url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyEncoded));
     }
+    // Include cached OCR text in the search index if available.
+    const OcrService::Result ocrResult = OcrService::readSidecar(filePath);
+    if (ocrResult.status == OcrService::Ready && !ocrResult.text.isEmpty()) {
+        searchParts << ocrResult.text;
+    }
     meta.searchableText = searchParts.join(QLatin1Char('\n')).toLower();
     return meta;
 }
@@ -87,27 +110,7 @@ bool indexedItemMatchesFilter(const ClipboardBoardService::IndexedItemMeta &item
     return item.searchableText.contains(keyword, Qt::CaseInsensitive) || matchedNames.contains(item.name);
 }
 
-QDateTime itemTimestampForFile(const QFileInfo &info) {
-    bool ok = false;
-    const qint64 epochMs = info.completeBaseName().toLongLong(&ok);
-    if (ok && epochMs > 0) {
-        const QDateTime parsed = QDateTime::fromMSecsSinceEpoch(epochMs);
-        if (parsed.isValid()) {
-            return parsed;
-        }
-    }
-    return info.lastModified();
-}
-
-bool isExpiredForCutoff(const QFileInfo &info, const QDateTime &cutoff) {
-    return cutoff.isValid() && itemTimestampForFile(info) < cutoff;
-}
-
-struct PendingItemProcessingResult {
-    QImage thumbnailImage;
-};
-
-} // namespace
+// --- Constructor / Destructor ---
 
 ClipboardBoardService::ClipboardBoardService(const QString &category, QObject *parent)
     : QObject(parent),
@@ -167,43 +170,7 @@ ClipboardBoardService::~ClipboardBoardService() {
     }
 }
 
-QThread *ClipboardBoardService::startTrackedThread(const std::function<void()> &task) {
-    QThread *thread = QThread::create([task]() {
-        task();
-    });
-
-    processingThreads_.append(thread);
-    connect(thread, &QThread::finished, this, [this, thread]() {
-        processingThreads_.removeAll(thread);
-    });
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    thread->start();
-    return thread;
-}
-
-void ClipboardBoardService::startThumbnailTask(const std::function<void()> &task) {
-    if (!thumbnailTaskPool_) {
-        task();
-        return;
-    }
-
-    thumbnailTaskPool_->start(QRunnable::create([task]() {
-        task();
-    }));
-}
-
-void ClipboardBoardService::trackExclusiveThread(QThread *thread, QThread **slot) {
-    if (!thread || !slot) {
-        return;
-    }
-
-    *slot = thread;
-    connect(thread, &QThread::finished, this, [slot, thread]() {
-        if (*slot == thread) {
-            *slot = nullptr;
-        }
-    });
-}
+// --- Simple accessors ---
 
 QString ClipboardBoardService::category() const {
     return category_;
@@ -228,6 +195,16 @@ bool ClipboardBoardService::hasPendingItems() const {
 bool ClipboardBoardService::deferredLoadActive() const {
     return deferredLoadActive_;
 }
+
+bool ClipboardBoardService::hasRecentInternalWrite() const {
+    return (QDateTime::currentMSecsSinceEpoch() - lastInternalWriteMs_) < 2000;
+}
+
+quint64 ClipboardBoardService::internalWriteGeneration() const {
+    return internalWriteGen_;
+}
+
+// --- Index management ---
 
 void ClipboardBoardService::applyPendingFileIndex(const QStringList &filePaths,
                                                   int initialBatchSize,
@@ -255,7 +232,10 @@ void ClipboardBoardService::refreshIndex() {
     indexedItems_.clear();
     indexedFilePaths_.clear();
     pendingLoadFilePaths_.clear();
-    failedFullLoadPaths_.clear();
+    {
+        QMutexLocker locker(&failedFullLoadMutex_);
+        failedFullLoadPaths_.clear();
+    }
     updateTotalItemCount(0);
     checkSaveDir();
     emit pendingCountChanged(0);
@@ -324,6 +304,8 @@ ClipboardBoardService::IncrementalSyncResult ClipboardBoardService::syncIndexInc
     return result;
 }
 
+// --- Loading / scheduling ---
+
 void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBatchSize) {
     if (deferredLoadTimer_) {
         deferredLoadTimer_->stop();
@@ -334,7 +316,10 @@ void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBat
     indexedItems_.clear();
     indexedFilePaths_.clear();
     pendingLoadFilePaths_.clear();
-    failedFullLoadPaths_.clear();
+    {
+        QMutexLocker locker(&failedFullLoadMutex_);
+        failedFullLoadPaths_.clear();
+    }
     updateTotalItemCount(0);
     emit pendingCountChanged(0);
     checkSaveDir();
@@ -343,94 +328,216 @@ void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBat
     const QString directory = saveDir();
     QPointer<ClipboardBoardService> guard(this);
     QThread *thread = startTrackedThread([guard, directory, initialBatchSize, deferredBatchSize, token]() {
-        QList<ClipboardBoardService::IndexedItemMeta> indexedItems;
-        QStringList filePaths;
         LocalSaver saver;
         QDir dir(directory);
-        const QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files);
-        indexedItems.reserve(fileInfos.size());
-        filePaths.reserve(fileInfos.size());
+        QFileInfoList fileInfos = dir.entryInfoList(QStringList() << "*.mpaste", QDir::Files);
+
+        // Sort by file modification time (newest first) so the first
+        // batch we stream back contains the most recent items — these
+        // are the ones the user sees on the first page.
+        std::sort(fileInfos.begin(), fileInfos.end(), [](const QFileInfo &a, const QFileInfo &b) {
+            return a.lastModified() > b.lastModified();
+        });
+
+        const int earlyBatchSize = qMax(1, initialBatchSize > 0 ? initialBatchSize : 24);
+        QList<ClipboardBoardService::IndexedItemMeta> earlyItems;
+        QStringList earlyPaths;
+        earlyItems.reserve(earlyBatchSize);
+        earlyPaths.reserve(earlyBatchSize);
+
+        QList<ClipboardBoardService::IndexedItemMeta> remainingItems;
+        QStringList remainingPaths;
+        remainingItems.reserve(qMax(0, fileInfos.size() - earlyBatchSize));
+        remainingPaths.reserve(qMax(0, fileInfos.size() - earlyBatchSize));
+
+        bool earlyBatchPosted = false;
+
         for (const QFileInfo &info : fileInfos) {
-            if (LocalSaver::isCurrentFormatFile(info.filePath())) {
-                const QString filePath = info.filePath();
-                ClipboardItem item = saver.loadFromFileLight(filePath);
-                if (item.getName().isEmpty()) {
-                    qWarning().noquote() << QStringLiteral("[board-service] skip unreadable history file during index build path=%1")
-                        .arg(filePath);
-                    continue;
+            if (!LocalSaver::isCurrentFormatFile(info.filePath())) {
+                continue;
+            }
+            const QString filePath = info.filePath();
+            ClipboardItem item = saver.loadFromFileLight(filePath);
+            if (item.getName().isEmpty()) {
+                qWarning().noquote() << QStringLiteral("[board-service] skip unreadable history file during index build path=%1")
+                    .arg(filePath);
+                continue;
+            }
+
+            if (!earlyBatchPosted) {
+                earlyPaths.append(filePath);
+                earlyItems.append(buildIndexedItemMeta(filePath, item));
+                if (earlyItems.size() >= earlyBatchSize) {
+                    earlyBatchPosted = true;
+                    // Sort early batch by header time for correct display order.
+                    QList<int> order(earlyItems.size());
+                    std::iota(order.begin(), order.end(), 0);
+                    std::sort(order.begin(), order.end(), [&](int a, int b) {
+                        return earlyItems[a].time > earlyItems[b].time;
+                    });
+                    QList<ClipboardBoardService::IndexedItemMeta> sortedEarly;
+                    QStringList sortedEarlyPaths;
+                    sortedEarly.reserve(earlyItems.size());
+                    sortedEarlyPaths.reserve(earlyPaths.size());
+                    for (int idx : order) {
+                        sortedEarly.append(earlyItems[idx]);
+                        sortedEarlyPaths.append(earlyPaths[idx]);
+                    }
+                    earlyItems = std::move(sortedEarly);
+                    earlyPaths = std::move(sortedEarlyPaths);
+
+                    // Post the early batch to the main thread immediately.
+                    if (guard) {
+                        QMetaObject::invokeMethod(guard.data(), [guard, earlyItems, earlyPaths, initialBatchSize, token]() {
+                            if (!guard || token != guard->asyncLoadToken_) {
+                                return;
+                            }
+                            // Preserve items added via saveItemQuiet() during
+                            // the async scan window.
+                            QList<IndexedItemMeta> locallyAdded;
+                            QStringList locallyAddedPaths;
+                            for (int i = 0; i < guard->indexedItems_.size(); ++i) {
+                                const QString &path = (i < guard->indexedFilePaths_.size())
+                                    ? guard->indexedFilePaths_.at(i)
+                                    : guard->indexedItems_.at(i).filePath;
+                                if (!earlyPaths.contains(path)) {
+                                    locallyAdded.append(guard->indexedItems_.at(i));
+                                    locallyAddedPaths.append(path);
+                                }
+                            }
+                            guard->indexedItems_ = earlyItems;
+                            guard->indexedFilePaths_ = earlyPaths;
+                            guard->pendingLoadFilePaths_ = earlyPaths;
+                            for (int i = locallyAdded.size() - 1; i >= 0; --i) {
+                                guard->indexedItems_.prepend(locallyAdded.at(i));
+                                guard->indexedFilePaths_.prepend(locallyAddedPaths.at(i));
+                            }
+                            guard->updateTotalItemCount(guard->indexedItems_.size());
+                            emit guard->pendingCountChanged(guard->pendingLoadFilePaths_.size());
+                            // Load the early batch into the model right away.
+                            guard->loadNextBatch(initialBatchSize > 0 ? initialBatchSize : earlyItems.size());
+                        }, Qt::QueuedConnection);
+                    }
                 }
-                filePaths.append(filePath);
-                indexedItems.append(buildIndexedItemMeta(filePath, item));
+            } else {
+                remainingPaths.append(filePath);
+                remainingItems.append(buildIndexedItemMeta(filePath, item));
             }
         }
-        // Sort by header time (newest first) instead of relying on
-        // filename order, so items display correctly even if the
-        // filename timestamp diverges from the stored time.
-        QList<int> order(indexedItems.size());
-        std::iota(order.begin(), order.end(), 0);
-        std::sort(order.begin(), order.end(), [&](int a, int b) {
-            return indexedItems[a].time > indexedItems[b].time;
-        });
-        {
-            QList<ClipboardBoardService::IndexedItemMeta> sortedItems;
-            QStringList sortedPaths;
-            sortedItems.reserve(indexedItems.size());
-            sortedPaths.reserve(filePaths.size());
+
+        // If total files were fewer than earlyBatchSize, the early batch
+        // was never posted — treat everything as the early batch.
+        if (!earlyBatchPosted) {
+            // Sort by header time.
+            QList<int> order(earlyItems.size());
+            std::iota(order.begin(), order.end(), 0);
+            std::sort(order.begin(), order.end(), [&](int a, int b) {
+                return earlyItems[a].time > earlyItems[b].time;
+            });
+            QList<ClipboardBoardService::IndexedItemMeta> sortedEarly;
+            QStringList sortedEarlyPaths;
+            sortedEarly.reserve(earlyItems.size());
+            sortedEarlyPaths.reserve(earlyPaths.size());
             for (int idx : order) {
-                sortedItems.append(indexedItems[idx]);
-                sortedPaths.append(filePaths[idx]);
+                sortedEarly.append(earlyItems[idx]);
+                sortedEarlyPaths.append(earlyPaths[idx]);
             }
-            indexedItems = std::move(sortedItems);
-            filePaths = std::move(sortedPaths);
+            earlyItems = std::move(sortedEarly);
+            earlyPaths = std::move(sortedEarlyPaths);
+        }
+
+        // Post the final result (early + remaining, fully sorted) to
+        // the main thread so the index is complete.
+        QList<ClipboardBoardService::IndexedItemMeta> allItems;
+        QStringList allPaths;
+        allItems.reserve(earlyItems.size() + remainingItems.size());
+        allPaths.reserve(earlyPaths.size() + remainingPaths.size());
+        allItems.append(earlyItems);
+        allItems.append(remainingItems);
+        allPaths.append(earlyPaths);
+        allPaths.append(remainingPaths);
+
+        // Final sort by header time across all items.
+        {
+            QList<int> order(allItems.size());
+            std::iota(order.begin(), order.end(), 0);
+            std::sort(order.begin(), order.end(), [&](int a, int b) {
+                return allItems[a].time > allItems[b].time;
+            });
+            QList<ClipboardBoardService::IndexedItemMeta> sorted;
+            QStringList sortedPaths;
+            sorted.reserve(allItems.size());
+            sortedPaths.reserve(allPaths.size());
+            for (int idx : order) {
+                sorted.append(allItems[idx]);
+                sortedPaths.append(allPaths[idx]);
+            }
+            allItems = std::move(sorted);
+            allPaths = std::move(sortedPaths);
         }
 
         if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, indexedItems, filePaths, initialBatchSize, deferredBatchSize, token]() {
-                if (guard) {
-                    if (token != guard->asyncLoadToken_) {
-                        return;
+            QMetaObject::invokeMethod(guard.data(), [guard, allItems, allPaths, earlyBatchPosted, earlyPaths, initialBatchSize, deferredBatchSize, token]() {
+                if (!guard || token != guard->asyncLoadToken_) {
+                    return;
+                }
+                // Preserve items added via saveItemQuiet() during the scan.
+                QList<IndexedItemMeta> locallyAdded;
+                QStringList locallyAddedPaths;
+                for (int i = 0; i < guard->indexedItems_.size(); ++i) {
+                    const QString &path = (i < guard->indexedFilePaths_.size())
+                        ? guard->indexedFilePaths_.at(i)
+                        : guard->indexedItems_.at(i).filePath;
+                    if (!allPaths.contains(path)) {
+                        locallyAdded.append(guard->indexedItems_.at(i));
+                        locallyAddedPaths.append(path);
                     }
-                    // Preserve items added via saveItemQuiet() during the
-                    // async scan window — the scan started before those
-                    // files were written, so they are missing from the
-                    // scan result.
-                    QList<IndexedItemMeta> locallyAdded;
-                    QStringList locallyAddedPaths;
-                    for (int i = 0; i < guard->indexedItems_.size(); ++i) {
-                        const QString &path = (i < guard->indexedFilePaths_.size())
-                            ? guard->indexedFilePaths_.at(i)
-                            : guard->indexedItems_.at(i).filePath;
-                        if (!filePaths.contains(path)) {
-                            locallyAdded.append(guard->indexedItems_.at(i));
-                            locallyAddedPaths.append(path);
+                }
+
+                // Replace index with the full scan result.
+                guard->indexedItems_ = allItems;
+                guard->indexedFilePaths_ = allPaths;
+
+                // Build pending list: exclude paths already loaded by
+                // the early batch.
+                if (earlyBatchPosted) {
+                    const QSet<QString> loadedSet(earlyPaths.begin(), earlyPaths.end());
+                    guard->pendingLoadFilePaths_.clear();
+                    for (const QString &path : allPaths) {
+                        if (!loadedSet.contains(path)) {
+                            guard->pendingLoadFilePaths_.append(path);
                         }
                     }
+                } else {
+                    guard->pendingLoadFilePaths_ = allPaths;
+                }
 
-                    guard->indexedItems_ = indexedItems;
-                    guard->indexedFilePaths_ = filePaths;
-                    guard->pendingLoadFilePaths_ = filePaths;
+                for (int i = locallyAdded.size() - 1; i >= 0; --i) {
+                    guard->indexedItems_.prepend(locallyAdded.at(i));
+                    guard->indexedFilePaths_.prepend(locallyAddedPaths.at(i));
+                }
+                guard->updateTotalItemCount(guard->indexedItems_.size());
+                emit guard->pendingCountChanged(guard->pendingLoadFilePaths_.size());
 
-                    // Re-insert locally added items at the front.
-                    for (int i = locallyAdded.size() - 1; i >= 0; --i) {
-                        guard->indexedItems_.prepend(locallyAdded.at(i));
-                        guard->indexedFilePaths_.prepend(locallyAddedPaths.at(i));
-                    }
-                    guard->updateTotalItemCount(guard->indexedItems_.size());
-                    emit guard->pendingCountChanged(guard->pendingLoadFilePaths_.size());
+                if (!earlyBatchPosted) {
+                    // Nothing was streamed yet — load the first batch now.
                     if (guard->pendingLoadFilePaths_.isEmpty()) {
                         guard->deferredLoadActive_ = false;
                         emit guard->deferredLoadCompleted();
                         return;
                     }
+                    guard->loadNextBatch(initialBatchSize > 0 ? initialBatchSize
+                                                              : qMax(1, deferredBatchSize));
+                }
+
+                if (guard->pendingLoadFilePaths_.isEmpty()) {
+                    guard->deferredLoadActive_ = false;
+                    emit guard->deferredLoadCompleted();
+                } else {
                     guard->deferredLoadActive_ = deferredBatchSize > 0;
                     guard->deferredBatchSize_ = qMax(1, deferredBatchSize);
-                    guard->loadNextBatch(initialBatchSize > 0 ? initialBatchSize
-                                                              : (guard->deferredBatchSize_ > 0 ? guard->deferredBatchSize_ : 1));
-                    if (guard->deferredLoadActive_ && !guard->pendingLoadFilePaths_.isEmpty() && guard->deferredLoadTimer_) {
+                    if (guard->deferredLoadActive_ && guard->deferredLoadTimer_) {
                         guard->deferredLoadTimer_->start(guard->visibleHint_ ? 0 : 8);
-                    } else if (guard->pendingLoadFilePaths_.isEmpty()) {
-                        guard->deferredLoadActive_ = false;
-                        emit guard->deferredLoadCompleted();
                     }
                 }
             }, Qt::QueuedConnection);
@@ -497,193 +604,7 @@ void ClipboardBoardService::setVisibleHint(bool visible) {
     visibleHint_ = visible;
 }
 
-ClipboardItem ClipboardBoardService::prepareItemForSave(const ClipboardItem &source) const {
-    return ThumbnailBuilder::prepareItemForDisplayAndSave(source);
-}
-
-void ClipboardBoardService::saveItem(const ClipboardItem &item) {
-    const bool isNew = saveItemInternal(item);
-    if (isNew) {
-        updateTotalItemCount(indexedItems_.size());
-    }
-    emit localPersistenceChanged();
-}
-
-void ClipboardBoardService::saveItemQuiet(const ClipboardItem &item) {
-    saveItemInternal(item);
-    // No signals — caller is responsible for keeping UI in sync.
-}
-
-void ClipboardBoardService::scheduleDeferredSave(const ClipboardItem &item) {
-    // Replace any pending save for the same item, keep only the latest.
-    for (int i = 0; i < pendingSaveQueue_.size(); ++i) {
-        if (pendingSaveQueue_[i].getName() == item.getName()) {
-            pendingSaveQueue_[i] = item;
-            deferredSaveTimer_->start();
-            return;
-        }
-    }
-    pendingSaveQueue_.append(item);
-    deferredSaveTimer_->start();
-}
-
-bool ClipboardBoardService::hasRecentInternalWrite() const {
-    return (QDateTime::currentMSecsSinceEpoch() - lastInternalWriteMs_) < 2000;
-}
-
-quint64 ClipboardBoardService::internalWriteGeneration() const {
-    return internalWriteGen_;
-}
-
-bool ClipboardBoardService::saveItemInternal(const ClipboardItem &item) {
-    lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
-    ++internalWriteGen_;
-    checkSaveDir();
-    const QString filePath = filePathForItem(item);
-    const bool knownPath = indexedFilePaths_.contains(filePath);
-    saver_->saveToFile(item, filePath);
-    ClipboardItem lightItem = saver_->loadFromFileLight(filePath);
-    if (!lightItem.getName().isEmpty()) {
-        const IndexedItemMeta meta = buildIndexedItemMeta(filePath, lightItem);
-        const int existingIndex = indexedFilePaths_.indexOf(filePath);
-        if (existingIndex >= 0 && existingIndex < indexedItems_.size()) {
-            indexedItems_[existingIndex] = meta;
-        } else if (!filePath.isEmpty()) {
-            indexedFilePaths_.prepend(filePath);
-            indexedItems_.prepend(meta);
-        }
-    }
-    return !knownPath && !filePath.isEmpty();
-}
-
-void ClipboardBoardService::removeItemFile(const QString &filePath) {
-    if (filePath.isEmpty()) {
-        return;
-    }
-    saver_->removeItem(filePath);
-    const int index = indexedFilePaths_.indexOf(filePath);
-    if (index >= 0) {
-        indexedFilePaths_.removeAt(index);
-        if (index < indexedItems_.size()) {
-            indexedItems_.removeAt(index);
-        }
-    }
-    pendingLoadFilePaths_.removeAll(filePath);
-    emit localPersistenceChanged();
-}
-
-void ClipboardBoardService::deleteItemByPath(const QString &filePath) {
-    deleteItemByPathInternal(filePath);
-    emit localPersistenceChanged();
-}
-
-void ClipboardBoardService::deleteItemByPathQuiet(const QString &filePath) {
-    deleteItemByPathInternal(filePath);
-}
-
-void ClipboardBoardService::deleteItemByPathInternal(const QString &filePath) {
-    if (filePath.isEmpty()) {
-        return;
-    }
-
-    lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
-    ++internalWriteGen_;
-    saver_->removeItem(filePath);
-    const int index = indexedFilePaths_.indexOf(filePath);
-    if (index >= 0) {
-        indexedFilePaths_.removeAt(index);
-        if (index < indexedItems_.size()) {
-            indexedItems_.removeAt(index);
-        }
-    }
-    const int pendingIndex = pendingLoadFilePaths_.indexOf(filePath);
-    if (pendingIndex >= 0) {
-        pendingLoadFilePaths_.removeAt(pendingIndex);
-    }
-    totalItemCount_ = qMax(0, totalItemCount_ - 1);
-}
-
-bool ClipboardBoardService::deletePendingItemByPath(const QString &filePath) {
-    if (filePath.isEmpty()) {
-        return false;
-    }
-
-    const int pendingIndex = pendingLoadFilePaths_.indexOf(filePath);
-    if (pendingIndex < 0) {
-        return false;
-    }
-
-    const int index = indexedFilePaths_.indexOf(filePath);
-    if (index >= 0) {
-        indexedFilePaths_.removeAt(index);
-        if (index < indexedItems_.size()) {
-            indexedItems_.removeAt(index);
-        }
-    }
-    pendingLoadFilePaths_.removeAt(pendingIndex);
-    saver_->removeItem(filePath);
-    emit localPersistenceChanged();
-    emit pendingCountChanged(pendingLoadFilePaths_.size());
-    decrementTotalItemCount();
-    return true;
-}
-
-QString ClipboardBoardService::filePathForItem(const ClipboardItem &item) const {
-    return filePathForName(item.getName());
-}
-
-QString ClipboardBoardService::filePathForName(const QString &name) const {
-    if (name.isEmpty()) {
-        return QString();
-    }
-    return QDir::cleanPath(saveDir() + QDir::separator() + name + ".mpaste");
-}
-
-ClipboardItem ClipboardBoardService::loadItemLight(const QString &filePath, bool includeThumbnail) {
-    return saver_->loadFromFileLight(filePath, includeThumbnail);
-}
-
-void ClipboardBoardService::refreshIndexedItemForPath(const QString &filePath) {
-    if (filePath.isEmpty()) {
-        return;
-    }
-
-    const int existingIndex = indexedFilePaths_.indexOf(filePath);
-    if (!QFileInfo::exists(filePath) || !LocalSaver::isCurrentFormatFile(filePath)) {
-        if (existingIndex >= 0) {
-            indexedFilePaths_.removeAt(existingIndex);
-            if (existingIndex < indexedItems_.size()) {
-                indexedItems_.removeAt(existingIndex);
-            }
-            updateTotalItemCount(indexedItems_.size());
-        }
-        emit localPersistenceChanged();
-        return;
-    }
-
-    ClipboardItem lightItem = saver_->loadFromFileLight(filePath);
-    if (lightItem.getName().isEmpty()) {
-        if (existingIndex >= 0) {
-            indexedFilePaths_.removeAt(existingIndex);
-            if (existingIndex < indexedItems_.size()) {
-                indexedItems_.removeAt(existingIndex);
-            }
-            updateTotalItemCount(indexedItems_.size());
-        }
-        emit localPersistenceChanged();
-        return;
-    }
-
-    const IndexedItemMeta meta = buildIndexedItemMeta(filePath, lightItem);
-    if (existingIndex >= 0 && existingIndex < indexedItems_.size()) {
-        indexedItems_[existingIndex] = meta;
-    } else {
-        indexedFilePaths_.prepend(filePath);
-        indexedItems_.prepend(meta);
-        updateTotalItemCount(indexedItems_.size());
-    }
-    emit localPersistenceChanged();
-}
+// --- Query methods ---
 
 int ClipboardBoardService::filteredItemCount(ContentType type,
                                              const QString &keyword,
@@ -791,6 +712,8 @@ bool ClipboardBoardService::containsFingerprint(const QByteArray &fingerprint) c
     return false;
 }
 
+// --- Index mutation ---
+
 void ClipboardBoardService::notifyItemAdded() {
     updateTotalItemCount(totalItemCount_ + 1);
 }
@@ -821,353 +744,71 @@ void ClipboardBoardService::updateIndexedItemTime(const QString &name, const QDa
     }
 }
 
-void ClipboardBoardService::trimExpiredPendingItems(const QDateTime &cutoff) {
-    Q_UNUSED(cutoff);
-    if (category_ == MPasteSettings::STAR_CATEGORY_NAME) {
-        return;
-    }
-}
-
-void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, const QString &expectedName) {
-    if (expectedName.isEmpty()) {
+void ClipboardBoardService::refreshIndexedItemForPath(const QString &filePath) {
+    if (filePath.isEmpty()) {
         return;
     }
 
-    const ContentType contentType = item.getContentType();
-    const ClipboardPreviewKind previewKind = item.getPreviewKind();
-    const ClipboardItem baseItem = item;
-    const QByteArray imageBytes = (contentType == Image
-            || contentType == Office
-            || (contentType == RichText && previewKind == VisualPreview))
-        ? item.imagePayloadBytesFast()
-        : QByteArray();
-    const QString richHtml = ((contentType == RichText && previewKind == VisualPreview)
-            || contentType == Office)
-        ? item.getHtml()
-        : QString();
-    const QSize imageSize = item.isMimeDataLoaded()
-        && (contentType == Image || contentType == Office)
-        ? item.getImagePixelSize()
-        : QSize();
-    const QString sourceFilePath = item.sourceFilePath();
-    const quint64 mimeOffset = item.mimeDataFileOffset();
-    const qreal thumbnailDpr = ThumbnailBuilder::maxScreenDevicePixelRatio();
-    const int itemScale = MPasteSettings::getInst()->getItemScale();
-
-    QPointer<ClipboardBoardService> guard(this);
-    startThumbnailTask([guard, expectedName, contentType, previewKind, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
-        PendingItemProcessingResult result;
-        QByteArray resolvedImageBytes = imageBytes;
-        QString resolvedHtml = richHtml;
-        if ((resolvedImageBytes.isEmpty() || resolvedHtml.isEmpty())
-            && !sourceFilePath.isEmpty()
-            && (contentType == Image
-                || contentType == Office
-                || (contentType == RichText && previewKind == VisualPreview))) {
-            QString htmlPayload;
-            QByteArray imagePayload;
-            LocalSaver::loadMimePayloads(sourceFilePath,
-                                         mimeOffset,
-                                         ((contentType == RichText && previewKind == VisualPreview)
-                                             || contentType == Office) ? &htmlPayload : nullptr,
-                                         (contentType == Image
-                                            || contentType == Office
-                                            || (contentType == RichText && previewKind == VisualPreview)) ? &imagePayload : nullptr);
-            if (resolvedHtml.isEmpty()) {
-                resolvedHtml = htmlPayload;
+    const int existingIndex = indexedFilePaths_.indexOf(filePath);
+    if (!QFileInfo::exists(filePath) || !LocalSaver::isCurrentFormatFile(filePath)) {
+        if (existingIndex >= 0) {
+            indexedFilePaths_.removeAt(existingIndex);
+            if (existingIndex < indexedItems_.size()) {
+                indexedItems_.removeAt(existingIndex);
             }
-            if (resolvedImageBytes.isEmpty()) {
-                resolvedImageBytes = imagePayload;
-            }
+            updateTotalItemCount(indexedItems_.size());
         }
-
-        if ((contentType == Image || contentType == Office)
-            && !resolvedImageBytes.isEmpty()) {
-            result.thumbnailImage = ThumbnailBuilder::buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr, itemScale);
-        } else if (contentType == Office
-                   && !resolvedHtml.isEmpty()) {
-            result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
-        } else if (contentType == RichText
-                   && previewKind == VisualPreview
-                   && !resolvedHtml.isEmpty()) {
-            result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
-        } else if (contentType == Link && !baseItem.hasThumbnail()) {
-            QString linkUrl;
-            const QList<QUrl> urls = baseItem.getNormalizedUrls();
-            if (!urls.isEmpty()) {
-                const QUrl &first = urls.first();
-                linkUrl = first.isLocalFile() ? first.toLocalFile() : first.toString();
-            } else {
-                linkUrl = baseItem.getNormalizedText().left(512).trimmed();
-            }
-            result.thumbnailImage = ThumbnailBuilder::buildLinkPreviewImage(linkUrl, baseItem.getTitle(), thumbnailDpr, itemScale);
-        }
-
-        // Save to disk in the worker thread.  Avoid QPixmap here — it
-        // requires the GUI thread and would block the main event loop.
-        QString savedFilePath;
-        {
-            if (guard) {
-                savedFilePath = guard->filePathForItem(baseItem);
-                LocalSaver saver;
-                saver.saveToFile(baseItem, savedFilePath, result.thumbnailImage);
-            }
-        }
-
-        if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, baseItem, result, thumbnailDpr, savedFilePath]() mutable {
-                if (!guard) {
-                    return;
-                }
-
-                ClipboardItem preparedItem = baseItem;
-                if (preparedItem.getName().isEmpty()) {
-                    return;
-                }
-
-                if (!result.thumbnailImage.isNull()) {
-                    QPixmap thumbnail = QPixmap::fromImage(result.thumbnailImage);
-                    thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
-                    preparedItem.setThumbnail(thumbnail);
-                    const QSize imageSize = preparedItem.getImagePixelSize();
-                    if (ThumbnailBuilder::isVeryTallImage(imageSize)) {
-                        qInfo().noquote() << QStringLiteral("[thumb-build] stage=ui name=%1 image=%2x%3 thumbPx=%4x%5 thumbLogical=%6x%7 thumbDpr=%8")
-                            .arg(expectedName)
-                            .arg(imageSize.width())
-                            .arg(imageSize.height())
-                            .arg(thumbnail.width())
-                            .arg(thumbnail.height())
-                            .arg(qRound(thumbnail.width() / qMax<qreal>(1.0, thumbnail.devicePixelRatio())))
-                            .arg(qRound(thumbnail.height() / qMax<qreal>(1.0, thumbnail.devicePixelRatio())))
-                            .arg(thumbnail.devicePixelRatio(), 0, 'f', 2);
-                    }
-                }
-
-                // Update the service index from the saved file (lightweight)
-                // and propagate sourceFilePath/mimeDataFileOffset so that
-                // preview can read image data from disk after mimeData_ is
-                // released.
-                if (!savedFilePath.isEmpty()) {
-                    LocalSaver indexSaver;
-                    ClipboardItem lightItem = indexSaver.loadFromFileLight(savedFilePath);
-                    if (!lightItem.getName().isEmpty()) {
-                        const IndexedItemMeta meta = buildIndexedItemMeta(savedFilePath, lightItem);
-                        const int existingIndex = guard->indexedFilePaths_.indexOf(savedFilePath);
-                        if (existingIndex >= 0 && existingIndex < guard->indexedItems_.size()) {
-                            guard->indexedItems_[existingIndex] = meta;
-                        } else {
-                            guard->indexedFilePaths_.prepend(savedFilePath);
-                            guard->indexedItems_.prepend(meta);
-                        }
-                        preparedItem.setSourceFilePath(savedFilePath);
-                        preparedItem.setMimeDataFileOffset(lightItem.mimeDataFileOffset());
-                    }
-                    guard->lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
-                    ++guard->internalWriteGen_;
-                }
-
-                emit guard->pendingItemReady(expectedName, preparedItem);
-            }, Qt::QueuedConnection);
-        }
-    });
-}
-
-void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, const QString &filePath) {
-    if (expectedName.isEmpty() || filePath.isEmpty()) {
+        emit localPersistenceChanged();
         return;
     }
 
-    QPointer<ClipboardBoardService> guard(this);
-    startThumbnailTask([guard, expectedName, filePath]() mutable {
-        LocalSaver saver;
-        ClipboardItem loaded = saver.loadFromFileLight(filePath);
-        ClipboardItem preparedItem = loaded;
-        bool generatedThumbnail = false;
-        bool refreshedRichText = false;
-        bool attemptedRebuild = false;
-        bool rebuildFailed = false;
-        bool loadedPersistedThumbnail = false;
-        const QString loadedNormalizedText = loaded.getNormalizedText();
-        if (!loaded.getName().isEmpty()) {
-            const ContentType type = loaded.getContentType();
-            if (loaded.hasThumbnailHint() && loaded.thumbnail().isNull()) {
-                ClipboardItem thumbnailItem = saver.loadFromFileLight(filePath, true);
-                if (!thumbnailItem.getName().isEmpty() && !thumbnailItem.thumbnail().isNull()) {
-                    preparedItem.setThumbnail(thumbnailItem.thumbnail());
-                    loadedPersistedThumbnail = true;
-                }
+    ClipboardItem lightItem = saver_->loadFromFileLight(filePath);
+    if (lightItem.getName().isEmpty()) {
+        if (existingIndex >= 0) {
+            indexedFilePaths_.removeAt(existingIndex);
+            if (existingIndex < indexedItems_.size()) {
+                indexedItems_.removeAt(existingIndex);
             }
-
-            const bool shouldRebuild =
-                (type == RichText && loaded.getPreviewKind() == VisualPreview)
-                || (preparedItem.thumbnail().isNull()
-                    && (type == Image
-                        || type == Office));
-            if (shouldRebuild && !(guard && guard->failedFullLoadPaths_.contains(filePath))) {
-                attemptedRebuild = true;
-                if (type == RichText) {
-                    QString htmlPayload;
-                    QByteArray imagePayload;
-                    if (LocalSaver::loadMimePayloads(filePath,
-                                                     loaded.mimeDataFileOffset(),
-                                                     &htmlPayload,
-                                                     &imagePayload)
-                        && !htmlPayload.isEmpty()) {
-                        const qreal thumbnailDpr = ThumbnailBuilder::maxScreenDevicePixelRatio();
-                        const int itemScale = MPasteSettings::getInst()->getItemScale();
-                        const QImage thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(htmlPayload,
-                                                                                          imagePayload,
-                                                                                          thumbnailDpr,
-                                                                                          itemScale);
-                        if (!thumbnailImage.isNull()) {
-                            QPixmap thumbnail = QPixmap::fromImage(thumbnailImage);
-                            thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
-                            preparedItem.setThumbnail(thumbnail);
-                            generatedThumbnail = preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
-                            refreshedRichText = true;
-                        }
-                    }
-
-                    if (!generatedThumbnail) {
-                        ClipboardItem fullItem = saver.loadFromFile(filePath);
-                        if (!fullItem.getName().isEmpty()) {
-                            preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
-                            generatedThumbnail = !preparedItem.thumbnail().isNull()
-                                && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
-                            refreshedRichText = !preparedItem.thumbnail().isNull();
-                        }
-                    }
-
-                    if (!generatedThumbnail && !refreshedRichText) {
-                        rebuildFailed = true;
-                    }
-                } else if (type == Office) {
-                    QString htmlPayload;
-                    QByteArray imagePayload;
-                    if (LocalSaver::loadMimePayloads(filePath,
-                                                     loaded.mimeDataFileOffset(),
-                                                     &htmlPayload,
-                                                     &imagePayload)) {
-                        const qreal thumbnailDpr = ThumbnailBuilder::maxScreenDevicePixelRatio();
-                        const int itemScale = MPasteSettings::getInst()->getItemScale();
-                        QImage thumbnailImage;
-                        if (!imagePayload.isEmpty()) {
-                            thumbnailImage = ThumbnailBuilder::buildCardThumbnailImageFromBytes(imagePayload,
-                                                                                                thumbnailDpr,
-                                                                                                itemScale);
-                        }
-                        if (thumbnailImage.isNull() && !htmlPayload.isEmpty()) {
-                            thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(htmlPayload,
-                                                                                                   imagePayload,
-                                                                                                   thumbnailDpr,
-                                                                                                   itemScale);
-                        }
-                        if (!thumbnailImage.isNull()) {
-                            QPixmap thumbnail = QPixmap::fromImage(thumbnailImage);
-                            thumbnail.setDevicePixelRatio(qMax<qreal>(1.0, thumbnailDpr));
-                            preparedItem.setThumbnail(thumbnail);
-                            generatedThumbnail = preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
-                            refreshedRichText = !preparedItem.thumbnail().isNull();
-                        }
-                    }
-
-                    if (!generatedThumbnail) {
-                        ClipboardItem fullItem = saver.loadFromFile(filePath);
-                        if (!fullItem.getName().isEmpty()) {
-                            preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
-                            generatedThumbnail = !preparedItem.thumbnail().isNull()
-                                && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
-                            refreshedRichText = !preparedItem.thumbnail().isNull();
-                        }
-                    }
-
-                    if (!generatedThumbnail && !refreshedRichText) {
-                        rebuildFailed = true;
-                    }
-                } else {
-                    ClipboardItem fullItem = saver.loadFromFile(filePath);
-                    if (!fullItem.getName().isEmpty()) {
-                        preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
-                        generatedThumbnail = !preparedItem.thumbnail().isNull()
-                            && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();
-                        refreshedRichText = type == RichText;
-                    } else {
-                        rebuildFailed = true;
-                    }
-                }
-            } else if (shouldRebuild) {
-                rebuildFailed = true;
-            }
+            updateTotalItemCount(indexedItems_.size());
         }
-        const QPixmap thumbnail = preparedItem.thumbnail();
-        const bool shouldPersistPreparedItem = generatedThumbnail
-            || (refreshedRichText && preparedItem.getNormalizedText() != loadedNormalizedText);
-        const bool noThumbnailProgress = attemptedRebuild
-            && thumbnail.isNull()
-            && !generatedThumbnail
-            && !refreshedRichText
-            && !loadedPersistedThumbnail;
-
-        if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, expectedName, filePath, preparedItem, thumbnail, generatedThumbnail, refreshedRichText, shouldPersistPreparedItem, rebuildFailed, noThumbnailProgress]() {
-                if (!guard) {
-                    return;
-                }
-                if (rebuildFailed && !filePath.isEmpty()) {
-                    guard->failedFullLoadPaths_.insert(filePath);
-                }
-                if ((generatedThumbnail || refreshedRichText) && !preparedItem.getName().isEmpty()) {
-                    // Emit the thumbnail immediately so the UI updates
-                    // without any disk I/O on the main thread.  Persist
-                    // the file later via a deferred call so the current
-                    // event-loop iteration stays responsive.
-                    emit guard->thumbnailReady(expectedName, thumbnail);
-                    if (shouldPersistPreparedItem) {
-                        guard->saveItemQuiet(preparedItem);
-                    }
-                    return;
-                }
-                if (rebuildFailed || noThumbnailProgress) {
-                    emit guard->thumbnailReady(expectedName, QPixmap());
-                    return;
-                }
-                emit guard->thumbnailReady(expectedName, thumbnail);
-            }, Qt::QueuedConnection);
-        }
-    });
-}
-
-void ClipboardBoardService::startAsyncKeywordSearch(const QList<QPair<QString, quint64>> &candidates,
-                                                    const QString &keyword,
-                                                    quint64 token) {
-    if (candidates.isEmpty() || keyword.isEmpty()) {
+        emit localPersistenceChanged();
         return;
     }
 
-    QPointer<ClipboardBoardService> guard(this);
-    QThread *thread = startTrackedThread([guard, candidates, keyword, token]() {
-        QSet<QString> matchedNames;
-        for (const auto &candidate : candidates) {
-            if (candidate.first.isEmpty()) {
-                continue;
-            }
-            if (LocalSaver::mimeSectionContainsKeyword(candidate.first, candidate.second, keyword)) {
-                const QFileInfo info(candidate.first);
-                matchedNames.insert(info.completeBaseName());
-            }
-        }
-
-        if (guard) {
-            QMetaObject::invokeMethod(guard.data(), [guard, matchedNames, token]() {
-                if (!guard) {
-                    return;
-                }
-                emit guard->keywordMatched(matchedNames, token);
-            }, Qt::QueuedConnection);
-        }
-    });
-    trackExclusiveThread(thread, &keywordSearchThread_);
+    const IndexedItemMeta meta = buildIndexedItemMeta(filePath, lightItem);
+    if (existingIndex >= 0 && existingIndex < indexedItems_.size()) {
+        indexedItems_[existingIndex] = meta;
+    } else {
+        indexedFilePaths_.prepend(filePath);
+        indexedItems_.prepend(meta);
+        updateTotalItemCount(indexedItems_.size());
+    }
+    emit localPersistenceChanged();
 }
+
+QStringList ClipboardBoardService::trimExpiredItems(const QDateTime &cutoff) {
+    if (category_ == MPasteSettings::STAR_CATEGORY_NAME || !cutoff.isValid()) {
+        return {};
+    }
+
+    QStringList removedPaths;
+    for (int i = indexedItems_.size() - 1; i >= 0; --i) {
+        const IndexedItemMeta &meta = indexedItems_.at(i);
+        if (meta.pinned) {
+            continue;
+        }
+        if (meta.time < cutoff) {
+            removedPaths << indexedFilePaths_.at(i);
+        }
+    }
+
+    for (const QString &path : removedPaths) {
+        deleteItemByPathInternal(path);
+    }
+    return removedPaths;
+}
+
+// --- Deferred load internals ---
 
 void ClipboardBoardService::continueDeferredLoad() {
     if (!deferredLoadActive_) {
@@ -1198,29 +839,6 @@ void ClipboardBoardService::handleDeferredBatchRead(const QList<QPair<QString, Q
     if (deferredLoadActive_ && !pendingLoadFilePaths_.isEmpty()) {
         scheduleDeferredLoadBatch();
     }
-}
-
-void ClipboardBoardService::checkSaveDir() {
-    QDir dir;
-    const QString path = QDir::cleanPath(saveDir());
-    if (!dir.exists(path)) {
-        dir.mkpath(path);
-    }
-}
-
-void ClipboardBoardService::updateTotalItemCount(int total) {
-    if (total == totalItemCount_) {
-        return;
-    }
-    totalItemCount_ = qMax(0, total);
-    emit totalItemCountChanged(totalItemCount_);
-}
-
-void ClipboardBoardService::decrementTotalItemCount() {
-    if (totalItemCount_ <= 0) {
-        return;
-    }
-    updateTotalItemCount(totalItemCount_ - 1);
 }
 
 void ClipboardBoardService::scheduleDeferredLoadBatch() {
@@ -1317,4 +935,29 @@ void ClipboardBoardService::waitForIndexRefresh() {
         indexRefreshThread_->wait();
         QCoreApplication::processEvents(QEventLoop::AllEvents);
     }
+}
+
+// --- Internal helpers ---
+
+void ClipboardBoardService::checkSaveDir() {
+    QDir dir;
+    const QString path = QDir::cleanPath(saveDir());
+    if (!dir.exists(path)) {
+        dir.mkpath(path);
+    }
+}
+
+void ClipboardBoardService::updateTotalItemCount(int total) {
+    if (total == totalItemCount_) {
+        return;
+    }
+    totalItemCount_ = qMax(0, total);
+    emit totalItemCountChanged(totalItemCount_);
+}
+
+void ClipboardBoardService::decrementTotalItemCount() {
+    if (totalItemCount_ <= 0) {
+        return;
+    }
+    updateTotalItemCount(totalItemCount_ - 1);
 }

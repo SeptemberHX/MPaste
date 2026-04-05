@@ -4,6 +4,22 @@
 // update: If I change, update this header block and my folder README.md.
 // note: Adds async thumbnail fetch for on-demand UI loading with bounded worker concurrency.
 //
+// Implementation split
+// --------------------
+// The implementation is spread across 3 .cpp files:
+//   - ClipboardBoardService.cpp    (core) — constructor, index management,
+//     loading/scheduling, query methods, deferred load internals.
+//   - ClipboardBoardServiceIO.cpp  (persistence) — save, delete, file
+//     paths, deferred save.  All disk write operations live here.
+//   - ClipboardBoardServiceAsync.cpp (background) — thumbnail processing,
+//     thumbnail fetch, keyword search, thread management.  All worker-
+//     thread creation lives here.
+//
+// When adding new functionality:
+//   - Disk I/O → IO file.
+//   - Background/async work → Async file.
+//   - Index queries or load scheduling → core file.
+//
 // Threading model
 // ---------------
 // Main-thread-only methods (called from the GUI/event-loop thread):
@@ -27,7 +43,7 @@
 // Fields accessed from worker threads:
 //   - category_ (immutable after construction -- safe).
 //   - failedFullLoadPaths_ (read from workers, written on main thread via
-//     invokeMethod callback -- benign race, worst case is a redundant rebuild).
+//     invokeMethod callback -- guarded by failedFullLoadMutex_).
 //
 // Cross-thread communication:
 //   All worker lambdas capture a QPointer<ClipboardBoardService> guard and
@@ -52,6 +68,7 @@
 #include <QStringList>
 #include <QObject>
 #include <QPixmap>
+#include <QMutex>
 #include <QReadWriteLock>
 
 #include <memory>
@@ -140,7 +157,7 @@ public:
     void notifyItemAdded();
     bool moveIndexedItemToFront(const QString &name);
     void updateIndexedItemTime(const QString &name, const QDateTime &time);
-    void trimExpiredPendingItems(const QDateTime &cutoff);
+    QStringList trimExpiredItems(const QDateTime &cutoff);
     void processPendingItemAsync(const ClipboardItem &item, const QString &expectedName);
     void requestThumbnailAsync(const QString &expectedName, const QString &filePath);
     void startAsyncKeywordSearch(const QList<QPair<QString, quint64>> &candidates,
@@ -186,6 +203,7 @@ private:
     QList<QThread *> processingThreads_;
     std::unique_ptr<QThreadPool> thumbnailTaskPool_;
     QSet<QString> failedFullLoadPaths_;
+    mutable QMutex failedFullLoadMutex_;
     mutable QReadWriteLock indexLock_;
     QList<IndexedItemMeta> indexedItems_;
     QStringList indexedFilePaths_;

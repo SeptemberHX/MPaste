@@ -6,7 +6,6 @@
 #include <QDir>
 #include <QFile>
 
-#include "data/LocalSaver.h"
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QItemSelectionModel>
@@ -32,7 +31,6 @@
 #include "ClipboardBoardProxyModel.h"
 #include "ClipboardBoardActionService.h"
 #include "ClipboardCardDelegate.h"
-#include "ClipboardItemRenameDialog.h"
 #include "CardMetrics.h"
 #include "ScrollItemsWidget.h"
 #include "ui_ScrollItemsWidget.h"
@@ -383,7 +381,6 @@ void ScrollItemsWidget::setCurrentProxyIndex(const QModelIndex &index) {
 }
 
 void ScrollItemsWidget::handleCurrentIndexChanged(const QModelIndex &current, const QModelIndex &previous) {
-    Q_UNUSED(current);
     Q_UNUSED(previous);
 
     ensureLinkPreviewForIndex(current);
@@ -392,68 +389,23 @@ void ScrollItemsWidget::handleCurrentIndexChanged(const QModelIndex &current, co
     }
 }
 
-void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
-    if (!boardModel_) {
-        return;
-    }
-    const int row = boardModel_->rowForName(item.getName());
-    if (row < 0) {
-        return;
-    }
-    ClipboardItemRenameDialog dialog(item.getAlias(), this);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-    ClipboardItem updated = boardModel_->itemAt(row);
-    updated.setAlias(dialog.alias());
-    boardModel_->updateItem(row, updated);
-    if (boardService_) {
-        ClipboardBoardActionService::persistItemMetadata(boardService_, boardModel_, row, updated);
-    }
-    emit aliasChanged(updated.fingerprint(), updated.getAlias());
-}
-
-void ScrollItemsWidget::setItemPinned(const ClipboardItem &item, bool pinned) {
-    if (!boardModel_) {
-        return;
-    }
-    const int row = boardModel_->rowForName(item.getName());
-    if (row < 0) {
-        return;
-    }
-
-    const ClipboardItem updated = boardModel_->itemAt(row);
-    if (updated.isPinned() == pinned) {
-        return;
-    }
-
-    if (shouldEvictPages()) {
-        ClipboardItem persisted = updated;
-        persisted.setPinned(pinned);
-        boardModel_->updateItem(row, persisted);
-        if (!ClipboardBoardActionService::persistItemMetadata(boardService_, boardModel_, row, persisted)) {
-            return;
-        }
-        loadedPage_ = -1;
-        loadedPageBaseOffset_ = -1;
-        loadedPageTotalItems_ = -1;
-        syncPageWindow(false);
-        refreshContentWidthHint();
-        updateHoverActionBar(currentProxyIndex());
-        return;
-    }
-
-    const int targetRow = pinned ? 0 : unpinnedInsertRowForItem(updated, row);
-    if (!ClipboardBoardActionService::applyPinnedState(boardModel_, boardService_, row, targetRow, pinned)) {
-        return;
-    }
-    const QModelIndex targetIndex = proxyIndexForSourceRow(targetRow);
-    setCurrentProxyIndex(targetIndex);
-    updateHoverActionBar(targetIndex);
-    refreshContentWidthHint();
-}
-
 void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex) {
+    // Debounce: during rapid arrow-key scrolling, defer the expensive
+    // OpenGraphFetcher creation until the user stops on an item.
+    pendingLinkPreviewIndex_ = QPersistentModelIndex(proxyIndex);
+    if (!linkPreviewDebounceTimer_) {
+        linkPreviewDebounceTimer_ = new QTimer(this);
+        linkPreviewDebounceTimer_->setSingleShot(true);
+        linkPreviewDebounceTimer_->setInterval(150);
+        connect(linkPreviewDebounceTimer_, &QTimer::timeout, this, [this]() {
+            if (!pendingLinkPreviewIndex_.isValid()) return;
+            executeLinkPreviewFetch(pendingLinkPreviewIndex_);
+        });
+    }
+    linkPreviewDebounceTimer_->start();
+}
+
+void ScrollItemsWidget::executeLinkPreviewFetch(const QModelIndex &proxyIndex) {
     if (!proxyModel_ || !boardModel_ || !proxyIndex.isValid()) {
         return;
     }
@@ -465,6 +417,10 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
 
     ClipboardItem item = boardModel_->itemAt(sourceRow);
     if (item.getContentType() != Link) {
+        return;
+    }
+    // Skip if we already have OG data (title or preview image).
+    if (!item.getTitle().isEmpty() || item.hasThumbnail()) {
         return;
     }
 
@@ -494,9 +450,12 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
     }
     pendingLinkPreviewUrls_.insert(requestKey);
 
-    const QByteArray fingerprint = item.fingerprint();
+    // Use item name instead of fingerprint for the callback lookup —
+    // fingerprint() computes SHA1 synchronously and adds ~15ms latency
+    // to arrow-key navigation.
+    const QString itemName = item.getName();
     auto *fetcher = new OpenGraphFetcher(url, this);
-    connect(fetcher, &OpenGraphFetcher::finished, this, [this, fetcher, requestKey, fingerprint, linkText](const OpenGraphItem &ogItem) {
+    connect(fetcher, &OpenGraphFetcher::finished, this, [this, fetcher, requestKey, itemName, linkText](const OpenGraphItem &ogItem) {
         pendingLinkPreviewUrls_.remove(requestKey);
         fetcher->deleteLater();
 
@@ -504,7 +463,7 @@ void ScrollItemsWidget::ensureLinkPreviewForIndex(const QModelIndex &proxyIndex)
             return;
         }
 
-        const int row = boardModel_->rowForFingerprint(fingerprint);
+        const int row = boardModel_->rowForName(itemName);
         if (row < 0) {
             return;
         }
@@ -718,138 +677,11 @@ void ScrollItemsWidget::setFirstVisibleItemSelected() {
     }
 }
 
-bool ScrollItemsWidget::filterShowsVisualPreviewCards() const {
-    return currentTypeFilter_ == All
-        || currentTypeFilter_ == Image
-        || currentTypeFilter_ == Link
-        || currentTypeFilter_ == Office
-        || currentTypeFilter_ == RichText;
-}
-
-bool ScrollItemsWidget::usesManagedVisualPreviewCard(const ClipboardItem &item) const {
-    const ContentType type = item.getContentType();
-    return type == Image
-        || type == Office
-        || (type == RichText && item.getPreviewKind() == VisualPreview);
-}
-
-ClipboardBoardModel::PreviewState ScrollItemsWidget::previewStateForItem(const ClipboardItem &item) const {
-    if (!usesManagedVisualPreviewCard(item)) {
-        return ClipboardBoardModel::PreviewNotApplicable;
-    }
-    if (item.hasThumbnail()) {
-        return ClipboardBoardModel::PreviewReady;
-    }
-    if (missingThumbnailNames_.contains(item.getName())) {
-        return ClipboardBoardModel::PreviewUnavailable;
-    }
-    return ClipboardBoardModel::PreviewLoading;
-}
-
-void ScrollItemsWidget::syncPreviewStateForRow(int row) {
-    if (!boardModel_ || row < 0) {
-        return;
-    }
-    boardModel_->setPreviewState(row, previewStateForItem(boardModel_->itemAt(row)));
-}
-
-void ScrollItemsWidget::syncPreviewStateForName(const QString &name) {
-    if (!boardModel_ || name.isEmpty()) {
-        return;
-    }
-    syncPreviewStateForRow(boardModel_->rowForName(name));
-}
-
-void ScrollItemsWidget::releaseManagedVisualThumbnailsFromModel() {
-    if (!boardModel_) {
-        return;
-    }
-
-    pendingThumbnailNames_.clear();
-    desiredThumbnailNames_.clear();
-    managedThumbnailNames_.clear();
-    visibleLoadingThumbnailNames_.clear();
-
-    const int rowCount = boardModel_->rowCount();
-    for (int row = 0; row < rowCount; ++row) {
-        ClipboardItem item = boardModel_->itemAt(row);
-        if (!usesManagedVisualPreviewCard(item)) {
-            continue;
-        }
-        if (item.hasThumbnail()) {
-            item.setThumbnail(QPixmap());
-            boardModel_->updateItem(row, item);
-        }
-        syncPreviewStateForRow(row);
-    }
-}
-
-
 void ScrollItemsWidget::updateSelectionState() {
     if (selectedItemCount() > 1) {
         hideHoverActionBar(false);
     }
     emit selectionStateChanged();
-}
-
-int ScrollItemsWidget::moveItemToFirst(int sourceRow) {
-    if (sourceRow < 0 || !boardModel_) {
-        return sourceRow;
-    }
-
-    ClipboardItem item = boardModel_->itemAt(sourceRow);
-    if (item.getName().isEmpty()) {
-        return sourceRow;
-    }
-
-    const int pinRow = pinnedInsertRow();
-    qInfo().noquote() << QStringLiteral("[moveItemToFirst] sourceRow=%1 name=%2 fp=%3 pinnedInsertRow=%4")
-        .arg(sourceRow).arg(item.getName()).arg(QString::fromLatin1(item.fingerprint().toHex().left(12))).arg(pinRow);
-
-    // Update the header timestamp in the .mpaste file so the item
-    // sorts first on restart (disk loading sorts by header time).
-    // No file rename needed — avoids filesystem events, index refresh
-    // cascades, and pagination reload conflicts.
-    if (boardService_ && !item.isPinned()) {
-        item.setTime(QDateTime::currentDateTime());
-        const QString filePath = item.sourceFilePath().isEmpty()
-            ? boardService_->filePathForName(item.getName())
-            : item.sourceFilePath();
-        if (!filePath.isEmpty()) {
-            LocalSaver saver;
-            saver.updateTimestamp(filePath, item.getTime(), item.getName());
-        }
-        boardModel_->updateItem(sourceRow, item);
-        if (cardDelegate_) {
-            cardDelegate_->invalidateCard(item.getName());
-        }
-        boardService_->updateIndexedItemTime(item.getName(), item.getTime());
-    }
-
-    // Move in model and service index.
-    const int targetRow = item.isPinned() ? 0 : pinnedInsertRow();
-    if (boardService_) {
-        boardService_->moveIndexedItemToFront(item.getName());
-    }
-    if (targetRow != sourceRow) {
-        boardModel_->moveItemToRow(sourceRow, targetRow);
-    }
-
-    if (shouldEvictPages() && currentPage_ != 0) {
-        currentPage_ = 0;
-        reloadCurrentPageItems(true);
-        syncPageWindow(true);
-        return 0;
-    }
-    if (paginationEnabled() && currentPage_ != 0) {
-        setCurrentPageNumber(1);
-    }
-
-    const QScrollBar *sb = horizontalScrollbar();
-    if (!sb || sb->value() <= sb->minimum()) {
-        setCurrentProxyIndex(proxyIndexForSourceRow(targetRow));
-    }
-    return targetRow;
 }
 
 void ScrollItemsWidget::animateScrollTo(int targetValue) {
@@ -910,13 +742,6 @@ void ScrollItemsWidget::maybeLoadMoreItems() {
             break;
         }
     }
-}
-
-void ScrollItemsWidget::trimExpiredItems() {
-    if (category == MPasteSettings::STAR_CATEGORY_NAME || !boardService_) {
-        return;
-    }
-    setFirstVisibleItemSelected();
 }
 
 void ScrollItemsWidget::prepareLoadFromSaveDir() {
@@ -989,218 +814,6 @@ void ScrollItemsWidget::updateLoadingOverlay() {
     }
 }
 
-void ScrollItemsWidget::scheduleThumbnailUpdate() {
-    // No-op: cardPixmapCache_ manages all rendering.
-}
-
-int ScrollItemsWidget::estimateVisibleCardCount() const {
-    if (!listView_) {
-        return 0;
-    }
-    const int gridWidth = qMax(1, listView_->gridSize().width());
-    int vpWidth = listView_->viewport() ? listView_->viewport()->width() : 0;
-    // When the window is hidden the viewport is tiny; fall back to
-    // primary screen width so startup pre-render covers enough cards.
-    if (vpWidth < gridWidth) {
-        if (QScreen *screen = QGuiApplication::primaryScreen()) {
-            vpWidth = screen->availableSize().width();
-        } else {
-            vpWidth = 1920;
-        }
-    }
-    return qMax(1, vpWidth / gridWidth + 2);
-}
-
-void ScrollItemsWidget::requestVisibleThumbnails() {
-    if (!boardService_ || !boardModel_ || !proxyModel_ || !listView_ || !isBoardUiVisible()) {
-        return;
-    }
-
-    const int proxyCount = proxyModel_->rowCount();
-    if (proxyCount <= 0) {
-        return;
-    }
-
-    const int visibleCount = estimateVisibleCardCount();
-    const QRect viewportRect = listView_->viewport()->rect();
-    const QModelIndex leftIndex = listView_->indexAt(QPoint(viewportRect.left() + 1, viewportRect.center().y()));
-    const int startRow = leftIndex.isValid() ? leftIndex.row() : 0;
-    const int endRow = qMin(proxyCount - 1, startRow + visibleCount - 1);
-
-    for (int proxyRow = startRow; proxyRow <= endRow; ++proxyRow) {
-        const QModelIndex proxyIndex = proxyModel_->index(proxyRow, 0);
-        const int sourceRow = sourceRowForProxyIndex(proxyIndex);
-        if (sourceRow < 0) {
-            continue;
-        }
-
-        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
-        if (!item || !shouldManageThumbnail(*item) || item->hasThumbnail() || !item->hasThumbnailHint()) {
-            continue;
-        }
-
-        const QString filePath = item->sourceFilePath().isEmpty()
-            ? boardService_->filePathForName(item->getName())
-            : item->sourceFilePath();
-        if (filePath.isEmpty()) {
-            missingThumbnailNames_.insert(item->getName());
-            syncPreviewStateForRow(sourceRow);
-            continue;
-        }
-
-        // Load thumbnails asynchronously so the showEvent path is not
-        // blocked by disk I/O.  Cards show a loading placeholder until
-        // the thumbnailReady signal delivers the pixmap.
-        desiredThumbnailNames_.insert(item->getName());
-        requestThumbnailForItem(*item);
-    }
-}
-
-bool ScrollItemsWidget::shouldManageThumbnail(const ClipboardItem &item) const {
-    const ContentType type = item.getContentType();
-    return type == Image
-        || type == Link
-        || type == Office
-        || (type == RichText && item.getPreviewKind() == VisualPreview);
-}
-
-void ScrollItemsWidget::requestThumbnailForItem(const ClipboardItem &item) {
-    if (!boardService_ || item.getName().isEmpty() || item.sourceFilePath().isEmpty()) {
-        return;
-    }
-    if (missingThumbnailNames_.contains(item.getName())) {
-        return;
-    }
-    if (pendingThumbnailNames_.contains(item.getName())) {
-        return;
-    }
-    pendingThumbnailNames_.insert(item.getName());
-    syncPreviewStateForName(item.getName());
-    boardService_->requestThumbnailAsync(item.getName(), item.sourceFilePath());
-}
-
-void ScrollItemsWidget::applyManagedThumbnailNames(const QSet<QString> &desiredNames) {
-    if (!boardModel_) {
-        managedThumbnailNames_.clear();
-        return;
-    }
-
-    QSet<QString> leavingNames = managedThumbnailNames_;
-    leavingNames.subtract(desiredNames);
-
-    for (const QString &name : leavingNames) {
-        const int row = boardModel_->rowForName(name);
-        if (row < 0) {
-            continue;
-        }
-        const ClipboardItem *item = boardModel_->itemPtrAt(row);
-        if (!item || !shouldManageThumbnail(*item) || !item->hasThumbnail() || item->sourceFilePath().isEmpty()) {
-            continue;
-        }
-        ClipboardItem updated = *item;
-        updated.setThumbnail(QPixmap());
-        boardModel_->updateItem(row, updated);
-    }
-
-    for (const QString &name : desiredNames) {
-        const int row = boardModel_->rowForName(name);
-        if (row < 0) {
-            continue;
-        }
-        const ClipboardItem *item = boardModel_->itemPtrAt(row);
-        if (item && shouldManageThumbnail(*item) && !item->hasThumbnail()) {
-            requestThumbnailForItem(*item);
-        }
-    }
-
-    managedThumbnailNames_ = desiredNames;
-    desiredThumbnailNames_ = desiredNames;
-}
-
-void ScrollItemsWidget::setVisibleLoadingThumbnailNames(const QSet<QString> &names) {
-    QSet<QString> changedNames = visibleLoadingThumbnailNames_;
-    changedNames.unite(names);
-    visibleLoadingThumbnailNames_ = names;
-    updateThumbnailViewport(changedNames);
-
-    if (!thumbnailPulseTimer_) {
-        return;
-    }
-
-    if (visibleLoadingThumbnailNames_.isEmpty()) {
-        thumbnailPulseTimer_->stop();
-        return;
-    }
-
-    if (!thumbnailPulseTimer_->isActive()) {
-        thumbnailPulseTimer_->start();
-    }
-}
-
-void ScrollItemsWidget::updateThumbnailViewport(const QSet<QString> &names) {
-    if (!listView_ || !boardModel_ || !proxyModel_ || names.isEmpty()) {
-        return;
-    }
-
-    QWidget *viewport = listView_->viewport();
-    if (!viewport) {
-        return;
-    }
-
-    const QRect viewportRect = viewport->rect();
-    for (const QString &name : names) {
-        const int sourceRow = boardModel_->rowForName(name);
-        if (sourceRow < 0) {
-            continue;
-        }
-
-        const QModelIndex proxyIndex = proxyIndexForSourceRow(sourceRow);
-        if (!proxyIndex.isValid()) {
-            continue;
-        }
-
-        const QRect rect = listView_->visualRect(proxyIndex);
-        if (!rect.isValid() || !viewportRect.intersects(rect)) {
-            continue;
-        }
-        viewport->update(rect.adjusted(-2, -2, 2, 2));
-    }
-}
-
-void ScrollItemsWidget::releaseItemPixmaps(int row) {
-    if (boardModel_) {
-        boardModel_->releaseItemPixmaps(row);
-    }
-}
-
-void ScrollItemsWidget::preRenderAndCleanup() {
-    if (!boardModel_ || !cardDelegate_ || !listView_ || !proxyModel_) {
-        return;
-    }
-
-    managedThumbnailNames_.clear();
-    cardDelegate_->clearIntermediateCaches();
-    setVisibleLoadingThumbnailNames({});
-}
-
-void ScrollItemsWidget::updateVisibleThumbnails() {
-    // No-op: cardPixmapCache_ holds all rendered cards.
-    // Intermediate data cleanup happens in preRenderAndCleanup().
-
-}
-
-void ScrollItemsWidget::updateContentWidthHint() {
-    if (!isBoardUiVisible()) {
-        return;
-    }
-    if (listView_) {
-        if (auto *boardView = dynamic_cast<ClipboardBoardView *>(listView_)) {
-            boardView->refreshItemGeometries();
-        }
-        listView_->viewport()->update();
-    }
-}
-
 void ScrollItemsWidget::updateEdgeFadeOverlays() {
     QWidget *viewport = listView_ ? listView_->viewport() : nullptr;
     QWidget *overlayHost = ui ? ui->viewHost : nullptr;
@@ -1250,6 +863,19 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
         return;
     }
 
+    // For Image/Office items, check the indexed searchableText
+    // (which includes OCR sidecar text) directly instead of
+    // reading MIME data from disk.
+    const QString lowerKeyword = currentKeyword_.toLower();
+    const auto &indexedMeta = boardService_->indexedItemsMeta();
+    for (const auto &meta : indexedMeta) {
+        if (meta.contentType == Image || meta.contentType == Office) {
+            if (meta.searchableText.contains(lowerKeyword)) {
+                asyncKeywordMatchedNames_.insert(meta.name);
+            }
+        }
+    }
+
     QList<QPair<QString, quint64>> candidates;
     const QList<ClipboardItem> items = boardModel_->items();
     for (const ClipboardItem &item : items) {
@@ -1266,6 +892,10 @@ void ScrollItemsWidget::startAsyncKeywordSearch() {
     }
 
     if (candidates.isEmpty()) {
+        // Still need to notify the proxy that matches changed.
+        if (filterProxyModel_) {
+            filterProxyModel_->setAsyncMatchedNames(asyncKeywordMatchedNames_);
+        }
         return;
     }
 
@@ -1364,169 +994,6 @@ bool ScrollItemsWidget::isBoardUiVisible() const {
         && listView_->viewport()->isVisible();
 }
 
-bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
-    int row = boardModel_->rowForMatchingItem(nItem);
-    if (row < 0) {
-        row = boardModel_->rowForFingerprint(nItem.fingerprint());
-    }
-
-    if (row >= 0) {
-        const ClipboardItem existingItem = boardModel_->itemAt(row);
-
-        // Detect whether the incoming copy carries better data than what
-        // is already stored (e.g. the existing item was saved with a bug
-        // that dropped MIME content, or the new copy has richer rich-text).
-        const bool richerIncomingRichText = nItem.getContentType() == RichText
-            && existingItem.getContentType() == RichText
-            && nItem.getNormalizedText().size() > existingItem.getNormalizedText().size();
-        const bool contentTypeUpgrade = nItem.getContentType() != existingItem.getContentType()
-            && existingItem.getContentType() == Text
-            && nItem.getContentType() != Text;
-        // Detect corrupted items: correct type but missing actual content
-        // (e.g. Image item saved without image data due to earlier bug).
-        const bool existingLacksContent = !existingItem.hasThumbnail()
-            && existingItem.getNormalizedText().trimmed().isEmpty()
-            && existingItem.getContentType() != Color;
-
-        if (richerIncomingRichText || contentTypeUpgrade || existingLacksContent) {
-            ClipboardItem updated = nItem;
-            updated.setPinned(existingItem.isPinned());
-            boardModel_->updateItem(row, updated);
-            syncPreviewStateForRow(row);
-            if (boardService_) {
-                boardService_->processPendingItemAsync(updated, updated.getName());
-            }
-        }
-        const bool alreadyFirst = (row == 0) && (currentPage_ == 0);
-        if (!alreadyFirst) {
-            moveItemToFirst(row);
-        }
-        return false;
-    }
-
-    const bool favorite = category == MPasteSettings::STAR_CATEGORY_NAME
-        || favoriteFingerprints_.contains(nItem.fingerprint());
-    const int insertRow = pinnedInsertRow();
-    boardModel_->insertItem(insertRow, nItem, favorite);
-
-    // Keep the model within PAGE_SIZE when pagination is active.
-    if (paginationEnabled() && boardModel_->rowCount() > PAGE_SIZE) {
-        boardModel_->removeItemAt(boardModel_->rowCount() - 1);
-    }
-
-    const QModelIndex firstProxyIndex = proxyIndexForSourceRow(insertRow);
-    // Only auto-select the new item if the user is already at the
-    // beginning.  Otherwise scrolling would jump back to the start
-    // every time a clipboard capture arrives.
-    const QScrollBar *sb = horizontalScrollbar();
-    const bool atStart = !sb || sb->value() <= sb->minimum();
-    if (atStart) {
-        setCurrentProxyIndex(firstProxyIndex);
-    }
-    ensureLinkPreviewForIndex(firstProxyIndex);
-    scheduleThumbnailUpdate();
-
-    if (boardService_) {
-        if (!shouldEvictPages()) {
-            boardService_->notifyItemAdded();
-        }
-    }
-    trimExpiredItems();
-    refreshContentWidthHint();
-    emit itemCountChanged(itemCountForDisplay());
-    return true;
-}
-
-bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
-    // Fast duplicate check before any expensive preparation.
-    if (boardModel_) {
-        int existingRow = boardModel_->rowForMatchingItem(nItem);
-        if (existingRow < 0) {
-            existingRow = boardModel_->rowForFingerprint(nItem.fingerprint());
-        }
-        if (existingRow >= 0) {
-            // Delegate to addOneItem which handles update + moveToFirst.
-            addOneItem(nItem);
-            return false;
-        }
-    }
-
-    // Also check the on-disk index — during startup the model may not
-    // be fully loaded yet, so the model check above can miss duplicates.
-    // However, if the model doesn't have the item (existingRow < 0 above)
-    // but the on-disk index claims the fingerprint exists, the backing file
-    // may have been cleaned up.  In that case, re-add and re-save the item
-    // so it becomes visible again.
-    if (boardService_ && boardService_->containsFingerprint(nItem.fingerprint())) {
-        if (boardModel_ && boardModel_->rowForFingerprint(nItem.fingerprint()) >= 0) {
-            return false;
-        }
-        // Fingerprint in disk index but not in model — treat as new item.
-    }
-
-    // Add item to model immediately so the UI can display it right away.
-    const bool added = addOneItem(nItem);
-    ensureLinkPreviewForIndex(proxyIndexForSourceRow(0));
-    if (added && boardService_) {
-        // Save + thumbnail generation happen asynchronously to avoid
-        // blocking the UI with large items (e.g. Word documents).
-        boardService_->processPendingItemAsync(nItem, nItem.getName());
-
-        // Keep loaded-page bookkeeping in sync.
-        if (paginationEnabled() && loadedPageTotalItems_ >= 0) {
-            loadedPageTotalItems_ = totalItemCountForPagination();
-        }
-    }
-    return added;
-}
-
-void ScrollItemsWidget::mergeDeferredMimeFormats(const QString &itemName, const QMap<QString, QByteArray> &extraFormats) {
-    if (!boardModel_ || itemName.isEmpty() || extraFormats.isEmpty()) {
-        return;
-    }
-
-    const int row = boardModel_->rowForName(itemName);
-    if (row < 0) {
-        // Item not in current model page — just save the extra formats to
-        // the item on disk via the board service so they are available when
-        // the user pastes.
-        if (boardService_) {
-            const QString filePath = boardService_->filePathForName(itemName);
-            ClipboardItem item = boardService_->loadItemLight(filePath, false);
-            if (!item.getName().isEmpty()) {
-                item.ensureMimeDataLoaded();
-                for (auto it = extraFormats.cbegin(); it != extraFormats.cend(); ++it) {
-                    item.setMimeFormat(it.key(), it.value());
-                }
-                item.reclassifyContentType();
-                boardService_->saveItemQuiet(item);
-            }
-        }
-        return;
-    }
-
-    ClipboardItem item = boardModel_->itemAt(row);
-    for (auto it = extraFormats.cbegin(); it != extraFormats.cend(); ++it) {
-        item.setMimeFormat(it.key(), it.value());
-    }
-
-    // Re-classify: the deferred formats may include Office-specific
-    // markers (e.g. PowerPoint Internal Shapes) that weren't available
-    // during the initial lightweight capture.
-    item.reclassifyContentType();
-
-    boardModel_->updateItem(row, item);
-    syncPreviewStateForRow(row);
-
-    if (cardDelegate_) {
-        cardDelegate_->invalidateCard(itemName);
-    }
-
-    if (boardService_) {
-        boardService_->saveItemQuiet(item);
-    }
-}
-
 void ScrollItemsWidget::filterByKeyword(const QString &keyword) {
     currentKeyword_ = keyword;
     ++keywordSearchToken_;
@@ -1603,56 +1070,6 @@ QList<QModelIndex> ScrollItemsWidget::shortcutVisibleIndexes() const {
     }
 
     return result;
-}
-
-int ScrollItemsWidget::pinnedInsertRow() const {
-    if (!boardModel_) {
-        return 0;
-    }
-    const int rowCount = boardModel_->rowCount();
-    for (int row = 0; row < rowCount; ++row) {
-        const ClipboardItem *item = boardModel_->itemPtrAt(row);
-        if (!item || !item->isPinned()) {
-            return row;
-        }
-    }
-    return rowCount;
-}
-
-int ScrollItemsWidget::unpinnedInsertRowForItem(const ClipboardItem &item, int excludeRow) const {
-    if (!boardModel_) {
-        return 0;
-    }
-    const QDateTime targetTime = item.getTime();
-    const int rowCount = boardModel_->rowCount();
-    int pinnedCount = 0;
-    int insertRow = rowCount;
-
-    for (int row = 0; row < rowCount; ++row) {
-        if (row == excludeRow) {
-            continue;
-        }
-        const ClipboardItem *candidate = boardModel_->itemPtrAt(row);
-        if (!candidate) {
-            continue;
-        }
-        if (candidate->isPinned()) {
-            ++pinnedCount;
-            continue;
-        }
-        if (!targetTime.isValid() || !candidate->getTime().isValid()) {
-            continue;
-        }
-        if (targetTime >= candidate->getTime()) {
-            insertRow = row;
-            break;
-        }
-    }
-
-    if (insertRow < pinnedCount) {
-        insertRow = pinnedCount;
-    }
-    return insertRow;
 }
 
 void ScrollItemsWidget::setShortcutInfo() {
@@ -1977,25 +1394,6 @@ void ScrollItemsWidget::setFavoriteFingerprints(const QSet<QByteArray> &fingerpr
     }
 }
 
-void ScrollItemsWidget::moveSelectedToFirst() {
-    const int sourceRow = selectedSourceRow();
-    if (sourceRow >= 0) {
-        moveItemToFirst(sourceRow);
-    }
-}
-
-void ScrollItemsWidget::moveItemByNameToFirst(const QString &itemName) {
-    if (itemName.isEmpty() || !boardModel_) {
-        return;
-    }
-    const int row = boardModel_->rowForName(itemName);
-    qInfo().noquote() << QStringLiteral("[move-by-name] name=%1 foundRow=%2 rowCount=%3")
-        .arg(itemName).arg(row).arg(boardModel_->rowCount());
-    if (row >= 0) {
-        moveItemToFirst(row);
-    }
-}
-
 void ScrollItemsWidget::scrollToFirst() {
     if (!proxyModel_) {
         return;
@@ -2024,118 +1422,6 @@ void ScrollItemsWidget::scrollToLast() {
 
 QString ScrollItemsWidget::getCategory() const {
     return category;
-}
-
-void ScrollItemsWidget::removeItems(const QList<ClipboardItem> &items) {
-    if (!boardModel_ || items.isEmpty()) {
-        return;
-    }
-
-    for (const ClipboardItem &item : items) {
-        if (item.getName().isEmpty()) {
-            continue;
-        }
-        pendingThumbnailNames_.remove(item.getName());
-        missingThumbnailNames_.remove(item.getName());
-        desiredThumbnailNames_.remove(item.getName());
-    }
-
-    const int removedCount = ClipboardBoardActionService::removeItems(boardService_, boardModel_, items);
-    if (removedCount <= 0) {
-        return;
-    }
-
-    syncPageWindow(true);
-    refreshContentWidthHint();
-    emit itemCountChanged(itemCountForDisplay());
-}
-
-void ScrollItemsWidget::applyFavoriteToItems(const QList<ClipboardItem> &items, bool favorite) {
-    if (!boardModel_ || items.isEmpty()) {
-        return;
-    }
-
-    for (const ClipboardItem &item : items) {
-        const QList<int> rows = ClipboardBoardActionService::resolveRowsForItems(boardModel_, {item});
-        const int row = rows.isEmpty() ? -1 : rows.first();
-        if (row < 0) {
-            continue;
-        }
-
-        const ClipboardItem currentItem = boardModel_->itemAt(row);
-        const bool isFavorite = boardModel_->isFavorite(row);
-        if (isFavorite == favorite) {
-            continue;
-        }
-
-        setItemFavorite(currentItem, favorite);
-        if (favorite) {
-            emit itemStared(currentItem);
-        } else {
-            emit itemUnstared(currentItem);
-        }
-    }
-}
-
-void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
-    if (!item.getName().isEmpty()) {
-        pendingThumbnailNames_.remove(item.getName());
-        missingThumbnailNames_.remove(item.getName());
-        desiredThumbnailNames_.remove(item.getName());
-    }
-
-    // Remember the position so we can select the next item after removal.
-    const int rowBefore = boardModel_ ? boardModel_->rowForName(item.getName()) : -1;
-
-    if (ClipboardBoardActionService::removeItem(boardService_, boardModel_, item)) {
-        // Select the item that now occupies the deleted position (i.e. the
-        // next item), or the last item if we deleted the tail.
-        if (boardModel_ && rowBefore >= 0) {
-            const int nextRow = qMin(rowBefore, boardModel_->rowCount() - 1);
-            if (nextRow >= 0) {
-                setCurrentProxyIndex(proxyIndexForSourceRow(nextRow));
-            }
-        }
-
-        if (paginationEnabled() && loadedPageTotalItems_ > 0) {
-            loadedPageTotalItems_ = totalItemCountForPagination();
-        }
-        refreshContentWidthHint();
-        emit itemCountChanged(itemCountForDisplay());
-        emit pageStateChanged(currentPageNumber(), totalPageCount());
-    }
-}
-
-void ScrollItemsWidget::setItemFavorite(const ClipboardItem &item, bool favorite) {
-    if (favorite) {
-        favoriteFingerprints_.insert(item.fingerprint());
-    } else {
-        favoriteFingerprints_.remove(item.fingerprint());
-    }
-    ClipboardBoardActionService::setFavorite(boardModel_, item, favorite);
-}
-
-void ScrollItemsWidget::syncAlias(const QByteArray &fingerprint, const QString &alias) {
-    if (!boardModel_ || fingerprint.isEmpty()) {
-        return;
-    }
-
-    const int rowCount = boardModel_->rowCount();
-    for (int row = 0; row < rowCount; ++row) {
-        const ClipboardItem *item = boardModel_->itemPtrAt(row);
-        if (!item || item->fingerprint() != fingerprint) {
-            continue;
-        }
-        ClipboardItem updated = boardModel_->itemAt(row);
-        if (updated.getAlias() == alias) {
-            continue;
-        }
-        updated.setAlias(alias);
-        boardModel_->updateItem(row, updated);
-        if (boardService_) {
-            ClipboardBoardActionService::persistItemMetadata(boardService_, boardModel_, row, updated);
-        }
-    }
 }
 
 QList<ClipboardItem> ScrollItemsWidget::allItems() {

@@ -11,7 +11,9 @@
 #include <QHBoxLayout>
 #include <QMimeData>
 #include <QMenu>
+#include <QPointer>
 #include <QPropertyAnimation>
+#include <QSet>
 #include <QSystemTrayIcon>
 #include <QElapsedTimer>
 #include <QHideEvent>
@@ -19,18 +21,14 @@
 #include <QLabel>
 #include <QComboBox>
 
-#include "utils/ClipboardMonitor.h"
 #include "data/ClipboardItem.h"
-#include "data/LocalSaver.h"
 #include "AboutWidget.h"
 #include "ClipboardItemDetailsDialog.h"
 #include "ClipboardItemPreviewDialog.h"
 #include "MPasteSettingsWidget.h"
 #include "ScrollItemsWidget.h"
 
-class CopySoundPlayer;
-class SyncWatcher;
-class ClipboardPasteController;
+class ClipboardAppController;
 
 namespace Ui {
 class MPasteWidget;
@@ -58,8 +56,6 @@ signals:
     void shortcutChanged(const QString &newShortcut);
 
 private slots:
-    void clipboardActivityObserved(int wId);
-    void clipboardUpdated(const ClipboardItem &item, int wId);
     void updateItemCount(int itemCount);
     void hideAndPaste();
     void debugKeyState();
@@ -70,10 +66,8 @@ private:
     void initStyle();
     void initUI();
     void initSearchAnimations();
-    void initClipboard();
     void initShortcuts();
     void initSystemTray();
-    void initSound();
     void initMenu();
     void setupConnections();
     AboutWidget *ensureAboutWidget();
@@ -81,10 +75,8 @@ private:
     ClipboardItemPreviewDialog *ensurePreviewDialog();
     MPasteSettingsWidget *ensureSettingsWidget();
     void applyTheme(bool dark);
-    void loadFromSaveDir();
     void scheduleStartupWarmup();
     void reloadHistoryBoards();
-    void syncHistoryBoardsIncremental();
     void updatePageSelector();
     void updatePageSelectorStyle();
 
@@ -101,8 +93,8 @@ private:
     bool triggerShortcutPaste(int shortcutIndex, bool plainText);
 
     ScrollItemsWidget* currItemsWidget();
-    void setupSyncWatcher();
     void applyScale(int scale);
+    void showOcrResultDialog(const QString &text);
 
 private:
     struct {
@@ -139,20 +131,13 @@ private:
         QAction *quitAction = nullptr;
     } ui_;
 
-    struct {
-        ClipboardMonitor *monitor;
-        bool copiedWhenHide = false;
-    } clipboard_;
-
-    ClipboardPasteController *pasteController_ = nullptr;
-    SyncWatcher *syncWatcher_ = nullptr;
+    ClipboardAppController *controller_ = nullptr;
+    QPointer<QDialog> ocrLoadingDialog_;
 
     struct {
         bool startupWarmupScheduled = false;
         bool startupWarmupCompleted = false;
     } loading_;
-
-    CopySoundPlayer *copySoundPlayer_ = nullptr;
 
     struct {
         QList<int> numKeyList;

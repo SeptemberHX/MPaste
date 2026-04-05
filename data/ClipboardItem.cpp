@@ -5,10 +5,15 @@
 #include "ClipboardItem.h"
 #include "ClipboardItemUrlParser.h"
 #include "ClipboardItemImageDecoder.h"
+#include "LocalSaver.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QDir>
+#include <QFileInfo>
 #include <QRegularExpression>
+
+#include "utils/MPasteSettings.h"
 
 #include <algorithm>
 #include <cstring>
@@ -220,7 +225,9 @@ QString ClipboardItem::buildSearchableText() const {
 
 QByteArray ClipboardItem::buildFingerprint() const {
     QCryptographicHash hash(QCryptographicHash::Sha1);
-    hash.addData(QByteArray::number(static_cast<int>(getContentType())));
+    // NOTE: contentType is intentionally excluded from the fingerprint
+    // so that the same content produces the same hash regardless of
+    // how it is later classified (e.g. Text vs RichText).
 
     if (!mimeData_) {
         return hash.result();
@@ -600,8 +607,70 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
             }
         }
 
+        // Detect MathType / equation editors: set a descriptive title
+        // and use the MathML content as fallback text for preview.
+        // Qt on Windows wraps custom formats as
+        // application/x-qt-windows-mime;value="MathType EF", so check
+        // all format names for the keywords rather than exact matches.
+        bool isMathType = false;
+        QString mathmlFormat;
+        for (const QString &fmt : mimeData->formats()) {
+            const QString lower = fmt.toLower();
+            if (lower.contains(QStringLiteral("mathtype"))) {
+                isMathType = true;
+            }
+            if (lower.contains(QStringLiteral("mathml"))) {
+                isMathType = true;
+                if (mathmlFormat.isEmpty()) {
+                    mathmlFormat = fmt;
+                }
+            }
+        }
+        if (isMathType) {
+            item.title_ = QStringLiteral("MathType");
+            if (!mimeData->hasText()) {
+                QByteArray mathml;
+                if (!mathmlFormat.isEmpty()) {
+                    mathml = mimeData->data(mathmlFormat);
+                }
+                if (!mathml.isEmpty()) {
+                    // MathType may emit UTF-16LE (with or without BOM).
+                    // Detect by checking for a NUL byte in the first few
+                    // positions — UTF-8/ASCII never has NUL in valid XML.
+                    QString mathText;
+                    if (mathml.size() >= 2
+                        && (mathml.at(1) == '\0' || (static_cast<unsigned char>(mathml.at(0)) == 0xFF
+                                                     && static_cast<unsigned char>(mathml.at(1)) == 0xFE))) {
+                        mathText = QString::fromUtf16(
+                            reinterpret_cast<const char16_t *>(mathml.constData()),
+                            mathml.size() / 2);
+                    } else {
+                        mathText = QString::fromUtf8(mathml);
+                    }
+                    // Strip XML tags and MathType annotation blocks.
+                    static const QRegularExpression annotationRe(
+                        QStringLiteral("<annotation[^>]*>.*?</annotation>"),
+                        QRegularExpression::DotMatchesEverythingOption);
+                    mathText.remove(annotationRe);
+                    static const QRegularExpression xmlTagRe(QStringLiteral("<[^>]*>"));
+                    mathText.replace(xmlTagRe, QStringLiteral(" "));
+                    // Remove remaining invisible Unicode operators
+                    // (e.g. U+2061 function application, U+2062 invisible times).
+                    mathText.remove(QChar(0x2061));
+                    mathText.remove(QChar(0x2062));
+                    mathText.remove(QChar(0x2063));
+                    mathText.remove(QChar(0x2064));
+                    mathText = mathText.simplified();
+                    if (!mathText.isEmpty()) {
+                        item.mimeData_->setText(mathText);
+                    }
+                }
+            }
+        }
+
         // Capture image payload: try fast raw bytes first, fall back
         // to QVariant image decoding for screenshots.
+        bool capturedImage = false;
         QString imageFormat;
         const QByteArray imageBytes = ClipboardImageDecoder::extractFastImagePayloadBytes(mimeData, &imageFormat);
         if (!imageBytes.isEmpty()) {
@@ -609,9 +678,29 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
                 ? QStringLiteral("application/x-qt-image")
                 : imageFormat;
             item.mimeData_->setData(format, imageBytes);
+            capturedImage = true;
         } else if (mimeData->hasImage()) {
             const QPixmap pixmap = ClipboardImageDecoder::decodePixmapFromMimeData(mimeData);
             ClipboardImageDecoder::materializeCanonicalImage(item.mimeData_.data(), pixmap);
+            capturedImage = !pixmap.isNull();
+        }
+
+        // Fallback: try to render a Windows metafile (MetaFilePict / EMF)
+        // as an image.  This captures equation editors (MathType) and
+        // other OLE sources that only provide vector previews.
+        if (!capturedImage) {
+            const QVariant imgData = mimeData->imageData();
+            if (imgData.isValid()) {
+                QPixmap pixmap;
+                if (imgData.canConvert<QPixmap>()) {
+                    pixmap = qvariant_cast<QPixmap>(imgData);
+                } else if (imgData.canConvert<QImage>()) {
+                    pixmap = QPixmap::fromImage(qvariant_cast<QImage>(imgData));
+                }
+                if (!pixmap.isNull()) {
+                    ClipboardImageDecoder::materializeCanonicalImage(item.mimeData_.data(), pixmap);
+                }
+            }
         }
     }
     item.time_ = QDateTime::currentDateTime();
@@ -628,6 +717,43 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
                                                                item.hasFastImagePayload());
     item.mimeDataLoaded_ = false;
     return item;
+}
+
+// --- Rehydrate ---
+
+ClipboardItem ClipboardItem::rehydrate(const ClipboardItem &item) {
+    if (item.getName().isEmpty()) {
+        return {};
+    }
+    LocalSaver saver;
+    const QString sourceFilePath = item.sourceFilePath();
+    if (!sourceFilePath.isEmpty() && QFileInfo::exists(sourceFilePath)) {
+        ClipboardItem loaded = saver.loadFromFile(sourceFilePath);
+        if (!loaded.getName().isEmpty()) {
+            return loaded;
+        }
+    }
+    const QString rootDir = QDir::cleanPath(MPasteSettings::getInst()->getSaveDir());
+    if (rootDir.isEmpty()) {
+        return {};
+    }
+    const QStringList categories = {
+        MPasteSettings::STAR_CATEGORY_NAME,
+        MPasteSettings::CLIPBOARD_CATEGORY_NAME
+    };
+    for (const QString &category : categories) {
+        const QString filePath = QDir::cleanPath(rootDir + QDir::separator()
+                                                 + category + QDir::separator()
+                                                 + item.getName() + ".mpaste");
+        if (!QFileInfo::exists(filePath)) {
+            continue;
+        }
+        ClipboardItem loaded = saver.loadFromFile(filePath);
+        if (!loaded.getName().isEmpty()) {
+            return loaded;
+        }
+    }
+    return {};
 }
 
 // --- Search ---
@@ -738,7 +864,9 @@ bool ClipboardItem::shouldCopyLightMimeFormat(const QString &format) {
         || lower.contains(QStringLiteral("uri"))
         || lower.contains(QStringLiteral("descriptor"))
         || lower.contains(QStringLiteral("ksdocclipboard"))
-        || lower.contains(QStringLiteral("rich text"));
+        || lower.contains(QStringLiteral("rich text"))
+        || lower.contains(QStringLiteral("mathml"))
+        || lower.contains(QStringLiteral("mathtype"));
 }
 
 bool ClipboardItem::shouldCopyExtraMimeFormat(const QString &format) {
