@@ -19,5 +19,5 @@ void TextCardBody::paint(QPainter *painter, const CardBodyContext &ctx) const {
     CardRenderUtils::drawWrappedText(painter, textRect,
                                      CardRenderUtils::previewTextForCard(ctx.card),
                                      previewFont, ctx.bodyTextColor,
-                                     isCode ? 1.2 : 0);
+                                     1.2);
 }
