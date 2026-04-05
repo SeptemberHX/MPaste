@@ -21,18 +21,14 @@
 #include <QLabel>
 #include <QComboBox>
 
-#include "utils/ClipboardMonitor.h"
-#include "utils/OcrService.h"
 #include "data/ClipboardItem.h"
-#include "data/LocalSaver.h"
 #include "AboutWidget.h"
 #include "ClipboardItemDetailsDialog.h"
 #include "ClipboardItemPreviewDialog.h"
 #include "MPasteSettingsWidget.h"
 #include "ScrollItemsWidget.h"
 
-class CopySoundPlayer;
-class SyncWatcher;
+class ClipboardAppController;
 class ClipboardPasteController;
 
 namespace Ui {
@@ -61,8 +57,6 @@ signals:
     void shortcutChanged(const QString &newShortcut);
 
 private slots:
-    void clipboardActivityObserved(int wId);
-    void clipboardUpdated(const ClipboardItem &item, int wId);
     void updateItemCount(int itemCount);
     void hideAndPaste();
     void debugKeyState();
@@ -73,10 +67,8 @@ private:
     void initStyle();
     void initUI();
     void initSearchAnimations();
-    void initClipboard();
     void initShortcuts();
     void initSystemTray();
-    void initSound();
     void initMenu();
     void setupConnections();
     AboutWidget *ensureAboutWidget();
@@ -84,10 +76,8 @@ private:
     ClipboardItemPreviewDialog *ensurePreviewDialog();
     MPasteSettingsWidget *ensureSettingsWidget();
     void applyTheme(bool dark);
-    void loadFromSaveDir();
     void scheduleStartupWarmup();
     void reloadHistoryBoards();
-    void syncHistoryBoardsIncremental();
     void updatePageSelector();
     void updatePageSelectorStyle();
 
@@ -104,10 +94,7 @@ private:
     bool triggerShortcutPaste(int shortcutIndex, bool plainText);
 
     ScrollItemsWidget* currItemsWidget();
-    void setupSyncWatcher();
     void applyScale(int scale);
-    void ensureOcrService();
-    void showOcrResultDialog(const QString &text);
 
 private:
     struct {
@@ -144,23 +131,12 @@ private:
         QAction *quitAction = nullptr;
     } ui_;
 
-    struct {
-        ClipboardMonitor *monitor;
-        bool copiedWhenHide = false;
-    } clipboard_;
-
-    ClipboardPasteController *pasteController_ = nullptr;
-    SyncWatcher *syncWatcher_ = nullptr;
+    ClipboardAppController *controller_ = nullptr;
 
     struct {
         bool startupWarmupScheduled = false;
         bool startupWarmupCompleted = false;
     } loading_;
-
-    CopySoundPlayer *copySoundPlayer_ = nullptr;
-    OcrService *ocrService_ = nullptr;
-    QPointer<QDialog> ocrLoadingDialog_;
-    QSet<QString> manualOcrItems_;
 
     struct {
         QList<int> numKeyList;

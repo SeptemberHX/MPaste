@@ -636,6 +636,15 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
         thumbnail.setDevicePixelRatio(thumbnailOverride.devicePixelRatio());
     } else if (item.hasThumbnail()) {
         thumbnail = item.thumbnail();
+        // If the thumbnail is much larger than the card preview area
+        // (e.g. a raw OG image), scale it down with cover-crop to
+        // avoid saving an oversized pixmap that renders incorrectly.
+        const qreal dpr = maxThumbnailDevicePixelRatio();
+        const QSize maxPixelSize = QSize(kCardPreviewWidth, kCardPreviewHeight) * dpr;
+        if (thumbnail.width() > maxPixelSize.width() * 1.5
+            || thumbnail.height() > maxPixelSize.height() * 1.5) {
+            thumbnail = buildCardThumbnailPixmap(thumbnail);
+        }
     } else {
         QPixmap fullImage = item.getImage();
         if (!fullImage.isNull()) {

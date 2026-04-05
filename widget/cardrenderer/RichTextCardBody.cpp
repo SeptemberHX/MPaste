@@ -34,6 +34,6 @@ void RichTextCardBody::paint(QPainter *painter, const CardBodyContext &ctx) cons
         CardRenderUtils::drawWrappedText(painter, textRect,
                                          CardRenderUtils::previewTextForCard(ctx.card),
                                          previewFont, ctx.bodyTextColor,
-                                         isCode ? 1.2 : 0);
+                                         isCode ? 1.2 : 1.1);
     }
 }
