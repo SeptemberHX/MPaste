@@ -225,7 +225,7 @@ private:
     QSet<QByteArray> favoriteFingerprints_;
     QSet<QString> pendingLinkPreviewUrls_;
     QTimer *linkPreviewDebounceTimer_ = nullptr;
-    QModelIndex pendingLinkPreviewIndex_;
+    QPersistentModelIndex pendingLinkPreviewIndex_;
     QSet<QString> pendingThumbnailNames_;
     QSet<QString> missingThumbnailNames_;
     QSet<QString> desiredThumbnailNames_;
