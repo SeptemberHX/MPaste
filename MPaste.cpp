@@ -10,6 +10,11 @@
 #include <qsurfaceformat.h>
 #include <QTimer>
 #include <QShowEvent>
+#include <QFile>
+#include <QDir>
+#include <QDateTime>
+#include <QMutex>
+#include <QTextStream>
 
 #include "utils/MPasteSettings.h"
 #include "widget/MPasteWidget.h"
@@ -82,6 +87,63 @@ void runAfterAltReleased(QObject *context, Func &&func, int intervalMs = 10, int
 }
 #endif
 
+namespace {
+QFile *g_logFile = nullptr;
+QMutex g_logMutex;
+
+void mpasteMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+    Q_UNUSED(context);
+    const char *level = "INFO";
+    switch (type) {
+        case QtDebugMsg:    level = "DEBUG"; break;
+        case QtInfoMsg:     level = "INFO";  break;
+        case QtWarningMsg:  level = "WARN";  break;
+        case QtCriticalMsg: level = "ERROR"; break;
+        case QtFatalMsg:    level = "FATAL"; break;
+    }
+    const QString line = QStringLiteral("%1 [%2] %3\n")
+        .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz")))
+        .arg(QString::fromLatin1(level))
+        .arg(msg);
+
+    QMutexLocker locker(&g_logMutex);
+    if (g_logFile && g_logFile->isOpen()) {
+        g_logFile->write(line.toUtf8());
+        g_logFile->flush();
+    }
+    // Also echo to stderr (visible when launched from a console).
+    fputs(line.toUtf8().constData(), stderr);
+
+    if (type == QtFatalMsg) {
+        abort();
+    }
+}
+
+void installFileLogger() {
+    const QString dirPath = QDir::homePath() + QDir::separator() + QStringLiteral(".MPaste");
+    QDir().mkpath(dirPath);
+    const QString logPath = dirPath + QDir::separator() + QStringLiteral("MPaste.log");
+
+    // Rotate if larger than 5 MB to keep the file bounded.
+    QFileInfo info(logPath);
+    if (info.exists() && info.size() > 5 * 1024 * 1024) {
+        const QString rotated = logPath + QStringLiteral(".1");
+        QFile::remove(rotated);
+        QFile::rename(logPath, rotated);
+    }
+
+    g_logFile = new QFile(logPath);
+    if (!g_logFile->open(QIODevice::Append | QIODevice::Text)) {
+        delete g_logFile;
+        g_logFile = nullptr;
+        return;
+    }
+    qInstallMessageHandler(mpasteMessageHandler);
+    qInfo().noquote() << QStringLiteral("=== MPaste log opened at %1 ===")
+        .arg(QDateTime::currentDateTime().toString(Qt::ISODate));
+}
+}  // namespace
+
 void configureOpenGLBackend() {
     const QString backend = qEnvironmentVariable("MPASTE_OPENGL_BACKEND").trimmed().toLower();
 
@@ -110,6 +172,7 @@ void configureOpenGLBackend() {
 }
 
 int main(int argc, char* argv[]) {
+    installFileLogger();
     configureOpenGLBackend();
 
     QSurfaceFormat format;

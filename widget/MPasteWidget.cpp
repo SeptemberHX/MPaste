@@ -471,8 +471,12 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
 
 void MPasteWidget::hideAndPaste() {
     WId previousWId = PlatformRelated::previousActiveWindow();
+    qInfo().noquote() << QStringLiteral("[hide-and-paste] enter previousWId=%1 isVisible=%2")
+        .arg(reinterpret_cast<quintptr>(previousWId))
+        .arg(isVisible());
 
     hide();
+    qInfo().noquote() << QStringLiteral("[hide-and-paste] after hide() isVisible=%1").arg(isVisible());
 
     controller_->pasteToTarget(previousWId);
 }

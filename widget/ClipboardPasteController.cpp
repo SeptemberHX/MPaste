@@ -207,7 +207,11 @@ void ClipboardPasteController::handleUrlsClipboard(QMimeData *mimeData, const Cl
 }
 
 void ClipboardPasteController::pasteToTarget(WId targetWindow) {
+    qInfo().noquote() << QStringLiteral("[paste-controller] pasteToTarget targetWindow=%1 isAutoPaste=%2")
+        .arg(reinterpret_cast<quintptr>(targetWindow))
+        .arg(MPasteSettings::getInst()->isAutoPaste());
     if (!MPasteSettings::getInst()->isAutoPaste()) {
+        qInfo() << "[paste-controller] auto-paste disabled, abort";
         return;
     }
 
@@ -215,6 +219,7 @@ void ClipboardPasteController::pasteToTarget(WId targetWindow) {
     emit pastingStarted();
 
     auto finishPaste = [this]() {
+        qInfo() << "[paste-controller] finishPaste -> triggerPasteShortcut";
         PlatformRelated::triggerPasteShortcut(MPasteSettings::getInst()->getPasteShortcutMode());
         QTimer::singleShot(200, this, [this]() {
             isPasting_ = false;
@@ -223,6 +228,8 @@ void ClipboardPasteController::pasteToTarget(WId targetWindow) {
     };
 
     auto restoreFocusAndPaste = [this, targetWindow, finishPaste]() {
+        qInfo().noquote() << QStringLiteral("[paste-controller] restoreFocusAndPaste targetWindow=%1")
+            .arg(reinterpret_cast<quintptr>(targetWindow));
         if (targetWindow) {
             PlatformRelated::activateWindow(targetWindow);
             QTimer::singleShot(100, this, finishPaste);
@@ -240,6 +247,8 @@ void ClipboardPasteController::pasteToTarget(WId targetWindow) {
         const bool altReleased = (GetAsyncKeyState(VK_MENU) & 0x8000) == 0;
         const bool timedOut = pollCount >= 50;
         if (altReleased || timedOut) {
+            qInfo().noquote() << QStringLiteral("[paste-controller] alt poll done released=%1 timedOut=%2 polls=%3")
+                .arg(altReleased).arg(timedOut).arg(pollCount);
             altReleaseTimer->stop();
             altReleaseTimer->deleteLater();
             restoreFocusAndPaste();

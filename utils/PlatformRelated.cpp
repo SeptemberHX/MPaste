@@ -365,7 +365,15 @@ void WinUtils::activeWindowWin32(HWND hwnd) {
     if (IsIconic(hwnd)) {
         ShowWindow(hwnd, SW_RESTORE);
     }
-    SetForegroundWindow(hwnd);
+    const BOOL sfg = SetForegroundWindow(hwnd);
+    const HWND afterFg = GetForegroundWindow();
+    char afterClass[256] = {0};
+    if (afterFg) GetClassNameA(afterFg, afterClass, sizeof(afterClass));
+    qInfo().noquote() << QStringLiteral("[platform-win] activeWindow target=%1 SetForegroundWindow=%2 currentFg=%3 fgClass=%4")
+        .arg(reinterpret_cast<quintptr>(hwnd))
+        .arg(sfg)
+        .arg(reinterpret_cast<quintptr>(afterFg))
+        .arg(QString::fromLatin1(afterClass));
     SetActiveWindow(hwnd);
 }
 
@@ -449,6 +457,23 @@ void WinUtils::triggerPasteShortcut(HWND hwnd, MPasteSettings::PasteShortcutMode
 
     const bool isTerminal = strcmp(className, "ConsoleWindowClass") == 0
         || strstr(className, "WindowsTerminal") != nullptr;
+
+    // If the user is still physically holding Alt when we get here (common
+    // on laptops where the key release lags past the 500ms poll window in
+    // ClipboardPasteController::pasteToTarget), the OS will merge our
+    // synthetic Ctrl+V with the held Alt into Ctrl+Alt+V, which most apps
+    // don't treat as paste. Synthesize a key-up for VK_MENU first so the
+    // OS sees Alt as released. Skip for Alt+Insert mode, which intentionally
+    // uses Alt as a modifier.
+    if (mode != MPasteSettings::AltInsertShortcut
+        && (GetAsyncKeyState(VK_MENU) & 0x8000)) {
+        INPUT altUp = {};
+        altUp.type = INPUT_KEYBOARD;
+        altUp.ki.wVk = VK_MENU;
+        altUp.ki.wScan = MapVirtualKey(VK_MENU, MAPVK_VK_TO_VSC);
+        altUp.ki.dwFlags = KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE;
+        SendInput(1, &altUp, sizeof(INPUT));
+    }
 
     switch (mode) {
         case MPasteSettings::AutoPasteShortcut:
