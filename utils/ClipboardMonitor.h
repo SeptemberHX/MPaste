@@ -53,6 +53,7 @@ private:
     void scheduleDeferredMimeCapture(const QString &itemName);
 
     static bool hasMeaningfulContent(const QMimeData *mimeData);
+    static QByteArray cheapMimeSignature(const QMimeData *mimeData);
     static bool looksLikeWpsStagedClipboard(const QMimeData *mimeData);
     static QUrl extractWpsSingleImageUrl(const QMimeData *mimeData);
     static QMimeData *cloneMimeData(const QMimeData *mimeData);
@@ -69,6 +70,7 @@ private:
     QByteArray lastCaptureKey_;
     qint64 lastCaptureAtMs_ = 0;
     int lastCaptureWindowId_ = 0;
+    QByteArray lastActivitySignature_;
 
     static const int STABILIZE_INTERVAL = 200;
     static const int MAX_RETRIES = 10;

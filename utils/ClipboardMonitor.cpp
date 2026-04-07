@@ -208,10 +208,22 @@ void ClipboardMonitor::beginClipboardCapture(bool emitActivitySignal) {
     if (emitActivitySignal) {
         const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
         if (hasMeaningfulContent(mimeData)) {
-            qInfo().noquote() << QStringLiteral("[clipboard-monitor] early activity signal token=%1 wId=%2")
-                .arg(captureToken_)
-                .arg(pendingWId_);
-            Q_EMIT clipboardActivityObserved(pendingWId_);
+            // Suppress when Windows re-fires dataChanged with identical
+            // content — e.g. Explorer flushing delayed-rendered formats on
+            // close. The later capture path would dedup the item itself, but
+            // the early-activity sound would already have played.
+            const QByteArray sig = cheapMimeSignature(mimeData);
+            if (!sig.isEmpty() && sig == lastActivitySignature_) {
+                qInfo().noquote() << QStringLiteral("[clipboard-monitor] suppress duplicate early activity token=%1 sig=%2")
+                    .arg(captureToken_)
+                    .arg(shortHex(sig));
+            } else {
+                lastActivitySignature_ = sig;
+                qInfo().noquote() << QStringLiteral("[clipboard-monitor] early activity signal token=%1 wId=%2")
+                    .arg(captureToken_)
+                    .arg(pendingWId_);
+                Q_EMIT clipboardActivityObserved(pendingWId_);
+            }
         }
     }
 }
@@ -362,6 +374,49 @@ bool ClipboardMonitor::hasMeaningfulContent(const QMimeData *mimeData) {
     }
 
     return hasContent;
+}
+
+
+QByteArray ClipboardMonitor::cheapMimeSignature(const QMimeData *mimeData) {
+    // Lightweight content signature derived directly from QMimeData, used to
+    // suppress duplicate "early activity" sounds when Windows re-fires
+    // dataChanged with identical content (e.g. Explorer flushing delayed-
+    // rendered formats on close). Must avoid expensive work like decoding
+    // image payloads — return empty for those cases so the sound still plays.
+    if (!mimeData) {
+        return {};
+    }
+
+    QCryptographicHash hash(QCryptographicHash::Sha1);
+
+    if (mimeData->hasUrls()) {
+        hash.addData(QByteArrayLiteral("urls\n"));
+        const QList<QUrl> urls = mimeData->urls();
+        for (const QUrl &url : urls) {
+            hash.addData(url.toString(QUrl::FullyEncoded).toUtf8());
+            hash.addData(QByteArrayLiteral("\n"));
+        }
+        return hash.result();
+    }
+
+    if (mimeData->hasText()) {
+        const QString text = mimeData->text();
+        if (!text.isEmpty()) {
+            hash.addData(QByteArrayLiteral("text\n"));
+            hash.addData(text.toUtf8());
+            return hash.result();
+        }
+    }
+
+    if (mimeData->hasColor()) {
+        hash.addData(QByteArrayLiteral("color\n"));
+        hash.addData(QByteArray::number(static_cast<quint32>(mimeData->colorData().value<QColor>().rgba())));
+        return hash.result();
+    }
+
+    // Image / OLE / vector payloads: skip the dedup (signature stays empty)
+    // rather than pay the cost of hashing raw image bytes here.
+    return {};
 }
 
 
