@@ -71,6 +71,8 @@ private:
     qint64 lastCaptureAtMs_ = 0;
     int lastCaptureWindowId_ = 0;
     QByteArray lastActivitySignature_;
+    bool capturing_ = false;
+    bool captureRestartPending_ = false;
 
     static const int STABILIZE_INTERVAL = 200;
     static const int MAX_RETRIES = 10;

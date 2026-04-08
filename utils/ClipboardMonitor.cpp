@@ -29,6 +29,7 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <ole2.h>
 #endif
 
 namespace {
@@ -192,6 +193,21 @@ static quint32 getClipboardSeqNumber() {
 }
 
 void ClipboardMonitor::beginClipboardCapture(bool emitActivitySignal) {
+    // Reentrancy guard: cross-process reads inside captureClipboard can
+    // pump the Windows message loop, which may deliver another WM_CLIPBOARD
+    // UPDATE and reenter this slot. If we let the new dataChanged run
+    // through to captureClipboard, Qt's QWindowsMimeRegistry will replace
+    // the underlying IDataObject while the outer capture is still iterating
+    // mimeData->formats(), producing a use-after-free inside heap routines
+    // like RtlGetUserInfoHeap. Instead, just flag that a re-capture is
+    // needed and let the outer capture finish cleanly.
+    if (capturing_) {
+        captureRestartPending_ = true;
+        qInfo().noquote() << QStringLiteral("[clipboard-monitor] reentry ignored; restart pending token=%1")
+            .arg(captureToken_);
+        return;
+    }
+
     pendingWId_ = PlatformRelated::currActiveWindow();
     lastSeqNumber_ = getClipboardSeqNumber();
     retryCount_ = 0;
@@ -262,6 +278,24 @@ void ClipboardMonitor::checkAndCapture() {
 }
 
 void ClipboardMonitor::captureClipboard() {
+    // Reentry guard — see beginClipboardCapture for rationale. We set the
+    // flag for the entire duration of the capture, and on exit consume any
+    // restart request that accumulated while we were reading.
+    struct CaptureScope {
+        ClipboardMonitor *self;
+        explicit CaptureScope(ClipboardMonitor *s) : self(s) { self->capturing_ = true; }
+        ~CaptureScope() {
+            self->capturing_ = false;
+            if (self->captureRestartPending_) {
+                self->captureRestartPending_ = false;
+                qInfo() << "[clipboard-monitor] consuming pending restart";
+                // Defer to the next event loop tick so we exit the current
+                // stack completely before re-entering the capture flow.
+                QTimer::singleShot(0, self, [s = self]() { s->beginClipboardCapture(false); });
+            }
+        }
+    } captureScope(this);
+
     const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
     qInfo().noquote() << QStringLiteral("[clipboard-monitor] mime snapshot token=%1 %2")
         .arg(captureToken_)
@@ -271,6 +305,33 @@ void ClipboardMonitor::captureClipboard() {
         qInfo().noquote() << QStringLiteral("[clipboard-monitor] ignore empty clipboard token=%1").arg(captureToken_);
         return;
     }
+
+#ifdef Q_OS_WIN
+    // If the clipboard carries delayed-rendered shell formats (Explorer file
+    // copies, Outlook attachments, archive files, OneDrive placeholders...),
+    // ask OLE to materialize them into the system clipboard right now. After
+    // OleFlushClipboard succeeds, the data is detached from the source
+    // process, so Qt's subsequent mimeData->data(format) calls won't crash
+    // even if the source dies (the laptop Explorer-close crash). We only do
+    // this when delayed formats are present, to avoid paying the cost on
+    // every plain text copy. Safe to call from any thread — OLE routes it to
+    // the current clipboard owner. If the owner set the clipboard with raw
+    // SetClipboardData (not OleSetClipboard), this is a no-op.
+    if (hasDeferrableMimeFormats(mimeData)) {
+        const HRESULT hr = OleFlushClipboard();
+        qInfo().noquote() << QStringLiteral("[clipboard-monitor] OleFlushClipboard token=%1 hr=0x%2")
+            .arg(captureToken_)
+            .arg(QString::number(static_cast<quint32>(hr), 16));
+        // After flushing, re-read the mimeData pointer — Qt caches the
+        // proxy and the underlying IDataObject has been replaced with a
+        // static snapshot.
+        mimeData = QGuiApplication::clipboard()->mimeData();
+        if (!mimeData || !hasMeaningfulContent(mimeData)) {
+            qWarning() << "[clipboard-monitor] mime data vanished after OleFlushClipboard";
+            return;
+        }
+    }
+#endif
 
     if (looksLikeWpsStagedClipboard(mimeData) && !wpsSettlePending_) {
         wpsSettlePending_ = true;

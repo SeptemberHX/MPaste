@@ -601,7 +601,12 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
             if (!shouldCopyLightMimeFormat(format)) {
                 continue;
             }
+            // Log before the cross-process read so the last-printed format
+            // on a crash tells us exactly which one tripped the UAF /
+            // dangling-IDataObject condition.
+            qInfo().noquote() << QStringLiteral("[clipboard-item] reading extra format: %1").arg(format);
             const QByteArray data = mimeData->data(format);
+            qInfo().noquote() << QStringLiteral("[clipboard-item] read ok %1 (%2 bytes)").arg(format).arg(data.size());
             if (!data.isEmpty()) {
                 item.mimeData_->setData(format, data);
             }
@@ -849,7 +854,14 @@ bool ClipboardItem::shouldCopyLightMimeFormat(const QString &format) {
         if (lower.contains(QStringLiteral("java_dataflavor"))
             || lower.contains(QStringLiteral("x-java-"))
             || lower.contains(QStringLiteral("chromium internal"))
-            || lower.contains(QStringLiteral("chromium web custom"))) {
+            || lower.contains(QStringLiteral("chromium web custom"))
+            // Windows Information Protection / Enterprise Data Protection
+            // policy tag. Reading it routes through a managed-device broker
+            // and crashes on machines under MDM/Intune policies (observed on
+            // enterprise-managed laptops: SIGSEGV deep inside
+            // RtlGetUserInfoHeap from mimeData->data()). The value is only a
+            // policy identifier, not paste content — dropping it is lossless.
+            || lower.contains(QStringLiteral("enterprisedataprotectionid"))) {
             return false;
         }
         // Preserve Windows clipboard formats (EMF/OLE/Office) so Office shapes remain editable.
