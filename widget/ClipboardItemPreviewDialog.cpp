@@ -279,7 +279,7 @@ PreviewPayload buildPreviewPayload(ContentType contentType,
                                    const QString &filePath,
                                    const QSize &targetSize,
                                    qreal devicePixelRatio,
-                                   bool isMathType) {
+                                   bool isEquation) {
     PreviewPayload payload;
 
     switch (contentType) {
@@ -305,11 +305,11 @@ PreviewPayload buildPreviewPayload(ContentType contentType,
             break;
         }
         case Office: {
-            // MathType items: skip the text/html fallback because their
-            // normalizedText is just a Unicode-stripped version of the
-            // MathML XML, which reads as gibberish. Show the rendered
-            // formula thumbnail instead.
-            if (isMathType && !fallbackImage.isNull()) {
+            // Equation items (MathType or Word/PowerPoint native): skip
+            // the text/html fallback because their normalizedText is just
+            // a Unicode-stripped version of the MathML XML, which reads
+            // as gibberish. Show the rendered formula thumbnail instead.
+            if (isEquation && !fallbackImage.isNull()) {
                 QImage image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
                 if (!image.isNull()) {
                     payload.kind = PreviewKind::Image;
@@ -570,13 +570,16 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     const QString sourceFilePath = item.sourceFilePath();
     const quint64 mimeOffset = item.mimeDataFileOffset();
     const bool preferFullItem = !sourceFilePath.isEmpty();
-    bool isMathType = item.getTitle() == QStringLiteral("MathType");
+    // Equation items all carry the "公式" title regardless of source
+    // (MathType, Word/PowerPoint native, ...). Both paths render through
+    // the MathML renderer in the preview dialog.
+    bool isEquation = (item.getTitle() == QStringLiteral("公式"));
 
-    // If MathType and we already have mime data in memory, snapshot the
-    // MathML bytes here so the worker thread can re-render at high
-    // resolution without paying for a disk full-load.
+    // If we already have mime data in memory, snapshot the MathML bytes
+    // here so the worker thread can re-render at high resolution without
+    // paying for a disk full-load.
     QByteArray mathmlBytes;
-    if (isMathType) {
+    if (isEquation) {
         if (const QMimeData *md = item.getMimeData()) {
             for (const QString &fmt : md->formats()) {
                 if (fmt.toLower().contains(QLatin1String("mathml"))) {
@@ -593,7 +596,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     const quint64 token = ++previewToken_;
 
     QPointer<ClipboardItemPreviewDialog> guard(this);
-    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, fallbackImage, filePath, sourceFilePath, mimeOffset, preferFullItem, targetSize, dpr, token, isMathType, mathmlBytes]() mutable {
+    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, fallbackImage, filePath, sourceFilePath, mimeOffset, preferFullItem, targetSize, dpr, token, isEquation, mathmlBytes]() mutable {
         ContentType resolvedType = contentType;
         QString resolvedText = normalizedText;
         QList<QUrl> resolvedUrls = normalizedUrls;
@@ -618,8 +621,8 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 if (lightItem.hasThumbnail()) {
                     resolvedFallbackImage = lightItem.thumbnail().toImage();
                 }
-                if (lightItem.getTitle() == QStringLiteral("MathType")) {
-                    isMathType = true;
+                if (lightItem.getTitle() == QStringLiteral("公式")) {
+                    isEquation = true;
                 }
             }
 
@@ -678,7 +681,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
         // 275×224 card thumbnail looks blurry. Try the in-memory snapshot
         // first; if absent (item only on disk), do a full load to fetch the
         // MathML format bytes.
-        if (isMathType) {
+        if (isEquation) {
             QByteArray mml = mathmlBytes;
             if (mml.isEmpty() && !sourceFilePath.isEmpty()) {
                 LocalSaver fullSaver;
@@ -735,7 +738,7 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                                                      resolvedFilePath,
                                                      targetSize,
                                                      dpr,
-                                                     isMathType);
+                                                     isEquation);
         if (guard) {
             QMetaObject::invokeMethod(guard.data(), [guard, payload, token]() {
                 if (!guard || guard->previewToken_ != token) {

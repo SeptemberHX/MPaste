@@ -637,22 +637,22 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
         // Qt on Windows wraps custom formats as
         // application/x-qt-windows-mime;value="MathType EF", so check
         // all format names for the keywords rather than exact matches.
-        bool isMathType = false;
+        // Equation items: MathType, Word/PowerPoint native equations, and
+        // anything else that ships a MathML or MathType format all share
+        // the same thumbnail renderer and preview path.
+        bool isEquation = false;
         QString mathmlFormat;
         for (const QString &fmt : mimeData->formats()) {
             const QString lower = fmt.toLower();
-            if (lower.contains(QStringLiteral("mathtype"))) {
-                isMathType = true;
-            }
-            if (lower.contains(QStringLiteral("mathml"))) {
-                isMathType = true;
-                if (mathmlFormat.isEmpty()) {
+            if (lower.contains(QStringLiteral("mathtype")) || lower.contains(QStringLiteral("mathml"))) {
+                isEquation = true;
+                if (mathmlFormat.isEmpty() && lower.contains(QStringLiteral("mathml"))) {
                     mathmlFormat = fmt;
                 }
             }
         }
-        if (isMathType) {
-            item.title_ = QStringLiteral("MathType");
+        if (isEquation) {
+            item.title_ = QStringLiteral("公式");
             // Read the MathML payload once and use it for both the text
             // fallback and the rendered preview thumbnail.
             QString mathmlText;
@@ -898,7 +898,13 @@ bool ClipboardItem::shouldCopyLightMimeFormat(const QString &format) {
             // enterprise-managed laptops: SIGSEGV deep inside
             // RtlGetUserInfoHeap from mimeData->data()). The value is only a
             // policy identifier, not paste content — dropping it is lossless.
-            || lower.contains(QStringLiteral("enterprisedataprotectionid"))) {
+            || lower.contains(QStringLiteral("enterprisedataprotectionid"))
+            // Word-internal "hyperlink to bookmark" metadata. Reading it
+            // crashes on some machines (cross-process IDataObject read
+            // returns a dangling HGLOBAL — same RtlGetUserInfoHeap stack
+            // as the EDP case). It's only meaningful when pasting back
+            // into the same Word instance, so dropping it is acceptable.
+            || lower.contains(QStringLiteral("hyperlinkwordbkmk"))) {
             return false;
         }
         // Preserve Windows clipboard formats (EMF/OLE/Office) so Office shapes remain editable.
