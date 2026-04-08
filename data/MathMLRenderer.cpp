@@ -1062,7 +1062,7 @@ std::unique_ptr<Node> parseElement(QXmlStreamReader &xml) {
 }  // namespace
 
 namespace {
-QPixmap renderToCanvas(const QString &mathmlSource, int canvasW, int canvasH, qreal fontPx) {
+QPixmap renderToCanvas(const QString &mathmlSource, int canvasW, int canvasH, qreal fontPx, bool darkTheme) {
     if (mathmlSource.trimmed().isEmpty() || canvasW <= 0 || canvasH <= 0) {
         return {};
     }
@@ -1107,11 +1107,15 @@ QPixmap renderToCanvas(const QString &mathmlSource, int canvasW, int canvasH, qr
     }
 
     QPixmap pm(canvasW, canvasH);
-    pm.fill(Qt::white);
+    // Theme-appropriate background and ink. Dark mode uses a dark surface
+    // matching the card body so the formula tile blends in.
+    const QColor bg = darkTheme ? QColor(40, 42, 46) : Qt::white;
+    const QColor fg = darkTheme ? QColor(232, 234, 237) : Qt::black;
+    pm.fill(bg);
     QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
-    p.setPen(Qt::black);
+    p.setPen(fg);
 
     const qreal scaledW = box.width * scale;
     const qreal scaledH = box.height() * scale;
@@ -1127,17 +1131,17 @@ QPixmap renderToCanvas(const QString &mathmlSource, int canvasW, int canvasH, qr
 }
 }  // namespace
 
-QPixmap MathMLRenderer::render(const QString &mathmlSource) {
+QPixmap MathMLRenderer::render(const QString &mathmlSource, bool darkTheme) {
     // Render at the canonical card preview dimensions. LocalSaver's load
     // path force-rescales thumbnails to this exact size with
     // Qt::IgnoreAspectRatio, so producing the thumbnail at this size up
     // front avoids the cross-restart stretch.
-    return renderToCanvas(mathmlSource, kCardPreviewWidth, kCardPreviewHeight, kBaseFontPx);
+    return renderToCanvas(mathmlSource, kCardPreviewWidth, kCardPreviewHeight, kBaseFontPx, darkTheme);
 }
 
-QPixmap MathMLRenderer::renderAt(const QString &mathmlSource, const QSize &targetSize) {
+QPixmap MathMLRenderer::renderAt(const QString &mathmlSource, const QSize &targetSize, bool darkTheme) {
     if (!targetSize.isValid() || targetSize.isEmpty()) {
-        return render(mathmlSource);
+        return render(mathmlSource, darkTheme);
     }
     // Pick a font size proportional to the canvas. The card path uses 24px
     // for a 275px-wide canvas; scale linearly so larger canvases get
@@ -1145,5 +1149,5 @@ QPixmap MathMLRenderer::renderAt(const QString &mathmlSource, const QSize &targe
     const qreal fontPx = qBound<qreal>(16.0,
                                        kBaseFontPx * (targetSize.width() / qreal(kCardPreviewWidth)),
                                        96.0);
-    return renderToCanvas(mathmlSource, targetSize.width(), targetSize.height(), fontPx);
+    return renderToCanvas(mathmlSource, targetSize.width(), targetSize.height(), fontPx, darkTheme);
 }

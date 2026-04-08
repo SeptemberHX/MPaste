@@ -708,7 +708,8 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 const QSize hiResSize = targetSize.isValid()
                     ? targetSize * qMax<qreal>(1.0, dpr)
                     : QSize(kPreviewDialogWidth, kPreviewDialogHeight);
-                QPixmap rendered = MathMLRenderer::renderAt(mathmlText, hiResSize);
+                const bool dark = ThemeManager::instance()->isDark();
+                QPixmap rendered = MathMLRenderer::renderAt(mathmlText, hiResSize, dark);
                 if (!rendered.isNull()) {
                     QImage img = rendered.toImage();
                     img.setDevicePixelRatio(qMax<qreal>(1.0, dpr));

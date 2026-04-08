@@ -20,13 +20,13 @@ public:
     // mfenced, mtable/mtr/mtd) — sufficient for ~80-90% of casually copied
     // MathType / MathML formulas. Anything more exotic falls back
     // gracefully (degenerates to row layout).
-    static QPixmap render(const QString &mathmlSource);
+    static QPixmap render(const QString &mathmlSource, bool darkTheme = false);
 
     // Render at a custom target size (in logical pixels). The font size is
     // scaled up so the formula fills the canvas at high resolution — useful
     // for the preview dialog, where naively upscaling the card thumbnail
     // looks blurry.
-    static QPixmap renderAt(const QString &mathmlSource, const QSize &targetSize);
+    static QPixmap renderAt(const QString &mathmlSource, const QSize &targetSize, bool darkTheme = false);
 };
 
 #endif  // MPASTE_MATHMLRENDERER_H

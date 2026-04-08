@@ -15,6 +15,7 @@
 #include <QRegularExpression>
 
 #include "utils/MPasteSettings.h"
+#include "utils/ThemeManager.h"
 
 #include <algorithm>
 #include <cstring>
@@ -696,9 +697,13 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
             // Render a visual preview from the MathML so the Office card
             // shows the formula instead of the text fallback. Failure (parse
             // error or unsupported nodes) leaves the thumbnail null and the
-            // card falls back to the previous text-only display.
+            // card falls back to the previous text-only display. The
+            // thumbnail color scheme is baked at capture time from the
+            // current theme — switching theme later will leave old MathType
+            // thumbnails in their original colors until they're re-captured.
             if (!mathmlText.isEmpty()) {
-                const QPixmap rendered = MathMLRenderer::render(mathmlText);
+                const bool dark = ThemeManager::instance()->isDark();
+                const QPixmap rendered = MathMLRenderer::render(mathmlText, dark);
                 if (!rendered.isNull()) {
                     item.setThumbnail(rendered);
                 }
