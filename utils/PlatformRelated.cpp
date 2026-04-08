@@ -463,10 +463,16 @@ void WinUtils::triggerPasteShortcut(HWND hwnd, MPasteSettings::PasteShortcutMode
     // ClipboardPasteController::pasteToTarget), the OS will merge our
     // synthetic Ctrl+V with the held Alt into Ctrl+Alt+V, which most apps
     // don't treat as paste. Synthesize a key-up for VK_MENU first so the
-    // OS sees Alt as released. Skip for Alt+Insert mode, which intentionally
-    // uses Alt as a modifier.
-    if (mode != MPasteSettings::AltInsertShortcut
-        && (GetAsyncKeyState(VK_MENU) & 0x8000)) {
+    // OS sees Alt as released, then after the paste re-assert key-down so
+    // the OS state matches the user's physical state. Otherwise, when the
+    // user finally releases Alt we'd leave the OS with a "stray Alt up",
+    // which Windows treats as a solo Alt tap and activates the foreground
+    // window's menu bar — producing a sticky/swallowed-key feeling on the
+    // next keystrokes. Skip for Alt+Insert mode, which intentionally uses
+    // Alt as a modifier.
+    const bool altWasHeld = (mode != MPasteSettings::AltInsertShortcut)
+        && ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
+    if (altWasHeld) {
         INPUT altUp = {};
         altUp.type = INPUT_KEYBOARD;
         altUp.ki.wVk = VK_MENU;
@@ -496,6 +502,18 @@ void WinUtils::triggerPasteShortcut(HWND hwnd, MPasteSettings::PasteShortcutMode
         default:
             simulateKeyPress(VK_INSERT, false, false, true);
             break;
+    }
+
+    // Re-assert Alt key-down to match the user's physical state, so their
+    // eventual physical release becomes a normal paired key-up rather than
+    // a stray solo Alt tap that would activate the foreground window's menu.
+    if (altWasHeld) {
+        INPUT altDown = {};
+        altDown.type = INPUT_KEYBOARD;
+        altDown.ki.wVk = VK_MENU;
+        altDown.ki.wScan = MapVirtualKey(VK_MENU, MAPVK_VK_TO_VSC);
+        altDown.ki.dwFlags = KEYEVENTF_SCANCODE;
+        SendInput(1, &altDown, sizeof(INPUT));
     }
 }
 
