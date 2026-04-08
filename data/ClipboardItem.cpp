@@ -289,6 +289,24 @@ QByteArray ClipboardItem::buildFingerprint() const {
         }
     }
 
+    // Equation editors (MathType, Word/PowerPoint embedded formulas,
+    // LaTeXiT, etc.): the stripped MathML text fallback is identical for
+    // two formulas that look different in the editor (e.g. plain G vs
+    // script G), because Presentation MathML export often drops style
+    // information into a sibling MTEF / OLE annotation binary. Mix in any
+    // mathml / mathtype format bytes so visually-different copies stay as
+    // distinct items. The check is narrow enough that other content types
+    // (text/image/file/etc.) never enter the loop, so their fingerprints
+    // are unchanged.
+    for (const QString &format : mimeData_->formats()) {
+        const QString lower = format.toLower();
+        if (lower.contains(QStringLiteral("mathtype")) || lower.contains(QStringLiteral("mathml"))) {
+            hash.addData(QByteArrayLiteral("mt:"));
+            hash.addData(format.toUtf8());
+            hash.addData(mimeData_->data(format));
+        }
+    }
+
     return hash.result();
 }
 

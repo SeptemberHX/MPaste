@@ -58,6 +58,23 @@ QByteArray captureKeyForItem(const ClipboardItem &item) {
     if (!normalizedText.isEmpty()) {
         hash.addData(QByteArrayLiteral("text\n"));
         hash.addData(normalizedText.simplified().toUtf8());
+        // Equation editors (MathType, Word/PowerPoint embedded formulas,
+        // LaTeXiT, ...): stripped MathML text fallback is identical for
+        // two formulas that look different in the editor. Mix in any
+        // mathml / mathtype format bytes so visually-different copies stay
+        // as distinct items. Other content types never have these formats
+        // in their mime data, so their capture keys are unchanged.
+        const QMimeData *md = item.getMimeData();
+        if (md) {
+            for (const QString &format : md->formats()) {
+                const QString lower = format.toLower();
+                if (lower.contains(QStringLiteral("mathtype")) || lower.contains(QStringLiteral("mathml"))) {
+                    hash.addData(QByteArrayLiteral("mt:"));
+                    hash.addData(format.toUtf8());
+                    hash.addData(md->data(format));
+                }
+            }
+        }
         return hash.result();
     }
 
