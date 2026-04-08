@@ -6,6 +6,7 @@
 #include "ClipboardItemUrlParser.h"
 #include "ClipboardItemImageDecoder.h"
 #include "LocalSaver.h"
+#include "MathMLRenderer.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -633,42 +634,55 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
         }
         if (isMathType) {
             item.title_ = QStringLiteral("MathType");
-            if (!mimeData->hasText()) {
-                QByteArray mathml;
-                if (!mathmlFormat.isEmpty()) {
-                    mathml = mimeData->data(mathmlFormat);
-                }
+            // Read the MathML payload once and use it for both the text
+            // fallback and the rendered preview thumbnail.
+            QString mathmlText;
+            if (!mathmlFormat.isEmpty()) {
+                const QByteArray mathml = mimeData->data(mathmlFormat);
                 if (!mathml.isEmpty()) {
                     // MathType may emit UTF-16LE (with or without BOM).
                     // Detect by checking for a NUL byte in the first few
                     // positions — UTF-8/ASCII never has NUL in valid XML.
-                    QString mathText;
                     if (mathml.size() >= 2
                         && (mathml.at(1) == '\0' || (static_cast<unsigned char>(mathml.at(0)) == 0xFF
                                                      && static_cast<unsigned char>(mathml.at(1)) == 0xFE))) {
-                        mathText = QString::fromUtf16(
+                        mathmlText = QString::fromUtf16(
                             reinterpret_cast<const char16_t *>(mathml.constData()),
                             mathml.size() / 2);
                     } else {
-                        mathText = QString::fromUtf8(mathml);
+                        mathmlText = QString::fromUtf8(mathml);
                     }
-                    // Strip XML tags and MathType annotation blocks.
-                    static const QRegularExpression annotationRe(
-                        QStringLiteral("<annotation[^>]*>.*?</annotation>"),
-                        QRegularExpression::DotMatchesEverythingOption);
-                    mathText.remove(annotationRe);
-                    static const QRegularExpression xmlTagRe(QStringLiteral("<[^>]*>"));
-                    mathText.replace(xmlTagRe, QStringLiteral(" "));
-                    // Remove remaining invisible Unicode operators
-                    // (e.g. U+2061 function application, U+2062 invisible times).
-                    mathText.remove(QChar(0x2061));
-                    mathText.remove(QChar(0x2062));
-                    mathText.remove(QChar(0x2063));
-                    mathText.remove(QChar(0x2064));
-                    mathText = mathText.simplified();
-                    if (!mathText.isEmpty()) {
-                        item.mimeData_->setText(mathText);
-                    }
+                }
+            }
+            if (!mathmlText.isEmpty() && !mimeData->hasText()) {
+                // Build a plain-text fallback by stripping XML tags and
+                // annotation blocks.
+                QString mathText = mathmlText;
+                static const QRegularExpression annotationRe(
+                    QStringLiteral("<annotation[^>]*>.*?</annotation>"),
+                    QRegularExpression::DotMatchesEverythingOption);
+                mathText.remove(annotationRe);
+                static const QRegularExpression xmlTagRe(QStringLiteral("<[^>]*>"));
+                mathText.replace(xmlTagRe, QStringLiteral(" "));
+                // Remove remaining invisible Unicode operators
+                // (e.g. U+2061 function application, U+2062 invisible times).
+                mathText.remove(QChar(0x2061));
+                mathText.remove(QChar(0x2062));
+                mathText.remove(QChar(0x2063));
+                mathText.remove(QChar(0x2064));
+                mathText = mathText.simplified();
+                if (!mathText.isEmpty()) {
+                    item.mimeData_->setText(mathText);
+                }
+            }
+            // Render a visual preview from the MathML so the Office card
+            // shows the formula instead of the text fallback. Failure (parse
+            // error or unsupported nodes) leaves the thumbnail null and the
+            // card falls back to the previous text-only display.
+            if (!mathmlText.isEmpty()) {
+                const QPixmap rendered = MathMLRenderer::render(mathmlText);
+                if (!rendered.isNull()) {
+                    item.setThumbnail(rendered);
                 }
             }
         }
