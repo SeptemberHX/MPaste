@@ -90,7 +90,12 @@ private:
     void handleNavigationKeys(QKeyEvent *event);
     void handleHomeEndKeys(QKeyEvent *event);
     void handleTabKey();
+
+public:
+    // Public so the WH_KEYBOARD_LL hook callback can call it.
     bool triggerShortcutPaste(int shortcutIndex, bool plainText);
+
+private:
 
     ScrollItemsWidget* currItemsWidget();
     void applyScale(int scale);
@@ -155,6 +160,11 @@ private:
 
     QTimer *keepAliveTimer_ = nullptr;
     bool darkTheme_ = false;
+
+#ifdef Q_OS_WIN
+    void installAltDigitHook();
+    void removeAltDigitHook();
+#endif
 };
 
 

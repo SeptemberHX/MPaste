@@ -178,6 +178,9 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
 }
 
 MPasteWidget::~MPasteWidget() {
+#ifdef Q_OS_WIN
+    removeAltDigitHook();
+#endif
     delete ui_.ui;
 }
 
@@ -601,11 +604,17 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     if (auto *board = currItemsWidget()) {
         board->updateLoadingOverlay();
     }
+#ifdef Q_OS_WIN
+    installAltDigitHook();
+#endif
     qInfo().noquote() << QStringLiteral("[wake] showEvent total: %1 ms").arg(t.elapsed());
 }
 
 void MPasteWidget::hideEvent(QHideEvent *event) {
     QWidget::hideEvent(event);
+#ifdef Q_OS_WIN
+    removeAltDigitHook();
+#endif
     for (auto it = ui_.boardWidgetMap.cbegin(); it != ui_.boardWidgetMap.cend(); ++it) {
         if (auto *board = it.value()) {
             board->hideHoverTools();
