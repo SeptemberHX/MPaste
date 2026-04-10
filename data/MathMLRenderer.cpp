@@ -9,8 +9,10 @@
 #include <QDebug>
 #include <QFont>
 #include <QFontMetricsF>
+#include <QGuiApplication>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScreen>
 #include <QXmlStreamReader>
 #include <QtMath>
 
@@ -1132,11 +1134,22 @@ QPixmap renderToCanvas(const QString &mathmlSource, int canvasW, int canvasH, qr
 }  // namespace
 
 QPixmap MathMLRenderer::render(const QString &mathmlSource, bool darkTheme) {
-    // Render at the canonical card preview dimensions. LocalSaver's load
+    // Render at the canonical card preview dimensions scaled by the screen
+    // DPI so thumbnails stay sharp on high-DPI displays.  LocalSaver's load
     // path force-rescales thumbnails to this exact size with
     // Qt::IgnoreAspectRatio, so producing the thumbnail at this size up
     // front avoids the cross-restart stretch.
-    return renderToCanvas(mathmlSource, kCardPreviewWidth, kCardPreviewHeight, kBaseFontPx, darkTheme);
+    qreal dpr = 1.0;
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    for (const QScreen *s : screens)
+        dpr = qMax(dpr, s->devicePixelRatio());
+    const int pw = qRound(kCardPreviewWidth * dpr);
+    const int ph = qRound(kCardPreviewHeight * dpr);
+    const qreal fontPx = kBaseFontPx * dpr;
+    QPixmap pm = renderToCanvas(mathmlSource, pw, ph, fontPx, darkTheme);
+    if (!pm.isNull())
+        pm.setDevicePixelRatio(dpr);
+    return pm;
 }
 
 QPixmap MathMLRenderer::renderAt(const QString &mathmlSource, const QSize &targetSize, bool darkTheme) {
