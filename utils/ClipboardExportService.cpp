@@ -60,22 +60,13 @@ bool shouldExportRawFormat(const QString &format) {
     return true;
 }
 
-void copyRawFormats(QMimeData *target, const QMimeData *source, bool skipAllHtml = false) {
+void copyRawFormats(QMimeData *target, const QMimeData *source) {
     if (!target || !source) {
         return;
     }
 
-    static const QString cfHtmlMime =
-        QStringLiteral("application/x-qt-windows-mime;value=\"HTML Format\"");
     for (const QString &format : source->formats()) {
         if (!shouldExportRawFormat(format))
-            continue;
-        // When raw CF_HTML is present (Office source), skip ALL HTML
-        // formats.  Qt's QWindowsMimeHtml generates CF_HTML from the
-        // text/html fragment, losing the <head><style> block with CSS
-        // classes for centering and fonts.  Without CF_HTML, Word falls
-        // back to RTF which preserves all formatting via native commands.
-        if (skipAllHtml && (format == QLatin1String("text/html") || format == cfHtmlMime))
             continue;
         const QByteArray data = source->data(format);
         if (!data.isEmpty()) {

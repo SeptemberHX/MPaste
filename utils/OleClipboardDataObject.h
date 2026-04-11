@@ -30,6 +30,15 @@ public:
     /// no Embed Source data.  Caller owns one reference.
     static OleClipboardDataObject *create(const QMimeData *mimeData);
 
+    /// General-purpose factory: replays ALL Windows clipboard formats
+    /// from the QMimeData as raw HGLOBAL bytes (Ditto-style).
+    /// Returns nullptr if no usable formats found.  Caller owns one ref.
+    static OleClipboardDataObject *createGeneral(const QMimeData *mimeData);
+
+    /// Returns true if the mimeData has raw Windows format data that
+    /// benefits from the native OLE path (e.g. raw CF_HTML bytes).
+    static bool shouldUseNativeOlePath(const QMimeData *mimeData);
+
     // IUnknown
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **ppv) override;
     ULONG STDMETHODCALLTYPE AddRef() override;

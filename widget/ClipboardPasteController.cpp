@@ -18,7 +18,6 @@
 #include <QDebug>
 #ifdef Q_OS_WIN
 #include <windows.h>
-#include <ole2.h>
 #endif
 
 namespace {
@@ -169,41 +168,6 @@ bool ClipboardPasteController::setClipboard(const ClipboardItem &item, bool plai
     monitor_->setSelfPasteGuardFromMimeData(mimeData);
     QGuiApplication::clipboard()->setMimeData(mimeData);
     qInfo() << "[clipboard-widget] setClipboard wrote system clipboard";
-
-#ifdef Q_OS_WIN
-    // Replace Qt's lossy CF_HTML with the raw bytes captured from the
-    // original source.  Qt's QWindowsMimeHtml only stores the fragment
-    // between StartFragment/EndFragment, losing the <head><style> block
-    // that defines CSS classes for centering, fonts, lists, etc.
-    // After OleFlushClipboard materializes Qt's formats to the system
-    // clipboard, we overwrite CF_HTML with the faithful raw bytes.
-    // Approach borrowed from Ditto clipboard manager.
-    static const QString cfHtmlMime =
-        QStringLiteral("application/x-qt-windows-mime;value=\"HTML Format\"");
-    const QMimeData *sourceMime = item.getMimeData();
-    if (!plainText && sourceMime && sourceMime->hasFormat(cfHtmlMime)) {
-        const QByteArray rawCfHtml = sourceMime->data(cfHtmlMime);
-        if (!rawCfHtml.isEmpty()) {
-            HRESULT hr = OleFlushClipboard();
-            qInfo().noquote() << QStringLiteral("[clipboard-widget] OleFlushClipboard hr=0x%1")
-                .arg(static_cast<quint32>(hr), 8, 16, QLatin1Char('0'));
-            if (SUCCEEDED(hr)) {
-                static UINT cfHtml = RegisterClipboardFormatW(L"HTML Format");
-                if (OpenClipboard(nullptr)) {
-                    HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, rawCfHtml.size());
-                    if (hg) {
-                        memcpy(GlobalLock(hg), rawCfHtml.constData(), rawCfHtml.size());
-                        GlobalUnlock(hg);
-                        SetClipboardData(cfHtml, hg);
-                        qInfo().noquote() << QStringLiteral("[clipboard-widget] injected raw CF_HTML %1 bytes")
-                            .arg(rawCfHtml.size());
-                    }
-                    CloseClipboard();
-                }
-            }
-        }
-    }
-#endif
     QTimer::singleShot(200, this, [this]() {
         qInfo() << "[clipboard-widget] reconnect monitor after self clipboard write";
         monitor_->connectMonitor();

@@ -7,6 +7,7 @@
 
 #include <ole2.h>
 #include <QDebug>
+#include <QSet>
 
 // ── IEnumFORMATETC implementation ─────────────────────────────────────
 
@@ -196,6 +197,91 @@ OleClipboardDataObject *OleClipboardDataObject::create(const QMimeData *mimeData
 
     qInfo().noquote() << QStringLiteral("[ole-dataobject] created with %1 formats, embedSource=%2 bytes")
         .arg(obj->entries_.size()).arg(embedData.size());
+    return obj;
+}
+
+// ── shouldUseNativeOlePath ────────────────────────────────────────────
+
+bool OleClipboardDataObject::shouldUseNativeOlePath(const QMimeData *mimeData) {
+    if (!mimeData) return false;
+    // Use the native OLE path when raw CF_HTML bytes are present —
+    // this is the only way to preserve the <style> block that Qt's
+    // QWindowsMimeHtml strips during the text/html → CF_HTML conversion.
+    static const QString cfHtmlMime =
+        QStringLiteral("application/x-qt-windows-mime;value=\"HTML Format\"");
+    return mimeData->hasFormat(cfHtmlMime) && !mimeData->data(cfHtmlMime).isEmpty();
+}
+
+// ── createGeneral (Ditto-style) ──────────────────────────────────────
+
+OleClipboardDataObject *OleClipboardDataObject::createGeneral(const QMimeData *mimeData) {
+    if (!mimeData) return nullptr;
+
+    auto *obj = new OleClipboardDataObject;
+    QSet<CLIPFORMAT> added;
+
+    // ── 1. CF_UNICODETEXT from text/plain ──
+    if (mimeData->hasText()) {
+        const QString text = mimeData->text();
+        if (!text.isEmpty()) {
+            const int byteLen = (text.size() + 1) * 2;
+            QByteArray buf(byteLen, '\0');
+            memcpy(buf.data(), text.utf16(), text.size() * 2);
+            FormatEntry e;
+            e.fmt = {CF_UNICODETEXT, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+            e.data = buf;
+            obj->entries_.append(e);
+            added.insert(CF_UNICODETEXT);
+        }
+    }
+
+    // ── 2. All application/x-qt-windows-mime;value="X" formats ──
+    for (const QString &mime : mimeData->formats()) {
+        // Skip standard MIME types — handled specially or not at all.
+        if (mime == QStringLiteral("text/plain")
+            || mime == QStringLiteral("text/html")
+            || mime == QStringLiteral("text/uri-list")
+            || mime == QStringLiteral("text/plain;charset=utf-8")
+            || mime.startsWith(QStringLiteral("application/x-qt-image"))
+            || mime.startsWith(QStringLiteral("image/")))
+            continue;
+
+        const CLIPFORMAT cf = cfFromQtMime(mime);
+        if (cf == 0) continue;
+        if (added.contains(cf)) continue;
+
+        // Block OLE container formats.  Even though our IDataObject CAN
+        // serve Embed Source as TYMED_ISTORAGE, Word prefers it over
+        // CF_HTML/RTF and creates an embedded OLE object instead of
+        // inline formatted text.  Blocking it forces Word to use
+        // CF_HTML (with our faithful raw bytes including <style>) or RTF.
+        const QString lower = mime.toLower();
+        if (lower.contains(QStringLiteral("embed source"))
+            || lower.contains(QStringLiteral("embedded object"))
+            || lower.contains(QStringLiteral("object descriptor"))
+            || lower.contains(QStringLiteral("link source"))
+            || lower.contains(QStringLiteral("ownerlink"))
+            || lower.contains(QStringLiteral("native"))
+            || lower.contains(QStringLiteral("objectlink")))
+            continue;
+
+        const QByteArray data = mimeData->data(mime);
+        if (data.isEmpty()) continue;
+
+        FormatEntry e;
+        e.fmt = {cf, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+        e.data = data;
+        obj->entries_.append(e);
+        added.insert(cf);
+    }
+
+    if (obj->entries_.isEmpty()) {
+        delete obj;
+        return nullptr;
+    }
+
+    qInfo().noquote() << QStringLiteral("[ole-dataobject] createGeneral %1 formats")
+        .arg(obj->entries_.size());
     return obj;
 }
 
