@@ -10,6 +10,7 @@
 #include "WindowBlurHelper.h"
 #include "BoardInternalHelpers.h"
 #include "ToggleSwitch.h"
+#include "utils/IconResolver.h"
 #include <QShowEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -26,7 +27,8 @@
 #include <QLayout>
 #include <QPushButton>
 #include <QFileDialog>
-#include <QTabWidget>
+#include <QListWidget>
+#include <QStackedWidget>
 #include <QUrl>
 #include <QDesktopServices>
 
@@ -77,35 +79,6 @@ static QString settingsStyleSheet(bool dark) {
                 border: none;
             }
 
-            QTabWidget::pane {
-                border: 1px solid rgba(255, 255, 255, 18);
-                border-radius: 8px;
-                background-color: rgba(30, 35, 43, 160);
-                margin-top: 8px;
-            }
-            QTabWidget > QWidget {
-                background: transparent;
-            }
-            QTabBar::tab {
-                background: rgba(37, 43, 52, 180);
-                color: #B8C5D4;
-                border: 1px solid #2F3945;
-                border-bottom: none;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                padding: 7px 14px;
-                min-height: 20px;
-                margin-right: 6px;
-            }
-            QTabBar::tab:selected {
-                background: #2D7FD3;
-                color: #FFFFFF;
-                border-color: #2D7FD3;
-            }
-            QTabBar::tab:!selected:hover {
-                background: #2A313C;
-                color: #E6EDF5;
-            }
 
             QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
                 background-color: #2A313C;
@@ -267,6 +240,32 @@ static QString settingsStyleSheet(bool dark) {
             QDialogButtonBox {
                 button-layout: 2;
             }
+
+            QListWidget#settingsSidebar {
+                background: transparent;
+                border: none;
+                outline: none;
+                padding: 4px;
+            }
+            QListWidget#settingsSidebar::item {
+                color: #B8C5D4;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+            QListWidget#settingsSidebar::item:selected {
+                background: #2D7FD3;
+                color: #FFFFFF;
+            }
+            QListWidget#settingsSidebar::item:hover:!selected {
+                background: rgba(255, 255, 255, 12);
+            }
+
+            QStackedWidget#settingsStack {
+                background: rgba(30, 35, 43, 100);
+                border: 1px solid rgba(255, 255, 255, 12);
+                border-radius: 8px;
+            }
         )");
     }
     return QStringLiteral(R"(
@@ -297,35 +296,6 @@ static QString settingsStyleSheet(bool dark) {
             border: none;
         }
 
-        QTabWidget::pane {
-            border: 1px solid rgba(0, 0, 0, 12);
-            border-radius: 8px;
-            background-color: rgba(255, 255, 255, 160);
-            margin-top: 8px;
-        }
-        QTabWidget > QWidget {
-            background: transparent;
-        }
-        QTabBar::tab {
-            background: rgba(245, 247, 250, 180);
-            color: #5B6572;
-            border: 1px solid #E2E8F0;
-            border-bottom: none;
-            border-top-left-radius: 6px;
-            border-top-right-radius: 6px;
-            padding: 7px 14px;
-            min-height: 20px;
-            margin-right: 6px;
-        }
-        QTabBar::tab:selected {
-            background: #0078D4;
-            color: #FFFFFF;
-            border-color: #0078D4;
-        }
-        QTabBar::tab:!selected:hover {
-            background: #EEF3F8;
-            color: #1F2A37;
-        }
 
         QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
             background-color: #F0F0F0;
@@ -487,6 +457,32 @@ static QString settingsStyleSheet(bool dark) {
         QDialogButtonBox {
             button-layout: 2;
         }
+
+        QListWidget#settingsSidebar {
+            background: transparent;
+            border: none;
+            outline: none;
+            padding: 4px;
+        }
+        QListWidget#settingsSidebar::item {
+            color: #5B6572;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+        QListWidget#settingsSidebar::item:selected {
+            background: #0078D4;
+            color: #FFFFFF;
+        }
+        QListWidget#settingsSidebar::item:hover:!selected {
+            background: rgba(0, 0, 0, 8);
+        }
+
+        QStackedWidget#settingsStack {
+            background: rgba(255, 255, 255, 100);
+            border: 1px solid rgba(0, 0, 0, 8);
+            border-radius: 8px;
+        }
     )");
 }
 
@@ -496,8 +492,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 {
     ui->setupUi(this);
 
-    setMinimumWidth(456);
-    setMaximumWidth(456);
+    setMinimumWidth(600);
+    setMaximumWidth(600);
     setMinimumHeight(0);
     setMaximumHeight(QWIDGETSIZE_MAX);
     if (layout()) {
@@ -512,7 +508,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &MPasteSettingsWidget::applyTheme);
 
     setWindowTitle(uiText("Settings", QStringLiteral("设置")));
-    ui->titleLabel->setText(uiText("Settings", QStringLiteral("设置")));
+    ui->titleLabel->setText(uiText("MPaste " MPASTE_VERSION, QStringLiteral("MPaste " MPASTE_VERSION)));
+    ui->titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     if (auto *grid = qobject_cast<QGridLayout*>(ui->generalCard->layout())) {
         grid->removeWidget(ui->label);
         grid->removeWidget(ui->numSpinBox);
@@ -671,9 +668,11 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->shortcutEdit->setMaximumHeight(36);
         syncButtonsLayout->setSpacing(8);
 
-        auto createTabGrid = [this](QWidget *parent) {
+        // ── Sidebar + StackedWidget (Clipaste-style) ──
+
+        auto createPageGrid = [](QWidget *parent) {
             auto *layout = new QGridLayout(parent);
-            layout->setContentsMargins(12, 12, 12, 12);
+            layout->setContentsMargins(16, 12, 16, 12);
             layout->setHorizontalSpacing(14);
             layout->setVerticalSpacing(8);
             layout->setColumnStretch(0, 0);
@@ -681,19 +680,31 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             return layout;
         };
 
-        auto *tabs = new QTabWidget(ui->generalCard);
-        tabs->setObjectName(QStringLiteral("settingsTabs"));
-        auto *generalPage = new QWidget(tabs);
-        auto *shortcutsPage = new QWidget(tabs);
-        auto *maintenancePage = new QWidget(tabs);
-        auto *generalLayout = createTabGrid(generalPage);
-        auto *shortcutsLayout = createTabGrid(shortcutsPage);
-        auto *maintenanceLayout = createTabGrid(maintenancePage);
+        auto *sidebar = new QListWidget(ui->generalCard);
+        sidebar->setObjectName(QStringLiteral("settingsSidebar"));
+        sidebar->setFixedWidth(120);
+        sidebar->setIconSize(QSize(20, 20));
+        sidebar->setSpacing(2);
+        sidebar->setFrameShape(QFrame::NoFrame);
+        sidebar->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-        tabs->addTab(generalPage, uiText("General", QStringLiteral("常用设置")));
-        tabs->addTab(shortcutsPage, uiText("Shortcuts", QStringLiteral("快捷与预览")));
-        tabs->addTab(maintenancePage, uiText("Maintenance", QStringLiteral("同步与维护")));
+        auto addSidebarItem = [&](const QString &iconName, const QString &text) {
+            auto *item = new QListWidgetItem(
+                IconResolver::themedIcon(iconName, ThemeManager::instance()->isDark()), text);
+            item->setSizeHint(QSize(110, 40));
+            sidebar->addItem(item);
+        };
+        addSidebarItem(QStringLiteral("settings"), uiText("General", QStringLiteral("通用")));
+        addSidebarItem(QStringLiteral("text_plain"), uiText("Shortcuts", QStringLiteral("快捷键")));
+        addSidebarItem(QStringLiteral("save_black"), uiText("Advanced", QStringLiteral("高级")));
+        addSidebarItem(QStringLiteral("info"), uiText("About", QStringLiteral("关于")));
 
+        auto *stack = new QStackedWidget(ui->generalCard);
+        stack->setObjectName(QStringLiteral("settingsStack"));
+
+        // ── General page ──
+        auto *generalPage = new QWidget(stack);
+        auto *generalLayout = createPageGrid(generalPage);
         generalLayout->addWidget(themeLabel_, 0, 0);
         generalLayout->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
         generalLayout->addWidget(ui->label_autostart, 1, 0);
@@ -705,18 +716,25 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         generalLayout->addWidget(ui->label_5, 4, 0);
         generalLayout->addWidget(ui->scaleWidget, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
         generalLayout->setRowStretch(5, 1);
+        stack->addWidget(generalPage);
 
+        // ── Shortcuts page ──
+        auto *shortcutsPage = new QWidget(stack);
+        auto *shortcutsLayout = createPageGrid(shortcutsPage);
         shortcutsLayout->addWidget(ui->label_4, 0, 0);
         shortcutsLayout->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
         shortcutsLayout->addWidget(pasteShortcutLabel_, 1, 0);
         shortcutsLayout->addWidget(pasteShortcutCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
         shortcutsLayout->setRowStretch(2, 1);
+        stack->addWidget(shortcutsPage);
 
+        // ── Advanced page ──
+        auto *maintenancePage = new QWidget(stack);
+        auto *maintenanceLayout = createPageGrid(maintenancePage);
         maintenanceLayout->addWidget(syncLabel_, 0, 0, 1, 2);
         maintenanceLayout->addWidget(syncPathEdit_, 1, 0, 1, 2);
         maintenanceLayout->addWidget(syncButtonsRow, 2, 0, 1, 2);
 
-        // OCR settings
         ocrLabel_ = new QLabel(uiText("OCR Backend", QStringLiteral("OCR 引擎")), maintenancePage);
         ocrBackendCombo_ = new QComboBox(maintenancePage);
         ocrBackendCombo_->setMinimumSize(QSize(200, 36));
@@ -756,13 +774,50 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         maintenanceLayout->addWidget(autoOcrLabel_, 6, 0);
         maintenanceLayout->addWidget(autoOcrSwitch_, 6, 1, Qt::AlignRight | Qt::AlignVCenter);
         maintenanceLayout->setRowStretch(7, 1);
+        stack->addWidget(maintenancePage);
 
-        grid->setContentsMargins(18, 14, 18, 14);
+        // ── About page ──
+        auto *aboutPage = new QWidget(stack);
+        auto *aboutLayout = new QVBoxLayout(aboutPage);
+        aboutLayout->setContentsMargins(20, 24, 20, 20);
+        aboutLayout->setSpacing(12);
+        auto *logoLabel = new QLabel(aboutPage);
+        logoLabel->setPixmap(QPixmap(QStringLiteral(":/resources/resources/mpaste.svg")).scaled(
+            64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        logoLabel->setAlignment(Qt::AlignCenter);
+        aboutLayout->addWidget(logoLabel);
+        auto *nameLabel = new QLabel(QStringLiteral("MPaste V" MPASTE_VERSION), aboutPage);
+        nameLabel->setAlignment(Qt::AlignCenter);
+        nameLabel->setStyleSheet(QStringLiteral("font-size: 16px; font-weight: 700; background: transparent;"));
+        aboutLayout->addWidget(nameLabel);
+        auto *authorLabel = new QLabel(
+            QStringLiteral("Author: SeptemberHX<br>"
+                           "Github: <a href=\"https://github.com/SeptemberHX/MPaste\">SeptemberHX/MPaste</a><br>"
+                           "Email: <a href=\"mailto:september_hx@outlook.com\">september_hx@outlook.com</a>"),
+            aboutPage);
+        authorLabel->setAlignment(Qt::AlignCenter);
+        authorLabel->setOpenExternalLinks(true);
+        authorLabel->setStyleSheet(QStringLiteral("font-size: 13px; background: transparent; line-height: 1.6;"));
+        aboutLayout->addWidget(authorLabel);
+        aboutLayout->addStretch(1);
+        stack->addWidget(aboutPage);
+
+        // ── Wire sidebar ↔ stack ──
+        connect(sidebar, &QListWidget::currentRowChanged, stack, &QStackedWidget::setCurrentIndex);
+        sidebar->setCurrentRow(0);
+
+        // ── Layout: sidebar | content ──
+        auto *hbox = new QHBoxLayout;
+        hbox->setContentsMargins(0, 0, 0, 0);
+        hbox->setSpacing(0);
+        hbox->addWidget(sidebar);
+        hbox->addWidget(stack, 1);
+
+        grid->setContentsMargins(8, 8, 8, 8);
         grid->setHorizontalSpacing(0);
         grid->setVerticalSpacing(0);
         grid->setColumnStretch(0, 1);
-        grid->setColumnStretch(1, 1);
-        grid->addWidget(tabs, 0, 0, 1, 2);
+        grid->addLayout(hbox, 0, 0, 1, 2);
     }
 
 #ifndef Q_OS_WIN
