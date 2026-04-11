@@ -9,6 +9,7 @@
 #include "utils/ThemeManager.h"
 #include "WindowBlurHelper.h"
 #include "BoardInternalHelpers.h"
+#include "SurfacePainter.h"
 #include "ToggleSwitch.h"
 #include "utils/IconResolver.h"
 #include <QShowEvent>
@@ -16,7 +17,6 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QGridLayout>
-#include <QGraphicsDropShadowEffect>
 #include <QApplication>
 #include <QDir>
 #include <QSettings>
@@ -27,8 +27,9 @@
 #include <QLayout>
 #include <QPushButton>
 #include <QFileDialog>
-#include <QListWidget>
+#include <QButtonGroup>
 #include <QStackedWidget>
+#include <QToolButton>
 #include <QUrl>
 #include <QDesktopServices>
 
@@ -241,30 +242,29 @@ static QString settingsStyleSheet(bool dark) {
                 button-layout: 2;
             }
 
-            QListWidget#settingsSidebar {
+            QToolButton#navBtn {
                 background: transparent;
                 border: none;
-                outline: none;
-                padding: 4px;
-            }
-            QListWidget#settingsSidebar::item {
-                color: #B8C5D4;
                 border-radius: 8px;
-                padding: 8px 12px;
-                font-size: 13px;
+                color: #8A98AB;
+                font-size: 11px;
+                padding: 6px 2px;
             }
-            QListWidget#settingsSidebar::item:selected {
-                background: #2D7FD3;
-                color: #FFFFFF;
+            QToolButton#navBtn:checked {
+                background-color: rgba(45, 127, 211, 25);
+                color: #2D7FD3;
             }
-            QListWidget#settingsSidebar::item:hover:!selected {
-                background: rgba(255, 255, 255, 12);
+            QToolButton#navBtn:hover:!checked {
+                background-color: rgba(255, 255, 255, 12);
             }
-
-            QStackedWidget#settingsStack {
-                background: rgba(30, 35, 43, 100);
-                border: 1px solid rgba(255, 255, 255, 12);
-                border-radius: 8px;
+            QFrame#navSep {
+                background: rgba(255, 255, 255, 15);
+            }
+            QFrame#card {
+                background: rgba(255, 255, 255, 8);
+                border: 1px solid rgba(255, 255, 255, 10);
+                border-radius: 10px;
+                padding: 6px 8px;
             }
         )");
     }
@@ -458,30 +458,29 @@ static QString settingsStyleSheet(bool dark) {
             button-layout: 2;
         }
 
-        QListWidget#settingsSidebar {
+        QToolButton#navBtn {
             background: transparent;
             border: none;
-            outline: none;
-            padding: 4px;
-        }
-        QListWidget#settingsSidebar::item {
-            color: #5B6572;
             border-radius: 8px;
-            padding: 8px 12px;
-            font-size: 13px;
+            color: #6A7888;
+            font-size: 11px;
+            padding: 6px 2px;
         }
-        QListWidget#settingsSidebar::item:selected {
-            background: #0078D4;
-            color: #FFFFFF;
+        QToolButton#navBtn:checked {
+            background-color: rgba(45, 127, 211, 18);
+            color: #2D7FD3;
         }
-        QListWidget#settingsSidebar::item:hover:!selected {
+        QToolButton#navBtn:hover:!checked {
+            background-color: rgba(0, 0, 0, 6);
+        }
+        QFrame#navSep {
             background: rgba(0, 0, 0, 8);
         }
-
-        QStackedWidget#settingsStack {
-            background: rgba(255, 255, 255, 100);
-            border: 1px solid rgba(0, 0, 0, 8);
-            border-radius: 8px;
+        QFrame#card {
+            background: rgba(0, 0, 0, 4);
+            border: 1px solid rgba(0, 0, 0, 6);
+            border-radius: 10px;
+            padding: 6px 8px;
         }
     )");
 }
@@ -680,24 +679,36 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             return layout;
         };
 
-        auto *sidebar = new QListWidget(ui->generalCard);
-        sidebar->setObjectName(QStringLiteral("settingsSidebar"));
-        sidebar->setFixedWidth(120);
-        sidebar->setIconSize(QSize(20, 20));
-        sidebar->setSpacing(2);
-        sidebar->setFrameShape(QFrame::NoFrame);
-        sidebar->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        // ── Sidebar with QToolButtons (MTodo pattern) ──
+        auto *sideWidget = new QWidget(ui->generalCard);
+        sideWidget->setFixedWidth(82);
+        auto *sideLayout = new QVBoxLayout(sideWidget);
+        sideLayout->setContentsMargins(4, 4, 4, 4);
+        sideLayout->setSpacing(2);
 
-        auto addSidebarItem = [&](const QString &iconName, const QString &text) {
-            auto *item = new QListWidgetItem(
-                IconResolver::themedIcon(iconName, ThemeManager::instance()->isDark()), text);
-            item->setSizeHint(QSize(110, 40));
-            sidebar->addItem(item);
+        auto *navGroup = new QButtonGroup(this);
+        navGroup->setExclusive(true);
+
+        auto makeNavBtn = [&](const QString &iconName, const QString &text, int id) {
+            auto *btn = new QToolButton();
+            btn->setObjectName(QStringLiteral("navBtn"));
+            btn->setIcon(IconResolver::themedIcon(iconName, dark));
+            btn->setIconSize(QSize(22, 22));
+            btn->setText(text);
+            btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+            btn->setCheckable(true);
+            btn->setFixedSize(72, 52);
+            btn->setCursor(Qt::PointingHandCursor);
+            btn->setFocusPolicy(Qt::NoFocus);
+            navGroup->addButton(btn, id);
+            sideLayout->addWidget(btn, 0, Qt::AlignHCenter);
         };
-        addSidebarItem(QStringLiteral("settings"), uiText("General", QStringLiteral("通用")));
-        addSidebarItem(QStringLiteral("text_plain"), uiText("Shortcuts", QStringLiteral("快捷键")));
-        addSidebarItem(QStringLiteral("save_black"), uiText("Advanced", QStringLiteral("高级")));
-        addSidebarItem(QStringLiteral("info"), uiText("About", QStringLiteral("关于")));
+
+        makeNavBtn(QStringLiteral("settings"), uiText("General", QStringLiteral("通用")), 0);
+        makeNavBtn(QStringLiteral("text_plain"), uiText("Shortcuts", QStringLiteral("快捷键")), 1);
+        makeNavBtn(QStringLiteral("save_black"), uiText("Advanced", QStringLiteral("高级")), 2);
+        sideLayout->addStretch();
+        makeNavBtn(QStringLiteral("info"), uiText("About", QStringLiteral("关于")), 3);
 
         auto *stack = new QStackedWidget(ui->generalCard);
         stack->setObjectName(QStringLiteral("settingsStack"));
@@ -803,14 +814,23 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         stack->addWidget(aboutPage);
 
         // ── Wire sidebar ↔ stack ──
-        connect(sidebar, &QListWidget::currentRowChanged, stack, &QStackedWidget::setCurrentIndex);
-        sidebar->setCurrentRow(0);
+        connect(navGroup, &QButtonGroup::idClicked,
+                stack, &QStackedWidget::setCurrentIndex);
+        if (auto *btn = navGroup->button(0))
+            btn->setChecked(true);
+        stack->setCurrentIndex(0);
 
-        // ── Layout: sidebar | content ──
+        // ── Layout: sidebar | separator | content ──
+        auto *navSep = new QFrame(ui->generalCard);
+        navSep->setObjectName(QStringLiteral("navSep"));
+        navSep->setFrameShape(QFrame::VLine);
+        navSep->setFixedWidth(1);
+
         auto *hbox = new QHBoxLayout;
         hbox->setContentsMargins(0, 0, 0, 0);
         hbox->setSpacing(0);
-        hbox->addWidget(sidebar);
+        hbox->addWidget(sideWidget);
+        hbox->addWidget(navSep);
         hbox->addWidget(stack, 1);
 
         grid->setContentsMargins(8, 8, 8, 8);
@@ -834,13 +854,6 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->scaleValueLabel->setText(QString("%1%").arg(value));
     });
 
-    // Card shadow
-    auto *shadow = new QGraphicsDropShadowEffect(ui->generalCard);
-    shadow->setBlurRadius(16);
-    shadow->setOffset(0, 2);
-    shadow->setColor(QColor(0, 0, 0, 25));
-    ui->generalCard->setGraphicsEffect(shadow);
-
     loadSettings();
     adjustSize();
 }
@@ -854,32 +867,7 @@ void MPasteSettingsWidget::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-
-    const qreal radius = CORNER_RADIUS;
-    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
-
-    // Clear outside the rounded rect so corners are transparent
-    p.setCompositionMode(QPainter::CompositionMode_Clear);
-    p.fillRect(rect(), Qt::transparent);
-    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
-
-    // Fill the rounded rect with a near-transparent color so mouse
-    // events are captured (fully transparent areas pass through).
-    QPainterPath shape;
-    shape.addRoundedRect(r, radius, radius);
-    p.setClipPath(shape);
-    p.fillRect(rect(), QColor(0, 0, 0, 1));
-    p.setClipping(false);
-
-    if (darkTheme_) {
-        p.setPen(QPen(QColor(255, 255, 255, 40), 1.5));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r, radius, radius);
-    } else {
-        p.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r, radius, radius);
-    }
+    SurfacePainter::paintPanel(p, QRectF(rect()), 12.0, darkTheme_, 45);
 }
 
 void MPasteSettingsWidget::mousePressEvent(QMouseEvent *event)
