@@ -904,17 +904,26 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         // ── About page ──
         auto *aboutPage = new QWidget(stack);
         auto *aboutLayout = new QVBoxLayout(aboutPage);
-        aboutLayout->setContentsMargins(20, 24, 20, 20);
-        aboutLayout->setSpacing(12);
+        aboutLayout->setContentsMargins(20, 20, 20, 20);
+        aboutLayout->setSpacing(0);
+
+        aboutLayout->addStretch(1);
+
         auto *logoLabel = new QLabel(aboutPage);
         logoLabel->setPixmap(QPixmap(QStringLiteral(":/resources/resources/mpaste.svg")).scaled(
             64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         logoLabel->setAlignment(Qt::AlignCenter);
         aboutLayout->addWidget(logoLabel);
+
+        aboutLayout->addSpacing(16);
+
         auto *nameLabel = new QLabel(QStringLiteral("MPaste V" MPASTE_VERSION), aboutPage);
         nameLabel->setAlignment(Qt::AlignCenter);
-        nameLabel->setStyleSheet(QStringLiteral("font-size: 16px; font-weight: 700; background: transparent;"));
+        nameLabel->setStyleSheet(QStringLiteral("font-size: 18px; font-weight: 700; background: transparent;"));
         aboutLayout->addWidget(nameLabel);
+
+        aboutLayout->addSpacing(20);
+
         auto *authorLabel = new QLabel(
             QStringLiteral("Author: SeptemberHX<br>"
                            "Github: <a href=\"https://github.com/SeptemberHX/MPaste\">SeptemberHX/MPaste</a><br>"
@@ -922,8 +931,9 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             aboutPage);
         authorLabel->setAlignment(Qt::AlignCenter);
         authorLabel->setOpenExternalLinks(true);
-        authorLabel->setStyleSheet(QStringLiteral("font-size: 13px; background: transparent; line-height: 1.6;"));
+        authorLabel->setStyleSheet(QStringLiteral("font-size: 13px; background: transparent; line-height: 1.8;"));
         aboutLayout->addWidget(authorLabel);
+
         aboutLayout->addStretch(1);
         stack->addWidget(aboutPage);
 
