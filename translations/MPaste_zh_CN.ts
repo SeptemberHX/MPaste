@@ -185,42 +185,42 @@
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="58"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="59"/>
         <source>Max number of items</source>
         <translation>最大条目数</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="82"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="83"/>
         <source>Maximum retention days</source>
         <translation>最大保留天数</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="106"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="107"/>
         <source>Launch at startup</source>
         <translation>开机自启动</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="127"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="128"/>
         <source>Play copy sound</source>
         <translation>复制提示音</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="148"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="149"/>
         <source>Activation shortcut</source>
         <translation>唤醒快捷键</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="170"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="171"/>
         <source>Card size</source>
         <translation>卡片大小</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.ui" line="193"/>
+        <location filename="../widget/MPasteSettingsWidget.ui" line="194"/>
         <source>100%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteSettingsWidget.cpp" line="769"/>
+        <location filename="../widget/MPasteSettingsWidget.cpp" line="964"/>
         <source>Auto-start is currently only supported on Windows.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -294,22 +294,22 @@
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="227"/>
+        <location filename="../widget/MPasteWidget.cpp" line="230"/>
         <source>Recognizing...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="257"/>
+        <location filename="../widget/MPasteWidget.cpp" line="260"/>
         <source>OCR</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="752"/>
+        <location filename="../widget/MPasteWidget.cpp" line="762"/>
         <source>Recognized Text</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/MPasteWidget.cpp" line="759"/>
+        <location filename="../widget/MPasteWidget.cpp" line="769"/>
         <source>Copy to Clipboard</source>
         <translation type="unfinished"></translation>
     </message>
@@ -333,37 +333,37 @@
         <translation type="vanished">?? MIME ??</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="114"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="110"/>
         <source>Paste as Plain Text</source>
         <translation type="unfinished">??????</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="126"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="122"/>
         <source>Details</source>
         <translation type="unfinished">??</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="138"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="134"/>
         <source>Open Containing Folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="150"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="146"/>
         <source>Alias</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="188"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="184"/>
         <source>Save</source>
         <translation type="unfinished">保存</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="196"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="192"/>
         <source>Delete</source>
         <translation type="unfinished">删除</translation>
     </message>
     <message>
-        <location filename="../widget/BoardInternalHelpers.h" line="204"/>
+        <location filename="../widget/BoardInternalHelpers.h" line="200"/>
         <source>Delete Selected</source>
         <translation type="unfinished"></translation>
     </message>

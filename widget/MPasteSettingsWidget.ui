@@ -32,10 +32,10 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
    <string>Settings</string>
   </property>
   <layout class="QVBoxLayout" name="mainLayout">
-   <property name="leftMargin"><number>10</number></property>
-   <property name="topMargin"><number>10</number></property>
-   <property name="rightMargin"><number>10</number></property>
-   <property name="bottomMargin"><number>10</number></property>
+   <property name="leftMargin"><number>6</number></property>
+   <property name="topMargin"><number>8</number></property>
+   <property name="rightMargin"><number>6</number></property>
+   <property name="bottomMargin"><number>8</number></property>
    <property name="spacing"><number>0</number></property>
    <item>
     <widget class="QLabel" name="titleLabel">
@@ -46,10 +46,10 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
    <item>
     <widget class="QFrame" name="generalCard">
      <layout class="QGridLayout" name="cardGrid">
-      <property name="leftMargin"><number>16</number></property>
-      <property name="topMargin"><number>2</number></property>
-      <property name="rightMargin"><number>16</number></property>
-      <property name="bottomMargin"><number>2</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
       <property name="horizontalSpacing"><number>12</number></property>
       <property name="verticalSpacing"><number>0</number></property>
 
