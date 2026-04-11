@@ -242,6 +242,19 @@ static QString settingsStyleSheet(bool dark) {
                 button-layout: 2;
             }
 
+            QToolButton#closeBtn {
+                color: #E6EDF5;
+                background: transparent;
+                border: none;
+                border-radius: 11px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QToolButton#closeBtn:hover {
+                background-color: #C13B3B;
+                color: white;
+            }
+
             QToolButton#navBtn {
                 background: transparent;
                 border: none;
@@ -258,7 +271,7 @@ static QString settingsStyleSheet(bool dark) {
                 background-color: rgba(255, 255, 255, 12);
             }
             QFrame#navSep {
-                background: rgba(255, 255, 255, 15);
+                background: rgba(255, 255, 255, 6);
             }
             QFrame#card {
                 background: rgba(255, 255, 255, 8);
@@ -458,6 +471,19 @@ static QString settingsStyleSheet(bool dark) {
             button-layout: 2;
         }
 
+        QToolButton#closeBtn {
+            color: #1C2330;
+            background: transparent;
+            border: none;
+            border-radius: 11px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        QToolButton#closeBtn:hover {
+            background-color: #C13B3B;
+            color: white;
+        }
+
         QToolButton#navBtn {
             background: transparent;
             border: none;
@@ -474,7 +500,7 @@ static QString settingsStyleSheet(bool dark) {
             background-color: rgba(0, 0, 0, 6);
         }
         QFrame#navSep {
-            background: rgba(0, 0, 0, 8);
+            background: rgba(0, 0, 0, 4);
         }
         QFrame#card {
             background: rgba(0, 0, 0, 4);
@@ -507,8 +533,34 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &MPasteSettingsWidget::applyTheme);
 
     setWindowTitle(uiText("Settings", QStringLiteral("设置")));
-    ui->titleLabel->setText(uiText("MPaste " MPASTE_VERSION, QStringLiteral("MPaste " MPASTE_VERSION)));
-    ui->titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    ui->titleLabel->hide(); // replaced by custom title bar
+
+    // ── Custom title bar (MTodo pattern) ──
+    {
+        auto *titleBar = new QWidget(this);
+        titleBar->setFixedHeight(32);
+        titleBar->setCursor(Qt::SizeAllCursor);
+        titleBar->setObjectName(QStringLiteral("titleBar"));
+        auto *tb = new QHBoxLayout(titleBar);
+        tb->setContentsMargins(8, 0, 4, 0);
+        tb->setSpacing(6);
+        auto *titleLabel = new QLabel(uiText("MPaste Settings", QStringLiteral("MPaste 设置")), titleBar);
+        QFont f = titleLabel->font();
+        f.setBold(true);
+        f.setPointSizeF(f.pointSizeF() + 0.5);
+        titleLabel->setFont(f);
+        tb->addWidget(titleLabel);
+        tb->addStretch();
+        auto *closeBtn = new QToolButton(titleBar);
+        closeBtn->setText(QStringLiteral("\u00D7"));
+        closeBtn->setFocusPolicy(Qt::NoFocus);
+        closeBtn->setCursor(Qt::PointingHandCursor);
+        closeBtn->setFixedSize(22, 22);
+        closeBtn->setObjectName(QStringLiteral("closeBtn"));
+        connect(closeBtn, &QToolButton::clicked, this, &QDialog::close);
+        tb->addWidget(closeBtn);
+        ui->mainLayout->insertWidget(0, titleBar);
+    }
     if (auto *grid = qobject_cast<QGridLayout*>(ui->generalCard->layout())) {
         grid->removeWidget(ui->label);
         grid->removeWidget(ui->numSpinBox);
@@ -681,9 +733,9 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         // ── Sidebar with QToolButtons (MTodo pattern) ──
         auto *sideWidget = new QWidget(ui->generalCard);
-        sideWidget->setFixedWidth(82);
+        sideWidget->setFixedWidth(76);
         auto *sideLayout = new QVBoxLayout(sideWidget);
-        sideLayout->setContentsMargins(4, 4, 4, 4);
+        sideLayout->setContentsMargins(2, 4, 0, 4);
         sideLayout->setSpacing(2);
 
         auto *navGroup = new QButtonGroup(this);
@@ -692,7 +744,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         auto makeNavBtn = [&](const QString &iconName, const QString &text, int id) {
             auto *btn = new QToolButton();
             btn->setObjectName(QStringLiteral("navBtn"));
-            btn->setIcon(IconResolver::themedIcon(iconName, dark));
+            btn->setIcon(IconResolver::themedIcon(iconName, ThemeManager::instance()->isDark()));
             btn->setIconSize(QSize(22, 22));
             btn->setText(text);
             btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
@@ -855,6 +907,20 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     });
 
     loadSettings();
+
+    // ── Auto-save: every control change saves immediately ──
+    auto save = [this]() { saveAllSettings(); };
+    connect(toggleSwitch_, &ToggleSwitch::toggled, this, save);
+    connect(autoStartSwitch_, &ToggleSwitch::toggled, this, save);
+    if (themeCombo_) connect(themeCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (retentionUnitCombo_) connect(retentionUnitCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (pasteShortcutCombo_) connect(pasteShortcutCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (ocrBackendCombo_) connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (autoOcrSwitch_) connect(autoOcrSwitch_, &ToggleSwitch::toggled, this, save);
+    connect(ui->daySpinBox, &QSpinBox::valueChanged, this, save);
+    connect(ui->itemScaleSlider, &QSlider::valueChanged, this, save);
+    connect(ui->shortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, save);
+
     adjustSize();
 }
 
@@ -873,17 +939,28 @@ void MPasteSettingsWidget::paintEvent(QPaintEvent *)
 void MPasteSettingsWidget::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        dragPos_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        // Only drag from the top 42px (title bar area)
+        if (event->position().toPoint().y() <= 42) {
+            dragPos_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        }
         event->accept();
     }
 }
 
 void MPasteSettingsWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    if (event->buttons() & Qt::LeftButton) {
+    if ((event->buttons() & Qt::LeftButton) && !dragPos_.isNull()) {
         move(event->globalPosition().toPoint() - dragPos_);
         event->accept();
     }
+}
+
+void MPasteSettingsWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        dragPos_ = QPoint();
+    }
+    QDialog::mouseReleaseEvent(event);
 }
 
 void MPasteSettingsWidget::showEvent(QShowEvent *event)
@@ -949,7 +1026,12 @@ void MPasteSettingsWidget::loadSettings()
 #endif
 }
 
-void MPasteSettingsWidget::accept()
+void MPasteSettingsWidget::accept() {
+    saveAllSettings();
+    QDialog::accept();
+}
+
+void MPasteSettingsWidget::saveAllSettings()
 {
     auto *settings = MPasteSettings::getInst();
     const int oldRetentionValue = settings->getHistoryRetentionValue();
@@ -1025,7 +1107,6 @@ void MPasteSettingsWidget::accept()
     if (oldScale != newScale) {
         emit itemScaleChanged(newScale);
     }
-    QDialog::accept();
 }
 
 void MPasteSettingsWidget::applyTheme(bool dark) {
