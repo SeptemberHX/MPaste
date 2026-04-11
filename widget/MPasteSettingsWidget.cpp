@@ -278,12 +278,9 @@ static QString settingsStyleSheet(bool dark) {
             QToolButton#navBtn:hover:!checked {
                 background-color: rgba(255, 255, 255, 12);
             }
-            QFrame#navSep {
-                background: rgba(255, 255, 255, 6);
-            }
             QFrame#card {
-                background: rgba(255, 255, 255, 8);
-                border: 1px solid rgba(255, 255, 255, 10);
+                background: rgba(255, 255, 255, 12);
+                border: 1px solid rgba(255, 255, 255, 8);
                 border-radius: 10px;
                 padding: 6px 8px;
             }
@@ -515,11 +512,8 @@ static QString settingsStyleSheet(bool dark) {
         QToolButton#navBtn:hover:!checked {
             background-color: rgba(0, 0, 0, 6);
         }
-        QFrame#navSep {
-            background: rgba(0, 0, 0, 4);
-        }
         QFrame#card {
-            background: rgba(0, 0, 0, 4);
+            background: rgba(255, 255, 255, 180);
             border: 1px solid rgba(0, 0, 0, 6);
             border-radius: 10px;
             padding: 6px 8px;
@@ -739,8 +733,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         auto createPageLayout = [](QWidget *parent) {
             auto *layout = new QVBoxLayout(parent);
-            layout->setContentsMargins(14, 8, 14, 8);
-            layout->setSpacing(10);
+            layout->setContentsMargins(16, 10, 16, 10);
+            layout->setSpacing(12);
             return layout;
         };
 
@@ -797,9 +791,9 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         auto makeSettingsGrid = []() {
             auto *g = new QGridLayout();
-            g->setContentsMargins(12, 8, 12, 8);
+            g->setContentsMargins(14, 10, 14, 10);
             g->setHorizontalSpacing(12);
-            g->setVerticalSpacing(10);
+            g->setVerticalSpacing(12);
             g->setColumnStretch(0, 1);
             g->setColumnStretch(1, 0);
             return g;
@@ -940,17 +934,11 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             btn->setChecked(true);
         stack->setCurrentIndex(0);
 
-        // ── Layout: sidebar | separator | content ──
-        auto *navSep = new QFrame(ui->generalCard);
-        navSep->setObjectName(QStringLiteral("navSep"));
-        navSep->setFrameShape(QFrame::VLine);
-        navSep->setFixedWidth(1);
-
+        // ── Layout: sidebar | content (no separator line) ──
         auto *hbox = new QHBoxLayout;
         hbox->setContentsMargins(0, 0, 0, 0);
         hbox->setSpacing(0);
         hbox->addWidget(sideWidget);
-        hbox->addWidget(navSep);
         hbox->addWidget(stack, 1);
 
         grid->setContentsMargins(0, 0, 0, 0);
