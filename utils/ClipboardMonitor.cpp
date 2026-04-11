@@ -165,7 +165,44 @@ QString itemSummary(const ClipboardItem &item) {
         .arg(item.getImagePixelSize().isValid() ? item.getImagePixelSize().height() : 0)
         .arg(item.getHtml().size());
 }
+
+#ifdef Q_OS_WIN
+/// Read the raw CF_HTML bytes from the OLE clipboard.
+/// Qt's QWindowsMimeHtml only extracts the fragment between StartFragment
+/// and EndFragment markers, discarding the <head><style> block.  CSS
+/// classes like .MsoNormal that define text-align, font-family, etc. live
+/// in that <style> section, so the fragment alone cannot preserve
+/// centering/fonts when reconverted to CF_HTML.  Reading the full bytes
+/// via IDataObject::GetData lets us store them alongside the item and
+/// replay them verbatim during clipboard export.
+QByteArray readRawCfHtml() {
+    static UINT cfHtml = RegisterClipboardFormatW(L"HTML Format");
+    IDataObject *pDataObj = nullptr;
+    if (FAILED(OleGetClipboard(&pDataObj)) || !pDataObj)
+        return {};
+
+    FORMATETC fmt = { static_cast<CLIPFORMAT>(cfHtml), nullptr,
+                      DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    STGMEDIUM medium = {};
+    QByteArray result;
+
+    if (SUCCEEDED(pDataObj->GetData(&fmt, &medium))) {
+        if (medium.tymed == TYMED_HGLOBAL && medium.hGlobal) {
+            void *data = GlobalLock(medium.hGlobal);
+            if (data) {
+                result = QByteArray(static_cast<const char *>(data),
+                                    static_cast<int>(GlobalSize(medium.hGlobal)));
+                GlobalUnlock(medium.hGlobal);
+            }
+        }
+        ReleaseStgMedium(&medium);
+    }
+    pDataObj->Release();
+    return result;
 }
+#endif
+
+} // anonymous namespace
 
 QList<QUrl> buildImageFetchCandidates(const QUrl &url) {
     QList<QUrl> candidates;
@@ -323,6 +360,24 @@ void ClipboardMonitor::captureClipboard() {
         return;
     }
 
+    // Self-paste echo guard: after MPaste writes to the clipboard via
+    // setClipboard(), OleFlushClipboard in the capture path triggers
+    // WM_CLIPBOARDUPDATE with the same content, creating an infinite
+    // Flush→notify→Flush loop.  The guard stays active until the
+    // clipboard content actually changes (signature mismatch) — no
+    // timeout, since the cascade can last arbitrarily long.
+    if (!selfPasteEchoSig_.isEmpty()) {
+        const QByteArray currentSig = computeEchoSignature(mimeData);
+        if (currentSig == selfPasteEchoSig_) {
+            qInfo().noquote() << QStringLiteral("[clipboard-monitor] self-paste echo suppressed token=%1 sig=%2")
+                .arg(captureToken_)
+                .arg(QString::fromLatin1(selfPasteEchoSig_.toHex().left(12)));
+            return;
+        }
+        // Signature differs → real new copy; clear the guard.
+        selfPasteEchoSig_.clear();
+    }
+
 #ifdef Q_OS_WIN
     // If the clipboard carries delayed-rendered shell formats (Explorer file
     // copies, Outlook attachments, archive files, OneDrive placeholders...),
@@ -364,6 +419,26 @@ void ClipboardMonitor::captureClipboard() {
     wpsSettlePending_ = false;
 
     ClipboardItem immediateItem = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(pendingWId_), mimeData);
+
+#ifdef Q_OS_WIN
+    // Preserve raw CF_HTML for faithful clipboard export.  Qt's html()
+    // only returns the fragment between StartFragment/EndFragment markers;
+    // the <head><style> block with CSS class definitions (centering, fonts)
+    // is discarded.  Store the full CF_HTML bytes so the export path can
+    // write them verbatim via QWindowsMimeAny instead of letting
+    // QWindowsMimeHtml regenerate lossy CF_HTML from the fragment.
+    if (mimeData->hasHtml()) {
+        const QByteArray rawCfHtml = readRawCfHtml();
+        if (!rawCfHtml.isEmpty()) {
+            immediateItem.setMimeFormat(
+                QStringLiteral("application/x-qt-windows-mime;value=\"HTML Format\""),
+                rawCfHtml);
+            qInfo().noquote() << QStringLiteral("[clipboard-monitor] preserved raw CF_HTML %1 bytes token=%2")
+                .arg(rawCfHtml.size()).arg(captureToken_);
+        }
+    }
+#endif
+
     if (ContentClassifier::hasFastImagePayload(mimeData)
         && immediateItem.imagePayloadBytesFast().isEmpty()
         && retryCount_ < MAX_RETRIES) {
@@ -430,6 +505,57 @@ void ClipboardMonitor::connectMonitor() {
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
         this, &ClipboardMonitor::clipboardChanged, Qt::UniqueConnection);
     qInfo() << "[clipboard-monitor] connected";
+}
+
+QByteArray ClipboardMonitor::computeEchoSignature(const QMimeData *mimeData) {
+    if (!mimeData) return {};
+    QCryptographicHash h(QCryptographicHash::Sha1);
+    // Pick the SINGLE most stable semantic field — don't combine them.
+    // The goal is "stable hit on self-echo", not "full equivalence".
+    // text is the most stable across OLE round-trips; html can be
+    // rewritten by Word (CF_HTML header changes, fragment shifts);
+    // urls are stable but only present for file/link copies.
+    if (mimeData->hasUrls() && !mimeData->urls().isEmpty()) {
+        h.addData(QByteArrayLiteral("U:"));
+        for (const QUrl &url : mimeData->urls())
+            h.addData(url.toString(QUrl::FullyEncoded).toUtf8());
+        return h.result();
+    }
+    if (mimeData->hasText()) {
+        const QString text = mimeData->text().simplified();
+        if (!text.isEmpty()) {
+            h.addData(QByteArrayLiteral("T:"));
+            h.addData(text.toUtf8());
+            return h.result();
+        }
+    }
+    if (mimeData->hasColor()) {
+        h.addData(QByteArrayLiteral("C:"));
+        h.addData(QByteArray::number(static_cast<quint32>(
+            mimeData->colorData().value<QColor>().rgba())));
+        return h.result();
+    }
+    if (mimeData->hasHtml()) {
+        // Last resort: extract the fragment and strip tags for a
+        // stable representation that survives CF_HTML header rewrites.
+        const QString html = mimeData->html();
+        QString fragment = ClipboardItem::htmlFragment(html).toString();
+        static const QRegularExpression tagRe(QStringLiteral("<[^>]*>"));
+        fragment.replace(tagRe, QString());
+        fragment = fragment.simplified();
+        if (!fragment.isEmpty()) {
+            h.addData(QByteArrayLiteral("H:"));
+            h.addData(fragment.toUtf8());
+            return h.result();
+        }
+    }
+    return {};
+}
+
+void ClipboardMonitor::setSelfPasteGuardFromMimeData(const QMimeData *mimeData) {
+    selfPasteEchoSig_ = computeEchoSignature(mimeData);
+    qInfo().noquote() << QStringLiteral("[clipboard-monitor] self-paste guard set sig=%1")
+        .arg(QString::fromLatin1(selfPasteEchoSig_.toHex().left(12)));
 }
 
 

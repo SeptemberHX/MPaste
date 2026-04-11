@@ -58,7 +58,7 @@ void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
         GetProcAddress(user32, "SetWindowCompositionAttribute"));
     if (!setWCA) return;
 
-    const QColor tint = dark ? QColor(30, 40, 55, 18) : QColor(231, 241, 244, 20);
+    const QColor tint = dark ? QColor(30, 40, 55, 18) : QColor(235, 235, 245, 1);
     DWORD tintVal = accentColorFromArgb(tint);
 
     ACCENT_POLICY accent{};

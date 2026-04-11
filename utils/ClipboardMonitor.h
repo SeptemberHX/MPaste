@@ -32,6 +32,19 @@ public:
     void connectMonitor();
     void primeCurrentClipboard();
 
+    /// Set a self-paste echo guard.  While active, captureClipboard()
+    /// skips OleFlushClipboard and the full capture if the clipboard
+    /// content fingerprint matches, preventing the infinite
+    /// Flush→WM_CLIPBOARDUPDATE→Flush loop after pasting.
+    void setSelfPasteGuardFromMimeData(const QMimeData *mimeData);
+
+    /// Compute a lightweight echo signature from a QMimeData.
+    /// Uses only text/html/urls — never reads heavy formats (RTF/OLE).
+    /// Both the write side (setClipboard) and the read side
+    /// (captureClipboard) call this same function to guarantee
+    /// identical results for the same clipboard content.
+    static QByteArray computeEchoSignature(const QMimeData *mimeData);
+
 signals:
     void clipboardActivityObserved(int wId);
     void clipboardUpdated(const ClipboardItem &item, int wId);
@@ -73,6 +86,10 @@ private:
     QByteArray lastActivitySignature_;
     bool capturing_ = false;
     bool captureRestartPending_ = false;
+
+    // Self-paste echo suppression — no timeout, cleared only on
+    // content change (signature mismatch).
+    QByteArray selfPasteEchoSig_;
 
     static const int STABILIZE_INTERVAL = 200;
     static const int MAX_RETRIES = 10;

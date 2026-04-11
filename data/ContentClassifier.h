@@ -391,7 +391,7 @@ inline ContentType classify(const QMimeData *mimeData,
         if (htmlImageLike) {
             return shouldTreatOfficePayloadAsType(traits) ? Office : Image;
         }
-        if (shouldTreatOfficePayloadAsType(traits)) {
+        if (shouldTreatOfficePayloadAsType(traits) && isImageLikeText(normalizedText)) {
             return Office;
         }
         QString text = normalizedText.trimmed();
