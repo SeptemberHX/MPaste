@@ -28,6 +28,7 @@
 #include <QPushButton>
 #include <QFileDialog>
 #include <QButtonGroup>
+#include <QFormLayout>
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QUrl>
@@ -240,6 +241,14 @@ static QString settingsStyleSheet(bool dark) {
 
             QDialogButtonBox {
                 button-layout: 2;
+            }
+
+            QLabel#section {
+                color: #8FB7E2;
+                font-weight: bold;
+                font-size: 12px;
+                background: transparent;
+                padding: 2px 0;
             }
 
             QToolButton#closeBtn {
@@ -471,6 +480,14 @@ static QString settingsStyleSheet(bool dark) {
             button-layout: 2;
         }
 
+        QLabel#section {
+            color: #2A6CB0;
+            font-weight: bold;
+            font-size: 12px;
+            background: transparent;
+            padding: 2px 0;
+        }
+
         QToolButton#closeBtn {
             color: #1C2330;
             background: transparent;
@@ -517,8 +534,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 {
     ui->setupUi(this);
 
-    setMinimumWidth(600);
-    setMaximumWidth(600);
+    setMinimumWidth(580);
+    setMaximumWidth(580);
     setMinimumHeight(0);
     setMaximumHeight(QWIDGETSIZE_MAX);
     if (layout()) {
@@ -721,22 +738,32 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         // ── Sidebar + StackedWidget (Clipaste-style) ──
 
-        auto createPageGrid = [](QWidget *parent) {
-            auto *layout = new QGridLayout(parent);
-            layout->setContentsMargins(16, 12, 16, 12);
-            layout->setHorizontalSpacing(14);
-            layout->setVerticalSpacing(8);
-            layout->setColumnStretch(0, 0);
-            layout->setColumnStretch(1, 1);
+        auto createPageLayout = [](QWidget *parent) {
+            auto *layout = new QVBoxLayout(parent);
+            layout->setContentsMargins(14, 8, 14, 8);
+            layout->setSpacing(10);
             return layout;
+        };
+
+        auto makeSectionLabel = [](const QString &text, QWidget *parent) {
+            auto *label = new QLabel(text, parent);
+            label->setObjectName(QStringLiteral("section"));
+            return label;
+        };
+
+        auto makeCard = [](QLayout *layout) {
+            auto *card = new QFrame();
+            card->setObjectName(QStringLiteral("card"));
+            card->setLayout(layout);
+            return card;
         };
 
         // ── Sidebar with QToolButtons (MTodo pattern) ──
         auto *sideWidget = new QWidget(ui->generalCard);
-        sideWidget->setFixedWidth(76);
+        sideWidget->setFixedWidth(80);
         auto *sideLayout = new QVBoxLayout(sideWidget);
-        sideLayout->setContentsMargins(2, 4, 0, 4);
-        sideLayout->setSpacing(2);
+        sideLayout->setContentsMargins(4, 8, 0, 8);
+        sideLayout->setSpacing(6);
 
         auto *navGroup = new QButtonGroup(this);
         navGroup->setExclusive(true);
@@ -767,40 +794,66 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         // ── General page ──
         auto *generalPage = new QWidget(stack);
-        auto *generalLayout = createPageGrid(generalPage);
-        generalLayout->addWidget(themeLabel_, 0, 0);
-        generalLayout->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_autostart, 1, 0);
-        generalLayout->addWidget(autoStartSwitch_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_3, 2, 0);
-        generalLayout->addWidget(toggleSwitch_, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_2, 3, 0);
-        generalLayout->addWidget(retentionWidget, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_5, 4, 0);
-        generalLayout->addWidget(ui->scaleWidget, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->setRowStretch(5, 1);
+        auto *gLayout = createPageLayout(generalPage);
+
+        gLayout->addWidget(makeSectionLabel(uiText("Appearance", QStringLiteral("外观")), generalPage));
+        {
+            auto *form = new QFormLayout();
+            form->setContentsMargins(12, 8, 12, 8);
+            form->setSpacing(10);
+            form->addRow(themeLabel_, themeCombo_);
+            form->addRow(ui->label_autostart, autoStartSwitch_);
+            gLayout->addWidget(makeCard(form));
+        }
+
+        gLayout->addWidget(makeSectionLabel(uiText("Behavior", QStringLiteral("行为")), generalPage));
+        {
+            auto *form = new QFormLayout();
+            form->setContentsMargins(12, 8, 12, 8);
+            form->setSpacing(10);
+            form->addRow(ui->label_3, toggleSwitch_);
+            form->addRow(ui->label_2, retentionWidget);
+            form->addRow(ui->label_5, ui->scaleWidget);
+            gLayout->addWidget(makeCard(form));
+        }
+
+        gLayout->addStretch();
         stack->addWidget(generalPage);
 
         // ── Shortcuts page ──
         auto *shortcutsPage = new QWidget(stack);
-        auto *shortcutsLayout = createPageGrid(shortcutsPage);
-        shortcutsLayout->addWidget(ui->label_4, 0, 0);
-        shortcutsLayout->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
-        shortcutsLayout->addWidget(pasteShortcutLabel_, 1, 0);
-        shortcutsLayout->addWidget(pasteShortcutCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
-        shortcutsLayout->setRowStretch(2, 1);
+        auto *sLayout = createPageLayout(shortcutsPage);
+
+        sLayout->addWidget(makeSectionLabel(uiText("Shortcuts", QStringLiteral("快捷键")), shortcutsPage));
+        {
+            auto *form = new QFormLayout();
+            form->setContentsMargins(12, 8, 12, 8);
+            form->setSpacing(10);
+            form->addRow(ui->label_4, ui->shortcutEdit);
+            form->addRow(pasteShortcutLabel_, pasteShortcutCombo_);
+            sLayout->addWidget(makeCard(form));
+        }
+
+        sLayout->addStretch();
         stack->addWidget(shortcutsPage);
 
         // ── Advanced page ──
         auto *maintenancePage = new QWidget(stack);
-        auto *maintenanceLayout = createPageGrid(maintenancePage);
-        maintenanceLayout->addWidget(syncLabel_, 0, 0, 1, 2);
-        maintenanceLayout->addWidget(syncPathEdit_, 1, 0, 1, 2);
-        maintenanceLayout->addWidget(syncButtonsRow, 2, 0, 1, 2);
+        auto *mLayout = createPageLayout(maintenancePage);
+
+        mLayout->addWidget(makeSectionLabel(uiText("Sync", QStringLiteral("同步")), maintenancePage));
+        {
+            auto *form = new QFormLayout();
+            form->setContentsMargins(12, 8, 12, 8);
+            form->setSpacing(10);
+            form->addRow(syncLabel_, syncPathEdit_);
+            form->addRow(QString(), syncButtonsRow);
+            mLayout->addWidget(makeCard(form));
+        }
 
         ocrLabel_ = new QLabel(uiText("OCR Backend", QStringLiteral("OCR 引擎")), maintenancePage);
         ocrBackendCombo_ = new QComboBox(maintenancePage);
-        ocrBackendCombo_->setMinimumSize(QSize(200, 36));
+        ocrBackendCombo_->setMinimumSize(QSize(180, 36));
         ocrBackendCombo_->setMaximumHeight(36);
         ocrBackendCombo_->addItem(uiText("Windows Built-in", QStringLiteral("Windows 内置")), 0);
         ocrBackendCombo_->addItem(uiText("Baidu OCR API", QStringLiteral("百度 OCR API")), 1);
@@ -828,15 +881,19 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         autoOcrLabel_ = new QLabel(uiText("Auto OCR for images", QStringLiteral("图片自动 OCR")), maintenancePage);
         autoOcrSwitch_ = new ToggleSwitch(maintenancePage);
 
-        maintenanceLayout->addWidget(ocrLabel_, 3, 0);
-        maintenanceLayout->addWidget(ocrBackendCombo_, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
-        maintenanceLayout->addWidget(baiduApiKeyLabel_, 4, 0);
-        maintenanceLayout->addWidget(baiduApiKeyEdit_, 4, 1);
-        maintenanceLayout->addWidget(baiduSecretKeyLabel_, 5, 0);
-        maintenanceLayout->addWidget(baiduSecretKeyEdit_, 5, 1);
-        maintenanceLayout->addWidget(autoOcrLabel_, 6, 0);
-        maintenanceLayout->addWidget(autoOcrSwitch_, 6, 1, Qt::AlignRight | Qt::AlignVCenter);
-        maintenanceLayout->setRowStretch(7, 1);
+        mLayout->addWidget(makeSectionLabel(uiText("OCR", QStringLiteral("OCR")), maintenancePage));
+        {
+            auto *form = new QFormLayout();
+            form->setContentsMargins(12, 8, 12, 8);
+            form->setSpacing(10);
+            form->addRow(ocrLabel_, ocrBackendCombo_);
+            form->addRow(baiduApiKeyLabel_, baiduApiKeyEdit_);
+            form->addRow(baiduSecretKeyLabel_, baiduSecretKeyEdit_);
+            form->addRow(autoOcrLabel_, autoOcrSwitch_);
+            mLayout->addWidget(makeCard(form));
+        }
+
+        mLayout->addStretch();
         stack->addWidget(maintenancePage);
 
         // ── About page ──
