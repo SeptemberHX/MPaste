@@ -49,7 +49,8 @@ inline void applyMenuTheme(QMenu *menu) {
     menu->setAttribute(Qt::WA_TranslucentBackground);
     menu->setWindowFlags(menu->windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
 
-    const QString bg = QStringLiteral("transparent");
+    const QString bg = dark ? QStringLiteral("rgba(32, 32, 36, 230)")
+                            : QStringLiteral("rgba(248, 248, 250, 235)");
     const QString border = dark ? QStringLiteral("rgba(255, 255, 255, 30)") : QStringLiteral("rgba(0, 0, 0, 22)");
     const QString text = dark ? QStringLiteral("#D6DEE8") : QStringLiteral("#1E2936");
     const QString highlight = dark ? QStringLiteral("rgba(255, 255, 255, 22)") : QStringLiteral("rgba(0, 0, 0, 12)");
@@ -83,11 +84,6 @@ inline void applyMenuTheme(QMenu *menu) {
         "QMenu::icon {"
         " padding-left: 8px;"
         "}").arg(bg, border, text, highlight, highlightText, separator));
-
-    // Apply blur after the menu is shown (connect once).
-    QObject::connect(menu, &QMenu::aboutToShow, menu, [menu, dark]() {
-        WindowBlurHelper::enableBlurBehind(menu, dark);
-    });
 }
 
 inline bool looksBrokenTranslation(const QString &text) {

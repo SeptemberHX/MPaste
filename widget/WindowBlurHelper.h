@@ -4,7 +4,9 @@
 #include <QWidget>
 
 namespace WindowBlurHelper {
-    void enableBlurBehind(QWidget *widget, bool dark);
+    /// Enable acrylic blur behind a widget.
+    /// Set extendFrame=false for popup menus to avoid DWM shadow.
+    void enableBlurBehind(QWidget *widget, bool dark, bool extendFrame = true);
 }
 
 #endif // MPASTE_WINDOWBLURHELPER_H
