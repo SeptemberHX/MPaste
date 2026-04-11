@@ -783,8 +783,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         };
 
         makeNavBtn(QStringLiteral("settings"), uiText("General", QStringLiteral("通用")), 0);
-        makeNavBtn(QStringLiteral("text_plain"), uiText("Shortcuts", QStringLiteral("快捷键")), 1);
-        makeNavBtn(QStringLiteral("save_black"), uiText("Advanced", QStringLiteral("高级")), 2);
+        makeNavBtn(QStringLiteral("rename"), uiText("Shortcuts", QStringLiteral("快捷键")), 1);
+        makeNavBtn(QStringLiteral("menu_more"), uiText("Advanced", QStringLiteral("高级")), 2);
         sideLayout->addStretch();
         makeNavBtn(QStringLiteral("info"), uiText("About", QStringLiteral("关于")), 3);
 
@@ -1181,5 +1181,16 @@ void MPasteSettingsWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
     WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     setStyleSheet(settingsStyleSheet(darkTheme_));
+
+    // Update sidebar icons for the new theme.
+    static const QStringList navIcons = {
+        QStringLiteral("settings"), QStringLiteral("rename"),
+        QStringLiteral("menu_more"), QStringLiteral("info")
+    };
+    const auto navBtns = findChildren<QToolButton *>(QStringLiteral("navBtn"));
+    for (int i = 0; i < navBtns.size() && i < navIcons.size(); ++i) {
+        navBtns[i]->setIcon(IconResolver::themedIcon(navIcons[i], dark));
+    }
+
     update();
 }
