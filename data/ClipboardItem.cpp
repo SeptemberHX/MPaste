@@ -6,6 +6,7 @@
 #include "ClipboardItemUrlParser.h"
 #include "ClipboardItemImageDecoder.h"
 #include "LocalSaver.h"
+#include "MathMLRenderer.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -14,6 +15,7 @@
 #include <QRegularExpression>
 
 #include "utils/MPasteSettings.h"
+#include "utils/ThemeManager.h"
 
 #include <algorithm>
 #include <cstring>
@@ -283,6 +285,24 @@ QByteArray ClipboardItem::buildFingerprint() const {
     if (!mimeData_->hasText() && !mimeData_->hasHtml() && !mimeData_->hasUrls()
         && !(hasFastImagePayload() || (mimeDataLoaded_ && hasDecodableImage())) && !mimeData_->hasColor()) {
         for (const QString &format : mimeData_->formats()) {
+            hash.addData(format.toUtf8());
+            hash.addData(mimeData_->data(format));
+        }
+    }
+
+    // Equation editors (MathType, Word/PowerPoint embedded formulas,
+    // LaTeXiT, etc.): the stripped MathML text fallback is identical for
+    // two formulas that look different in the editor (e.g. plain G vs
+    // script G), because Presentation MathML export often drops style
+    // information into a sibling MTEF / OLE annotation binary. Mix in any
+    // mathml / mathtype format bytes so visually-different copies stay as
+    // distinct items. The check is narrow enough that other content types
+    // (text/image/file/etc.) never enter the loop, so their fingerprints
+    // are unchanged.
+    for (const QString &format : mimeData_->formats()) {
+        const QString lower = format.toLower();
+        if (lower.contains(QStringLiteral("mathtype")) || lower.contains(QStringLiteral("mathml"))) {
+            hash.addData(QByteArrayLiteral("mt:"));
             hash.addData(format.toUtf8());
             hash.addData(mimeData_->data(format));
         }
@@ -601,7 +621,12 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
             if (!shouldCopyLightMimeFormat(format)) {
                 continue;
             }
+            // Log before the cross-process read so the last-printed format
+            // on a crash tells us exactly which one tripped the UAF /
+            // dangling-IDataObject condition.
+            qInfo().noquote() << QStringLiteral("[clipboard-item] reading extra format: %1").arg(format);
             const QByteArray data = mimeData->data(format);
+            qInfo().noquote() << QStringLiteral("[clipboard-item] read ok %1 (%2 bytes)").arg(format).arg(data.size());
             if (!data.isEmpty()) {
                 item.mimeData_->setData(format, data);
             }
@@ -612,58 +637,75 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
         // Qt on Windows wraps custom formats as
         // application/x-qt-windows-mime;value="MathType EF", so check
         // all format names for the keywords rather than exact matches.
-        bool isMathType = false;
+        // Equation items: MathType, Word/PowerPoint native equations, and
+        // anything else that ships a MathML or MathType format all share
+        // the same thumbnail renderer and preview path.
+        bool isEquation = false;
         QString mathmlFormat;
         for (const QString &fmt : mimeData->formats()) {
             const QString lower = fmt.toLower();
-            if (lower.contains(QStringLiteral("mathtype"))) {
-                isMathType = true;
-            }
-            if (lower.contains(QStringLiteral("mathml"))) {
-                isMathType = true;
-                if (mathmlFormat.isEmpty()) {
+            if (lower.contains(QStringLiteral("mathtype")) || lower.contains(QStringLiteral("mathml"))) {
+                isEquation = true;
+                if (mathmlFormat.isEmpty() && lower.contains(QStringLiteral("mathml"))) {
                     mathmlFormat = fmt;
                 }
             }
         }
-        if (isMathType) {
-            item.title_ = QStringLiteral("MathType");
-            if (!mimeData->hasText()) {
-                QByteArray mathml;
-                if (!mathmlFormat.isEmpty()) {
-                    mathml = mimeData->data(mathmlFormat);
-                }
+        if (isEquation) {
+            item.title_ = QStringLiteral("公式");
+            // Read the MathML payload once and use it for both the text
+            // fallback and the rendered preview thumbnail.
+            QString mathmlText;
+            if (!mathmlFormat.isEmpty()) {
+                const QByteArray mathml = mimeData->data(mathmlFormat);
                 if (!mathml.isEmpty()) {
                     // MathType may emit UTF-16LE (with or without BOM).
                     // Detect by checking for a NUL byte in the first few
                     // positions — UTF-8/ASCII never has NUL in valid XML.
-                    QString mathText;
                     if (mathml.size() >= 2
                         && (mathml.at(1) == '\0' || (static_cast<unsigned char>(mathml.at(0)) == 0xFF
                                                      && static_cast<unsigned char>(mathml.at(1)) == 0xFE))) {
-                        mathText = QString::fromUtf16(
+                        mathmlText = QString::fromUtf16(
                             reinterpret_cast<const char16_t *>(mathml.constData()),
                             mathml.size() / 2);
                     } else {
-                        mathText = QString::fromUtf8(mathml);
+                        mathmlText = QString::fromUtf8(mathml);
                     }
-                    // Strip XML tags and MathType annotation blocks.
-                    static const QRegularExpression annotationRe(
-                        QStringLiteral("<annotation[^>]*>.*?</annotation>"),
-                        QRegularExpression::DotMatchesEverythingOption);
-                    mathText.remove(annotationRe);
-                    static const QRegularExpression xmlTagRe(QStringLiteral("<[^>]*>"));
-                    mathText.replace(xmlTagRe, QStringLiteral(" "));
-                    // Remove remaining invisible Unicode operators
-                    // (e.g. U+2061 function application, U+2062 invisible times).
-                    mathText.remove(QChar(0x2061));
-                    mathText.remove(QChar(0x2062));
-                    mathText.remove(QChar(0x2063));
-                    mathText.remove(QChar(0x2064));
-                    mathText = mathText.simplified();
-                    if (!mathText.isEmpty()) {
-                        item.mimeData_->setText(mathText);
-                    }
+                }
+            }
+            if (!mathmlText.isEmpty() && !mimeData->hasText()) {
+                // Build a plain-text fallback by stripping XML tags and
+                // annotation blocks.
+                QString mathText = mathmlText;
+                static const QRegularExpression annotationRe(
+                    QStringLiteral("<annotation[^>]*>.*?</annotation>"),
+                    QRegularExpression::DotMatchesEverythingOption);
+                mathText.remove(annotationRe);
+                static const QRegularExpression xmlTagRe(QStringLiteral("<[^>]*>"));
+                mathText.replace(xmlTagRe, QStringLiteral(" "));
+                // Remove remaining invisible Unicode operators
+                // (e.g. U+2061 function application, U+2062 invisible times).
+                mathText.remove(QChar(0x2061));
+                mathText.remove(QChar(0x2062));
+                mathText.remove(QChar(0x2063));
+                mathText.remove(QChar(0x2064));
+                mathText = mathText.simplified();
+                if (!mathText.isEmpty()) {
+                    item.mimeData_->setText(mathText);
+                }
+            }
+            // Render a visual preview from the MathML so the Office card
+            // shows the formula instead of the text fallback. Failure (parse
+            // error or unsupported nodes) leaves the thumbnail null and the
+            // card falls back to the previous text-only display. The
+            // thumbnail color scheme is baked at capture time from the
+            // current theme — switching theme later will leave old MathType
+            // thumbnails in their original colors until they're re-captured.
+            if (!mathmlText.isEmpty()) {
+                const bool dark = ThemeManager::instance()->isDark();
+                const QPixmap rendered = MathMLRenderer::render(mathmlText, dark);
+                if (!rendered.isNull()) {
+                    item.setThumbnail(rendered);
                 }
             }
         }
@@ -849,7 +891,20 @@ bool ClipboardItem::shouldCopyLightMimeFormat(const QString &format) {
         if (lower.contains(QStringLiteral("java_dataflavor"))
             || lower.contains(QStringLiteral("x-java-"))
             || lower.contains(QStringLiteral("chromium internal"))
-            || lower.contains(QStringLiteral("chromium web custom"))) {
+            || lower.contains(QStringLiteral("chromium web custom"))
+            // Windows Information Protection / Enterprise Data Protection
+            // policy tag. Reading it routes through a managed-device broker
+            // and crashes on machines under MDM/Intune policies (observed on
+            // enterprise-managed laptops: SIGSEGV deep inside
+            // RtlGetUserInfoHeap from mimeData->data()). The value is only a
+            // policy identifier, not paste content — dropping it is lossless.
+            || lower.contains(QStringLiteral("enterprisedataprotectionid"))
+            // Word-internal "hyperlink to bookmark" metadata. Reading it
+            // crashes on some machines (cross-process IDataObject read
+            // returns a dangling HGLOBAL — same RtlGetUserInfoHeap stack
+            // as the EDP case). It's only meaningful when pasting back
+            // into the same Word instance, so dropping it is acceptable.
+            || lower.contains(QStringLiteral("hyperlinkwordbkmk"))) {
             return false;
         }
         // Preserve Windows clipboard formats (EMF/OLE/Office) so Office shapes remain editable.

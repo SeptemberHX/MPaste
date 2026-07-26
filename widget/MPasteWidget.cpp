@@ -178,6 +178,9 @@ MPasteWidget::MPasteWidget(QWidget *parent) :
 }
 
 MPasteWidget::~MPasteWidget() {
+#ifdef Q_OS_WIN
+    removeAltDigitHook();
+#endif
     delete ui_.ui;
 }
 
@@ -471,8 +474,12 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
 
 void MPasteWidget::hideAndPaste() {
     WId previousWId = PlatformRelated::previousActiveWindow();
+    qInfo().noquote() << QStringLiteral("[hide-and-paste] enter previousWId=%1 isVisible=%2")
+        .arg(reinterpret_cast<quintptr>(previousWId))
+        .arg(isVisible());
 
     hide();
+    qInfo().noquote() << QStringLiteral("[hide-and-paste] after hide() isVisible=%1").arg(isVisible());
 
     controller_->pasteToTarget(previousWId);
 }
@@ -566,18 +573,15 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
         p.setBrush(Qt::NoBrush);
         p.drawRoundedRect(r.adjusted(2, 2, -2, -2), radius - 1.5, radius - 1.5);
     } else {
-        // Light: gradient border (original style)
-        const qreal bw = 3.0;
-        QRectF rb = QRectF(rect()).adjusted(bw / 2.0, bw / 2.0, -bw / 2.0, -bw / 2.0);
-        QConicalGradient grad(rb.center(), 135);
-        grad.setColorAt(0.00, QColor("#4A90E2"));
-        grad.setColorAt(0.25, QColor("#1abc9c"));
-        grad.setColorAt(0.50, QColor("#fc9867"));
-        grad.setColorAt(0.75, QColor("#9B59B6"));
-        grad.setColorAt(1.00, QColor("#4A90E2"));
-        p.setPen(QPen(QBrush(grad), bw));
+        // Light: thin dark glass edge (mirrors dark mode with inverted colors)
+        QPen glassPen(QColor(0, 0, 0, 30), 1.0);
+        p.setPen(glassPen);
         p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(rb, radius, radius);
+        p.drawRoundedRect(r, radius, radius);
+
+        // Inner edge
+        p.setPen(QPen(QColor(0, 0, 0, 12), 0.5));
+        p.drawRoundedRect(r.adjusted(1.5, 1.5, -1.5, -1.5), radius - 1, radius - 1);
     }
 }
 
@@ -597,11 +601,17 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     if (auto *board = currItemsWidget()) {
         board->updateLoadingOverlay();
     }
+#ifdef Q_OS_WIN
+    installAltDigitHook();
+#endif
     qInfo().noquote() << QStringLiteral("[wake] showEvent total: %1 ms").arg(t.elapsed());
 }
 
 void MPasteWidget::hideEvent(QHideEvent *event) {
     QWidget::hideEvent(event);
+#ifdef Q_OS_WIN
+    removeAltDigitHook();
+#endif
     for (auto it = ui_.boardWidgetMap.cbegin(); it != ui_.boardWidgetMap.cend(); ++it) {
         if (auto *board = it.value()) {
             board->hideHoverTools();

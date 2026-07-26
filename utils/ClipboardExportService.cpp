@@ -34,12 +34,40 @@ void setUtf8Text(QMimeData *mimeData, const QString &text) {
     mimeData->setData(QStringLiteral("text/plain;charset=utf-8"), text.toUtf8());
 }
 
+/// OLE container formats that cannot safely round-trip through
+/// QMimeData (they require TYMED_ISTORAGE, not TYMED_HGLOBAL).
+/// Exporting them causes Word to prefer a broken OLE path over
+/// the working RTF/HTML fallback, resulting in "cannot display
+/// this image" and lost formatting.
+bool shouldExportRawFormat(const QString &format) {
+    const QString lower = format.toLower();
+    if (!lower.startsWith(QStringLiteral("application/x-qt-windows-mime;value=\"")))
+        return true; // standard MIME types are always safe
+
+    // Block OLE container / structured-storage formats that cannot
+    // safely round-trip through QMimeData (they need TYMED_ISTORAGE).
+    // Without these, Word falls back to CF_HTML + RTF which together
+    // preserve fonts, centering, images, and all rich formatting.
+    if (lower.contains(QStringLiteral("embed source"))
+        || lower.contains(QStringLiteral("embedded object"))
+        || lower.contains(QStringLiteral("object descriptor"))
+        || lower.contains(QStringLiteral("link source"))
+        || lower.contains(QStringLiteral("ownerlink"))
+        || lower.contains(QStringLiteral("native"))
+        || lower.contains(QStringLiteral("objectlink"))) {
+        return false;
+    }
+    return true;
+}
+
 void copyRawFormats(QMimeData *target, const QMimeData *source) {
     if (!target || !source) {
         return;
     }
 
     for (const QString &format : source->formats()) {
+        if (!shouldExportRawFormat(format))
+            continue;
         const QByteArray data = source->data(format);
         if (!data.isEmpty()) {
             target->setData(format, data);

@@ -1,8 +1,8 @@
 # MPaste
 
-A modern clipboard manager for **Windows** and **Linux**, inspired by [Paste](https://pasteapp.io/) for macOS.
+A modern clipboard manager for Windows and Linux, inspired by [Paste](https://pasteapp.io/) for macOS.
 
-> MPaste has no affiliation with Paste for Mac. I just like its UX design and decided to build one in Qt.
+> MPaste has no affiliation with Paste for Mac. It is a Qt implementation inspired by that workflow and visual style.
 
 Light mode:
 
@@ -14,19 +14,23 @@ Dark mode:
 
 ## Features
 
-- **Clipboard history** — automatically captures text, links, images, rich text, files, colors, and Office content
-- **Card-based UI** — each clipboard item rendered as a visual card with icon, thumbnail, and metadata
-- **Boards** — "Clipboard" for live history, "Starred" for favorites; pin or star items independently
-- **Search & filter** — type to search, filter by content type
-- **Quick paste** — `Alt+[1-9, 0]` to paste by position; `Ctrl+Enter` or `Alt+Shift+[1-9, 0]` to paste as plain text
-- **Space preview** — press `Space` to open a large, zoomable preview of the selected item
-- **Dark / Light / System theme** — full theme support with smooth switching
-- **Auto paste** — optionally paste immediately on item selection
-- **Persistent history** — clipboard items saved to disk in `.mpaste v4` format with embedded thumbnails
-- **Link preview** — fetches OpenGraph metadata and favicons for URL items
-- **Multi-select** — `Ctrl`/`Shift` click to select multiple items for bulk favorite or delete
-- **Configurable retention** — auto-cleanup history by days, weeks, or months
-- **Global hotkey** — assign a system shortcut to toggle the MPaste window
+- Clipboard history for text, links, rich text, images, files, colors, and Office clipboard payloads.
+- Card-based browsing with thumbnails, app icons, favicons, and metadata.
+- Separate clipboard and favorites boards, with independent pinning and favoriting.
+- Keyword search and content-type filters.
+- Paged and continuous history browsing modes.
+- Quick paste shortcuts: `Alt+[1-9, 0]` to paste by visible position.
+- Plain-text paste shortcuts: `Ctrl+Enter` for the current selection, or `Alt+Shift+[1-9, 0]` for quick slots.
+- Large preview dialog on `Space`, with zoom support for image previews.
+- Detailed inspector dialog for viewing normalized content and raw MIME data.
+- Alias rename, pin-to-top, multi-select, batch favorite/unfavorite, and batch delete actions.
+- Export selected items to image, HTML, or text files when supported.
+- Link preview fetching with OpenGraph metadata, preview images, and favicons.
+- Persistent history stored in `.mpaste` files with embedded preview thumbnails.
+- Current on-disk format is `.mpaste v6`; older v4/v5 files are still readable.
+- Configurable history retention, max history size, item scale, theme mode, sound, and paste shortcut mode.
+- Configurable global hotkey and optional auto-paste on selection.
+- Optional external sync folder watching with incremental reloads.
 
 ## Keyboard Shortcuts
 
@@ -34,37 +38,54 @@ Dark mode:
 |---|---|
 | `Alt+[1-9, 0]` | Quick select and paste |
 | `Alt+Shift+[1-9, 0]` | Quick select and paste as plain text |
-| `Ctrl+Enter` | Paste selected item as plain text |
-| `Space` | Toggle preview |
-| `Left` / `Right` | Navigate items |
+| `Ctrl+Enter` | Paste current selection as plain text |
+| `Space` | Open or close preview |
+| `Left` / `Right` | Move selection |
+| `Home` / `End` | Jump to start or end |
 | `Tab` | Switch boards |
-| Any character | Enter search mode |
+| Any printable character | Start search |
 
-Hold `Alt` to show shortcut hints on cards.
+Hold `Alt` to show shortcut hints on visible cards.
 
 ## Platform Notes
 
 ### Windows
 
-- Global hotkey uses `Alt`-based toggle with Office/WPS ribbon-keytip avoidance
-- Paste injection via simulated keypress (`Ctrl+V`, `Shift+Insert`, etc.)
+- Default global hotkey is `Alt+Q`, but it is configurable in settings.
+- Alt-based hotkeys have extra handling to avoid ribbon keytip conflicts in Office and WPS.
+- Paste injection supports multiple modes, including `Ctrl+V`, `Shift+Insert`, `Ctrl+Shift+V`, and `Alt+Insert`.
+- Explorer integration can reveal copied files from the item context menu.
 
 ### Linux
 
-- X11 support with `xdotool` integration
-- Wayland: window icons cannot be fetched (see `PlatformRelated.h`)
-- On GNOME, install [Focus My Window](https://extensions.gnome.org/extension/1005/focus-my-window/) for proper focus after hotkey activation
-- Deepin V20: download `.deb` from the release page
+- Linux support currently targets X11.
+- Build/runtime integration depends on X11, `xcb-keysyms`, `xdo` / `xdotool`, and `gsettings-qt`.
+- Wayland support is limited; window icon lookup and some focus/paste behaviors may not work as expected.
+- On GNOME, [Focus My Window](https://extensions.gnome.org/extension/1005/focus-my-window/) can improve focus restoration after the global hotkey.
+- Deepin V20 users can use the packaged `.deb` from the releases page.
 
 ## Configuration
 
-Config file: `~/.config/MPaste/MPaste.conf`
+MPaste uses `QSettings` for application preferences.
+
+- Linux typically stores settings in `~/.config/MPaste/MPaste.conf`.
+- Windows typically stores settings under `HKEY_CURRENT_USER\Software\MPaste\MPaste`.
+- Clipboard history is stored separately under the configured save folder, which defaults to `~/.MPaste`.
+
+Default settings:
 
 | Setting | Default |
 |---|---|
-| Max history size | 500 |
-| History location | `~/.MPaste` |
-| Auto paste | On |
+| Max history size | `500` |
+| Retention policy | `30 days` |
+| History save folder | `~/.MPaste` |
+| Auto paste | `On` |
+| Paste shortcut mode | `Auto` |
+| Theme | `Dark` |
+| History view mode | `Paged` |
+| Item scale | `100%` |
+| Copy sound | `On` |
+| Global hotkey | `Alt+Q` |
 
 ## Build from Source
 
@@ -72,22 +93,30 @@ Config file: `~/.config/MPaste/MPaste.conf`
 
 - C++17 compiler
 - CMake 3.7+
-- Qt 6 (Widgets, Multimedia, Network, Xml)
+- Qt 6 with `Widgets`, `Multimedia`, `Network`, `Xml`, and `LinguistTools`
+
+Linux builds also require:
+
+- `pkg-config`
+- X11 development headers/libraries
+- `xcb-keysyms`
+- `xdo` / `libxdo`
+- `gsettings-qt`
+
+Package names vary by distro. Install the Qt 6 development packages plus the libraries above before configuring the project.
 
 ### Linux
 
-```shell
-sudo apt install cmake g++ make libkf5windowsystem-dev qttools5-dev libqt5x11extras5-dev qtmultimedia5-dev libgsettings-qt-dev
+```sh
 git clone https://github.com/SeptemberHX/MPaste
 cd MPaste
-mkdir build && cd build
-cmake ..
-make -j8
+cmake -B build
+cmake --build build -j8
 ```
 
 ### Windows
 
-```shell
+```sh
 cmake -B build -DMPASTE_QT_ROOT=C:/Qt/6.8.0/mingw_64
 cmake --build build
 ```
@@ -97,18 +126,19 @@ Optional CMake flags:
 | Flag | Description |
 |---|---|
 | `-DMPASTE_QT_ROOT=<path>` | Qt installation prefix |
-| `-DMPASTE_MINGW_BIN_DIR=<path>` | MinGW runtime directory |
-| `-DMPASTE_ENABLE_WINDOWS_DEPLOY=OFF` | Disable post-build packaging |
+| `-DMPASTE_MINGW_BIN_DIR=<path>` | MinGW runtime directory used for Windows deployment |
+| `-DMPASTE_ENABLE_WINDOWS_DEPLOY=OFF` | Disable post-build Windows deployment packaging |
 
 ### Rendering Backend
 
-Control the OpenGL backend via `MPASTE_OPENGL_BACKEND` environment variable:
+You can control the OpenGL backend with the `MPASTE_OPENGL_BACKEND` environment variable:
 
 | Value | Behavior |
 |---|---|
 | `auto` | System default |
 | `gles` | Force OpenGL ES |
 | `software` | Force software rendering |
+| `software-gles` | Force OpenGL ES with software fallback attributes |
 
 ## Credits
 

@@ -41,13 +41,15 @@ DWORD accentColorFromArgb(const QColor &color) {
 } // anonymous namespace
 #endif
 
-void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
+void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark, bool extendFrame) {
 #ifdef Q_OS_WIN
     if (!widget) return;
     HWND hwnd = reinterpret_cast<HWND>(widget->winId());
 
-    MARGINS margins = {-1, -1, -1, -1};
-    DwmExtendFrameIntoClientArea(hwnd, &margins);
+    if (extendFrame) {
+        MARGINS margins = {-1, -1, -1, -1};
+        DwmExtendFrameIntoClientArea(hwnd, &margins);
+    }
 
     DWORD preference = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hwnd, 33, &preference, sizeof(preference));
@@ -58,7 +60,7 @@ void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark) {
         GetProcAddress(user32, "SetWindowCompositionAttribute"));
     if (!setWCA) return;
 
-    const QColor tint = dark ? QColor(30, 40, 55, 18) : QColor(231, 241, 244, 20);
+    const QColor tint = dark ? QColor(30, 40, 55, 18) : QColor(235, 235, 245, 1);
     DWORD tintVal = accentColorFromArgb(tint);
 
     ACCENT_POLICY accent{};

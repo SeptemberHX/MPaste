@@ -124,26 +124,37 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             }
         }
 
-        if ((contentType == Image || contentType == Office)
-            && !resolvedImageBytes.isEmpty()) {
-            result.thumbnailImage = ThumbnailBuilder::buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr, itemScale);
-        } else if (contentType == Office
-                   && !resolvedHtml.isEmpty()) {
-            result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
-        } else if (contentType == RichText
-                   && previewKind == VisualPreview
-                   && !resolvedHtml.isEmpty()) {
-            result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
-        } else if (contentType == Link && !baseItem.hasThumbnail()) {
-            QString linkUrl;
-            const QList<QUrl> urls = baseItem.getNormalizedUrls();
-            if (!urls.isEmpty()) {
-                const QUrl &first = urls.first();
-                linkUrl = first.isLocalFile() ? first.toLocalFile() : first.toString();
-            } else {
-                linkUrl = baseItem.getNormalizedText().left(512).trimmed();
+        // If createLightweight already produced a thumbnail for this item
+        // (e.g. equation items rendering MathML, or any future fast-path
+        // thumbnail), respect it. The async builders below are meant as
+        // fallbacks for types that can't be rendered cheaply on the main
+        // thread, not as overrides — otherwise the Office-with-HTML path
+        // would clobber the MathML render with a QTextDocument screenshot
+        // of the raw equation HTML, which is garbage.
+        const bool alreadyHasThumbnail = baseItem.hasThumbnail();
+
+        if (!alreadyHasThumbnail) {
+            if ((contentType == Image || contentType == Office)
+                && !resolvedImageBytes.isEmpty()) {
+                result.thumbnailImage = ThumbnailBuilder::buildCardThumbnailImageFromBytes(resolvedImageBytes, thumbnailDpr, itemScale);
+            } else if (contentType == Office
+                       && !resolvedHtml.isEmpty()) {
+                result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
+            } else if (contentType == RichText
+                       && previewKind == VisualPreview
+                       && !resolvedHtml.isEmpty()) {
+                result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
+            } else if (contentType == Link) {
+                QString linkUrl;
+                const QList<QUrl> urls = baseItem.getNormalizedUrls();
+                if (!urls.isEmpty()) {
+                    const QUrl &first = urls.first();
+                    linkUrl = first.isLocalFile() ? first.toLocalFile() : first.toString();
+                } else {
+                    linkUrl = baseItem.getNormalizedText().left(512).trimmed();
+                }
+                result.thumbnailImage = ThumbnailBuilder::buildLinkPreviewImage(linkUrl, baseItem.getTitle(), thumbnailDpr, itemScale);
             }
-            result.thumbnailImage = ThumbnailBuilder::buildLinkPreviewImage(linkUrl, baseItem.getTitle(), thumbnailDpr, itemScale);
         }
 
         // Save to disk in the worker thread.  Avoid QPixmap here — it

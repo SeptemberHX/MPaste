@@ -23,6 +23,10 @@
 #include "BoardInternalHelpers.h"
 #include "GlassPagePopup.h"
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 // ── anonymous-namespace helpers ────────────────────────────────────────
 
 namespace {
@@ -68,6 +72,73 @@ static int shortcutIndexForKey(int key) {
 
 // QEvent::KeyPress conflicts with the KeyPress in X.h
 #undef KeyPress
+
+// ── Alt+digit low-level keyboard hook (bypasses IME hooks) ────────────
+
+#ifdef Q_OS_WIN
+static HHOOK   s_altDigitHook   = nullptr;
+static MPasteWidget *s_altDigitWidget = nullptr;
+static bool    s_digitDown[10]  = {};
+
+static int vkToShortcutIndex(DWORD vk) {
+    if (vk >= '1' && vk <= '9') return static_cast<int>(vk - '1');
+    if (vk == '0') return 9;
+    return -1;
+}
+
+static LRESULT CALLBACK altDigitLLProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0 && s_altDigitWidget && s_altDigitWidget->isVisible()) {
+        auto *kb = reinterpret_cast<KBDLLHOOKSTRUCT *>(lParam);
+        const int idx = vkToShortcutIndex(kb->vkCode);
+
+        if (idx >= 0) {
+            if (wParam == WM_SYSKEYDOWN && (kb->flags & LLKHF_ALTDOWN)) {
+                if (s_digitDown[idx])
+                    return 1;                       // swallow auto-repeat
+                s_digitDown[idx] = true;
+
+                qInfo().noquote() << QStringLiteral(
+                    "[alt-digit-hook] vk=0x%1 idx=%2")
+                    .arg(kb->vkCode, 0, 16).arg(idx);
+
+                const bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                QMetaObject::invokeMethod(s_altDigitWidget,
+                    [idx, shift]() {
+                        if (s_altDigitWidget)
+                            s_altDigitWidget->triggerShortcutPaste(idx, shift);
+                    }, Qt::QueuedConnection);
+                return 1;                           // swallow
+            }
+            if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+                s_digitDown[idx] = false;
+                // don't swallow key-up so other consumers stay in sync
+            }
+        }
+    }
+    return CallNextHookEx(s_altDigitHook, nCode, wParam, lParam);
+}
+
+void MPasteWidget::installAltDigitHook() {
+    if (!s_altDigitHook) {
+        s_altDigitWidget = this;
+        memset(s_digitDown, 0, sizeof(s_digitDown));
+        s_altDigitHook = SetWindowsHookExW(
+            WH_KEYBOARD_LL, altDigitLLProc, nullptr, 0);
+        qInfo().noquote() << QStringLiteral("[alt-digit-hook] installed hook=%1")
+            .arg(s_altDigitHook != nullptr);
+    }
+}
+
+void MPasteWidget::removeAltDigitHook() {
+    if (s_altDigitHook) {
+        UnhookWindowsHookEx(s_altDigitHook);
+        s_altDigitHook = nullptr;
+        s_altDigitWidget = nullptr;
+        memset(s_digitDown, 0, sizeof(s_digitDown));
+        qInfo() << "[alt-digit-hook] removed";
+    }
+}
+#endif
 
 // ── MPasteWidget keyboard/event methods ────────────────────────────────
 
@@ -173,11 +244,9 @@ bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
     const QString itemName = selectedItem->getName();
     qInfo().noquote() << QStringLiteral("[shortcut-paste] index=%1 itemName=%2")
         .arg(shortcutIndex).arg(itemName);
-    QTimer::singleShot(50, this, [this, board, itemName]() {
-        hideAndPaste();
-        board->moveItemByNameToFirst(itemName);
-        currItemsWidget()->cleanShortCutInfo();
-    });
+    hideAndPaste();
+    board->moveItemByNameToFirst(itemName);
+    currItemsWidget()->cleanShortCutInfo();
     return true;
 }
 

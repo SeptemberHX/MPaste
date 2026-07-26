@@ -29,6 +29,7 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <ole2.h>
 #endif
 
 namespace {
@@ -57,6 +58,23 @@ QByteArray captureKeyForItem(const ClipboardItem &item) {
     if (!normalizedText.isEmpty()) {
         hash.addData(QByteArrayLiteral("text\n"));
         hash.addData(normalizedText.simplified().toUtf8());
+        // Equation editors (MathType, Word/PowerPoint embedded formulas,
+        // LaTeXiT, ...): stripped MathML text fallback is identical for
+        // two formulas that look different in the editor. Mix in any
+        // mathml / mathtype format bytes so visually-different copies stay
+        // as distinct items. Other content types never have these formats
+        // in their mime data, so their capture keys are unchanged.
+        const QMimeData *md = item.getMimeData();
+        if (md) {
+            for (const QString &format : md->formats()) {
+                const QString lower = format.toLower();
+                if (lower.contains(QStringLiteral("mathtype")) || lower.contains(QStringLiteral("mathml"))) {
+                    hash.addData(QByteArrayLiteral("mt:"));
+                    hash.addData(format.toUtf8());
+                    hash.addData(md->data(format));
+                }
+            }
+        }
         return hash.result();
     }
 
@@ -147,7 +165,44 @@ QString itemSummary(const ClipboardItem &item) {
         .arg(item.getImagePixelSize().isValid() ? item.getImagePixelSize().height() : 0)
         .arg(item.getHtml().size());
 }
+
+#ifdef Q_OS_WIN
+/// Read the raw CF_HTML bytes from the OLE clipboard.
+/// Qt's QWindowsMimeHtml only extracts the fragment between StartFragment
+/// and EndFragment markers, discarding the <head><style> block.  CSS
+/// classes like .MsoNormal that define text-align, font-family, etc. live
+/// in that <style> section, so the fragment alone cannot preserve
+/// centering/fonts when reconverted to CF_HTML.  Reading the full bytes
+/// via IDataObject::GetData lets us store them alongside the item and
+/// replay them verbatim during clipboard export.
+QByteArray readRawCfHtml() {
+    static UINT cfHtml = RegisterClipboardFormatW(L"HTML Format");
+    IDataObject *pDataObj = nullptr;
+    if (FAILED(OleGetClipboard(&pDataObj)) || !pDataObj)
+        return {};
+
+    FORMATETC fmt = { static_cast<CLIPFORMAT>(cfHtml), nullptr,
+                      DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    STGMEDIUM medium = {};
+    QByteArray result;
+
+    if (SUCCEEDED(pDataObj->GetData(&fmt, &medium))) {
+        if (medium.tymed == TYMED_HGLOBAL && medium.hGlobal) {
+            void *data = GlobalLock(medium.hGlobal);
+            if (data) {
+                result = QByteArray(static_cast<const char *>(data),
+                                    static_cast<int>(GlobalSize(medium.hGlobal)));
+                GlobalUnlock(medium.hGlobal);
+            }
+        }
+        ReleaseStgMedium(&medium);
+    }
+    pDataObj->Release();
+    return result;
 }
+#endif
+
+} // anonymous namespace
 
 QList<QUrl> buildImageFetchCandidates(const QUrl &url) {
     QList<QUrl> candidates;
@@ -192,6 +247,21 @@ static quint32 getClipboardSeqNumber() {
 }
 
 void ClipboardMonitor::beginClipboardCapture(bool emitActivitySignal) {
+    // Reentrancy guard: cross-process reads inside captureClipboard can
+    // pump the Windows message loop, which may deliver another WM_CLIPBOARD
+    // UPDATE and reenter this slot. If we let the new dataChanged run
+    // through to captureClipboard, Qt's QWindowsMimeRegistry will replace
+    // the underlying IDataObject while the outer capture is still iterating
+    // mimeData->formats(), producing a use-after-free inside heap routines
+    // like RtlGetUserInfoHeap. Instead, just flag that a re-capture is
+    // needed and let the outer capture finish cleanly.
+    if (capturing_) {
+        captureRestartPending_ = true;
+        qInfo().noquote() << QStringLiteral("[clipboard-monitor] reentry ignored; restart pending token=%1")
+            .arg(captureToken_);
+        return;
+    }
+
     pendingWId_ = PlatformRelated::currActiveWindow();
     lastSeqNumber_ = getClipboardSeqNumber();
     retryCount_ = 0;
@@ -208,10 +278,22 @@ void ClipboardMonitor::beginClipboardCapture(bool emitActivitySignal) {
     if (emitActivitySignal) {
         const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
         if (hasMeaningfulContent(mimeData)) {
-            qInfo().noquote() << QStringLiteral("[clipboard-monitor] early activity signal token=%1 wId=%2")
-                .arg(captureToken_)
-                .arg(pendingWId_);
-            Q_EMIT clipboardActivityObserved(pendingWId_);
+            // Suppress when Windows re-fires dataChanged with identical
+            // content — e.g. Explorer flushing delayed-rendered formats on
+            // close. The later capture path would dedup the item itself, but
+            // the early-activity sound would already have played.
+            const QByteArray sig = cheapMimeSignature(mimeData);
+            if (!sig.isEmpty() && sig == lastActivitySignature_) {
+                qInfo().noquote() << QStringLiteral("[clipboard-monitor] suppress duplicate early activity token=%1 sig=%2")
+                    .arg(captureToken_)
+                    .arg(shortHex(sig));
+            } else {
+                lastActivitySignature_ = sig;
+                qInfo().noquote() << QStringLiteral("[clipboard-monitor] early activity signal token=%1 wId=%2")
+                    .arg(captureToken_)
+                    .arg(pendingWId_);
+                Q_EMIT clipboardActivityObserved(pendingWId_);
+            }
         }
     }
 }
@@ -250,6 +332,24 @@ void ClipboardMonitor::checkAndCapture() {
 }
 
 void ClipboardMonitor::captureClipboard() {
+    // Reentry guard — see beginClipboardCapture for rationale. We set the
+    // flag for the entire duration of the capture, and on exit consume any
+    // restart request that accumulated while we were reading.
+    struct CaptureScope {
+        ClipboardMonitor *self;
+        explicit CaptureScope(ClipboardMonitor *s) : self(s) { self->capturing_ = true; }
+        ~CaptureScope() {
+            self->capturing_ = false;
+            if (self->captureRestartPending_) {
+                self->captureRestartPending_ = false;
+                qInfo() << "[clipboard-monitor] consuming pending restart";
+                // Defer to the next event loop tick so we exit the current
+                // stack completely before re-entering the capture flow.
+                QTimer::singleShot(0, self, [s = self]() { s->beginClipboardCapture(false); });
+            }
+        }
+    } captureScope(this);
+
     const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
     qInfo().noquote() << QStringLiteral("[clipboard-monitor] mime snapshot token=%1 %2")
         .arg(captureToken_)
@@ -259,6 +359,51 @@ void ClipboardMonitor::captureClipboard() {
         qInfo().noquote() << QStringLiteral("[clipboard-monitor] ignore empty clipboard token=%1").arg(captureToken_);
         return;
     }
+
+    // Self-paste echo guard: after MPaste writes to the clipboard via
+    // setClipboard(), OleFlushClipboard in the capture path triggers
+    // WM_CLIPBOARDUPDATE with the same content, creating an infinite
+    // Flush→notify→Flush loop.  The guard stays active until the
+    // clipboard content actually changes (signature mismatch) — no
+    // timeout, since the cascade can last arbitrarily long.
+    if (!selfPasteEchoSig_.isEmpty()) {
+        const QByteArray currentSig = computeEchoSignature(mimeData);
+        if (currentSig == selfPasteEchoSig_) {
+            qInfo().noquote() << QStringLiteral("[clipboard-monitor] self-paste echo suppressed token=%1 sig=%2")
+                .arg(captureToken_)
+                .arg(QString::fromLatin1(selfPasteEchoSig_.toHex().left(12)));
+            return;
+        }
+        // Signature differs → real new copy; clear the guard.
+        selfPasteEchoSig_.clear();
+    }
+
+#ifdef Q_OS_WIN
+    // If the clipboard carries delayed-rendered shell formats (Explorer file
+    // copies, Outlook attachments, archive files, OneDrive placeholders...),
+    // ask OLE to materialize them into the system clipboard right now. After
+    // OleFlushClipboard succeeds, the data is detached from the source
+    // process, so Qt's subsequent mimeData->data(format) calls won't crash
+    // even if the source dies (the laptop Explorer-close crash). We only do
+    // this when delayed formats are present, to avoid paying the cost on
+    // every plain text copy. Safe to call from any thread — OLE routes it to
+    // the current clipboard owner. If the owner set the clipboard with raw
+    // SetClipboardData (not OleSetClipboard), this is a no-op.
+    if (hasDeferrableMimeFormats(mimeData)) {
+        const HRESULT hr = OleFlushClipboard();
+        qInfo().noquote() << QStringLiteral("[clipboard-monitor] OleFlushClipboard token=%1 hr=0x%2")
+            .arg(captureToken_)
+            .arg(QString::number(static_cast<quint32>(hr), 16));
+        // After flushing, re-read the mimeData pointer — Qt caches the
+        // proxy and the underlying IDataObject has been replaced with a
+        // static snapshot.
+        mimeData = QGuiApplication::clipboard()->mimeData();
+        if (!mimeData || !hasMeaningfulContent(mimeData)) {
+            qWarning() << "[clipboard-monitor] mime data vanished after OleFlushClipboard";
+            return;
+        }
+    }
+#endif
 
     if (looksLikeWpsStagedClipboard(mimeData) && !wpsSettlePending_) {
         wpsSettlePending_ = true;
@@ -274,6 +419,26 @@ void ClipboardMonitor::captureClipboard() {
     wpsSettlePending_ = false;
 
     ClipboardItem immediateItem = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(pendingWId_), mimeData);
+
+#ifdef Q_OS_WIN
+    // Preserve raw CF_HTML for faithful clipboard export.  Qt's html()
+    // only returns the fragment between StartFragment/EndFragment markers;
+    // the <head><style> block with CSS class definitions (centering, fonts)
+    // is discarded.  Store the full CF_HTML bytes so the export path can
+    // write them verbatim via QWindowsMimeAny instead of letting
+    // QWindowsMimeHtml regenerate lossy CF_HTML from the fragment.
+    if (mimeData->hasHtml()) {
+        const QByteArray rawCfHtml = readRawCfHtml();
+        if (!rawCfHtml.isEmpty()) {
+            immediateItem.setMimeFormat(
+                QStringLiteral("application/x-qt-windows-mime;value=\"HTML Format\""),
+                rawCfHtml);
+            qInfo().noquote() << QStringLiteral("[clipboard-monitor] preserved raw CF_HTML %1 bytes token=%2")
+                .arg(rawCfHtml.size()).arg(captureToken_);
+        }
+    }
+#endif
+
     if (ContentClassifier::hasFastImagePayload(mimeData)
         && immediateItem.imagePayloadBytesFast().isEmpty()
         && retryCount_ < MAX_RETRIES) {
@@ -342,6 +507,57 @@ void ClipboardMonitor::connectMonitor() {
     qInfo() << "[clipboard-monitor] connected";
 }
 
+QByteArray ClipboardMonitor::computeEchoSignature(const QMimeData *mimeData) {
+    if (!mimeData) return {};
+    QCryptographicHash h(QCryptographicHash::Sha1);
+    // Pick the SINGLE most stable semantic field — don't combine them.
+    // The goal is "stable hit on self-echo", not "full equivalence".
+    // text is the most stable across OLE round-trips; html can be
+    // rewritten by Word (CF_HTML header changes, fragment shifts);
+    // urls are stable but only present for file/link copies.
+    if (mimeData->hasUrls() && !mimeData->urls().isEmpty()) {
+        h.addData(QByteArrayLiteral("U:"));
+        for (const QUrl &url : mimeData->urls())
+            h.addData(url.toString(QUrl::FullyEncoded).toUtf8());
+        return h.result();
+    }
+    if (mimeData->hasText()) {
+        const QString text = mimeData->text().simplified();
+        if (!text.isEmpty()) {
+            h.addData(QByteArrayLiteral("T:"));
+            h.addData(text.toUtf8());
+            return h.result();
+        }
+    }
+    if (mimeData->hasColor()) {
+        h.addData(QByteArrayLiteral("C:"));
+        h.addData(QByteArray::number(static_cast<quint32>(
+            mimeData->colorData().value<QColor>().rgba())));
+        return h.result();
+    }
+    if (mimeData->hasHtml()) {
+        // Last resort: extract the fragment and strip tags for a
+        // stable representation that survives CF_HTML header rewrites.
+        const QString html = mimeData->html();
+        QString fragment = ClipboardItem::htmlFragment(html).toString();
+        static const QRegularExpression tagRe(QStringLiteral("<[^>]*>"));
+        fragment.replace(tagRe, QString());
+        fragment = fragment.simplified();
+        if (!fragment.isEmpty()) {
+            h.addData(QByteArrayLiteral("H:"));
+            h.addData(fragment.toUtf8());
+            return h.result();
+        }
+    }
+    return {};
+}
+
+void ClipboardMonitor::setSelfPasteGuardFromMimeData(const QMimeData *mimeData) {
+    selfPasteEchoSig_ = computeEchoSignature(mimeData);
+    qInfo().noquote() << QStringLiteral("[clipboard-monitor] self-paste guard set sig=%1")
+        .arg(QString::fromLatin1(selfPasteEchoSig_.toHex().left(12)));
+}
+
 
 bool ClipboardMonitor::hasMeaningfulContent(const QMimeData *mimeData) {
     if (!mimeData) {
@@ -362,6 +578,49 @@ bool ClipboardMonitor::hasMeaningfulContent(const QMimeData *mimeData) {
     }
 
     return hasContent;
+}
+
+
+QByteArray ClipboardMonitor::cheapMimeSignature(const QMimeData *mimeData) {
+    // Lightweight content signature derived directly from QMimeData, used to
+    // suppress duplicate "early activity" sounds when Windows re-fires
+    // dataChanged with identical content (e.g. Explorer flushing delayed-
+    // rendered formats on close). Must avoid expensive work like decoding
+    // image payloads — return empty for those cases so the sound still plays.
+    if (!mimeData) {
+        return {};
+    }
+
+    QCryptographicHash hash(QCryptographicHash::Sha1);
+
+    if (mimeData->hasUrls()) {
+        hash.addData(QByteArrayLiteral("urls\n"));
+        const QList<QUrl> urls = mimeData->urls();
+        for (const QUrl &url : urls) {
+            hash.addData(url.toString(QUrl::FullyEncoded).toUtf8());
+            hash.addData(QByteArrayLiteral("\n"));
+        }
+        return hash.result();
+    }
+
+    if (mimeData->hasText()) {
+        const QString text = mimeData->text();
+        if (!text.isEmpty()) {
+            hash.addData(QByteArrayLiteral("text\n"));
+            hash.addData(text.toUtf8());
+            return hash.result();
+        }
+    }
+
+    if (mimeData->hasColor()) {
+        hash.addData(QByteArrayLiteral("color\n"));
+        hash.addData(QByteArray::number(static_cast<quint32>(mimeData->colorData().value<QColor>().rgba())));
+        return hash.result();
+    }
+
+    // Image / OLE / vector payloads: skip the dedup (signature stays empty)
+    // rather than pay the cost of hashing raw image bytes here.
+    return {};
 }
 
 

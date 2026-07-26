@@ -325,7 +325,6 @@ void MPasteWidget::initMenu() {
         if (!menu) {
             return;
         }
-        menu->addAction(ui_.aboutAction);
         menu->addAction(ui_.settingsAction);
         menu->addSeparator();
         menu->addAction(ui_.quitAction);

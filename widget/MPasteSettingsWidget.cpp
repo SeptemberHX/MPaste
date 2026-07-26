@@ -9,13 +9,14 @@
 #include "utils/ThemeManager.h"
 #include "WindowBlurHelper.h"
 #include "BoardInternalHelpers.h"
+#include "SurfacePainter.h"
 #include "ToggleSwitch.h"
+#include "utils/IconResolver.h"
 #include <QShowEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QGridLayout>
-#include <QGraphicsDropShadowEffect>
 #include <QApplication>
 #include <QDir>
 #include <QSettings>
@@ -26,7 +27,9 @@
 #include <QLayout>
 #include <QPushButton>
 #include <QFileDialog>
-#include <QTabWidget>
+#include <QButtonGroup>
+#include <QStackedWidget>
+#include <QToolButton>
 #include <QUrl>
 #include <QDesktopServices>
 
@@ -77,35 +80,6 @@ static QString settingsStyleSheet(bool dark) {
                 border: none;
             }
 
-            QTabWidget::pane {
-                border: 1px solid rgba(255, 255, 255, 18);
-                border-radius: 8px;
-                background-color: rgba(30, 35, 43, 160);
-                margin-top: 8px;
-            }
-            QTabWidget > QWidget {
-                background: transparent;
-            }
-            QTabBar::tab {
-                background: rgba(37, 43, 52, 180);
-                color: #B8C5D4;
-                border: 1px solid #2F3945;
-                border-bottom: none;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                padding: 7px 14px;
-                min-height: 20px;
-                margin-right: 6px;
-            }
-            QTabBar::tab:selected {
-                background: #2D7FD3;
-                color: #FFFFFF;
-                border-color: #2D7FD3;
-            }
-            QTabBar::tab:!selected:hover {
-                background: #2A313C;
-                color: #E6EDF5;
-            }
 
             QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
                 background-color: #2A313C;
@@ -267,6 +241,49 @@ static QString settingsStyleSheet(bool dark) {
             QDialogButtonBox {
                 button-layout: 2;
             }
+
+            QLabel#section {
+                color: #8FB7E2;
+                font-weight: bold;
+                font-size: 12px;
+                background: transparent;
+                padding: 2px 0;
+            }
+
+            QToolButton#closeBtn {
+                color: #E6EDF5;
+                background: transparent;
+                border: none;
+                border-radius: 11px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QToolButton#closeBtn:hover {
+                background-color: #C13B3B;
+                color: white;
+            }
+
+            QToolButton#navBtn {
+                background: transparent;
+                border: none;
+                border-radius: 8px;
+                color: #8A98AB;
+                font-size: 11px;
+                padding: 6px 2px;
+            }
+            QToolButton#navBtn:checked {
+                background-color: rgba(45, 127, 211, 25);
+                color: #2D7FD3;
+            }
+            QToolButton#navBtn:hover:!checked {
+                background-color: rgba(255, 255, 255, 12);
+            }
+            QFrame#card {
+                background: rgba(255, 255, 255, 12);
+                border: 1px solid rgba(255, 255, 255, 8);
+                border-radius: 10px;
+                padding: 6px 8px;
+            }
         )");
     }
     return QStringLiteral(R"(
@@ -297,35 +314,6 @@ static QString settingsStyleSheet(bool dark) {
             border: none;
         }
 
-        QTabWidget::pane {
-            border: 1px solid rgba(0, 0, 0, 12);
-            border-radius: 8px;
-            background-color: rgba(255, 255, 255, 160);
-            margin-top: 8px;
-        }
-        QTabWidget > QWidget {
-            background: transparent;
-        }
-        QTabBar::tab {
-            background: rgba(245, 247, 250, 180);
-            color: #5B6572;
-            border: 1px solid #E2E8F0;
-            border-bottom: none;
-            border-top-left-radius: 6px;
-            border-top-right-radius: 6px;
-            padding: 7px 14px;
-            min-height: 20px;
-            margin-right: 6px;
-        }
-        QTabBar::tab:selected {
-            background: #0078D4;
-            color: #FFFFFF;
-            border-color: #0078D4;
-        }
-        QTabBar::tab:!selected:hover {
-            background: #EEF3F8;
-            color: #1F2A37;
-        }
 
         QFrame#sep1, QFrame#sep2, QFrame#sep_autostart, QFrame#sep3, QFrame#sep4 {
             background-color: #F0F0F0;
@@ -487,6 +475,49 @@ static QString settingsStyleSheet(bool dark) {
         QDialogButtonBox {
             button-layout: 2;
         }
+
+        QLabel#section {
+            color: #2A6CB0;
+            font-weight: bold;
+            font-size: 12px;
+            background: transparent;
+            padding: 2px 0;
+        }
+
+        QToolButton#closeBtn {
+            color: #1C2330;
+            background: transparent;
+            border: none;
+            border-radius: 11px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        QToolButton#closeBtn:hover {
+            background-color: #C13B3B;
+            color: white;
+        }
+
+        QToolButton#navBtn {
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: #6A7888;
+            font-size: 11px;
+            padding: 6px 2px;
+        }
+        QToolButton#navBtn:checked {
+            background-color: rgba(45, 127, 211, 18);
+            color: #2D7FD3;
+        }
+        QToolButton#navBtn:hover:!checked {
+            background-color: rgba(0, 0, 0, 6);
+        }
+        QFrame#card {
+            background: rgba(255, 255, 255, 180);
+            border: 1px solid rgba(0, 0, 0, 6);
+            border-radius: 10px;
+            padding: 6px 8px;
+        }
     )");
 }
 
@@ -496,8 +527,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 {
     ui->setupUi(this);
 
-    setMinimumWidth(456);
-    setMaximumWidth(456);
+    setMinimumWidth(580);
+    setMaximumWidth(580);
     setMinimumHeight(0);
     setMaximumHeight(QWIDGETSIZE_MAX);
     if (layout()) {
@@ -512,7 +543,34 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &MPasteSettingsWidget::applyTheme);
 
     setWindowTitle(uiText("Settings", QStringLiteral("设置")));
-    ui->titleLabel->setText(uiText("Settings", QStringLiteral("设置")));
+    ui->titleLabel->hide(); // replaced by custom title bar
+
+    // ── Custom title bar (MTodo pattern) ──
+    {
+        auto *titleBar = new QWidget(this);
+        titleBar->setFixedHeight(32);
+        titleBar->setCursor(Qt::SizeAllCursor);
+        titleBar->setObjectName(QStringLiteral("titleBar"));
+        auto *tb = new QHBoxLayout(titleBar);
+        tb->setContentsMargins(8, 0, 4, 0);
+        tb->setSpacing(6);
+        auto *titleLabel = new QLabel(uiText("MPaste Settings", QStringLiteral("MPaste 设置")), titleBar);
+        QFont f = titleLabel->font();
+        f.setBold(true);
+        f.setPointSizeF(f.pointSizeF() + 0.5);
+        titleLabel->setFont(f);
+        tb->addWidget(titleLabel);
+        tb->addStretch();
+        auto *closeBtn = new QToolButton(titleBar);
+        closeBtn->setText(QStringLiteral("\u00D7"));
+        closeBtn->setFocusPolicy(Qt::NoFocus);
+        closeBtn->setCursor(Qt::PointingHandCursor);
+        closeBtn->setFixedSize(22, 22);
+        closeBtn->setObjectName(QStringLiteral("closeBtn"));
+        connect(closeBtn, &QToolButton::clicked, this, &QDialog::close);
+        tb->addWidget(closeBtn);
+        ui->mainLayout->insertWidget(0, titleBar);
+    }
     if (auto *grid = qobject_cast<QGridLayout*>(ui->generalCard->layout())) {
         grid->removeWidget(ui->label);
         grid->removeWidget(ui->numSpinBox);
@@ -671,55 +729,134 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->shortcutEdit->setMaximumHeight(36);
         syncButtonsLayout->setSpacing(8);
 
-        auto createTabGrid = [this](QWidget *parent) {
-            auto *layout = new QGridLayout(parent);
-            layout->setContentsMargins(12, 12, 12, 12);
-            layout->setHorizontalSpacing(14);
-            layout->setVerticalSpacing(8);
-            layout->setColumnStretch(0, 0);
-            layout->setColumnStretch(1, 1);
+        // ── Sidebar + StackedWidget (Clipaste-style) ──
+
+        auto createPageLayout = [](QWidget *parent) {
+            auto *layout = new QVBoxLayout(parent);
+            layout->setContentsMargins(16, 10, 16, 10);
+            layout->setSpacing(12);
             return layout;
         };
 
-        auto *tabs = new QTabWidget(ui->generalCard);
-        tabs->setObjectName(QStringLiteral("settingsTabs"));
-        auto *generalPage = new QWidget(tabs);
-        auto *shortcutsPage = new QWidget(tabs);
-        auto *maintenancePage = new QWidget(tabs);
-        auto *generalLayout = createTabGrid(generalPage);
-        auto *shortcutsLayout = createTabGrid(shortcutsPage);
-        auto *maintenanceLayout = createTabGrid(maintenancePage);
+        auto makeSectionLabel = [](const QString &text, QWidget *parent) {
+            auto *label = new QLabel(text, parent);
+            label->setObjectName(QStringLiteral("section"));
+            return label;
+        };
 
-        tabs->addTab(generalPage, uiText("General", QStringLiteral("常用设置")));
-        tabs->addTab(shortcutsPage, uiText("Shortcuts", QStringLiteral("快捷与预览")));
-        tabs->addTab(maintenancePage, uiText("Maintenance", QStringLiteral("同步与维护")));
+        auto makeCard = [](QLayout *layout) {
+            auto *card = new QFrame();
+            card->setObjectName(QStringLiteral("card"));
+            card->setLayout(layout);
+            return card;
+        };
 
-        generalLayout->addWidget(themeLabel_, 0, 0);
-        generalLayout->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_autostart, 1, 0);
-        generalLayout->addWidget(autoStartSwitch_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_3, 2, 0);
-        generalLayout->addWidget(toggleSwitch_, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_2, 3, 0);
-        generalLayout->addWidget(retentionWidget, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->addWidget(ui->label_5, 4, 0);
-        generalLayout->addWidget(ui->scaleWidget, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
-        generalLayout->setRowStretch(5, 1);
+        // ── Sidebar with QToolButtons (MTodo pattern) ──
+        auto *sideWidget = new QWidget(ui->generalCard);
+        sideWidget->setFixedWidth(80);
+        auto *sideLayout = new QVBoxLayout(sideWidget);
+        sideLayout->setContentsMargins(0, 8, 0, 8);
+        sideLayout->setSpacing(6);
 
-        shortcutsLayout->addWidget(ui->label_4, 0, 0);
-        shortcutsLayout->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
-        shortcutsLayout->addWidget(pasteShortcutLabel_, 1, 0);
-        shortcutsLayout->addWidget(pasteShortcutCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
-        shortcutsLayout->setRowStretch(2, 1);
+        auto *navGroup = new QButtonGroup(this);
+        navGroup->setExclusive(true);
 
-        maintenanceLayout->addWidget(syncLabel_, 0, 0, 1, 2);
-        maintenanceLayout->addWidget(syncPathEdit_, 1, 0, 1, 2);
-        maintenanceLayout->addWidget(syncButtonsRow, 2, 0, 1, 2);
+        auto makeNavBtn = [&](const QString &iconName, const QString &text, int id) {
+            auto *btn = new QToolButton();
+            btn->setObjectName(QStringLiteral("navBtn"));
+            btn->setIcon(IconResolver::themedIcon(iconName, ThemeManager::instance()->isDark()));
+            btn->setIconSize(QSize(22, 22));
+            btn->setText(text);
+            btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+            btn->setCheckable(true);
+            btn->setFixedSize(72, 52);
+            btn->setCursor(Qt::PointingHandCursor);
+            btn->setFocusPolicy(Qt::NoFocus);
+            navGroup->addButton(btn, id);
+            sideLayout->addWidget(btn, 0, Qt::AlignHCenter);
+        };
 
-        // OCR settings
+        makeNavBtn(QStringLiteral("settings"), uiText("General", QStringLiteral("通用")), 0);
+        makeNavBtn(QStringLiteral("rename"), uiText("Shortcuts", QStringLiteral("快捷键")), 1);
+        makeNavBtn(QStringLiteral("menu_more"), uiText("Advanced", QStringLiteral("高级")), 2);
+        sideLayout->addStretch();
+        makeNavBtn(QStringLiteral("info"), uiText("About", QStringLiteral("关于")), 3);
+
+        auto *stack = new QStackedWidget(ui->generalCard);
+        stack->setObjectName(QStringLiteral("settingsStack"));
+
+        // ── General page ──
+        auto *generalPage = new QWidget(stack);
+        auto *gLayout = createPageLayout(generalPage);
+
+        auto makeSettingsGrid = []() {
+            auto *g = new QGridLayout();
+            g->setContentsMargins(14, 10, 14, 10);
+            g->setHorizontalSpacing(12);
+            g->setVerticalSpacing(12);
+            g->setColumnStretch(0, 1);
+            g->setColumnStretch(1, 0);
+            return g;
+        };
+
+        gLayout->addWidget(makeSectionLabel(uiText("Appearance", QStringLiteral("外观")), generalPage));
+        {
+            auto *g = makeSettingsGrid();
+            g->addWidget(themeLabel_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(ui->label_autostart, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(autoStartSwitch_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            gLayout->addWidget(makeCard(g));
+        }
+
+        gLayout->addWidget(makeSectionLabel(uiText("Behavior", QStringLiteral("行为")), generalPage));
+        {
+            auto *g = makeSettingsGrid();
+            g->addWidget(ui->label_3, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(toggleSwitch_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(ui->label_2, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(retentionWidget, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(ui->label_5, 2, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(ui->scaleWidget, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
+            gLayout->addWidget(makeCard(g));
+        }
+
+        gLayout->addStretch();
+        stack->addWidget(generalPage);
+
+        // ── Shortcuts page ──
+        auto *shortcutsPage = new QWidget(stack);
+        auto *sLayout = createPageLayout(shortcutsPage);
+
+        sLayout->addWidget(makeSectionLabel(uiText("Shortcuts", QStringLiteral("快捷键")), shortcutsPage));
+        {
+            auto *g = makeSettingsGrid();
+            g->addWidget(ui->label_4, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(pasteShortcutLabel_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(pasteShortcutCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            sLayout->addWidget(makeCard(g));
+        }
+
+        sLayout->addStretch();
+        stack->addWidget(shortcutsPage);
+
+        // ── Advanced page ──
+        auto *maintenancePage = new QWidget(stack);
+        auto *mLayout = createPageLayout(maintenancePage);
+
+        mLayout->addWidget(makeSectionLabel(uiText("Sync", QStringLiteral("同步")), maintenancePage));
+        {
+            auto *g = makeSettingsGrid();
+            g->addWidget(syncLabel_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(syncPathEdit_, 0, 1);
+            g->addWidget(syncButtonsRow, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            mLayout->addWidget(makeCard(g));
+        }
+
         ocrLabel_ = new QLabel(uiText("OCR Backend", QStringLiteral("OCR 引擎")), maintenancePage);
         ocrBackendCombo_ = new QComboBox(maintenancePage);
-        ocrBackendCombo_->setMinimumSize(QSize(200, 36));
+        ocrBackendCombo_->setMinimumSize(QSize(180, 36));
         ocrBackendCombo_->setMaximumHeight(36);
         ocrBackendCombo_->addItem(uiText("Windows Built-in", QStringLiteral("Windows 内置")), 0);
         ocrBackendCombo_->addItem(uiText("Baidu OCR API", QStringLiteral("百度 OCR API")), 1);
@@ -747,22 +884,78 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         autoOcrLabel_ = new QLabel(uiText("Auto OCR for images", QStringLiteral("图片自动 OCR")), maintenancePage);
         autoOcrSwitch_ = new ToggleSwitch(maintenancePage);
 
-        maintenanceLayout->addWidget(ocrLabel_, 3, 0);
-        maintenanceLayout->addWidget(ocrBackendCombo_, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
-        maintenanceLayout->addWidget(baiduApiKeyLabel_, 4, 0);
-        maintenanceLayout->addWidget(baiduApiKeyEdit_, 4, 1);
-        maintenanceLayout->addWidget(baiduSecretKeyLabel_, 5, 0);
-        maintenanceLayout->addWidget(baiduSecretKeyEdit_, 5, 1);
-        maintenanceLayout->addWidget(autoOcrLabel_, 6, 0);
-        maintenanceLayout->addWidget(autoOcrSwitch_, 6, 1, Qt::AlignRight | Qt::AlignVCenter);
-        maintenanceLayout->setRowStretch(7, 1);
+        mLayout->addWidget(makeSectionLabel(uiText("OCR", QStringLiteral("OCR")), maintenancePage));
+        {
+            auto *g = makeSettingsGrid();
+            g->addWidget(ocrLabel_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(ocrBackendCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(baiduApiKeyLabel_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(baiduApiKeyEdit_, 1, 1);
+            g->addWidget(baiduSecretKeyLabel_, 2, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(baiduSecretKeyEdit_, 2, 1);
+            g->addWidget(autoOcrLabel_, 3, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(autoOcrSwitch_, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
+            mLayout->addWidget(makeCard(g));
+        }
 
-        grid->setContentsMargins(18, 14, 18, 14);
+        mLayout->addStretch();
+        stack->addWidget(maintenancePage);
+
+        // ── About page ──
+        auto *aboutPage = new QWidget(stack);
+        auto *aboutLayout = new QVBoxLayout(aboutPage);
+        aboutLayout->setContentsMargins(20, 20, 20, 20);
+        aboutLayout->setSpacing(0);
+
+        aboutLayout->addStretch(1);
+
+        auto *logoLabel = new QLabel(aboutPage);
+        logoLabel->setPixmap(QPixmap(QStringLiteral(":/resources/resources/mpaste.svg")).scaled(
+            64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        logoLabel->setAlignment(Qt::AlignCenter);
+        aboutLayout->addWidget(logoLabel);
+
+        aboutLayout->addSpacing(16);
+
+        auto *nameLabel = new QLabel(QStringLiteral("MPaste V" MPASTE_VERSION), aboutPage);
+        nameLabel->setAlignment(Qt::AlignCenter);
+        nameLabel->setStyleSheet(QStringLiteral("font-size: 18px; font-weight: 700; background: transparent;"));
+        aboutLayout->addWidget(nameLabel);
+
+        aboutLayout->addSpacing(20);
+
+        auto *authorLabel = new QLabel(
+            QStringLiteral("Author: SeptemberHX<br>"
+                           "Github: <a href=\"https://github.com/SeptemberHX/MPaste\">SeptemberHX/MPaste</a><br>"
+                           "Email: <a href=\"mailto:september_hx@outlook.com\">september_hx@outlook.com</a>"),
+            aboutPage);
+        authorLabel->setAlignment(Qt::AlignCenter);
+        authorLabel->setOpenExternalLinks(true);
+        authorLabel->setStyleSheet(QStringLiteral("font-size: 13px; background: transparent; line-height: 1.8;"));
+        aboutLayout->addWidget(authorLabel);
+
+        aboutLayout->addStretch(1);
+        stack->addWidget(aboutPage);
+
+        // ── Wire sidebar ↔ stack ──
+        connect(navGroup, &QButtonGroup::idClicked,
+                stack, &QStackedWidget::setCurrentIndex);
+        if (auto *btn = navGroup->button(0))
+            btn->setChecked(true);
+        stack->setCurrentIndex(0);
+
+        // ── Layout: sidebar | content (no separator line) ──
+        auto *hbox = new QHBoxLayout;
+        hbox->setContentsMargins(0, 0, 0, 0);
+        hbox->setSpacing(0);
+        hbox->addWidget(sideWidget);
+        hbox->addWidget(stack, 1);
+
+        grid->setContentsMargins(0, 0, 0, 0);
         grid->setHorizontalSpacing(0);
         grid->setVerticalSpacing(0);
         grid->setColumnStretch(0, 1);
-        grid->setColumnStretch(1, 1);
-        grid->addWidget(tabs, 0, 0, 1, 2);
+        grid->addLayout(hbox, 0, 0, 1, 2);
     }
 
 #ifndef Q_OS_WIN
@@ -779,14 +972,21 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ui->scaleValueLabel->setText(QString("%1%").arg(value));
     });
 
-    // Card shadow
-    auto *shadow = new QGraphicsDropShadowEffect(ui->generalCard);
-    shadow->setBlurRadius(16);
-    shadow->setOffset(0, 2);
-    shadow->setColor(QColor(0, 0, 0, 25));
-    ui->generalCard->setGraphicsEffect(shadow);
-
     loadSettings();
+
+    // ── Auto-save: every control change saves immediately ──
+    auto save = [this]() { saveAllSettings(); };
+    connect(toggleSwitch_, &ToggleSwitch::toggled, this, save);
+    connect(autoStartSwitch_, &ToggleSwitch::toggled, this, save);
+    if (themeCombo_) connect(themeCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (retentionUnitCombo_) connect(retentionUnitCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (pasteShortcutCombo_) connect(pasteShortcutCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (ocrBackendCombo_) connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (autoOcrSwitch_) connect(autoOcrSwitch_, &ToggleSwitch::toggled, this, save);
+    connect(ui->daySpinBox, &QSpinBox::valueChanged, this, save);
+    connect(ui->itemScaleSlider, &QSlider::valueChanged, this, save);
+    connect(ui->shortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, save);
+
     adjustSize();
 }
 
@@ -799,48 +999,34 @@ void MPasteSettingsWidget::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-
-    const qreal radius = CORNER_RADIUS;
-    QRectF r = QRectF(rect()).adjusted(0.75, 0.75, -0.75, -0.75);
-
-    // Clear outside the rounded rect so corners are transparent
-    p.setCompositionMode(QPainter::CompositionMode_Clear);
-    p.fillRect(rect(), Qt::transparent);
-    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
-
-    // Fill the rounded rect with a near-transparent color so mouse
-    // events are captured (fully transparent areas pass through).
-    QPainterPath shape;
-    shape.addRoundedRect(r, radius, radius);
-    p.setClipPath(shape);
-    p.fillRect(rect(), QColor(0, 0, 0, 1));
-    p.setClipping(false);
-
-    if (darkTheme_) {
-        p.setPen(QPen(QColor(255, 255, 255, 40), 1.5));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r, radius, radius);
-    } else {
-        p.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r, radius, radius);
-    }
+    SurfacePainter::paintPanel(p, QRectF(rect()), 12.0, darkTheme_, 45);
 }
 
 void MPasteSettingsWidget::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        dragPos_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        // Only drag from the top 42px (title bar area)
+        if (event->position().toPoint().y() <= 42) {
+            dragPos_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        }
         event->accept();
     }
 }
 
 void MPasteSettingsWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    if (event->buttons() & Qt::LeftButton) {
+    if ((event->buttons() & Qt::LeftButton) && !dragPos_.isNull()) {
         move(event->globalPosition().toPoint() - dragPos_);
         event->accept();
     }
+}
+
+void MPasteSettingsWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        dragPos_ = QPoint();
+    }
+    QDialog::mouseReleaseEvent(event);
 }
 
 void MPasteSettingsWidget::showEvent(QShowEvent *event)
@@ -906,7 +1092,12 @@ void MPasteSettingsWidget::loadSettings()
 #endif
 }
 
-void MPasteSettingsWidget::accept()
+void MPasteSettingsWidget::accept() {
+    saveAllSettings();
+    QDialog::accept();
+}
+
+void MPasteSettingsWidget::saveAllSettings()
 {
     auto *settings = MPasteSettings::getInst();
     const int oldRetentionValue = settings->getHistoryRetentionValue();
@@ -982,12 +1173,22 @@ void MPasteSettingsWidget::accept()
     if (oldScale != newScale) {
         emit itemScaleChanged(newScale);
     }
-    QDialog::accept();
 }
 
 void MPasteSettingsWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
     WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     setStyleSheet(settingsStyleSheet(darkTheme_));
+
+    // Update sidebar icons for the new theme.
+    static const QStringList navIcons = {
+        QStringLiteral("settings"), QStringLiteral("rename"),
+        QStringLiteral("menu_more"), QStringLiteral("info")
+    };
+    const auto navBtns = findChildren<QToolButton *>(QStringLiteral("navBtn"));
+    for (int i = 0; i < navBtns.size() && i < navIcons.size(); ++i) {
+        navBtns[i]->setIcon(IconResolver::themedIcon(navIcons[i], dark));
+    }
+
     update();
 }

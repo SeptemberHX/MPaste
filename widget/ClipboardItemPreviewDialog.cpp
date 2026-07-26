@@ -37,6 +37,7 @@
 
 #include "data/ContentClassifier.h"
 #include "data/LocalSaver.h"
+#include "data/MathMLRenderer.h"
 #include "utils/ThemeManager.h"
 #include "WindowBlurHelper.h"
 #include "utils/ThumbnailBuilder.h"
@@ -277,7 +278,8 @@ PreviewPayload buildPreviewPayload(ContentType contentType,
                                    const QImage &fallbackImage,
                                    const QString &filePath,
                                    const QSize &targetSize,
-                                   qreal devicePixelRatio) {
+                                   qreal devicePixelRatio,
+                                   bool isEquation) {
     PreviewPayload payload;
 
     switch (contentType) {
@@ -303,6 +305,19 @@ PreviewPayload buildPreviewPayload(ContentType contentType,
             break;
         }
         case Office: {
+            // Equation items (MathType or Word/PowerPoint native): skip
+            // the text/html fallback because their normalizedText is just
+            // a Unicode-stripped version of the MathML XML, which reads
+            // as gibberish. Show the rendered formula thumbnail instead.
+            if (isEquation && !fallbackImage.isNull()) {
+                QImage image = scalePreviewImage(fallbackImage, QSize(), devicePixelRatio);
+                if (!image.isNull()) {
+                    payload.kind = PreviewKind::Image;
+                    payload.image = image;
+                    payload.imageUrl = QStringLiteral("preview-image://mathml");
+                    break;
+                }
+            }
             // Prefer rich text or plain text so the user can select/copy
             // content.  Fall back to the image only for shape-only items
             // (e.g. PowerPoint diagrams) that carry no readable text.
@@ -555,12 +570,33 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     const QString sourceFilePath = item.sourceFilePath();
     const quint64 mimeOffset = item.mimeDataFileOffset();
     const bool preferFullItem = !sourceFilePath.isEmpty();
+    // Equation items all carry the "公式" title regardless of source
+    // (MathType, Word/PowerPoint native, ...). Both paths render through
+    // the MathML renderer in the preview dialog.
+    bool isEquation = (item.getTitle() == QStringLiteral("公式"));
+
+    // If we already have mime data in memory, snapshot the MathML bytes
+    // here so the worker thread can re-render at high resolution without
+    // paying for a disk full-load.
+    QByteArray mathmlBytes;
+    if (isEquation) {
+        if (const QMimeData *md = item.getMimeData()) {
+            for (const QString &fmt : md->formats()) {
+                if (fmt.toLower().contains(QLatin1String("mathml"))) {
+                    mathmlBytes = md->data(fmt);
+                    if (!mathmlBytes.isEmpty()) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
     const QSize targetSize(kPreviewDialogWidth - 120, kPreviewDialogHeight - 180);
     const qreal dpr = devicePixelRatioF();
     const quint64 token = ++previewToken_;
 
     QPointer<ClipboardItemPreviewDialog> guard(this);
-    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, fallbackImage, filePath, sourceFilePath, mimeOffset, preferFullItem, targetSize, dpr, token]() mutable {
+    QThread *thread = QThread::create([guard, contentType, normalizedText, normalizedUrls, html, imageBytes, fallbackImage, filePath, sourceFilePath, mimeOffset, preferFullItem, targetSize, dpr, token, isEquation, mathmlBytes]() mutable {
         ContentType resolvedType = contentType;
         QString resolvedText = normalizedText;
         QList<QUrl> resolvedUrls = normalizedUrls;
@@ -584,6 +620,9 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                 }
                 if (lightItem.hasThumbnail()) {
                     resolvedFallbackImage = lightItem.thumbnail().toImage();
+                }
+                if (lightItem.getTitle() == QStringLiteral("公式")) {
+                    isEquation = true;
                 }
             }
 
@@ -637,6 +676,51 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
             }
         }
 
+        // For MathType items, re-render the formula at preview-dialog
+        // resolution from the original MathML source — naively scaling the
+        // 275×224 card thumbnail looks blurry. Try the in-memory snapshot
+        // first; if absent (item only on disk), do a full load to fetch the
+        // MathML format bytes.
+        if (isEquation) {
+            QByteArray mml = mathmlBytes;
+            if (mml.isEmpty() && !sourceFilePath.isEmpty()) {
+                LocalSaver fullSaver;
+                ClipboardItem fullItem = fullSaver.loadFromFile(sourceFilePath);
+                if (const QMimeData *fmd = fullItem.getMimeData()) {
+                    for (const QString &fmt : fmd->formats()) {
+                        if (fmt.toLower().contains(QLatin1String("mathml"))) {
+                            mml = fmd->data(fmt);
+                            if (!mml.isEmpty()) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!mml.isEmpty()) {
+                QString mathmlText;
+                if (mml.size() >= 2
+                    && (mml.at(1) == '\0' || (static_cast<unsigned char>(mml.at(0)) == 0xFF
+                                              && static_cast<unsigned char>(mml.at(1)) == 0xFE))) {
+                    mathmlText = QString::fromUtf16(
+                        reinterpret_cast<const char16_t *>(mml.constData()),
+                        mml.size() / 2);
+                } else {
+                    mathmlText = QString::fromUtf8(mml);
+                }
+                const QSize hiResSize = targetSize.isValid()
+                    ? targetSize * qMax<qreal>(1.0, dpr)
+                    : QSize(kPreviewDialogWidth, kPreviewDialogHeight);
+                const bool dark = ThemeManager::instance()->isDark();
+                QPixmap rendered = MathMLRenderer::renderAt(mathmlText, hiResSize, dark);
+                if (!rendered.isNull()) {
+                    QImage img = rendered.toImage();
+                    img.setDevicePixelRatio(qMax<qreal>(1.0, dpr));
+                    resolvedFallbackImage = img;
+                }
+            }
+        }
+
         qInfo().noquote() << QStringLiteral("[preview] type=%1 sourceFile=%2 mimeOffset=%3 imageBytes=%4 fallbackNull=%5 preferFull=%6")
             .arg(resolvedType)
             .arg(sourceFilePath.isEmpty() ? QStringLiteral("(empty)") : sourceFilePath)
@@ -653,7 +737,8 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                                                      resolvedFallbackImage,
                                                      resolvedFilePath,
                                                      targetSize,
-                                                     dpr);
+                                                     dpr,
+                                                     isEquation);
         if (guard) {
             QMetaObject::invokeMethod(guard.data(), [guard, payload, token]() {
                 if (!guard || guard->previewToken_ != token) {
