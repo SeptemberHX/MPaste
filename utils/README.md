@@ -74,3 +74,15 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardBoardService` now exposes `containsFingerprint()` for fast duplicate lookup and `indexedItemsMeta()` for accessing the light-item index; `searchableText` in `IndexedItemMeta` is truncated to 512 characters.
 - `MPasteSettings` now provides a `HistoryViewMode` enum (`ViewModePaged` / `ViewModeContinuous`) with getter, setter, and persistence support.
 - New `ClipboardExportService` namespace (`ClipboardExportService.h/.cpp`) provides `buildMimeData()` for constructing clipboard export payloads from items.
+
+## GNOME 51 Wayland integration
+
+- `GnomeBridge.h/.cpp` provides the Qt DBus client for the bundled Shell companion, directed MIME snapshots, shortcut signals and automatic reconnect.
+- `ClipboardMonitor` consumes complete bridge snapshots on Wayland instead of reading the unfocused Qt clipboard; self-paste and duplicate guards remain active.
+- `HotKeyManager` delegates Wayland accelerators to GNOME. XCB members are initialized even when the X11 backend is skipped.
+- `PlatformRelated` routes focus, panel activation and paste injection through GNOME; compositor IDs use a separate numeric namespace from Qt window IDs.
+- This backend requires the companion in `extensions/`; it is specific to GNOME 51. Source application icons are resolved through GNOME and cached by compositor window ID.
+
+- 在 GNOME Wayland 会话内使用 XWayland 预览时，热键仍由 GNOME 管理。`GnomeBridge` 在扩展未加载时创建独立的 MPaste 系统自定义快捷键（保留其他条目），通过 `--toggle` 唤起已有实例；扩展接管时释放该临时绑定。
+
+- `GnomeBridge` receives directed `SourceIcon` metadata, resolves theme/file icons to a 64px pixmap, and bounds the cache to 64 entries. `PlatformRelated::getWindowIcon` uses that cache for captured Wayland items; the normal `.mpaste` writer persists the icon. Missing metadata from older extensions safely falls back to the default.

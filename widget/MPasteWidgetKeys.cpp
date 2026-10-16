@@ -1,3 +1,4 @@
+// output: Handles keyboard input and keeps tab backgrounds rounded at their actual layout size.
 // MPasteWidgetKeys.cpp — Keyboard handling, event filter, and focus management.
 // Split from MPasteWidget.cpp; shares the MPasteWidget class.
 #include <QButtonGroup>
@@ -296,6 +297,15 @@ void MPasteWidget::handleSearchInput(QKeyEvent *event) {
 }
 
 bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
+    if (event->type() == QEvent::Resize && watched->property("roundedTab").toBool()) {
+        auto *button = qobject_cast<QWidget *>(watched);
+        // QSS discards oversized corner radii. Layout/font/DPI changes can make
+        // the actual button smaller than the maximum height used by applyScale.
+        const int radius = qMax(0, qMin(button->width(), button->height()) / 2 - 1);
+        const QString style = QStringLiteral("border-radius: %1px;").arg(radius);
+        if (button->styleSheet() != style) button->setStyleSheet(style);
+    }
+
     if (event->type() == QEvent::Paint &&
         (watched == ui_.ui->clipboardBtnWidget || watched == ui_.ui->typeBtnWidget)) {
         QWidget *w = qobject_cast<QWidget*>(watched);

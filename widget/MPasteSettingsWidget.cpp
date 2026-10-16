@@ -1,5 +1,5 @@
 ﻿// input: 依赖对应头文件、Qt Widgets/布局、设置对象与自定义开关组件。
-// output: 提供设置窗口的界面初始化、样式和交互逻辑实现。
+// output: 提供设置界面及单组快捷键编辑、GNOME 说明和注册失败回退。
 // pos: widget 层中的 MPasteSettingsWidget 实现文件。
 // update: 修改本文件时，同步更新文件头注释与 `widget/README.md`。
 // note: Dark theme now uses light spin icons and the settings layout is grouped into clearer sections with preview cache maintenance actions.
@@ -20,6 +20,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QLabel>
 #include <QComboBox>
 #include <QLocale>
@@ -555,6 +556,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         tb->setContentsMargins(8, 0, 4, 0);
         tb->setSpacing(6);
         auto *titleLabel = new QLabel(uiText("MPaste Settings", QStringLiteral("MPaste 设置")), titleBar);
+        titleLabel->setObjectName(QStringLiteral("glassSettingsTitle"));
         QFont f = titleLabel->font();
         f.setBold(true);
         f.setPointSizeF(f.pointSizeF() + 0.5);
@@ -838,6 +840,17 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             sLayout->addWidget(makeCard(g));
         }
 
+#ifdef Q_OS_LINUX
+        if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")) {
+            auto *help = new QLabel(QStringLiteral(
+                "GNOME Wayland：快捷键由桌面注册。扩展尚未加载时，使用系统的 MPaste 自定义快捷键唤起窗口。"
+                "可在「设置 → 键盘 → 自定义快捷键」查看或排查冲突。\n"
+                "后台采集和自动粘贴仍需要启用 MPaste 扩展；首次安装后请注销再登录。"), shortcutsPage);
+            help->setWordWrap(true);
+            sLayout->addWidget(help);
+        }
+#endif
+        ui->shortcutEdit->setMaximumSequenceLength(1);
         sLayout->addStretch();
         stack->addWidget(shortcutsPage);
 
@@ -985,7 +998,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     if (autoOcrSwitch_) connect(autoOcrSwitch_, &ToggleSwitch::toggled, this, save);
     connect(ui->daySpinBox, &QSpinBox::valueChanged, this, save);
     connect(ui->itemScaleSlider, &QSlider::valueChanged, this, save);
-    connect(ui->shortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, save);
+    connect(ui->shortcutEdit, &QKeySequenceEdit::editingFinished, this, save);
 
     adjustSize();
 }
@@ -1114,6 +1127,10 @@ void MPasteSettingsWidget::saveAllSettings()
     if (!newShortcut.isEmpty() && newShortcut != settings->getShortcutStr()) {
         settings->setShortcutStr(newShortcut);
         emit shortcutChanged(newShortcut);
+        if (settings->getShortcutStr() != newShortcut) {
+            const QSignalBlocker blocker(ui->shortcutEdit);
+            ui->shortcutEdit->setKeySequence(QKeySequence(settings->getShortcutStr()));
+        }
     }
 
     if (pasteShortcutCombo_) {
@@ -1177,8 +1194,11 @@ void MPasteSettingsWidget::saveAllSettings()
 
 void MPasteSettingsWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
+    setProperty("mpasteBlurRadius", 12.0);
     WindowBlurHelper::enableBlurBehind(this, darkTheme_);
-    setStyleSheet(settingsStyleSheet(darkTheme_));
+    setStyleSheet(settingsStyleSheet(darkTheme_) + QStringLiteral(
+        "QLabel#glassSettingsTitle { color: %1; background: transparent; }")
+        .arg(darkTheme_ ? QStringLiteral("#E6EDF5") : QStringLiteral("#1E2936")));
 
     // Update sidebar icons for the new theme.
     static const QStringList navIcons = {

@@ -1,5 +1,5 @@
 // input: Depends on Qt, ClipboardItem, ThemeManager.
-// output: Shared anonymous-namespace-level helper functions for ScrollItemsWidget implementation files.
+// output: Compact themed menus with native backdrop blur when supported and translucent tint fallback.
 // pos: Internal header -- not part of the public API, only included by BoardXxx.cpp and ScrollItemsWidgetMV.cpp.
 #ifndef BOARDINTERNALHELPERS_H
 #define BOARDINTERNALHELPERS_H
@@ -45,12 +45,25 @@ inline void applyMenuTheme(QMenu *menu) {
         return;
     }
     const bool dark = ThemeManager::instance()->isDark();
+    QFont font = QApplication::font();
+    font.setPixelSize(13);
+    font.setWeight(QFont::Normal);
+    menu->setFont(font);
 
     menu->setAttribute(Qt::WA_TranslucentBackground);
     menu->setWindowFlags(menu->windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
 
-    const QString bg = dark ? QStringLiteral("rgba(32, 32, 36, 230)")
-                            : QStringLiteral("rgba(248, 248, 250, 235)");
+    const bool opaque = WindowBlurHelper::useOpaqueFallback();
+    if ((opaque || WindowBlurHelper::hasNativeBlur()) && menu->style()->objectName().compare(QStringLiteral("fusion"), Qt::CaseInsensitive) != 0) {
+        // GNOME's native menu metrics otherwise add oversized padding/icon gutters.
+        auto *style = QStyleFactory::create(QStringLiteral("Fusion"));
+        style->setParent(menu);
+        menu->setStyle(style);
+    }
+    const bool nativeBlur = WindowBlurHelper::enableNativeBlur(menu);
+    const QString bg = nativeBlur
+        ? (dark ? QStringLiteral("rgba(24, 31, 43, 175)") : QStringLiteral("rgba(245, 248, 252, 180)"))
+        : (dark ? QStringLiteral("rgba(24, 31, 43, 230)") : QStringLiteral("rgba(245, 248, 252, 235)"));
     const QString border = dark ? QStringLiteral("rgba(255, 255, 255, 30)") : QStringLiteral("rgba(0, 0, 0, 22)");
     const QString text = dark ? QStringLiteral("#D6DEE8") : QStringLiteral("#1E2936");
     const QString highlight = dark ? QStringLiteral("rgba(255, 255, 255, 22)") : QStringLiteral("rgba(0, 0, 0, 12)");
@@ -62,28 +75,35 @@ inline void applyMenuTheme(QMenu *menu) {
         " background-color: %1;"
         " border: 1px solid %2;"
         " border-radius: 8px;"
-        " padding: 6px 0px;"
+        " padding: 5px 0px;"
+        " min-width: 180px;"
         " color: %3;"
         " font-size: 13px;"
+        " font-weight: 400;"
         "}"
         "QMenu::item {"
-        " padding: 6px 28px 6px 16px;"
+        " height: 28px;"
+        " min-height: 28px; max-height: 28px;"
+        " padding: 0px 16px 0px 12px;"
+        " font-size: 13px; font-weight: 400;"
         " border-radius: 6px;"
-        " margin: 1px 6px;"
+        " margin: 1px 5px;"
         " color: %3;"
         "}"
         "QMenu::item:selected {"
         " background-color: %4;"
         " color: %5;"
         "}"
+        "QMenu::item:disabled { color: %7; }"
         "QMenu::separator {"
         " height: 1px;"
         " background: %6;"
         " margin: 4px 12px;"
         "}"
         "QMenu::icon {"
-        " padding-left: 8px;"
-        "}").arg(bg, border, text, highlight, highlightText, separator));
+        " padding: 0px;"
+        "}").arg(bg, border, text, highlight, highlightText, separator,
+               dark ? QStringLiteral("#6F7C8E") : QStringLiteral("#8B96A5")));
 }
 
 inline bool looksBrokenTranslation(const QString &text) {

@@ -1,7 +1,8 @@
 // input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
-// output: 提供 AboutWidget 的实现逻辑。
+// output: 關於視窗；支援原生磨砂的平台使用半透明圓角底板，否則使用實色底板。
 // pos: widget 层中的 AboutWidget 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
+#include "SurfacePainter.h"
 #include "AboutWidget.h"
 #include "ui_AboutWidget.h"
 
@@ -80,6 +81,11 @@ void AboutWidget::applyTheme(bool dark) {
 void AboutWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
+    if (WindowBlurHelper::useOpaqueFallback() || WindowBlurHelper::hasNativeBlur()) {
+        SurfacePainter::paintPanel(p, QRectF(rect()), 8.0, darkTheme_, 1);
+        return;
+    }
+
 
     const qreal radius = 8.0;
     QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);

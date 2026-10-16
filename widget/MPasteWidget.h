@@ -159,6 +159,7 @@ private:
     void touchWorkingSet();
 
     QTimer *keepAliveTimer_ = nullptr;
+    bool nativeBackdropBlur_ = false;
     bool darkTheme_ = false;
 
 #ifdef Q_OS_WIN

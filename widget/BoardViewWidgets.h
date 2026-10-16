@@ -1,5 +1,5 @@
 // input: Depends on Qt Widgets, QPainter, QListView, QElapsedTimer.
-// output: Provides HoverActionBar, EdgeFadeOverlay, and ClipboardBoardView widget classes.
+// output: Provides board widgets and a rounded hover bar with a locally blurred card backdrop.
 // pos: Standalone QWidget subclasses extracted from ScrollItemsWidgetMV.cpp.
 #ifndef BOARDVIEWWIDGETS_H
 #define BOARDVIEWWIDGETS_H
@@ -10,11 +10,42 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QWidget>
+#include <QGraphicsBlurEffect>
+#include <QGraphicsPixmapItem>
+#include <QGraphicsScene>
+#include <QPainterPath>
 
 class HoverActionBar final : public QWidget {
 public:
     explicit HoverActionBar(QWidget *parent = nullptr)
         : QWidget(parent) {}
+
+    void refreshBackdrop(QWidget *viewport, const QRect &rect) {
+        // Capture only the sibling viewport, never this toolbar or the desktop.
+        // Bound refresh work during high-frequency mouse/scroll events.
+        if (backdropTimer_.isValid() && backdropTimer_.elapsed() < 60 && rect == backdropRect_) return;
+        backdropTimer_.restart();
+        backdropRect_ = rect;
+        const QPixmap snapshot = viewport->grab(rect);
+        if (snapshot.isNull()) return;
+        const qreal dpr = snapshot.devicePixelRatioF();
+        QImage source = snapshot.toImage();
+        source.setDevicePixelRatio(1);
+        QGraphicsScene scene;
+        auto *item = scene.addPixmap(QPixmap::fromImage(source));
+        auto *blur = new QGraphicsBlurEffect;
+        blur->setBlurRadius(10 * dpr);
+        blur->setBlurHints(QGraphicsBlurEffect::QualityHint);
+        item->setGraphicsEffect(blur);
+        QImage result(source.size(), QImage::Format_ARGB32_Premultiplied);
+        result.fill(Qt::transparent);
+        QPainter painter(&result);
+        scene.render(&painter, QRectF(QPointF(), result.size()), QRectF(QPointF(), source.size()));
+        painter.end();
+        result.setDevicePixelRatio(dpr);
+        backdrop_ = QPixmap::fromImage(result);
+        update();
+    }
 
     void setCornerRadius(int radius) {
         cornerRadius_ = radius;
@@ -30,14 +61,25 @@ public:
 protected:
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
+        // This is a child widget: Qt propagates the parent/card background.
+        // Clearing with Source would punch a rectangular hole through that background.
         painter.setRenderHint(QPainter::Antialiasing, true);
         const QRectF rectF = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        QPainterPath shape;
+        shape.addRoundedRect(rectF, cornerRadius_, cornerRadius_);
+        painter.setClipPath(shape);
+        if (!backdrop_.isNull()) painter.drawPixmap(QPoint(-12, -12), backdrop_);
+        painter.fillPath(shape, background_);
+        painter.setClipping(false);
         painter.setPen(border_);
-        painter.setBrush(background_);
-        painter.drawRoundedRect(rectF, cornerRadius_, cornerRadius_);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(shape);
     }
 
 private:
+    QPixmap backdrop_;
+    QElapsedTimer backdropTimer_;
+    QRect backdropRect_;
     int cornerRadius_ = 8;
     QColor background_ = QColor(255, 255, 255, 185);
     QColor border_ = QColor(255, 255, 255, 120);

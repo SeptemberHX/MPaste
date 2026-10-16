@@ -1,8 +1,8 @@
 # input: 依赖 CMake、Qt、平台工具链与打包选项。
-# output: 对外提供主构建图与目标配置。
+# output: 提供 Qt 6 构建图；Linux 使用 D-Bus 桥接，构建时不改写翻译源文件。
 # pos: 根目录中的主构建入口。
 # update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.16)
 set(_VERSION_MAJOR 0)
 set(_VERSION_MINOR 7)
 set(_VERSION_PATCH 6)
@@ -55,26 +55,24 @@ set(TS_FILES
 )
 set_source_files_properties(${TS_FILES} PROPERTIES
         OUTPUT_LOCATION ${CMAKE_BINARY_DIR}/translations)
-qt6_create_translation(QM_FILES ${SRCS} ${TS_FILES})
 qt6_add_translation(QM_FILES ${TS_FILES})
 
 if(UNIX)
     find_package(PkgConfig REQUIRED)
     find_package(X11 REQUIRED)
     pkg_check_modules(XCB REQUIRED xcb xcb-keysyms)
-    pkg_check_modules(QGSettings REQUIRED gsettings-qt)
+    find_package(Qt6 REQUIRED COMPONENTS DBus)
 
     set(PLATFORM_SPECIFIC_LIBS
             xdo
             ${X11_LIBRARIES}
             ${XCB_LIBRARIES}
-            ${QGSettings_LIBRARIES}
+            Qt6::DBus
     )
 
     set(PLATFORM_SPECIFIC_INCLUDES
             ${X11_INCLUDE_DIR}
             ${XCB_INCLUDE_DIRS}
-            ${QGSettings_INCLUDE_DIRS}
     )
 
     set(PLATFORM_SPECIFIC_SOURCES
@@ -115,6 +113,27 @@ target_include_directories(${BIN_NAME} PUBLIC
         ${PROJECT_BINARY_DIR}
         ${PLATFORM_SPECIFIC_INCLUDES}
 )
+
+# Native background blur for Wayland compositors advertising ext-background-effect-v1.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Qt6 QUIET COMPONENTS GuiPrivate)
+    pkg_check_modules(WAYLAND_CLIENT QUIET IMPORTED_TARGET wayland-client)
+    pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+    find_program(WAYLAND_SCANNER wayland-scanner)
+    set(BLUR_PROTOCOL "${WAYLAND_PROTOCOLS_DIR}/staging/ext-background-effect/ext-background-effect-v1.xml")
+    if(Qt6_VERSION VERSION_GREATER_EQUAL "6.11" AND WAYLAND_CLIENT_FOUND AND WAYLAND_SCANNER AND TARGET Qt6::GuiPrivate AND EXISTS "${BLUR_PROTOCOL}")
+        add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/background-effect-client.h"
+            COMMAND "${WAYLAND_SCANNER}" client-header "${BLUR_PROTOCOL}" "${CMAKE_CURRENT_BINARY_DIR}/background-effect-client.h"
+            DEPENDS "${BLUR_PROTOCOL}")
+        add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/background-effect-protocol.c"
+            COMMAND "${WAYLAND_SCANNER}" private-code "${BLUR_PROTOCOL}" "${CMAKE_CURRENT_BINARY_DIR}/background-effect-protocol.c"
+            DEPENDS "${BLUR_PROTOCOL}")
+        target_sources(${BIN_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/background-effect-client.h"
+            "${CMAKE_CURRENT_BINARY_DIR}/background-effect-protocol.c")
+        target_link_libraries(${BIN_NAME} PRIVATE PkgConfig::WAYLAND_CLIENT Qt6::GuiPrivate)
+        target_compile_definitions(${BIN_NAME} PRIVATE MPASTE_WAYLAND_BLUR)
+    endif()
+endif()
 
 if(WIN32)
     target_link_libraries(${BIN_NAME} PRIVATE

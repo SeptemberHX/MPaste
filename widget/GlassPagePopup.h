@@ -1,3 +1,4 @@
+// output: Page selector with native frosted background and an opaque fallback when blur is unavailable.
 // GlassPagePopup.h — Glass dropdown popup for the page selector.
 // Extracted from MPasteWidget.cpp for use across split implementation files.
 #ifndef GLASSPAGEPOPUP_H
@@ -11,12 +12,14 @@
 #include <QCursor>
 
 #include "WindowBlurHelper.h"
+#include "SurfacePainter.h"
 
 class GlassPagePopup final : public QWidget {
     Q_OBJECT
 public:
     explicit GlassPagePopup(QWidget *parent = nullptr)
         : QWidget(parent, Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint) {
+        setWindowTitle(QStringLiteral("MPaste Pages"));
         setAttribute(Qt::WA_TranslucentBackground);
         setMouseTracking(true);
     }
@@ -48,7 +51,7 @@ protected:
         p.setRenderHint(QPainter::Antialiasing, true);
 
         const QRectF r = QRectF(rect()).adjusted(1, 1, -1, -1);
-        const QColor bg = dark_ ? QColor(30, 36, 48, 1) : QColor(245, 245, 248, 1);
+        const QColor bg = SurfacePainter::bodyColor(dark_, WindowBlurHelper::useOpaqueFallback(), 1);
         const QColor border = dark_ ? QColor(255, 255, 255, 30) : QColor(0, 0, 0, 22);
         p.setPen(QPen(border, 1));
         p.setBrush(bg);

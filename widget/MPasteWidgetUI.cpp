@@ -1,3 +1,4 @@
+// output: Builds the panel UI with native Wayland flags and size-aware rounded tab backgrounds.
 // MPasteWidgetUI.cpp — UI initialisation, theming, and page-selector logic.
 // Split from MPasteWidget.cpp; shares the MPasteWidget class.
 #include <QButtonGroup>
@@ -118,7 +119,8 @@ void MPasteWidget::initStyle() {
     Qt::WindowFlags flags = Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Tool | Qt::FramelessWindowHint;
 
 #ifdef Q_OS_LINUX
-    flags |= Qt::X11BypassWindowManagerHint;
+    if (qEnvironmentVariable("XDG_SESSION_TYPE") != QStringLiteral("wayland"))
+        flags |= Qt::X11BypassWindowManagerHint;
     flags |= Qt::Window;
 #endif
     setWindowFlags(flags);
@@ -358,6 +360,7 @@ void MPasteWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
 
     WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    nativeBackdropBlur_ = WindowBlurHelper::enableNativeBlur(this);
 
     if (ui_.ui) {
         ui_.ui->menuButton->setIcon(IconResolver::themedIcon(QStringLiteral("settings"), darkTheme_));
@@ -441,12 +444,14 @@ void MPasteWidget::applyScale(int scale) {
         widget->setMinimumHeight(height);
         widget->setMaximumHeight(height);
     };
-    auto applyRadius = [](QWidget *widget) {
+    auto applyRadius = [this](QWidget *widget) {
         if (!widget) {
             return;
         }
         const int height = qMax(1, widget->maximumHeight());
-        const int radius = qMax(6, height / 2);
+        const int radius = qMax(0, height / 2 - 1);
+        widget->setProperty("roundedTab", true);
+        widget->installEventFilter(this);
         widget->setStyleSheet(QStringLiteral("border-radius: %1px;").arg(radius));
     };
 

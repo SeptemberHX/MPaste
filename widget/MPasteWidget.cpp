@@ -1,5 +1,5 @@
 // input: Depends on MPasteWidget.h, Qt runtime services, resource assets, and platform clipboard/window helpers.
-// output: Implements the main window, item interaction flow, reliable quick-paste shortcuts, and plain-text paste behavior.
+// output: Main panel with native Wayland frosted backdrop, opaque fallback and platform show/hide support.
 // pos: Widget-layer main window implementation coordinating boards, shortcuts, and system integration.
 // update: If I change, update this header block and my folder README.md.
 // note: Added theme application, dark mode propagation, tray menu theming, robust paste rehydration, and alias sync.
@@ -42,6 +42,7 @@
 #include "WindowBlurHelper.h"
 #include "utils/IconResolver.h"
 #include "MPasteWidget.h"
+#include "SurfacePainter.h"
 #include "ui_MPasteWidget.h"
 #include "BoardInternalHelpers.h"
 #include "ClipboardAppController.h"
@@ -57,11 +58,17 @@ class OcrResultDialog : public QDialog {
 public:
     bool dark = false;
     QPoint dragOffset_;
-    using QDialog::QDialog;
+    explicit OcrResultDialog(QWidget *parent = nullptr) : QDialog(parent) {
+        setWindowTitle(QStringLiteral("MPaste OCR"));
+    }
 protected:
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing, true);
+        if (WindowBlurHelper::useOpaqueFallback() || WindowBlurHelper::hasNativeBlur()) {
+            SurfacePainter::paintPanel(p, QRectF(rect()), 8.0, dark, 1);
+            return;
+        }
         const qreal r = 8.0;
         QRectF rect = QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
         p.setPen(QPen(dark ? QColor(255,255,255,40) : QColor(0,0,0,25), 1.0));
@@ -485,6 +492,22 @@ void MPasteWidget::hideAndPaste() {
 }
 void MPasteWidget::setVisibleWithAnnimation(bool visible) {
     if (visible == isVisible()) return;
+#ifdef Q_OS_LINUX
+    // Native Wayland has no client-controlled top-level opacity.
+    if (QGuiApplication::platformName().startsWith(QStringLiteral("wayland"))) {
+        setVisible(visible);
+        if (visible) {
+            if (controller_->copiedWhenHide()) {
+                controller_->clearCopiedWhenHide();
+                ui_.clipboardWidget->scrollToFirst();
+            }
+            if (!ui_.ui->searchEdit->text().isEmpty()) ui_.ui->searchEdit->setFocus();
+        } else {
+            currItemsWidget()->cleanShortCutInfo();
+        }
+        return;
+    }
+#endif
 
     if (visible) {
         QElapsedTimer t; t.start();
@@ -545,10 +568,17 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
     const qreal radius = 8.0;
     QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
 
-    // Clear to transparent so DWM acrylic shows through
+    // Keep rounded corners transparent; platforms without DWM need a painted body.
     p.setCompositionMode(QPainter::CompositionMode_Clear);
     p.fillRect(rect(), Qt::transparent);
     p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+    if (WindowBlurHelper::useOpaqueFallback() || WindowBlurHelper::hasNativeBlur()) {
+        QPainterPath body;
+        body.addRoundedRect(r, radius, radius);
+        const int alpha = nativeBackdropBlur_ ? (darkTheme_ ? 150 : 175) : 255;
+        p.fillPath(body, SurfacePainter::bodyColor(darkTheme_, true, 255, alpha));
+    }
 
     if (darkTheme_) {
         // Glass edge - thin luminous white border

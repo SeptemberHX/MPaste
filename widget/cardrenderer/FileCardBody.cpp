@@ -1,3 +1,6 @@
+// input: Card geometry, file URLs and platform icons.
+// output: Bounded, DPI-aware file icons with separate filename space.
+// pos: File card body renderer. Update widget/README.md when changing layout.
 #include "FileCardBody.h"
 
 #include <QCache>
@@ -43,10 +46,13 @@ QPixmap loadLocalFileIconSync(const QString &filePath, const QSize &targetLogica
 
     QFileIconProvider provider;
     QIcon icon = provider.icon(info);
-    QPixmap pixmap = icon.pixmap(pixelTargetSize);
+    QPixmap pixmap = icon.pixmap(targetLogicalSize, qMax<qreal>(1.0, targetDpr));
     if (pixmap.isNull()) {
         return {};
     }
+    // Some platform icon engines return a larger native bitmap than requested.
+    if (pixmap.width() > pixelTargetSize.width() || pixmap.height() > pixelTargetSize.height())
+        pixmap = pixmap.scaled(pixelTargetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
     return pixmap;
 }
@@ -82,8 +88,9 @@ void FileCardBody::paint(QPainter *painter, const CardBodyContext &ctx) const {
 
         const int iconPadding = qMax(10, 12 * ctx.scale / 100);
         const int availableHeight = ctx.previewRect.height() - nameHeight - nameTopGap;
-        const int iconSize = qMax(24, qMin(ctx.previewRect.width() - iconPadding * 2,
-                                           availableHeight - iconPadding * 2));
+        const int preferredIconSize = qMax(24, 120 * ctx.scale / 100);
+        const int iconSize = qMax(1, qMin(preferredIconSize,
+            qMin(ctx.previewRect.width() - iconPadding * 2, availableHeight - iconPadding * 2)));
         const QRect iconArea(ctx.previewRect.left(), ctx.previewRect.top(),
                              ctx.previewRect.width(), availableHeight);
         const QRect iconRect(iconArea.left() + (iconArea.width() - iconSize) / 2,
@@ -95,15 +102,10 @@ void FileCardBody::paint(QPainter *painter, const CardBodyContext &ctx) const {
         if (iconPixmap.isNull()) {
             iconPixmap = filePixmap(iconRect.size());
         }
-        QPoint iconPos = iconRect.topLeft();
-        const qreal iconDpr = qMax<qreal>(1.0, iconPixmap.devicePixelRatio());
-        const QSize iconLogicalSize(qRound(iconPixmap.width() / iconDpr),
-                                    qRound(iconPixmap.height() / iconDpr));
-        if (iconLogicalSize.isValid() && iconLogicalSize != iconRect.size()) {
-            iconPos.setX(iconRect.left() + (iconRect.width() - iconLogicalSize.width()) / 2);
-            iconPos.setY(iconRect.top() + (iconRect.height() - iconLogicalSize.height()) / 2);
-        }
-        painter->drawPixmap(iconPos, iconPixmap);
+        painter->save();
+        painter->setClipRect(iconRect, Qt::IntersectClip);
+        CardRenderUtils::drawContainPixmap(painter, iconRect, iconPixmap);
+        painter->restore();
 
         // Draw filename below icon.
         if (!fileName.isEmpty()) {

@@ -1,9 +1,10 @@
 // input: Depends on ClipboardItemRenameDialog.h, ThemeManager, and Qt layout/widgets.
-// output: Implements a themed rename dialog matching the app's card language.
+// output: Themed rename dialog with an inset native frosted surface and opaque fallback.
 // pos: Widget-layer rename dialog implementation.
 // update: If I change, update this header block and my folder README.md.
 // note: Rename dialog now explicitly activates and focuses the input field.
 #include "ClipboardItemRenameDialog.h"
+#include "WindowBlurHelper.h"
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -37,8 +38,8 @@ QString renameDialogStyleSheet(bool dark) {
                 background: transparent;
             }
             QFrame#renameCard {
-                background: rgba(24, 29, 36, 0.96);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: #181F2B;
+                border: 1px solid rgba(255, 255, 255, 20);
                 border-radius: 12px;
             }
             QLabel#renameTitle {
@@ -51,7 +52,7 @@ QString renameDialogStyleSheet(bool dark) {
                 font-size: 11px;
             }
             QLineEdit#renameInput {
-                background: rgba(24, 29, 36, 0.95);
+                background: rgba(24, 29, 36, 242);
                 border: 1px solid #3A4655;
                 border-radius: 8px;
                 color: #F2F6FB;
@@ -89,8 +90,8 @@ QString renameDialogStyleSheet(bool dark) {
             background: transparent;
         }
         QFrame#renameCard {
-            background: rgba(255, 255, 255, 0.98);
-            border: 1px solid rgba(0, 0, 0, 0.12);
+            background: #F5F8FC;
+            border: 1px solid rgba(0, 0, 0, 31);
             border-radius: 12px;
         }
         QLabel#renameTitle {
@@ -103,7 +104,7 @@ QString renameDialogStyleSheet(bool dark) {
             font-size: 11px;
         }
         QLineEdit#renameInput {
-            background: rgba(255, 255, 255, 0.98);
+            background: #F5F8FC;
             border: 1px solid #D6D6D6;
             border-radius: 8px;
             color: #2C3E50;
@@ -232,5 +233,13 @@ void ClipboardItemRenameDialog::showEvent(QShowEvent *event) {
 }
 
 void ClipboardItemRenameDialog::applyTheme(bool dark) {
-    setStyleSheet(renameDialogStyleSheet(dark));
+    setProperty("mpasteBlurRadius", 12.0);
+    setProperty("mpasteBlurInset", 10.0);
+    WindowBlurHelper::enableBlurBehind(this, dark);
+    QString style = renameDialogStyleSheet(dark);
+    if (!WindowBlurHelper::useOpaqueFallback()) {
+        style.replace("#181F2B", "rgba(24, 31, 43, 175)");
+        style.replace("#F5F8FC", "rgba(245, 248, 252, 185)");
+    }
+    setStyleSheet(style);
 }

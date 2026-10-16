@@ -1,5 +1,5 @@
 // input: 依赖 Qt 应用入口、翻译加载、全局热键与主窗口初始化流程。
-// output: 提供 MPaste 应用启动、单实例控制和主窗口装配逻辑。
+// output: 提供启动、单实例、--show 入口，以及 GNOME Wayland 桥接缺失提示。
 // pos: 项目入口层中的 MPaste 应用入口实现文件。
 // update: 修改本文件时，同步更新文件头注释与根目录 README.md。
 #include <QApplication>
@@ -15,6 +15,10 @@
 #include <QDateTime>
 #include <QMutex>
 #include <QTextStream>
+#include <QMessageBox>
+#ifdef Q_OS_LINUX
+#include "utils/GnomeBridge.h"
+#endif
 
 #include "utils/MPasteSettings.h"
 #include "widget/MPasteWidget.h"
@@ -120,7 +124,8 @@ void mpasteMessageHandler(QtMsgType type, const QMessageLogContext &context, con
 }
 
 void installFileLogger() {
-    const QString dirPath = QDir::homePath() + QDir::separator() + QStringLiteral(".MPaste");
+    const QString dirPath = qEnvironmentVariable("MPASTE_LOG_DIR",
+        QDir::homePath() + QDir::separator() + QStringLiteral(".MPaste"));
     QDir().mkpath(dirPath);
     const QString logPath = dirPath + QDir::separator() + QStringLiteral("MPaste.log");
 
@@ -317,18 +322,48 @@ int main(int argc, char* argv[]) {
             showWidget(altHotkey);
         };
         QObject::connect(&widget, &MPasteWidget::shortcutChanged,
-            [&hotkeyManager](const QString &newShortcut) {
+            [&hotkeyManager, &widget, &shortcutStr](const QString &newShortcut) {
                 hotkeyManager.unregisterHotkey();
-                hotkeyManager.registerHotkey(QKeySequence(newShortcut));
+                if (!hotkeyManager.registerHotkey(QKeySequence(newShortcut))) {
+                    hotkeyManager.registerHotkey(QKeySequence(shortcutStr));
+                    MPasteSettings::getInst()->setShortcutStr(shortcutStr);
+                    QMessageBox::warning(&widget, QStringLiteral("MPaste"),
+                        QStringLiteral("快捷键注册失败。请检查 GNOME 设置 → 键盘 → 自定义快捷键，"
+                                       "确认没有其他程序占用该组合键。已保留原快捷键。"));
+                } else {
+                    shortcutStr = newShortcut;
+                }
             });
 
         QObject::connect(&hotkeyManager, &HotkeyManager::hotkeyPressed, toggleWidget);
         QObject::connect(&singleApp, &SingleApplication::messageReceived,
-            [showWidget](const QString &) { showWidget(); });
+            [showWidget, toggleWidget](const QString &message) {
+                if (message == QStringLiteral("toggle")) toggleWidget();
+                else showWidget();
+            });
 
+        if (app.arguments().contains(QStringLiteral("--show")) ||
+            app.arguments().contains(QStringLiteral("--toggle"))) {
+            QTimer::singleShot(0, &widget, [showWidget]() { showWidget(); });
+        }
+#ifdef Q_OS_LINUX
+        if (GnomeBridge::isWayland()) {
+            const auto reply = GnomeBridge::instance()->call("CurrentWindow");
+            if (reply.type() == QDBusMessage::ErrorMessage) {
+                QTimer::singleShot(0, &widget, [&widget]() {
+                    QMessageBox::warning(&widget, QStringLiteral("MPaste — GNOME Wayland"),
+                        QStringLiteral("Enable the MPaste Wayland Integration GNOME extension, "
+                                       "then log out and log back in.\n\n"
+                                       "Setup: python3 tools/install_gnome_wayland.py\n\n"
+                                       "Background clipboard capture, the global shortcut and automatic "
+                                       "paste require this extension on GNOME Wayland."));
+                });
+            }
+        }
+#endif
         return app.exec();
     } else {
-        singleApp.sendMessage("show");
+        singleApp.sendMessage(app.arguments().contains(QStringLiteral("--toggle")) ? "toggle" : "show");
         return 0;
     }
 }

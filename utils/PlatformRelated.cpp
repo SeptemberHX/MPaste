@@ -1,11 +1,13 @@
 // input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
-// output: 提供 PlatformRelated 的实现逻辑。
+// output: Windows/X11 平台操作，以及 GNOME Wayland 来源图标、焦点、窗口和粘贴桥接。
 // pos: utils 层中的 PlatformRelated 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 //
 // Created by ragdoll on 2021/5/26.
 //
 
+#include <QApplication>
+#include <QWidget>
 #include "PlatformRelated.h"
 #include <iostream>
 #include <QDesktopServices>
@@ -14,6 +16,7 @@
 #include <QUrl>
 
 #if defined(__linux__)
+#include "GnomeBridge.h"
 #include <QImage>
 #include <QPainter>
 #include "MPasteSettings.h"
@@ -155,18 +158,44 @@ QPixmap XUtils::convertFromNative(const void* data, int width, int height) {
 }
 
 void PlatformRelated::activateWindow(WId wId) {
+    if (GnomeBridge::isWayland()) {
+        if (wId & 0x40000000u) {
+            GnomeBridge::instance()->call("Activate", {uint(wId) & ~0x40000000u});
+            return;
+        }
+        for (auto *widget : QApplication::topLevelWidgets()) {
+            if (widget->testAttribute(Qt::WA_WState_Created) && widget->winId() == wId) {
+                GnomeBridge::instance()->call("ShowPanel");
+                return;
+            }
+        }
+        GnomeBridge::instance()->call("Activate", {uint(wId)});
+        return;
+    }
     XUtils::activeWindowX11((Window)wId);
 }
 
 QPixmap PlatformRelated::getWindowIcon(WId wId) {
+    if (GnomeBridge::isWayland())
+        return GnomeBridge::instance()->sourceIcon(uint(wId) & ~0x40000000u);
     return XUtils::getWindowIconX11((Window)wId);
 }
 
 WId PlatformRelated::currActiveWindow() {
+    if (GnomeBridge::isWayland()) {
+        if (QApplication::activeWindow()) return QApplication::activeWindow()->winId();
+        const auto reply = GnomeBridge::instance()->call("CurrentWindow");
+        return reply.arguments().isEmpty() || !reply.arguments().first().toUInt()
+            ? 0 : (reply.arguments().first().toUInt() | 0x40000000u);
+    }
     return (WId)XUtils::currentWinId();
 }
 
 void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode) {
+    if (GnomeBridge::isWayland()) {
+        GnomeBridge::instance()->call("Paste", {uint(mode)});
+        return;
+    }
     XUtils::triggerPasteShortcut(XUtils::currentWinId(), mode);
 }
 
@@ -175,6 +204,11 @@ void PlatformRelated::startWindowTracking() {
 }
 
 WId PlatformRelated::previousActiveWindow() {
+    if (GnomeBridge::isWayland()) {
+        const auto reply = GnomeBridge::instance()->call("PreviousWindow");
+        return reply.arguments().isEmpty() || !reply.arguments().first().toUInt()
+            ? 0 : (reply.arguments().first().toUInt() | 0x40000000u);
+    }
     return PlatformRelated::currActiveWindow();
 }
 

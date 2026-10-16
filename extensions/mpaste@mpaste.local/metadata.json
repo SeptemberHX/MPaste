@@ -1,0 +1,9 @@
+{
+  "uuid": "mpaste@mpaste.local",
+  "name": "MPaste Wayland Integration",
+  "description": "Clipboard history, global shortcut, panel activation and paste support for MPaste on GNOME Wayland.",
+  "shell-version": [
+    "51"
+  ],
+  "version": 4
+}

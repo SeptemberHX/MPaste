@@ -1,3 +1,4 @@
+// output: Shared native blur capability and lifecycle helpers for windows, menus and dialogs.
 #ifndef MPASTE_WINDOWBLURHELPER_H
 #define MPASTE_WINDOWBLURHELPER_H
 
@@ -8,15 +9,13 @@ namespace WindowBlurHelper {
     /// Set extendFrame=false for popup menus to avoid DWM shadow.
     void enableBlurBehind(QWidget *widget, bool dark, bool extendFrame = true);
 
-    /// Returns true on platforms where blur is not available (Ubuntu).
-    /// Callers should use opaque backgrounds instead.
-    inline bool useOpaqueFallback() {
-#ifdef Q_OS_WIN
-        return false;
-#else
-        return true;
-#endif
-    }
+    /// Attach native compositor blur to a window or popup; false means unsupported.
+    bool enableNativeBlur(QWidget *widget);
+
+    bool hasNativeBlur();
+    /// Solid fallback only when neither Windows acrylic nor native Wayland blur is available.
+    bool useOpaqueFallback();
+
 }
 
 #endif // MPASTE_WINDOWBLURHELPER_H

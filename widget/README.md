@@ -184,3 +184,31 @@ update: 修改本目录文件时，同步更新本 README。
 - `ScrollItemsWidgetMV`: scroll performance improved by using `loadingPhase` only in cache key for loading cards and avoiding unnecessary page reloads.
 - `MPasteSettingsWidget` now emits `historyViewModeChanged` signal.
 - `MPasteWidget` now defers `primeCurrentClipboard` until board loading completes.
+
+## Native Wayland panel behavior
+
+- `MPasteWidgetUI` applies X11 bypass-window-manager flags only in X11 sessions.
+- `MPasteWidget` skips unsupported top-level opacity animation with the native Wayland Qt plugin, while preserving show/hide selection behavior.
+- `ClipboardPasteController` synchronizes the Wayland selection before hiding the focused panel. This prevents the target window from pasting the old clipboard during focus restoration. Window-ID logging is portable across Linux and Windows.
+
+- 主面板在支持 ext-background-effect-v1 的 Wayland 桌面上使用原生背景模糊和半透明主题底色；不支持该协议的平台保留不透明底色。
+
+- 顶部标签按钮在实际布局尺寸变化时重新计算圆角，并留出边框余量，避免字体、缩放或布局压缩后 QSS 因半径超出按钮边界而退回直角背景。
+
+- 快捷键编辑限制为单组组合键，并在编辑完成后注册；注册失败时显示提示并恢复原值。GNOME 会话的快捷键设置页说明桌面注册方式和扩展要求。
+
+- File card icons use a 120 logical-pixel target at 100% item scale, centered above a separate filename area. Icon requests pass logical size and DPR separately; oversized platform bitmaps are reduced and painting is clipped to the icon slot to prevent overlap with headers and footers on HiDPI Linux desktops.
+
+- Hover tools retain their header position. Buttons use explicit vertical centering and uniform padding-free hit areas, and all five refresh on theme changes. The child toolbar preserves Qt parent-background propagation and paints only its translucent rounded body; it must not clear the shared backing store or use top-level translucent-window flags.
+
+- Top-level surfaces (Space preview, details, About, settings, OCR, page selector and rename) use native background blur plus a readable translucent tint when supported, with an opaque fallback otherwise. Blur regions follow each surface’s corner radius and inset. Context menus retain compact Fusion metrics; opening a context menu hides the hover toolbar.
+
+- Preview has its own `MPaste Preview` compositor title, resets to Windows’ 980×760 logical size on opening, and only shrinks to fit a small work area. Details, OCR and the page popup also have distinct identities so the GNOME panel handler cannot stretch them across the bottom of the screen.
+
+- Context menus use a fixed 13px normal-weight font and 28px content rows, a minimum logical width of 180px, and a padding-free icon column so native GNOME font metrics cannot stretch rows or push icons into labels. Save uses a light icon in dark mode.
+
+- Context menus request real compositor backdrop blur through `ext-background-effect-v1` when available (GNOME 51). The blur region follows the 8px rounded corners in logical coordinates; native objects are recreated and destroyed with each Wayland surface. Menu text/icons are not blurred. Unsupported compositors get a more opaque translucent tint. Preview dialogs share the same capability-aware background treatment.
+
+- The main panel and menus share `WindowBlurHelper::enableNativeBlur`; resize, hide/show and native-surface recreation update the rounded blur region. Panel tint is translucent only after compositor support is confirmed, leaving card/text rendering sharp.
+
+- HoverActionBar blurs a padded snapshot of the sibling card viewport using QGraphicsBlurEffect, clips it to its own rounded shape and then paints the tint/buttons. The snapshot never includes the toolbar itself; refreshes are bounded during mouse movement. Desktop/compositor blur alone cannot blur content inside the same Qt surface.

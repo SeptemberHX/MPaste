@@ -1,5 +1,5 @@
 // input: Depends on ClipboardCardDelegate.h, card metrics, and ClipboardItem display data.
-// output: Implements the manual card painter for the delegate-based clipboard board.
+// output: Paints clipboard cards and loads bounded file icons using logical size plus explicit DPR.
 // pos: Widget-layer delegate implementation that replaces per-item QWidget rendering.
 // update: If I change, update this header block and my folder README.md (smaller card typography + file image thumbnails + improved file previews + footer height tweak + link preview caption trimmed + header spacing + link url shortcut spacing + custom alias header line + pinned badge + rich text fill + data-layer preview kind + async file preview caching).
 // note: Adjusted card palette for dark theme and moved heavy file preview work out of paint.
@@ -502,10 +502,13 @@ QPixmap loadLocalFileIconSync(const QString &filePath, const QSize &targetLogica
 
     QFileIconProvider provider;
     QIcon icon = provider.icon(info);
-    QPixmap pixmap = icon.pixmap(pixelTargetSize);
+    QPixmap pixmap = icon.pixmap(targetLogicalSize, qMax<qreal>(1.0, targetDpr));
     if (pixmap.isNull()) {
         return {};
     }
+    // Some platform icon engines return a larger native bitmap than requested.
+    if (pixmap.width() > pixelTargetSize.width() || pixmap.height() > pixelTargetSize.height())
+        pixmap = pixmap.scaled(pixelTargetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     pixmap.setDevicePixelRatio(qMax<qreal>(1.0, targetDpr));
     return pixmap;
 }

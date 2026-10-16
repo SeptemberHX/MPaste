@@ -1,5 +1,5 @@
 // input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
-// output: 提供 ClipboardMonitor 的实现逻辑。
+// output: 采集系统剪贴板；GNOME Wayland 使用带完整 MIME 的 D-Bus 快照。
 // pos: utils 层中的 ClipboardMonitor 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 // note: Adds image payload settle retries for lazy clipboard providers.
@@ -10,6 +10,10 @@
 #include "ClipboardMonitor.h"
 
 #include "PlatformRelated.h"
+#ifdef Q_OS_LINUX
+#include "GnomeBridge.h"
+#include <QDBusArgument>
+#endif
 #include <iostream>
 #include <QClipboard>
 #include <QBuffer>
@@ -304,6 +308,9 @@ void ClipboardMonitor::clipboardChanged() {
 
 void ClipboardMonitor::primeCurrentClipboard() {
     qInfo() << "[clipboard-monitor] primeCurrentClipboard";
+#ifdef Q_OS_LINUX
+    if (GnomeBridge::isWayland()) return; // Registration supplies the initial snapshot.
+#endif
     beginClipboardCapture(false);
 }
 
@@ -494,6 +501,11 @@ ClipboardMonitor::ClipboardMonitor() {
 }
 
 void ClipboardMonitor::disconnectMonitor() {
+#ifdef Q_OS_LINUX
+    if (GnomeBridge::isWayland())
+        disconnect(GnomeBridge::instance(), &GnomeBridge::clipboardReceived,
+                   this, &ClipboardMonitor::captureGnomeClipboard);
+#endif
     stabilizeTimer_.stop();
     cancelPendingImageFetch();
     disconnect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
@@ -502,6 +514,13 @@ void ClipboardMonitor::disconnectMonitor() {
 }
 
 void ClipboardMonitor::connectMonitor() {
+#ifdef Q_OS_LINUX
+    if (GnomeBridge::isWayland()) {
+        connect(GnomeBridge::instance(), &GnomeBridge::clipboardReceived, this,
+                &ClipboardMonitor::captureGnomeClipboard, Qt::UniqueConnection);
+        return;
+    }
+#endif
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
         this, &ClipboardMonitor::clipboardChanged, Qt::UniqueConnection);
     qInfo() << "[clipboard-monitor] connected";
@@ -937,4 +956,31 @@ void ClipboardMonitor::fetchWpsImageAndEmit(const QMimeData *mimeData, const QUr
     };
 
     (*startNextRequest)();
+}
+
+void ClipboardMonitor::captureGnomeClipboard(const QVariantMap &formats, uint window) {
+#ifdef Q_OS_LINUX
+    if (window) window |= 0x40000000u; // Keep compositor IDs separate from Qt WIds.
+    QMimeData mime;
+    for (auto it = formats.cbegin(); it != formats.cend(); ++it) {
+        const auto bytes = qdbus_cast<QByteArray>(it.value());
+        if (!bytes.isEmpty()) mime.setData(it.key(), bytes);
+    }
+    // GNOME applications commonly advertise only the charset-qualified target.
+    if (!mime.hasFormat("text/plain") && mime.hasFormat("text/plain;charset=utf-8"))
+        mime.setData("text/plain", mime.data("text/plain;charset=utf-8"));
+    if (!hasMeaningfulContent(&mime)) return;
+    const auto signature = computeEchoSignature(&mime);
+    if (!selfPasteEchoSig_.isEmpty() && signature == selfPasteEchoSig_) return;
+    selfPasteEchoSig_.clear();
+    auto item = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(window), &mime);
+    // The bridge already owns a complete snapshot: no later read from QClipboard.
+    for (const auto &format : mime.formats()) item.setMimeFormat(format, mime.data(format));
+    if (isDuplicateRecentCapture(item, int(window))) return;
+    emit clipboardActivityObserved(int(window));
+    emitCapturedItem(item, int(window));
+#else
+    Q_UNUSED(formats);
+    Q_UNUSED(window);
+#endif
 }

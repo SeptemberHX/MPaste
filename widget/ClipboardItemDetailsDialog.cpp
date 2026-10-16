@@ -1,8 +1,9 @@
 // input: Depends on ClipboardItemDetailsDialog.h, Qt form widgets, and ClipboardItem metadata accessors.
-// output: Implements a polished clipboard item inspector dialog aligned with the app's rounded glass-card language.
+// output: Clipboard inspector with native frosted glass and a readable solid fallback.
 // pos: Widget-layer details dialog implementation for clipboard debugging and transparency.
 // update: If I change, update this header block and my folder README.md.
 // note: Added dark theme styling support.
+#include "SurfacePainter.h"
 #include "ClipboardItemDetailsDialog.h"
 
 #include <QApplication>
@@ -280,6 +281,7 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
     : QDialog(parent) {
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
     setModal(false);
+    setWindowTitle(QStringLiteral("MPaste Details"));
     setAttribute(Qt::WA_TranslucentBackground);
     setFixedWidth(kDetailsDialogWidth);
     resize(kDetailsDialogWidth, kDetailsDialogHeight);
@@ -505,7 +507,7 @@ void ClipboardItemDetailsDialog::paintEvent(QPaintEvent *) {
     gradient.setColorAt(1.00, QColor("#4A90E2"));
 
     painter.setPen(QPen(QBrush(gradient), borderWidth));
-    painter.setBrush(darkTheme_ ? QColor(26, 31, 38, 1) : QColor(247, 250, 255, 1));
+    painter.setBrush(SurfacePainter::bodyColor(darkTheme_, WindowBlurHelper::useOpaqueFallback(), 1));
     painter.drawRoundedRect(outerRect, radius, radius);
 }
 

@@ -1,5 +1,5 @@
 // input: 依赖对应头文件及其所需 Qt/标准库/同层组件实现。
-// output: 提供 HotKeyManager 的实现逻辑。
+// output: Windows/X11 热键注册，以及 GNOME Wayland 扩展热键桥接。
 // pos: utils 层中的 HotKeyManager 实现文件。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 // HotKeyManager.cpp
@@ -10,6 +10,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #elif defined(Q_OS_LINUX)
+#include "GnomeBridge.h"
 #include <xcb/xcb.h>
 #include <xcb/xcb_keysyms.h>
 #endif
@@ -23,6 +24,11 @@ public:
 #ifdef Q_OS_WIN
         hotkeyId = 0;
 #elif defined(Q_OS_LINUX)
+        if (GnomeBridge::needsDesktopShortcut()) {
+            QObject::connect(GnomeBridge::instance(), &GnomeBridge::hotkeyPressed,
+                             q, &HotkeyManager::hotkeyPressed);
+            return;
+        }
         // Initialize XCB connection
         connection = xcb_connect(nullptr, nullptr);
         if (xcb_connection_has_error(connection)) {
@@ -80,6 +86,31 @@ public:
         return RegisterHotKey(nullptr, hotkeyId, modifiers, key);
 
 #elif defined(Q_OS_LINUX)
+        if (GnomeBridge::needsDesktopShortcut()) {
+            if (keySequence.count() != 1) return false;
+            const auto key = keySequence[0];
+            QString accelerator;
+            const auto mods = key.keyboardModifiers();
+            if (mods & Qt::ControlModifier) accelerator += "<Control>";
+            if (mods & Qt::AltModifier) accelerator += "<Alt>";
+            if (mods & Qt::ShiftModifier) accelerator += "<Shift>";
+            if (mods & Qt::MetaModifier) accelerator += "<Super>";
+            QString keyName = QKeySequence(key.key()).toString(QKeySequence::PortableText);
+            if (key.key() >= Qt::Key_A && key.key() <= Qt::Key_Z) keyName = keyName.toLower();
+            switch (key.key()) {
+            case Qt::Key_Space: keyName = "space"; break;
+            case Qt::Key_Backspace: keyName = "BackSpace"; break;
+            case Qt::Key_PageUp: keyName = "Page_Up"; break;
+            case Qt::Key_PageDown: keyName = "Page_Down"; break;
+            case Qt::Key_Enter: keyName = "KP_Enter"; break;
+            case Qt::Key_Escape: keyName = "Escape"; break;
+            case Qt::Key_Insert: keyName = "Insert"; break;
+            case Qt::Key_Delete: keyName = "Delete"; break;
+            default: break;
+            }
+            accelerator += keyName;
+            return GnomeBridge::instance()->registerShortcut(accelerator);
+        }
         if (keySequence.isEmpty() || !connection || !keySymbols)
             return false;
 
@@ -123,6 +154,10 @@ public:
             hotkeyId = 0;
         }
 #elif defined(Q_OS_LINUX)
+        if (GnomeBridge::needsDesktopShortcut()) {
+            GnomeBridge::instance()->unregisterShortcut();
+            return;
+        }
         if (connection && keycode != 0) {
             xcb_ungrab_key(connection, keycode, root, modifiers);
             xcb_flush(connection);
@@ -172,11 +207,11 @@ private:
 #ifdef Q_OS_WIN
     int hotkeyId;
 #elif defined(Q_OS_LINUX)
-    xcb_connection_t *connection;
-    xcb_window_t root;
-    xcb_key_symbols_t *keySymbols;
-    uint32_t keycode;
-    uint32_t modifiers;
+    xcb_connection_t *connection = nullptr;
+    xcb_window_t root = 0;
+    xcb_key_symbols_t *keySymbols = nullptr;
+    uint32_t keycode = 0;
+    uint32_t modifiers = 0;
 #endif
 
     friend class HotkeyManager;

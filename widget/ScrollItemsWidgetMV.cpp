@@ -1,5 +1,5 @@
 // input: Depends on ScrollItemsWidget.h, ClipboardBoardService, Qt model/view APIs, and delegate-based card painting.
-// output: Implements lazy-loaded boards, proxy filtering, async thumbnail completion, and list-view item interaction.
+// output: Implements board loading and interaction, including consistent styles for all hover tools.
 // pos: Widget-layer board implementation driving clipboard and favorites history lists.
 // update: If I change, update this header block and my folder README.md (arrow navigation no longer forces center + hover action bar + main-card save/export + multi-select batch actions + data-layer preview kind + board paint FPS logging + hidden-stage light prewarm).
 // note: Context menu methods in BoardContextMenu.cpp, hover action bar in BoardHoverActions.cpp, pagination in BoardPagination.cpp, widget classes in BoardViewWidgets.h.
@@ -218,12 +218,12 @@ void ScrollItemsWidget::applyTheme(bool dark) {
 
     const int scale = MPasteSettings::getInst()->getItemScale();
     const int borderRadius = qMax(4, 6 * scale / 100);
-    const int padding = qMax(2, 3 * scale / 100);
+    const int padding = 0;
     const QString buttonStyle = hoverButtonStyle(darkTheme_, borderRadius, padding);
 
     if (hoverActionBar_) {
         auto *hoverBar = static_cast<HoverActionBar *>(hoverActionBar_);
-        hoverBar->setColors(darkTheme_ ? QColor(26, 31, 38, 205) : QColor(255, 255, 255, 185),
+        hoverBar->setColors(darkTheme_ ? QColor(26, 31, 38, 150) : QColor(255, 255, 255, 185),
                             darkTheme_ ? QColor(255, 255, 255, 40) : QColor(255, 255, 255, 120));
     }
 
@@ -239,6 +239,17 @@ void ScrollItemsWidget::applyTheme(bool dark) {
     if (hoverDetailsBtn_) {
         hoverDetailsBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("details"), darkTheme_));
         hoverDetailsBtn_->setStyleSheet(buttonStyle);
+    }
+    if (hoverAliasBtn_) {
+        hoverAliasBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("rename"), darkTheme_));
+        hoverAliasBtn_->setStyleSheet(buttonStyle);
+    }
+    if (hoverPinBtn_) {
+        hoverPinBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("pin"), darkTheme_));
+        hoverPinBtn_->setStyleSheet(buttonStyle);
+        const int row = hoverProxyIndex_.isValid() ? sourceRowForProxyIndex(hoverProxyIndex_) : -1;
+        const ClipboardItem *item = boardModel_ ? boardModel_->itemPtrAt(row) : nullptr;
+        updateHoverPinButton(item && item->isPinned());
     }
     if (hoverFavoriteBtn_) {
         hoverFavoriteBtn_->setStyleSheet(buttonStyle);

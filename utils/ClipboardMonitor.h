@@ -1,5 +1,5 @@
 // input: 依赖相关 Qt/标准库类型与同层或跨层前置声明。
-// output: 对外提供 ClipboardMonitor 的声明接口。
+// output: 提供系统剪贴板监听与 GNOME Wayland MIME 快照接收接口。
 // pos: utils 层中的 ClipboardMonitor 接口定义。
 // update: 修改本文件时，同步更新文件头注释与所属目录 README.md。
 // note: Adds image payload settle retries for lazy clipboard providers.
@@ -13,6 +13,7 @@
 #include <QObject>
 #include <QByteArray>
 #include <QMap>
+#include <QVariantMap>
 #include <QTimer>
 #include <QPointer>
 #include "data/ClipboardItem.h"
@@ -52,6 +53,7 @@ signals:
 
 public slots:
     void clipboardChanged();
+    void captureGnomeClipboard(const QVariantMap &formats, uint window);
 
 private:
     void beginClipboardCapture(bool emitActivitySignal);

@@ -1,5 +1,5 @@
 // input: Depends on ClipboardPasteController.h, ClipboardExportService, ClipboardMonitor, PlatformRelated, MPasteSettings.
-// output: Implements clipboard write and paste-to-target orchestration.
+// output: Publishes clipboard data before Wayland focus loss, then restores focus and pastes.
 // pos: Widget-layer helper implementation.
 // update: If I change, update this header block.
 #include "ClipboardPasteController.h"
@@ -167,6 +167,10 @@ bool ClipboardPasteController::setClipboard(const ClipboardItem &item, bool plai
     // sees the echo.
     monitor_->setSelfPasteGuardFromMimeData(mimeData);
     QGuiApplication::clipboard()->setMimeData(mimeData);
+#ifdef Q_OS_LINUX
+    if (QGuiApplication::platformName().startsWith(QStringLiteral("wayland")))
+        QGuiApplication::sync(); // Publish selection before hiding the focused surface.
+#endif
     qInfo() << "[clipboard-widget] setClipboard wrote system clipboard";
     QTimer::singleShot(200, this, [this]() {
         qInfo() << "[clipboard-widget] reconnect monitor after self clipboard write";
@@ -213,7 +217,7 @@ void ClipboardPasteController::handleUrlsClipboard(QMimeData *mimeData, const Cl
 
 void ClipboardPasteController::pasteToTarget(WId targetWindow) {
     qInfo().noquote() << QStringLiteral("[paste-controller] pasteToTarget targetWindow=%1 isAutoPaste=%2")
-        .arg(reinterpret_cast<quintptr>(targetWindow))
+        .arg(quintptr(targetWindow))
         .arg(MPasteSettings::getInst()->isAutoPaste());
     if (!MPasteSettings::getInst()->isAutoPaste()) {
         qInfo() << "[paste-controller] auto-paste disabled, abort";
@@ -234,7 +238,7 @@ void ClipboardPasteController::pasteToTarget(WId targetWindow) {
 
     auto restoreFocusAndPaste = [this, targetWindow, finishPaste]() {
         qInfo().noquote() << QStringLiteral("[paste-controller] restoreFocusAndPaste targetWindow=%1")
-            .arg(reinterpret_cast<quintptr>(targetWindow));
+            .arg(quintptr(targetWindow));
         if (targetWindow) {
             PlatformRelated::activateWindow(targetWindow);
             QTimer::singleShot(100, this, finishPaste);

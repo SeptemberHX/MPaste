@@ -1,5 +1,5 @@
 // input: Depends on ScrollItemsWidget.h, BoardInternalHelpers.h, Qt Widgets.
-// output: Implements context menu methods of ScrollItemsWidget.
+// output: Context menus that hide card hover tools while the menu is open.
 // pos: Split from ScrollItemsWidgetMV.cpp -- context menu population and save-to-file.
 #include <QFileDialog>
 #include <QListView>
@@ -55,6 +55,7 @@ void ScrollItemsWidget::showContextMenu(const QPoint &pos) {
 
     const bool multiSelection = selection.size() > 1;
 
+    hideHoverActionBar(false);
     QMenu menu(this);
     applyMenuTheme(&menu);
     if (multiSelection) {
@@ -148,7 +149,7 @@ void ScrollItemsWidget::populateSingleSelectionMenu(QMenu *menu, const QModelInd
         });
     }
     if (canSaveToFile) {
-        menu->addAction(QIcon(QStringLiteral(":/resources/resources/save_black.svg")), saveItemLabel(), [this, proxyIndex]() {
+        menu->addAction(IconResolver::themedIcon(QStringLiteral("save_black"), dark), saveItemLabel(), [this, proxyIndex]() {
             setCurrentProxyIndex(proxyIndex);
             const ClipboardItem *selectedItem = currentSelectedItem();
             if (selectedItem) {

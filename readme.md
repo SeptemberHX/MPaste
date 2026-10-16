@@ -58,9 +58,9 @@ Hold `Alt` to show shortcut hints on visible cards.
 
 ### Linux
 
-- Linux support currently targets X11.
-- Build/runtime integration depends on X11, `xcb-keysyms`, `xdo` / `xdotool`, and `gsettings-qt`.
-- Wayland support is limited; window icon lookup and some focus/paste behaviors may not work as expected.
+- Linux supports X11 and GNOME 51 Wayland (Ubuntu 26.10) with the bundled companion extension.
+- X11 build/runtime integration depends on X11, `xcb-keysyms`, and `xdo` / `xdotool`; GNOME Wayland integration uses Qt DBus.
+- On GNOME Wayland, install the companion after building: `python3 tools/install_gnome_wayland.py --autostart`, then log out and log back in. See [Wayland setup](extensions/README.md). Source-app icons are resolved through GNOME (unknown apps use a fallback); other Wayland desktops are not supported by this bridge.
 - On GNOME, [Focus My Window](https://extensions.gnome.org/extension/1005/focus-my-window/) can improve focus restoration after the global hotkey.
 - Deepin V20 users can use the packaged `.deb` from the releases page.
 
@@ -92,7 +92,7 @@ Default settings:
 ### Requirements
 
 - C++17 compiler
-- CMake 3.7+
+- CMake 3.16+
 - Qt 6 with `Widgets`, `Multimedia`, `Network`, `Xml`, and `LinguistTools`
 
 Linux builds also require:
@@ -101,7 +101,7 @@ Linux builds also require:
 - X11 development headers/libraries
 - `xcb-keysyms`
 - `xdo` / `libxdo`
-- `gsettings-qt`
+- Qt 6 DBus development files
 
 Package names vary by distro. Install the Qt 6 development packages plus the libraries above before configuring the project.
 
@@ -113,6 +113,22 @@ cd MPaste
 cmake -B build
 cmake --build build -j8
 ```
+
+### Ubuntu 26.10 / GNOME Wayland
+
+System build dependencies (if not already installed):
+
+```sh
+sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-tools-dev-tools qt6-wayland libx11-dev libxcb-keysyms1-dev libxdo-dev
+cmake -S . -B build
+cmake --build build -j4
+python3 tools/install_gnome_wayland.py --autostart
+```
+
+Log out and back in once to load the new extension. Alt+Q opens the panel;
+selecting an item restores the original window and pastes it. `--show` opens the
+panel on first launch. `MPASTE_LOG_DIR` optionally redirects application logs.
+To run the isolated desktop regression, use `python3 tests/gnome-wayland/run.py`.
 
 ### Windows
 
@@ -149,3 +165,13 @@ You can control the OpenGL backend with the `MPASTE_OPENGL_BACKEND` environment 
 ## License
 
 [GPLv3](LICENSE)
+
+On GNOME Wayland, hotkeys also work for the XWayland preview: if the companion is not loaded, MPaste registers a GNOME custom shortcut that invokes `--toggle`. The companion takes over when available. This fallback only opens/closes MPaste; background clipboard capture and native automatic paste still require the companion. Shortcut changes are applied after editing finishes, and failed registrations restore the previous setting.
+
+Context menus use consistent logical row/font sizing on GNOME and theme-aware action icons.
+
+### Native menu backdrop blur
+
+On GNOME 51 Wayland, the main panel, menus and dialogs use `ext-background-effect-v1` for real background blur with a translucent tint. This works directly through the compositor and does not need a new Shell extension session. Building this optional backend requires Qt 6.11+, `qt6-base-private-dev`, `libwayland-dev`, `libwayland-bin` and `wayland-protocols` containing the staging background-effect XML. Without these build dependencies or compositor support, menus use a translucent tint fallback.
+
+Card hover tools blur the underlying card content locally because they share its Qt surface. The desktop backend applies blur only behind independent windows; it never blurs foreground text or controls.

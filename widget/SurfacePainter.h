@@ -7,14 +7,15 @@
 #include <QRectF>
 #include "WindowBlurHelper.h"
 
-// Shared "frosted rounded panel" painting used by TodoWidget, SettingsDialog,
-// AboutDialog and ReminderToast. Centralises the CompositionMode_Clear →
-// rounded fill → luminous-edge sequence so Ubuntu opaque-fallback changes
-// only need to be made in one place.
+// Shared rounded popup surfaces for settings, previews, About and OCR.
+// Native blur uses a readable translucent tint; unsupported compositors get a solid body.
+// Windows can continue to composite the translucent body over native acrylic.
 namespace SurfacePainter {
 
 inline QColor bodyColor(bool dark, bool opaque,
-                        int translucentAlpha, int opaqueAlpha = 236) {
+                        int translucentAlpha, int opaqueAlpha = 255) {
+    if (!opaque && WindowBlurHelper::hasNativeBlur())
+        translucentAlpha = dark ? 175 : 185;
     if (dark)
         return opaque ? QColor(24, 31, 43, opaqueAlpha)
                       : QColor(18, 24, 36, translucentAlpha);
@@ -38,7 +39,7 @@ inline QColor edgeColor(bool dark, bool opaque, int translucentAlpha) {
 inline void paintPanel(QPainter &p, const QRectF &widgetRect,
                        qreal radius, bool dark,
                        int bodyAlpha, int edgeAlpha = 45,
-                       int opaqueBodyAlpha = 236,
+                       int opaqueBodyAlpha = 255,
                        qreal edgeWidth = 1.0) {
     const bool opaque = WindowBlurHelper::useOpaqueFallback();
 

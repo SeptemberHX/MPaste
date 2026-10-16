@@ -1,8 +1,9 @@
-﻿// input: Depends on ClipboardItemPreviewDialog.h, Qt widgets/layout, and ClipboardItem payload accessors.
-// output: Implements a centered read-only preview dialog with selection/copy support for rich text, text, images, and files.
+// input: Depends on ClipboardItemPreviewDialog.h, Qt widgets/layout, and ClipboardItem payload accessors.
+// output: Screen-centered 980x760 previews with an independent compositor identity and capability-aware frosted surface.
 // pos: Widget-layer preview dialog implementation for larger clipboard inspection.
 // update: If I change, update this header block and my folder README.md (tuned preview font size + hidden caret/focus).
 // note: Adds fallback decoding for Qt serialized image payloads and image zoom interactions.
+#include "SurfacePainter.h"
 #include "ClipboardItemPreviewDialog.h"
 
 #include <QCursor>
@@ -60,6 +61,7 @@ public:
 };
 
 // simplifyHtmlForPreview — use ThumbnailBuilder::simplifyHtmlForRendering()
+
 
 namespace {
 constexpr int kPreviewDialogWidth = 980;
@@ -430,6 +432,7 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
     setModal(false);
     setAttribute(Qt::WA_TranslucentBackground);
+    setWindowTitle(QStringLiteral("MPaste Preview")); // Stable compositor identity, separate from the panel.
     resize(kPreviewDialogWidth, kPreviewDialogHeight);
 
     auto *cardLayout = new QVBoxLayout(this);
@@ -529,6 +532,7 @@ bool ClipboardItemPreviewDialog::supportsPreview(const ClipboardItem &item) {
 
 void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     releasePreviewContent();
+    resize(kPreviewDialogWidth, kPreviewDialogHeight);
 
     const ContentType contentType = item.getContentType();
 
@@ -808,6 +812,8 @@ connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     }
     if (targetScreen) {
         const QRect target = targetScreen->availableGeometry();
+        resize(qMin(kPreviewDialogWidth, qMax(1, target.width() - 32)),
+               qMin(kPreviewDialogHeight, qMax(1, target.height() - 32)));
         move(target.center() - QPoint(width() / 2, height() / 2));
     }
 
@@ -819,6 +825,7 @@ connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
 void ClipboardItemPreviewDialog::reject() {
     QDialog::reject();
+
 }
 
 void ClipboardItemPreviewDialog::applyTheme(bool dark) {
@@ -1033,6 +1040,11 @@ void ClipboardItemPreviewDialog::keyPressEvent(QKeyEvent *event) {
 void ClipboardItemPreviewDialog::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
+    if (WindowBlurHelper::useOpaqueFallback() || WindowBlurHelper::hasNativeBlur()) {
+        SurfacePainter::paintPanel(painter, QRectF(rect()), 8.0, darkTheme_, 1);
+        return;
+    }
+
 
     // Match the DWM DWMWCP_ROUND corner radius (~8px on Windows 11)
     const qreal radius = 8.0;

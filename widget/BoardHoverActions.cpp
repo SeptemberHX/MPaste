@@ -1,5 +1,5 @@
 // input: Depends on ScrollItemsWidget.h, BoardInternalHelpers.h, BoardViewWidgets.h, Qt Widgets.
-// output: Implements hover action bar management methods of ScrollItemsWidget.
+// output: Creates hover tools with centered, padding-free buttons in the existing header position.
 // pos: Split from ScrollItemsWidgetMV.cpp -- hover action bar creation and positioning.
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
@@ -29,7 +29,7 @@ void ScrollItemsWidget::createHoverActionBar() {
     }
 
     const int scale = MPasteSettings::getInst()->getItemScale();
-    const int barHeight = qMax(20, 28 * scale / 100);
+    const int barHeight = qMax(28, 34 * scale / 100);
     const int borderRadius = qMax(6, 8 * scale / 100);
     const int margin = qMax(4, 6 * scale / 100);
     const int spacing = qMax(2, 4 * scale / 100);
@@ -41,11 +41,11 @@ void ScrollItemsWidget::createHoverActionBar() {
     hoverActionBar_->setFixedHeight(barHeight);
     hoverActionBar_->setFocusPolicy(Qt::NoFocus);
     hoverActionBar_->setAttribute(Qt::WA_TransparentForMouseEvents, false);
-    hoverActionBar_->setAttribute(Qt::WA_TranslucentBackground);
+    hoverActionBar_->setAutoFillBackground(false); // Preserve Qt parent-background propagation.
     hoverActionBar_->setMouseTracking(true);
     hoverActionBar_->installEventFilter(this);
     hoverBar->setCornerRadius(borderRadius);
-    hoverBar->setColors(dark ? QColor(26, 31, 38, 205) : QColor(255, 255, 255, 185),
+    hoverBar->setColors(dark ? QColor(26, 31, 38, 150) : QColor(255, 255, 255, 185),
                         dark ? QColor(255, 255, 255, 40) : QColor(255, 255, 255, 120));
 
     hoverOpacity_ = new QGraphicsOpacityEffect(hoverActionBar_);
@@ -57,12 +57,13 @@ void ScrollItemsWidget::createHoverActionBar() {
     layout->setSpacing(spacing);
 
     auto createButton = [this, scale, dark](const QString &iconPath, const QString &tooltip) {
-        const int iconSz = qMax(12, 14 * scale / 100);
-        const int btnSz = qMax(18, 22 * scale / 100);
+        const int iconSz = qMax(14, 16 * scale / 100);
+        const int btnSz = qMax(22, 26 * scale / 100);
         const int borderR = qMax(4, 6 * scale / 100);
-        const int pad = qMax(2, 3 * scale / 100);
+        const int pad = 0;
 
         auto *button = new QToolButton;
+        button->setAutoRaise(true);
         button->setIcon(QIcon(iconPath));
         button->setIconSize(QSize(iconSz, iconSz));
         button->setFixedSize(btnSz, btnSz);
@@ -81,11 +82,11 @@ void ScrollItemsWidget::createHoverActionBar() {
     hoverFavoriteBtn_ = createButton(IconResolver::themedPath(QStringLiteral("star_outline"), dark), favoriteActionLabel(false));
     hoverDeleteBtn_ = createButton(QStringLiteral(":/resources/resources/delete.svg"), deleteLabel());
 
-    layout->addWidget(hoverDetailsBtn_);
-    layout->addWidget(hoverAliasBtn_);
-    layout->addWidget(hoverPinBtn_);
-    layout->addWidget(hoverFavoriteBtn_);
-    layout->addWidget(hoverDeleteBtn_);
+    layout->addWidget(hoverDetailsBtn_, 0, Qt::AlignVCenter);
+    layout->addWidget(hoverAliasBtn_, 0, Qt::AlignVCenter);
+    layout->addWidget(hoverPinBtn_, 0, Qt::AlignVCenter);
+    layout->addWidget(hoverFavoriteBtn_, 0, Qt::AlignVCenter);
+    layout->addWidget(hoverDeleteBtn_, 0, Qt::AlignVCenter);
 
     connect(hoverDetailsBtn_, &QToolButton::clicked, this, [this]() {
         if (!proxyModel_ || !boardModel_ || !hoverProxyIndex_.isValid()) {
@@ -277,6 +278,9 @@ void ScrollItemsWidget::updateHoverActionBarPosition() {
     const int x = qBound(0, desiredX, maxX);
     const int y = qBound(0, desiredY, maxY);
     hoverActionBar_->move(x, y);
+    const QPoint sourcePos = viewport->mapFrom(overlayHost, QPoint(x, y));
+    static_cast<HoverActionBar *>(hoverActionBar_)->refreshBackdrop(viewport,
+        QRect(sourcePos, hoverActionBar_->size()).adjusted(-12, -12, 12, 12));
 }
 
 void ScrollItemsWidget::hideHoverActionBar(bool animated) {
