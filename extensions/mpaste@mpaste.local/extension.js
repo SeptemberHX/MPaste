@@ -25,6 +25,7 @@ const XML = `<node><interface name="${NAME}">
 <signal name="SourceIcon"><arg type="u" name="window"/><arg type="as" name="names"/><arg type="s" name="path"/></signal>
 <signal name="ClipboardChanged"><arg type="a{sv}" name="formats"/><arg type="u" name="window"/></signal>
 </interface></node>`;
+const IMAGE_PREFERENCE = ['image/png', 'image/tiff', 'image/bmp', 'image/webp', 'image/jpeg'];
 
 export default class MPasteExtension extends Extension {
     enable() {
@@ -243,7 +244,12 @@ export default class MPasteExtension extends Extension {
         if (!this._client) return;
         if (source.own) return;
         const window = source.window;
-        const formats = this._clipboard.get_mimetypes(St.ClipboardType.CLIPBOARD);
+        let formats = this._clipboard.get_mimetypes(St.ClipboardType.CLIPBOARD);
+        // Toolkits re-encode one image into every writer format (Qt offers xpm, xbm,
+        // wbmp, tiff... before png). Read only the best one so lossy or monochrome
+        // encodings never consume the size budget ahead of the real image.
+        const image = IMAGE_PREFERENCE.find(f => formats.includes(f));
+        if (image) formats = [image, ...formats.filter(f => !f.startsWith('image/'))];
         const data = {};
         let size = 0;
         const next = () => {

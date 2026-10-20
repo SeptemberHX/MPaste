@@ -17,6 +17,7 @@
 #include <iostream>
 #include <QClipboard>
 #include <QBuffer>
+#include <QImage>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDebug>
@@ -969,6 +970,27 @@ void ClipboardMonitor::captureGnomeClipboard(const QVariantMap &formats, uint wi
     // GNOME applications commonly advertise only the charset-qualified target.
     if (!mime.hasFormat("text/plain") && mime.hasFormat("text/plain;charset=utf-8"))
         mime.setData("text/plain", mime.data("text/plain;charset=utf-8"));
+    // QMimeData::hasImage() only recognizes Qt's internal target, which the platform
+    // plugin normally synthesizes. Image-only sources (GNOME screenshots) offer image/*.
+    if (!mime.hasFormat("application/x-qt-image")) {
+        QByteArray png = mime.data("image/png");
+        if (png.isEmpty()) {
+            // Full-color sources first; Qt also offers monochrome (wbmp, xbm) and
+            // grayscale (pgm) re-encodings of the same image.
+            static const QStringList preferred = {"image/tiff", "image/bmp", "image/webp",
+                "image/jpeg", "image/ppm", "image/xpm"};
+            for (const auto &format : preferred) {
+                if (!mime.hasFormat(format)) continue;
+                const QImage image = QImage::fromData(mime.data(format));
+                if (image.isNull()) continue;
+                QBuffer buffer(&png);
+                buffer.open(QIODevice::WriteOnly);
+                image.save(&buffer, "PNG");
+                break;
+            }
+        }
+        if (!png.isEmpty()) materializePng(&mime, png);
+    }
     if (!hasMeaningfulContent(&mime)) return;
     const auto signature = computeEchoSignature(&mime);
     if (!selfPasteEchoSig_.isEmpty() && signature == selfPasteEchoSig_) return;
