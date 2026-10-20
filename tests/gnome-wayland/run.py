@@ -105,12 +105,15 @@ def main():
         print('PASS capture', expected, flush=True)
     try:
         launch(['gnome-shell', '--headless', '--no-x11', '--wayland-display=' + base.name,
-                '--virtual-monitor=1440x900'], 'shell.log')
+                '--virtual-monitor=1440x900', '--virtual-monitor=1920x1080'], 'shell.log')
         wait_for(lambda: evaluate('true'), 'GNOME test driver')
         app = launch([str(args.binary.resolve())], 'app.log')
         wait_for(lambda: '[startup] event-loop checkpoint 500ms' in (base / 'app.log').read_text(), 'MPaste startup')
         launch([str(base / 'client'), str(base)], 'client.log')
         wait_for(lambda: evaluate("Main.overview.hide();global.display.focus_window?.get_title() === 'MPaste Test Target'"), 'target focus')
+        evaluate("global.display.focus_window.move_to_monitor(0); true")
+        evaluate("(()=>{const m=Main.layoutManager.monitors[0];this.pointer.notify_absolute_motion(GLib.get_monotonic_time(),m.x+20,m.y+20);return true;})()")
+        wait_for(lambda: evaluate("global.display.focus_window?.get_monitor() === 0"), 'initial target monitor')
         copy({'text': 'Wayland 中文 history'}, 'type=1')
         saved_item = next((base / 'history/Clipboard').glob('*.mpaste'))
         subprocess.run([str(base / 'client'), '--verify-icon', str(saved_item)],
@@ -134,11 +137,13 @@ def main():
         key('Alt_L', 'q')
         wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste'"), 'Alt+Q activation')
         rect = evaluate('(()=>{const r=global.display.focus_window.get_frame_rect();return [r.x,r.y,r.width,r.height];})()')
-        assert rect[0] == 0 and rect[2] == 1440 and rect[1] + rect[3] == 900, rect
+        initial_area = evaluate('(()=>{const a=Main.layoutManager.getWorkAreaForMonitor(0);return [a.x,a.y,a.width,a.height];})()')
+        ax,ay,aw,ah = initial_area
+        assert rect[0] == ax and rect[2] == aw and rect[1] + rect[3] == ay + ah, (rect,initial_area)
         time.sleep(.3)
         frames = evaluate('global.stage.disconnect(this.frameTrace); this.panelFrames')
         assert frames, 'No visible panel frames sampled'
-        assert all(r[0] == 0 and r[2] == 1440 and r[1] + r[3] == 900 for r in frames), frames
+        assert all(r[0] == ax and r[2] == aw and r[1] + r[3] == ay + ah for r in frames), frames
         print('PASS first visible frame and every mapped frame at screen bottom', flush=True)
         print('PASS global hotkey and bottom panel geometry', flush=True)
         for attempt in range(2):
@@ -168,6 +173,41 @@ def main():
         assert len(list((base / 'history/Clipboard').glob('*.mpaste'))) == count
         assert app.poll() is None
         print('PASS historical paste, focus restoration and no self-capture duplicate', flush=True)
+        # Reopen on the pointer monitor while focus stays on the other monitor.
+        # Check the real Qt surface on every frame, not only Mutter's final rect.
+        for monitor in [1, 0]:
+            assert evaluate(f"""(()=>{{
+                const target=global.get_window_actors().map(a=>a.meta_window)
+                    .find(w=>w.get_title()==='MPaste Test Target');
+                target.move_to_monitor({1-monitor});
+                Main.activateWindow(target);
+                return true;
+            }})()""")
+            wait_for(lambda: evaluate(f"global.display.focus_window?.get_monitor() === {1-monitor} && global.display.focus_window?.get_title() === 'MPaste Test Target'"), 'target monitor')
+            evaluate(f"(()=>{{const m=Main.layoutManager.monitors[{monitor}];this.pointer.notify_absolute_motion(GLib.get_monotonic_time(),m.x+20,m.y+20);return true;}})()")
+            # Allow Qt's deferred application-inactive hide to finish after the
+            # previous popup before sending the next real shortcut.
+            time.sleep(.25)
+            evaluate("""this.panelFrames=[];
+                this.frameTrace=global.stage.connect('before-paint',()=>{
+                    for(const actor of global.get_window_actors()) {
+                        const w=actor.meta_window;
+                        if(w.get_title()!=='MPaste'||!actor.is_visible()||actor.opacity===0)continue;
+                        const r=w.get_frame_rect();
+                        this.panelFrames.push([r.x,r.y,r.width,r.height]);
+                    }
+                }); true""")
+            key('Alt_L', 'q')
+            wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste'"), 'panel on pointer monitor')
+            time.sleep(.3)
+            area = evaluate(f"(()=>{{const a=Main.layoutManager.getWorkAreaForMonitor({monitor});return [a.x,a.y,a.width,a.height];}})()")
+            frames = evaluate('global.stage.disconnect(this.frameTrace);this.panelFrames')
+            ax,ay,aw,ah = area
+            assert frames and all(r[0]==ax and r[2]==aw and r[1]+r[3]==ay+ah for r in frames), (monitor,area,frames)
+            key('Alt_L', 'q')
+            wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste Test Target'"), 'panel dismissal')
+            time.sleep(.25)
+        print('PASS pointer monitor overrides focused monitor, with correct width before first frame', flush=True)
         # Test service reconnection without restarting MPaste.
         for action in ['disable', 'enable']:
             subprocess.run(['gnome-extensions', action, 'mpaste@mpaste.local'], env=env, check=True)

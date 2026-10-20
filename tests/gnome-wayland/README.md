@@ -25,6 +25,8 @@ The test client has a desktop entry with a distinctive source icon. After copyin
 
 Space-preview regression opens and closes the preview twice, asserts 980×760 logical bounds centered in the actual work area, and verifies the bottom panel bounds are unchanged.
 
+Two virtual monitors (1440×900 and 1920×1080) verify that reopening with the pointer on either monitor and the focused target on the other changes the panel width and bottom alignment correctly on every visible frame, including the first.
+
 Optional native menu-blur validation: `menu-blur-scene.cpp` is an alternate application entry point that can be linked against the normal application objects/libraries (excluding `MPaste.cpp.o`). Set `MPASTE_MENU_BLUR_PROBE` to that executable when running `run.py`. The runner opens the menu over a checkerboard, saves `native-menu-blur.png` through the GNOME compositor, checks advertised blur support, and opens/closes the popup three times to exercise Wayland surface recreation. QWidget screenshots cannot validate compositor blur, so inspect the compositor capture instead.
 
 Set `MPASTE_GLASS_POPUPS=1` with the menu probe to capture and inspect the hover toolbar, settings, Space preview, details, About and alias windows over the checkerboard. `MPASTE_TEST_LIGHT=1` repeats the scene with the light theme.

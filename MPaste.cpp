@@ -1,5 +1,5 @@
 // input: 依赖 Qt 应用入口、翻译加载、全局热键与主窗口初始化流程。
-// output: 提供启动、单实例、--show 入口，以及 GNOME Wayland 桥接缺失提示。
+// output: 提供启动、单实例、--show 入口、鼠标所在屏幕呼出，以及 GNOME Wayland 桥接缺失提示。
 // pos: 项目入口层中的 MPaste 应用入口实现文件。
 // update: 修改本文件时，同步更新文件头注释与根目录 README.md。
 #include <QApplication>
@@ -256,15 +256,27 @@ int main(int argc, char* argv[]) {
             }
             MPasteSettings::getInst()->setCurrFocusWinId(focusWinId);
 
-            QScreen* currentScreen = getScreenForWindow(focusWinId);
+            QScreen* currentScreen = QGuiApplication::screenAt(QCursor::pos());
             if (!currentScreen) {
-                currentScreen = QGuiApplication::screenAt(QCursor::pos());
+                currentScreen = getScreenForWindow(focusWinId);
             }
             if (!currentScreen) {
                 currentScreen = QGuiApplication::primaryScreen();
             }
 
-            widget.setFixedWidth(currentScreen->availableSize().width());
+            // GNOME places the panel on the pointer's monitor before
+            // painting. A primary-screen fixed width prevents Mutter from
+            // resizing it when the next invocation targets another monitor.
+#ifdef Q_OS_LINUX
+            if (GnomeBridge::isWayland()) {
+                widget.setMinimumWidth(0);
+                widget.setMaximumWidth(QWIDGETSIZE_MAX);
+                widget.resize(currentScreen->availableSize().width(), widget.height());
+            } else
+#endif
+            {
+                widget.setFixedWidth(currentScreen->availableSize().width());
+            }
 
             isShowingWidget = true;
 

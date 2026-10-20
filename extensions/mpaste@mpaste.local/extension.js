@@ -1,5 +1,5 @@
 // input: GNOME Shell selection, keybinding and window APIs; authenticated session client.
-// output: Directed clipboard snapshots and desktop actions; panel placement happens before its first frame.
+// output: Directed clipboard snapshots and desktop actions; panel follows the pointer's monitor before its first frame.
 // pos: GNOME 51 Wayland companion. No clipboard data is written to disk here.
 // update: Keep utils/GnomeBridge and extensions/README.md in sync.
 import Gio from 'gi://Gio';
@@ -160,7 +160,11 @@ export default class MPasteExtension extends Extension {
         panel ??= global.get_window_actors().map(a => a.meta_window)
             .find(w => w.get_pid() === this._pid && w.get_title() === 'MPaste');
         if (!panel) return;
-        const monitor = this._previous?.get_monitor() ?? global.display.get_current_monitor();
+        // Placement follows the pointer; _previous remains the paste target.
+        const [x, y] = global.get_pointer();
+        const pointerMonitor = Main.layoutManager.monitors.findIndex(m =>
+            x >= m.x && x < m.x + m.width && y >= m.y && y < m.y + m.height);
+        const monitor = pointerMonitor >= 0 ? pointerMonitor : Main.layoutManager.primaryIndex;
         const area = Main.layoutManager.getWorkAreaForMonitor(monitor);
         const frame = panel.get_frame_rect();
         panel.move_to_monitor(monitor);

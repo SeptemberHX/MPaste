@@ -175,3 +175,5 @@ Context menus use consistent logical row/font sizing on GNOME and theme-aware ac
 On GNOME 51 Wayland, the main panel, menus and dialogs use `ext-background-effect-v1` for real background blur with a translucent tint. This works directly through the compositor and does not need a new Shell extension session. Building this optional backend requires Qt 6.11+, `qt6-base-private-dev`, `libwayland-dev`, `libwayland-bin` and `wayland-protocols` containing the staging background-effect XML. Without these build dependencies or compositor support, menus use a translucent tint fallback.
 
 Card hover tools blur the underlying card content locally because they share its Qt surface. The desktop backend applies blur only behind independent windows; it never blurs foreground text or controls.
+
+On GNOME Wayland, each panel opening uses the pointer's monitor work-area width, including when switching between differently sized monitors. Qt leaves the width resizable so the compositor can apply the correct bounds before painting.

@@ -41,6 +41,10 @@ Before the companion is loaded, GNOME custom shortcuts can open/close the runnin
 
 Panel placement runs from the compositor `map` event before the first painted frame, including subsequent remaps. There is no delayed `window-created` timer, so the panel does not flash at GNOME’s default centered position. GNOME caches extension JavaScript for the session; upgrading this code requires a logout/login, not merely toggling the extension.
 
+On native Wayland the Qt panel width stays resizable: the compositor sets it to the pointer's monitor work-area width on each opening. Do not lock it to the Qt primary screen width, which prevents correct placement across differently sized monitors.
+
+Version 5 selects the panel monitor from the global pointer position. The previously focused window remains the paste destination and does not control panel placement. Preview windows stay centered on the panel's monitor.
+
 The `SourceIcon(u, as, s)` signal precedes the corresponding clipboard snapshot. Source metadata is captured when the selection changes, before the debounce and asynchronous MIME reads, so a later focus change does not replace the source application. Qt resolves the icon into a bounded 64-entry cache, and the existing item serialization embeds the pixmap. Metadata is never inserted into clipboard MIME formats. Older history with only a placeholder cannot be reliably backfilled because it did not store the source application identity.
 
 Version 4 distinguishes `MPaste Preview` from the main `MPaste` panel and centers previews in the owning panel’s monitor work area at 980×760 logical pixels (clamped on small screens), matching the Windows Qt path. This compositor-side placement is necessary because Wayland ignores client `move()` requests.
