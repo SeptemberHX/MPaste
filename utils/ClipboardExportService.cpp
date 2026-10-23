@@ -68,6 +68,10 @@ void copyRawFormats(QMimeData *target, const QMimeData *source) {
     for (const QString &format : source->formats()) {
         if (!shouldExportRawFormat(format))
             continue;
+        // Stored items keep encoded bytes under Qt's internal image target, but platform
+        // plugins expect a QImage there. Exported via setImageData() instead.
+        if (format == QStringLiteral("application/x-qt-image"))
+            continue;
         const QByteArray data = source->data(format);
         if (!data.isEmpty()) {
             target->setData(format, data);
@@ -91,7 +95,8 @@ void materializeCanonicalImage(QMimeData *mimeData, const QPixmap &pixmap) {
         return;
     }
 
-    mimeData->setData(QStringLiteral("application/x-qt-image"), imageData);
+    // Do not overwrite application/x-qt-image with bytes: QtWayland serves every
+    // image/* request from imageData() and sends nothing if it is not a QImage.
     mimeData->setData(QStringLiteral("image/png"), imageData);
     mimeData->setData(QStringLiteral("application/x-qt-windows-mime;value=\"PNG\""), imageData);
 }
