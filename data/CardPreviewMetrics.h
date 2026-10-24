@@ -7,8 +7,8 @@
 
 #include <QtGlobal>
 
-constexpr int kCardBaseWidth = 248;
-constexpr int kCardBaseHeight = 264;
+constexpr int kCardBaseWidth = 256;
+constexpr int kCardBaseHeight = 216;
 constexpr int kCardHeaderHeight = 56;
 constexpr int kCardFooterHeight = 20;
 // Stored thumbnails keep their original 275x224 size: loaded thumbnails are

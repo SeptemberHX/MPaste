@@ -11,7 +11,9 @@
 #include "BoardViewWidgets.h"
 #include "ClipboardBoardModel.h"
 #include "ClipboardBoardProxyModel.h"
+#include "CardMetrics.h"
 #include "ClipboardCardDelegate.h"
+#include "utils/MPasteSettings.h"
 #include "ScrollItemsWidget.h"
 
 using namespace BoardHelpers;
@@ -24,7 +26,8 @@ int ScrollItemsWidget::estimateVisibleCardCount() const {
     if (!listView_) {
         return 0;
     }
-    const int gridWidth = qMax(1, listView_->gridSize().width());
+    const int gridWidth = qMax(1, cardOuterSizeForScale(MPasteSettings::getInst()->getItemScale()).width()
+                                     + cardSpacingForScale(MPasteSettings::getInst()->getItemScale()));
     int vpWidth = listView_->viewport() ? listView_->viewport()->width() : 0;
     // When the window is hidden the viewport is tiny; fall back to
     // primary screen width so startup pre-render covers enough cards.

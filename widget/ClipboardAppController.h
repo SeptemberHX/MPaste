@@ -2,6 +2,8 @@
 #define MPASTE_CLIPBOARD_APP_CONTROLLER_H
 
 #include <QObject>
+#include <QPair>
+#include <optional>
 #include <QPointer>
 #include <QSet>
 #include <qwindowdefs.h>
@@ -80,6 +82,11 @@ private:
     QWidget *parentWidget_;
     QMap<QString, ScrollItemsWidget*> boardWidgetMap_;
     ScrollItemsWidget *clipboardWidget_;
+    // A capture that arrived before the saved history was indexed (at startup the
+    // clipboard usually still holds something already saved); handled once it is.
+    std::optional<QPair<ClipboardItem, int>> heldCapture_;
+    bool indexWaitOver_ = false;
+    void releaseHeldCapture();
     ScrollItemsWidget *staredWidget_;
 
     ClipboardMonitor *monitor_ = nullptr;

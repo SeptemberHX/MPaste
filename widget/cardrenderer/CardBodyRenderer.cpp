@@ -1,6 +1,7 @@
 #include "CardBodyRenderer.h"
 
 #include <QRegularExpression>
+#include <cmath>
 #include <QImage>
 
 #include <QApplication>
@@ -466,6 +467,62 @@ bool CardRenderUtils::isPlaceholderIcon(const QPixmap &icon) {
     const bool placeholder = difference / (12 * 12 * 4) < 14;
     cache.insert(icon.cacheKey(), new bool(placeholder));
     return placeholder;
+}
+
+void CardRenderUtils::paintCodeBlock(QPainter *painter, const QRect &bodyRect, const QString &text, int scale,
+                                     bool darkTheme, const QColor &textColor) {
+    QFont font = painter->font();
+    applyMonoFontDefaults(font);
+    font.setPointSize(qMax(8, 9 * scale / 100));
+
+    QString code = text;
+    if (QFontMetrics(font).inFont(QChar(0x2011))) {
+        code.replace(QLatin1Char('-'), QChar(0x2011));
+    }
+
+    // The block shares the left edge of the header icon and the footer.
+    const int edge = qMax(8, 12 * scale / 100);
+    const int pad = qMax(6, 8 * scale / 100);
+    const QRect available = bodyRect.adjusted(edge, qMax(6, 10 * scale / 100), -edge, -qMax(4, 6 * scale / 100));
+    const QRect textArea = available.adjusted(pad, pad, -pad, -pad);
+    if (textArea.width() <= 0 || textArea.height() <= 0) {
+        return;
+    }
+
+    // Height of the lines that fit, so a one-line command gets a one-line block.
+    constexpr qreal kLineSpacing = 1.25;
+    QString laidOut = code;
+    laidOut.replace(QLatin1String("\r\n"), QString(QChar::LineSeparator));
+    laidOut.replace(QLatin1Char('\n'), QChar::LineSeparator);
+    QTextLayout layout(laidOut, font, painter->device());
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    layout.setTextOption(option);
+    const qreal minLine = QFontMetricsF(font).height() * kLineSpacing;
+    qreal used = 0;
+    layout.beginLayout();
+    for (QTextLine line = layout.createLine(); line.isValid(); line = layout.createLine()) {
+        line.setLineWidth(textArea.width());
+        const qreal lineHeight = qMax(line.height() * kLineSpacing, minLine);
+        if (used + lineHeight > textArea.height()) {
+            break;
+        }
+        used += lineHeight;
+    }
+    layout.endLayout();
+
+    const int blockHeight = qMin(available.height(), int(std::ceil(used)) + pad * 2);
+    const QRectF block(available.left(), available.top(), available.width(), blockHeight);
+    const qreal radius = qMax(5, 8 * scale / 100);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(QPen(darkTheme ? QColor(255, 255, 255, 16) : QColor(0, 0, 0, 16), 1));
+    painter->setBrush(darkTheme ? QColor(0, 0, 0, 64) : QColor(255, 255, 255, 150));
+    painter->drawRoundedRect(block.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+    painter->restore();
+
+    drawWrappedText(painter, QRect(textArea.left(), textArea.top(), textArea.width(), blockHeight - pad * 2),
+                    code, font, textColor, kLineSpacing);
 }
 
 QUrl CardRenderUtils::singleWebUrl(const QString &text) {

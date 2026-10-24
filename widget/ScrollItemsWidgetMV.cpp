@@ -20,6 +20,9 @@
 #include <QShowEvent>
 #include <QGraphicsOpacityEffect>
 #include <QTimer>
+#include <QtMath>
+#include <QRegularExpression>
+#include <QDate>
 #include <QPainter>
 #include <QLocale>
 #include <QToolButton>
@@ -52,6 +55,25 @@ QString emptyText(const char *source, const QString &zh) {
         return zh;
     }
     return QString::fromUtf8(source);
+}
+
+// The name of a day as the dividers show it: 今天, 昨天, 周三, 10月22日 (with the year when it differs).
+QString dayGroupLabel(const QDate &date) {
+    const QDate today = QDate::currentDate();
+    const qint64 days = date.daysTo(today);
+    const bool zh = BoardHelpers::prefersChineseUi();
+    if (days == 0) return zh ? QStringLiteral("今天") : QStringLiteral("Today");
+    if (days == 1) return zh ? QStringLiteral("昨天") : QStringLiteral("Yesterday");
+    if (days > 1 && days < 7) {
+        static const char16_t *const zhDays[] = {u"周一", u"周二", u"周三", u"周四", u"周五", u"周六", u"周日"};
+        return zh ? QString::fromUtf16(zhDays[date.dayOfWeek() - 1]) : QLocale::c().toString(date, QStringLiteral("ddd"));
+    }
+    if (date.year() == today.year()) {
+        return zh ? QStringLiteral("%1月%2日").arg(date.month()).arg(date.day())
+                  : QLocale::c().toString(date, QStringLiteral("MMM d"));
+    }
+    return zh ? QStringLiteral("%1年%2月%3日").arg(date.year()).arg(date.month()).arg(date.day())
+              : QLocale::c().toString(date, QStringLiteral("MMM d, yyyy"));
 }
 
 QString typeNameForEmptyState(ContentType type) {
@@ -88,6 +110,7 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
 
     auto *boardView = new ClipboardBoardView(category, ui->viewHost);
     listView_ = boardView;
+    boardView->setUnderlayPainter([this](QPainter &painter) { paintGroupDividers(painter); });
     listView_->setObjectName(QStringLiteral("boardListView"));
     hostLayout->addWidget(listView_);
 
@@ -120,7 +143,8 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     listView_->setMovement(QListView::Static);
     listView_->setResizeMode(QListView::Adjust);
     listView_->setLayoutMode(QListView::SinglePass);
-    listView_->setUniformItemSizes(true);
+    // Cards that open a new day are wider (their divider sits before them).
+    listView_->setUniformItemSizes(false);
     listView_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     listView_->setSelectionBehavior(QAbstractItemView::SelectItems);
     listView_->setSelectionRectVisible(false);
@@ -132,8 +156,10 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     listView_->setFrameShape(QFrame::NoFrame);
     listView_->setContextMenuPolicy(Qt::CustomContextMenu);
     listView_->setMouseTracking(true);
-    listView_->setSpacing(qMax(6, 8 * scale / 100));
-    listView_->setGridSize(QSize(cardGridWidthForScale(scale, listView_->spacing()), itemOuterSize.height()));
+    // Clicking a card leaves the keyboard with the panel's search box (and its input method).
+    listView_->setFocusPolicy(Qt::NoFocus);
+    // The gap between cards is part of each item (QListView would also add its spacing above the row).
+    listView_->setSpacing(0);
     listView_->setStyleSheet(QStringLiteral("QListView { background: transparent; border: none; }"));
     listView_->setAttribute(Qt::WA_TranslucentBackground);
     listView_->viewport()->setAttribute(Qt::WA_TranslucentBackground);
@@ -1285,9 +1311,8 @@ void ScrollItemsWidget::applyScale(int scale) {
     hoverOpacity_ = nullptr;
 
     const QSize itemOuterSize = cardOuterSizeForScale(scale);
-    const int spacing = qMax(6, 8 * scale / 100);
-    listView_->setSpacing(spacing);
-    listView_->setGridSize(QSize(cardGridWidthForScale(scale, spacing), itemOuterSize.height()));
+    // The gap between cards is part of each item (QListView would also add its spacing above the row).
+    listView_->setSpacing(0);
 
     const int scrollbarHeight = qMax(12, listView_->horizontalScrollBar()->sizeHint().height());
     const int scrollHeight = itemOuterSize.height() + scrollbarHeight;
@@ -1613,6 +1638,81 @@ bool ScrollItemsWidget::handleWheelScroll(QWheelEvent *event) {
     animateScrollTo(scrollBar->value() + delta);
     event->accept();
     return true;
+}
+
+void ScrollItemsWidget::paintGroupDividers(QPainter &painter) {
+    if (!proxyModel_ || !listView_ || proxyModel_->rowCount() < 2) {
+        return;
+    }
+    const int rows = proxyModel_->rowCount();
+    const int scale = MPasteSettings::getInst()->getItemScale();
+    const QPoint origin = cardOriginForScale(scale);
+    const int cardWidth = kCardBaseWidth * scale / 100;
+    const int cardHeight = kCardBaseHeight * scale / 100;
+    const QRect viewportRect = listView_->viewport()->rect();
+    const QModelIndex leftmost = listView_->indexAt(QPoint(viewportRect.left() + 1, viewportRect.center().y()));
+    const int first = qMax(1, (leftmost.isValid() ? leftmost.row() : 0) - 1);
+
+    const bool dark = ThemeManager::instance()->isDark();
+    const QColor labelColor = dark ? QColor(232, 233, 238, 128) : QColor(31, 33, 41, 135);
+    const QColor ruleColor = dark ? QColor(255, 255, 255, 26) : QColor(0, 0, 0, 30);
+    QFont font = listView_->font();
+    font.setPixelSize(qMax(10, 11 * scale / 100));
+    font.setWeight(QFont::Medium);
+    const QFontMetrics metrics(font);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setFont(font);
+
+    for (int row = first; row < rows; ++row) {
+        const QModelIndex index = proxyModel_->index(row, 0);
+        const QRect rect = listView_->visualRect(index);
+        if (rect.left() > viewportRect.right()) {
+            break;
+        }
+        const int lead = ClipboardCardDelegate::dayGroupLead(index, scale);
+        if (lead <= 0) {
+            continue;
+        }
+        const QDate group = ClipboardCardDelegate::dayGroup(index);
+        const QRect before = listView_->visualRect(proxyModel_->index(row - 1, 0));
+        const int cardLeft = rect.left() + lead + origin.x();
+        const int previousRight = before.left() + ClipboardCardDelegate::dayGroupLead(proxyModel_->index(row - 1, 0), scale)
+            + origin.x() + cardWidth;
+        if (cardLeft <= previousRight) {
+            continue;   // wrapped to a new line, or not laid out yet
+        }
+        const qreal centerX = (previousRight + cardLeft) / 2.0;
+        const int top = rect.top() + origin.y() + qMax(6, 10 * scale / 100);
+        const int bottom = rect.top() + origin.y() + cardHeight - qMax(8, 14 * scale / 100);
+
+        const QString label = dayGroupLabel(group);
+        int textBottom = top;
+        painter.setPen(labelColor);
+        if (BoardHelpers::prefersChineseUi()) {
+            // Stacked one glyph per line, digits kept together: 10 / 月 / 22 / 日.
+            static const QRegularExpression tokens(QStringLiteral("\\d+|."));
+            int y = top;
+            auto it = tokens.globalMatch(label);
+            while (it.hasNext()) {
+                const QString token = it.next().captured();
+                painter.drawText(QRectF(centerX - 20, y, 40, metrics.height()), Qt::AlignHCenter | Qt::AlignTop, token);
+                y += metrics.height() - 1;
+            }
+            textBottom = y;
+        } else {
+            const int length = metrics.horizontalAdvance(label);
+            painter.save();
+            painter.translate(centerX, top);
+            painter.rotate(90);
+            painter.drawText(QRectF(0, -metrics.height() / 2.0, length + 2, metrics.height()), Qt::AlignLeft | Qt::AlignVCenter, label);
+            painter.restore();
+            textBottom = top + length;
+        }
+        if (bottom > textBottom + 8) {
+            painter.setPen(QPen(ruleColor, 1));
+            painter.drawLine(QPointF(qFloor(centerX) + 0.5, textBottom + 6), QPointF(qFloor(centerX) + 0.5, bottom));
+        }
+    }
 }
 
 void ScrollItemsWidget::setHoverGlowIndex(const QModelIndex &index, bool animated) {

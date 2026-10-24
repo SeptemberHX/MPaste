@@ -110,15 +110,15 @@ QWidget#typeBtnWidget QToolButton {
 }
 QWidget#clipboardBtnWidget QToolButton:checked,
 QWidget#typeBtnWidget QToolButton:checked {
+    /* The chosen pill's fill and radius are set together on the tab groups
+       (MPasteWidget::applyTheme): a fill here would paint it square. */
     color: {{tab_text}};
     font-weight: 600;
-    background-color: {{tab_checked_bg}};
     border: none;
 }
 QWidget#clipboardBtnWidget QToolButton:hover:!checked,
 QWidget#typeBtnWidget QToolButton:hover:!checked {
     color: {{tab_text}};
-    background-color: {{tab_hover_bg}};
     border: none;
 }
 QToolButton#countArea, QToolButton#countArea:hover {
@@ -143,3 +143,15 @@ QPushButton#firstButton, QPushButton#lastButton {
 QPushButton#firstButton:hover, QPushButton#lastButton:hover {
     background-color: {{top_hover_bg}};
 }
+
+/* Tooltips paint their own solid ground: the desktop style draws them see-through
+   and expects a blur behind them that MPaste's tooltip windows never get. */
+QToolTip {
+    color: #E6EDF5;
+    background-color: {{tooltip_bg}};
+    border: 1px solid {{tooltip_border}};
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+

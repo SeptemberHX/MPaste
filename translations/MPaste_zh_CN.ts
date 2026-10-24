@@ -424,6 +424,11 @@
         <translation type="unfinished">字符</translation>
     </message>
     <message>
+        <location filename="../widget/ClipboardCardDelegate.cpp" line="1349"/>
+        <source>Code</source>
+        <translation>代码</translation>
+    </message>
+    <message>
         <location filename="../widget/cardrenderer/CardBodyRenderer.cpp" line="390"/>
         <source>Rich text preview</source>
         <translation type="unfinished"></translation>

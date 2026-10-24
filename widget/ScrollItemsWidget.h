@@ -32,6 +32,7 @@ class QShowEvent;
 class QListView;
 class QGraphicsOpacityEffect;
 class QVariantAnimation;
+class QPainter;
 class QToolButton;
 class QLabel;
 
@@ -159,6 +160,8 @@ private:
     int wheelStepPixels() const;
     bool handleTouchpadScroll(QWheelEvent *event, QScrollBar *scrollBar);
     void setHoverGlowIndex(const QModelIndex &index, bool animated = true);
+    // Thin rules with the day's name where the copy date changes (pinned items lead, unlabelled).
+    void paintGroupDividers(QPainter &painter);
     void ensureAllItemsLoaded();
     void maybeLoadMoreItems();
     int itemCountForDisplay() const;

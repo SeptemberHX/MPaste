@@ -14,15 +14,14 @@ void TextCardBody::paint(QPainter *painter, const CardBodyContext &ctx) const {
         paintAddress(painter, ctx, url);
         return;
     }
-    QFont previewFont = painter->font();
-    const bool isCode = CardRenderUtils::looksLikeCode(ctx.card.normalizedText);
-    if (isCode) {
-        CardRenderUtils::applyMonoFontDefaults(previewFont);
-        previewFont.setPointSize(qMax(8, 9 * ctx.scale / 100));
-    } else {
-        CardRenderUtils::applyUiFontDefaults(previewFont);
-        previewFont.setPointSize(qMax(8, 10 * ctx.scale / 100));
+    if (CardRenderUtils::looksLikeCode(ctx.card.normalizedText)) {
+        CardRenderUtils::paintCodeBlock(painter, ctx.bodyRect, CardRenderUtils::previewTextForCard(ctx.card),
+                                        ctx.scale, ctx.darkTheme, ctx.bodyTextColor);
+        return;
     }
+    QFont previewFont = painter->font();
+    CardRenderUtils::applyUiFontDefaults(previewFont);
+    previewFont.setPointSize(qMax(8, 10 * ctx.scale / 100));
     // Same left edge as the header icon and the footer.
     const int textPadX = qMax(8, 12 * ctx.scale / 100);
     const int textPadY = qMax(6, 8 * ctx.scale / 100);

@@ -19,6 +19,8 @@
 #include <QUrl>
 #include <QVariant>
 
+#include "CfHtml.h"
+
 #include <functional>
 #include <optional>
 
@@ -177,7 +179,7 @@ public:
     QSize getImagePixelSize() const;
     QByteArray imagePayloadBytesFast() const { return extractFastImagePayloadBytes(); }
 
-    QString getHtml() const { return mimeData_ ? mimeData_->html() : QString(); }
+    QString getHtml() const { return mimeData_ ? stripCfHtmlHeader(mimeData_->html()) : QString(); }
     ClipboardPreviewKind getPreviewKind() const {
         if (!mimeDataLoaded_) {
             return cachedPreviewKind_;

@@ -225,6 +225,15 @@ void ClipboardAppController::clipboardActivityObserved(int wId) {
     copySoundPlayer_->playCopySoundIfNeeded(wId);
 }
 
+void ClipboardAppController::releaseHeldCapture() {
+    if (!heldCapture_) {
+        return;
+    }
+    const QPair<ClipboardItem, int> held = *heldCapture_;
+    heldCapture_.reset();
+    clipboardUpdated(held.first, held.second);
+}
+
 void ClipboardAppController::clipboardUpdated(const ClipboardItem &nItem, int wId) {
     if (pasteController_->isPasting()) {
         return;
@@ -236,6 +245,26 @@ void ClipboardAppController::clipboardUpdated(const ClipboardItem &nItem, int wI
         qInfo().noquote() << QStringLiteral("[clipboard-widget] clipboardUpdated suppressed echo wId=%1 fp=%2")
             .arg(wId)
             .arg(QString::fromLatin1(pastedFp.toHex().left(12)));
+        return;
+    }
+
+    ClipboardBoardService *service = clipboardWidget_->boardServiceRef();
+    if (service && !service->isIndexReady() && !indexWaitOver_) {
+        // Without the index a copy of something already saved looks new and
+        // would be saved twice; hold the latest capture until the index is in.
+        const bool armed = heldCapture_.has_value();
+        heldCapture_ = qMakePair(nItem, wId);
+        if (!armed) {
+            connect(service, &ClipboardBoardService::indexReady, this,
+                    &ClipboardAppController::releaseHeldCapture, Qt::SingleShotConnection);
+            // A history that never finishes indexing must not swallow captures.
+            QTimer::singleShot(4000, this, [this]() {
+                indexWaitOver_ = true;
+                releaseHeldCapture();
+            });
+        }
+        qInfo().noquote() << QStringLiteral("[clipboard-widget] capture held until the history is indexed fp=%1")
+            .arg(QString::fromLatin1(nItem.fingerprint().toHex().left(12)));
         return;
     }
 

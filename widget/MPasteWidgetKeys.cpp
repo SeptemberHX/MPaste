@@ -3,6 +3,8 @@
 // Split from MPasteWidget.cpp; shares the MPasteWidget class.
 #include <QButtonGroup>
 #include <QKeyEvent>
+#include <QInputMethodEvent>
+#include <QPropertyAnimation>
 #include <QWheelEvent>
 #include <QScrollBar>
 #include <QAbstractItemView>
@@ -152,7 +154,7 @@ void MPasteWidget::handleTabKey() {
 }
 
 void MPasteWidget::handleEscapeKey() {
-    if (ui_.ui->searchEdit->hasFocus() || !ui_.ui->searchEdit->text().isEmpty()) {
+    if (ui_.searchExpanded || !ui_.ui->searchEdit->text().isEmpty()) {
         ui_.ui->searchEdit->clear();
         setFocusOnSearch(false);
     } else {
@@ -213,20 +215,20 @@ bool MPasteWidget::triggerShortcutPaste(int shortcutIndex, bool plainText) {
 }
 
 void MPasteWidget::handleNavigationKeys(QKeyEvent *event) {
-    if (!ui_.ui->searchEdit->isVisible()) {
+    if (ui_.ui->searchEdit->text().isEmpty()) {
         if (event->key() == Qt::Key_Left) {
             currItemsWidget()->focusMoveLeft();
         } else {
             currItemsWidget()->focusMoveRight();
         }
-    } else if (ui_.ui->searchEdit->isVisible()) {
+    } else {
         QGuiApplication::sendEvent(ui_.ui->searchEdit, event);
         setFocusOnSearch(true);
     }
 }
 
 void MPasteWidget::handleHomeEndKeys(QKeyEvent *event) {
-    if (!ui_.ui->searchEdit->isVisible()) {
+    if (ui_.ui->searchEdit->text().isEmpty()) {
         if (event->key() == Qt::Key_Home) {
             currItemsWidget()->scrollToFirst();
         } else {
@@ -262,34 +264,24 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
         auto *button = qobject_cast<QWidget *>(watched);
         // QSS discards oversized corner radii. Layout/font/DPI changes can make
         // the actual button smaller than the maximum height used by applyScale.
-        // Rounded rectangles on the spec's 7 px radius, not full pills.
-        const int radius = qMax(0, qMin(7, qMin(button->width(), button->height()) / 2 - 1));
+        // Pills, as in the Aurora design.
+        const int radius = qMax(0, qMin(button->width(), button->height()) / 2 - 1);
         const QString style = QStringLiteral("border-radius: %1px;").arg(radius);
         if (button->styleSheet() != style) button->setStyleSheet(style);
     }
 
-    if (event->type() == QEvent::Paint &&
-        (watched == ui_.ui->clipboardBtnWidget || watched == ui_.ui->typeBtnWidget)) {
-        QWidget *w = qobject_cast<QWidget*>(watched);
-        QPainter p(w);
+    if (event->type() == QEvent::Paint && watched == ui_.tabCapsule) {
+        // One glass capsule for both tab groups, a hairline between them.
+        QPainter p(ui_.tabCapsule);
         p.setRenderHint(QPainter::Antialiasing);
-
-        const qreal radius = 9.0;   // segment radius 7 + the 2 px track padding
-        QRectF r = QRectF(w->rect());
-
-        if (darkTheme_) {
-            // Glass pill container
-            r = r.adjusted(0.5, 0.5, -0.5, -0.5);
-            p.setPen(Qt::NoPen);
-            p.setBrush(QColor(255, 255, 255, 15));
-            p.drawRoundedRect(r, radius, radius);
-        } else {
-            // Light: glass pill container with dark tint
-            r = r.adjusted(0.5, 0.5, -0.5, -0.5);
-            p.setPen(Qt::NoPen);
-            p.setBrush(QColor(0, 0, 0, 10));
-            p.drawRoundedRect(r, radius, radius);
-        }
+        const QRectF r = QRectF(ui_.tabCapsule->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        const qreal radius = r.height() / 2.0;
+        p.setPen(QPen(darkTheme_ ? QColor(255, 255, 255, 14) : QColor(0, 0, 0, 14), 1.0));
+        p.setBrush(darkTheme_ ? QColor(255, 255, 255, 13) : QColor(0, 0, 0, 12));
+        p.drawRoundedRect(r, radius, radius);
+        const qreal dividerX = ui_.ui->clipboardBtnWidget->geometry().right() + 7.5;
+        p.setPen(QPen(darkTheme_ ? QColor(255, 255, 255, 32) : QColor(0, 0, 0, 30), 1.0));
+        p.drawLine(QPointF(dividerX, r.center().y() - 8), QPointF(dividerX, r.center().y() + 8));
     }
 
     if (event->type() == QEvent::Wheel) {
@@ -303,6 +295,31 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
                 QGuiApplication::sendEvent(this, keyEvent);
                 return true;
             }
+            // An empty box is only holding the focus: the keys that drive the
+            // cards go to them, as they did before the box held it.
+            if (ui_.ui->searchEdit->text().isEmpty()) {
+                switch (keyEvent->key()) {
+                    case Qt::Key_Left:
+                    case Qt::Key_Right:
+                    case Qt::Key_Home:
+                    case Qt::Key_End:
+                    case Qt::Key_Space:
+                    case Qt::Key_Return:
+                    case Qt::Key_Enter:
+                    case Qt::Key_Escape:
+                    case Qt::Key_Tab:
+                        handleKeyboardEvent(keyEvent);
+                        return true;
+                    default:
+                        break;
+                }
+            }
+        }
+    } else if (event->type() == QEvent::InputMethod && watched == ui_.ui->searchEdit) {
+        // Unfold as soon as an input method starts composing, so the preedit shows.
+        const auto *imEvent = static_cast<QInputMethodEvent *>(event);
+        if (!ui_.searchExpanded && (!imEvent->preeditString().isEmpty() || !imEvent->commitString().isEmpty())) {
+            setFocusOnSearch(true);
         }
     }
 
@@ -373,13 +390,17 @@ bool MPasteWidget::focusNextPrevChild(bool next) {
 }
 
 void MPasteWidget::setFocusOnSearch(bool flag) {
-    if (flag) {
-        ui_.ui->searchEdit->show();
-        ui_.searchShowAnim->start();
-        ui_.ui->searchEdit->setFocus();
-    } else {
-        ui_.searchHideAnim->start();
-        ui_.ui->searchEdit->clearFocus();
-        setFocus();
+    ui_.ui->searchEdit->show();
+    ui_.searchExpanded = flag;
+    // Judged by the width, not the flag: at startup the box is open in the form
+    // file while the flag already says folded.
+    QPropertyAnimation *animation = flag ? ui_.searchShowAnim : ui_.searchHideAnim;
+    const int target = animation->endValue().toInt();
+    if (ui_.ui->searchEdit->maximumWidth() != target && animation->state() != QAbstractAnimation::Running) {
+        (flag ? ui_.searchHideAnim : ui_.searchShowAnim)->stop();
+        animation->start();
     }
+    // Folded or not, the box holds the focus: typing with an input method
+    // composes from the first key instead of losing it to the card list.
+    ui_.ui->searchEdit->setFocus();
 }

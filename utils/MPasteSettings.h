@@ -24,6 +24,8 @@ public:
     enum OcrBackend { OcrWindowsBuiltin = 0, OcrBaiduApi = 1 };
     // What the activation shortcut opens: the bottom panel or the stack by the caret.
     enum ActivationLayout { LayoutPanel = 0, LayoutStack = 1 };
+    // How cards look: Still (neutral, content first) or Aurora (the app's colour as light).
+    enum CardStyle { CardStill = 0, CardAurora = 1 };
 
     static MPasteSettings* getInst();
 
@@ -57,6 +59,8 @@ public:
     const QString &getShortcutStr() const;
 
     ActivationLayout getActivationLayout() const;
+    CardStyle getCardStyle() const;
+    void setCardStyle(CardStyle style);
     void setActivationLayout(ActivationLayout layout);
 
     void setShortcutStr(const QString &shortcutStr);
@@ -96,6 +100,7 @@ public:
 
 signals:
     void themeModeChanged(MPasteSettings::ThemeMode mode);
+    void cardStyleChanged(MPasteSettings::CardStyle style);
 
 private:
     MPasteSettings();
@@ -116,6 +121,7 @@ private:
     PasteShortcutMode pasteShortcutMode;
     QString shortcutStr;
     ActivationLayout activationLayout = LayoutPanel;
+    CardStyle cardStyle = CardStill;
     int itemScale;
     bool playSound;
     ThemeMode themeMode;

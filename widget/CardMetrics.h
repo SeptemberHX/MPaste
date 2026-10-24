@@ -31,9 +31,10 @@ inline QSize cardOuterSizeForScale(int scale) {
                  margin + kCardBaseHeight * scale / 100 + qMax(margin, kShadowBottomPadding * scale / 100));
 }
 
-// Neighbouring items overlap by the left margin so the visible gap between cards stays the same.
-inline int cardGridWidthForScale(int scale, int spacing) {
-    return cardOuterSizeForScale(scale).width() + spacing - cardSelectionMarginForScale(scale);
+// Items no longer overlap: the shadow room (10), the next card's ring room (5)
+// and this spacing make the ~22px gap between cards.
+inline int cardSpacingForScale(int scale) {
+    return qMax(4, 7 * scale / 100);
 }
 
 #endif // MPASTE_CARDMETRICS_H

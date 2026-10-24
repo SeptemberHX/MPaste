@@ -15,9 +15,17 @@
 - Empty clipboard, empty favourites, filters and searches without results now say so.
 - Top bar: steady layout while counts change; text that falls back to a font with a real medium weight when the UI font (e.g. Microsoft YaHei) has none.
 - Touchpad swipes in either direction follow the fingers and glide on after release.
+- Typing to search with an input method (fcitx, IBus) no longer loses the first key: the search box keeps the keyboard focus while the panel is open, folded away while empty, and the arrow keys, Space, Enter and Esc still act on the cards until something is typed.
+- Tooltips have a solid ground in the dark theme.
+- Fix: rich text copied from WPS no longer shows its Windows clipboard header ("Version:0.9 StartHTML:…") in the card, the preview or when pasted; rich-text previews are no longer cut off at the card's top and left.
+- Fix: starting MPaste while the clipboard still held something already saved (an image, typically) saved it again; captures that arrive before the history is indexed now wait for the index and are recognised.
 - Preview window shows the source app, type, copy time and size instead of the stored file name.
 - Settings window can be dragged and opens centred on GNOME Wayland (companion v7+).
 - Fix: rich-text previews no longer render white text in light mode under a dark platform palette.
+- Two card styles (Settings → General → Card style): **Still**, a neutral card with the content first and one quiet line of app, time and kind at its foot, pictures in a frame; and **Aurora**, the app's colour as a light in the card's corner under a header with its icon, pictures edge to edge. Both have light and dark versions; the coloured header band is gone. Cards are now 256 × 216, landscape. The board and kind tabs share one pill-shaped capsule with a hairline between the groups, and the search box and page indicator are pills too.
+- Days are marked in the list: a thin rule with "Today", "Yesterday", the weekday or the date where the copy date changes (pinned items lead the list unmarked); only those boundaries widen to hold it, the other gaps stay as they were.
+- Light theme cards: a deep app-colour header with white text over a clearly tinted body (was a pale pastel); yellows lean amber in both themes.
+- Code shows in an inset block that keeps hyphenated words whole; rich-text links read on light cards; header bands get a hairline and the cards a lit top edge; the count reads "12 条"; hover-bar icons are centred and evenly sized.
 
 ## 0.7.5
 

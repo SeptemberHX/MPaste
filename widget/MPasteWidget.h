@@ -137,6 +137,11 @@ private:
 
         QPropertyAnimation *searchShowAnim = nullptr;
         QPropertyAnimation *searchHideAnim = nullptr;
+        // The search box keeps keyboard focus while the panel is open, folded to
+        // nothing when empty, so an input method is live from the first key.
+        bool searchExpanded = false;
+        // One capsule holding both tab groups, a hairline between them.
+        QWidget *tabCapsule = nullptr;
         QSystemTrayIcon *trayIcon = nullptr;
         QMenu *menu = nullptr;
         QMenu *trayMenu = nullptr;

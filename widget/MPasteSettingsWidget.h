@@ -58,6 +58,8 @@ private:
     QComboBox *activationLayoutCombo_ = nullptr;
     QLabel *themeLabel_ = nullptr;
     QComboBox *themeCombo_ = nullptr;
+    QLabel *cardStyleLabel_ = nullptr;
+    QComboBox *cardStyleCombo_ = nullptr;
     QComboBox *retentionUnitCombo_ = nullptr;
     QLabel *syncLabel_ = nullptr;
     QLineEdit *syncPathEdit_ = nullptr;

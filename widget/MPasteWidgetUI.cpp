@@ -316,8 +316,25 @@ void MPasteWidget::initUI() {
     initMenu();
 
     ui_.ui->searchEdit->installEventFilter(this);
-    ui_.ui->clipboardBtnWidget->installEventFilter(this);
-    ui_.ui->typeBtnWidget->installEventFilter(this);
+
+    // Board and kind tabs share one capsule (the Aurora design): moved into a
+    // container that paints the pill, with room for the hairline between them.
+    if (ui_.ui->horizontalLayout) {
+        const int at = ui_.ui->horizontalLayout->indexOf(ui_.ui->clipboardBtnWidget);
+        ui_.tabCapsule = new QWidget(ui_.ui->widget);
+        ui_.tabCapsule->setObjectName(QStringLiteral("tabCapsule"));
+        ui_.tabCapsule->setAttribute(Qt::WA_TranslucentBackground);
+        auto *capsuleLayout = new QHBoxLayout(ui_.tabCapsule);
+        capsuleLayout->setContentsMargins(2, 2, 2, 2);
+        capsuleLayout->setSpacing(0);
+        ui_.ui->horizontalLayout->removeWidget(ui_.ui->clipboardBtnWidget);
+        ui_.ui->horizontalLayout->removeWidget(ui_.ui->typeBtnWidget);
+        capsuleLayout->addWidget(ui_.ui->clipboardBtnWidget);
+        capsuleLayout->addSpacing(13);
+        capsuleLayout->addWidget(ui_.ui->typeBtnWidget);
+        ui_.ui->horizontalLayout->insertWidget(at >= 0 ? at : 0, ui_.tabCapsule, 0, Qt::AlignVCenter);
+        ui_.tabCapsule->installEventFilter(this);
+    }
 
     applyTheme(ThemeManager::instance()->isDark());
     updatePageSelector();
@@ -401,7 +418,6 @@ void MPasteWidget::initSearchAnimations() {
     ui_.searchHideAnim = new QPropertyAnimation(ui_.ui->searchEdit, "maximumWidth");
     ui_.searchHideAnim->setEndValue(0);
     ui_.searchHideAnim->setDuration(150);
-    connect(ui_.searchHideAnim, &QPropertyAnimation::finished, ui_.ui->searchEdit, &QLineEdit::hide);
 
     ui_.searchShowAnim = new QPropertyAnimation(ui_.ui->searchEdit, "maximumWidth");
     ui_.searchShowAnim->setEndValue(200);
@@ -435,22 +451,42 @@ void MPasteWidget::applyTheme(bool dark) {
     if (ui_.quitAction) {
         ui_.quitAction->setIcon(QIcon(QStringLiteral(":/resources/resources/quit.svg")));
     }
+    // Pill tabs: the radius lives in the same rule as the background, or Qt
+    // paints the chosen tab square.
+    // Kept under half the tab's real height, which can come in below its
+    // maximum: QSS drops a radius that is too large and paints square.
+    const int tabPillRadius = ui_.ui ? qMax(6, ui_.ui->clipboardButton->maximumHeight() / 2 - 2) : 12;
     // Force glass-style tab borders in dark mode (QSS tokens don't override reliably)
     if (darkTheme_ && ui_.ui) {
         const QString glassTabStyle = QStringLiteral(
-            "QToolButton { background-color: transparent; border: none; border-radius: 12px; }"
-            "QToolButton:hover { background-color: rgba(255,255,255,22); }"
-            "QToolButton:checked, QToolButton:pressed { background-color: rgba(255,255,255,50); }");
+            "QToolButton { background-color: transparent; border: none; border-radius: %1px; }"
+            "QToolButton:hover { background-color: rgba(255,255,255,20); }"
+            "QToolButton:checked, QToolButton:pressed { background-color: rgba(255,255,255,38); }").arg(tabPillRadius);
         ui_.ui->clipboardBtnWidget->setStyleSheet(glassTabStyle);
         ui_.ui->typeBtnWidget->setStyleSheet(glassTabStyle);
     } else if (ui_.ui) {
         // Light mode: glass style with dark tint
         const QString lightGlassTabStyle = QStringLiteral(
-            "QToolButton { background-color: transparent; border: none; border-radius: 12px; }"
-            "QToolButton:hover { background-color: rgba(0,0,0,12); }"
-            "QToolButton:checked, QToolButton:pressed { background-color: rgba(0,0,0,22); }");
+            "QToolButton { background-color: transparent; border: none; border-radius: %1px; }"
+            "QToolButton:hover { background-color: rgba(0,0,0,10); }"
+            "QToolButton:checked, QToolButton:pressed { background-color: rgba(255,255,255,235); }").arg(tabPillRadius);
         ui_.ui->clipboardBtnWidget->setStyleSheet(lightGlassTabStyle);
         ui_.ui->typeBtnWidget->setStyleSheet(lightGlassTabStyle);
+    }
+    // The search box takes the tab groups' glass, set on the widget for the same
+    // reason: the desktop sheet's focused and hovered field rules win otherwise.
+    // It holds the focus whenever it is open, so focus only lifts the edge.
+    if (ui_.ui) {
+        const int searchRadius = qMax(6, ui_.ui->searchEdit->maximumHeight() / 2 - 1);
+        ui_.ui->searchEdit->setStyleSheet((darkTheme_
+            ? QStringLiteral(
+                "QLineEdit, QLineEdit:hover { background-color: rgba(255,255,255,15); border: 1px solid rgba(255,255,255,20);"
+                " border-radius: %1px; padding: 1px 12px; color: #F2F6FB; selection-background-color: rgba(91,141,239,150); }"
+                "QLineEdit:focus { background-color: rgba(255,255,255,22); border: 1px solid rgba(255,255,255,46); }")
+            : QStringLiteral(
+                "QLineEdit, QLineEdit:hover { background-color: rgba(255,255,255,150); border: 1px solid rgba(0,0,0,20);"
+                " border-radius: %1px; padding: 1px 12px; color: #2C3E50; selection-background-color: rgba(47,104,216,90); }"
+                "QLineEdit:focus { background-color: rgba(255,255,255,190); border: 1px solid rgba(0,0,0,36); }")).arg(searchRadius));
     }
 
     updatePageSelectorStyle();
@@ -507,22 +543,30 @@ void MPasteWidget::applyScale(int scale) {
         widget->setStyleSheet(QStringLiteral("border-radius: %1px;").arg(radius));
     };
 
-    const int topBarHeight = qMax(32, 36 * scale / 100);
+    // The bar scales with the cards; set outright, since the form's own minimum
+    // heights (36 and 28) would otherwise win over anything smaller.
+    auto fixHeight = [](QWidget *widget, int height) {
+        if (widget) {
+            widget->setMinimumHeight(height);
+            widget->setMaximumHeight(height);
+        }
+    };
+    const int topBarHeight = qMax(26, 30 * scale / 100);
     if (ui_.ui->topLine) {
         ui_.ui->topLine->setFixedHeight(qMax(1, scale / 20));
     }
-    scaleHeight(ui_.ui->widget, topBarHeight);
+    fixHeight(ui_.ui->widget, topBarHeight);
 
-    const int tabButtonHeight = qMax(24, 28 * scale / 100);
-    scaleHeight(ui_.ui->clipboardButton, tabButtonHeight);
-    scaleHeight(ui_.ui->staredButton, tabButtonHeight);
-    scaleHeight(ui_.ui->allTypeBtn, tabButtonHeight);
-    scaleHeight(ui_.ui->textTypeBtn, tabButtonHeight);
-    scaleHeight(ui_.ui->linkTypeBtn, tabButtonHeight);
-    scaleHeight(ui_.ui->imageTypeBtn, tabButtonHeight);
-    scaleHeight(ui_.ui->officeTypeBtn, tabButtonHeight);
-    scaleHeight(ui_.ui->richTextTypeBtn, tabButtonHeight);
-    scaleHeight(ui_.ui->fileTypeBtn, tabButtonHeight);
+    const int tabButtonHeight = qMax(20, 24 * scale / 100);
+    fixHeight(ui_.ui->clipboardButton, tabButtonHeight);
+    fixHeight(ui_.ui->staredButton, tabButtonHeight);
+    fixHeight(ui_.ui->allTypeBtn, tabButtonHeight);
+    fixHeight(ui_.ui->textTypeBtn, tabButtonHeight);
+    fixHeight(ui_.ui->linkTypeBtn, tabButtonHeight);
+    fixHeight(ui_.ui->imageTypeBtn, tabButtonHeight);
+    fixHeight(ui_.ui->officeTypeBtn, tabButtonHeight);
+    fixHeight(ui_.ui->richTextTypeBtn, tabButtonHeight);
+    fixHeight(ui_.ui->fileTypeBtn, tabButtonHeight);
     scaleFont(ui_.ui->clipboardButton);
     scaleFont(ui_.ui->staredButton);
     scaleFont(ui_.ui->allTypeBtn);
@@ -544,16 +588,16 @@ void MPasteWidget::applyScale(int scale) {
     applyRadius(ui_.ui->fileTypeBtn);
 
     if (ui_.ui->searchEdit) {
-        scaleHeight(ui_.ui->searchEdit, tabButtonHeight);
+        fixHeight(ui_.ui->searchEdit, tabButtonHeight);
     }
     if (ui_.ui->firstButton) {
-        scaleHeight(ui_.ui->firstButton, tabButtonHeight);
+        fixHeight(ui_.ui->firstButton, tabButtonHeight);
     }
     if (ui_.ui->lastButton) {
-        scaleHeight(ui_.ui->lastButton, tabButtonHeight);
+        fixHeight(ui_.ui->lastButton, tabButtonHeight);
     }
     if (ui_.pageComboBox) {
-        scaleHeight(ui_.pageComboBox, tabButtonHeight);
+        fixHeight(ui_.pageComboBox, tabButtonHeight);
         scaleFont(ui_.pageComboBox);
     }
     if (ui_.pagePrefixLabel) {
@@ -677,7 +721,7 @@ void MPasteWidget::updatePageSelectorStyle() {
         // The same quiet base as the tab groups beside it.
         ui_.pageSelectorWidget->layout()->activate();
         pill->setColors(darkTheme_ ? QColor(255, 255, 255, 15) : QColor(0, 0, 0, 10), Qt::transparent, Qt::transparent);
-        pill->setCornerRadius(qMin(9, height / 2));
+        pill->setCornerRadius(height / 2);
         pill->setDividerPosition(0);
         pill->setPaintFrame(true);
     }
@@ -699,8 +743,9 @@ void MPasteWidget::updatePageSelectorStyle() {
 
 void MPasteWidget::updateItemCount(int itemCount) {
     const int selectedCount = currItemsWidget() ? currItemsWidget()->selectedItemCount() : 0;
+    // "12 条" rather than a bare number nobody can place.
     ui_.ui->countArea->setText(selectedCount > 1
         ? QStringLiteral("%1/%2").arg(selectedCount).arg(itemCount)
-        : QString::number(itemCount));
+        : (BoardHelpers::prefersChineseUi() ? QStringLiteral("%1 条").arg(itemCount) : QString::number(itemCount)));
     ui_.ui->countArea->updateGeometry();
 }

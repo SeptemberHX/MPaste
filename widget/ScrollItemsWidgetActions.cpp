@@ -112,11 +112,27 @@ bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
     // but the on-disk index claims the fingerprint exists, the backing file
     // may have been cleaned up.  In that case, re-add and re-save the item
     // so it becomes visible again.
-    if (boardService_ && boardService_->containsFingerprint(nItem.fingerprint())) {
+    if (const auto *indexed = boardService_ ? boardService_->indexedItemForFingerprint(nItem.fingerprint()) : nullptr) {
         if (boardModel_ && boardModel_->rowForFingerprint(nItem.fingerprint()) >= 0) {
             return false;
         }
-        // Fingerprint in disk index but not in model — treat as new item.
+        // On disk but not loaded into the model yet, as at startup when MPaste
+        // finds the clipboard still holding something it already saved: bring
+        // that entry to the front instead of saving the same content again.
+        // Only a backing file that is really gone makes this a new item.
+        if (QFileInfo::exists(indexed->filePath)) {
+            const QString name = indexed->name;
+            if (!indexed->pinned) {
+                const QDateTime now = QDateTime::currentDateTime();
+                LocalSaver saver;
+                saver.updateTimestamp(indexed->filePath, now, name);
+                boardService_->updateIndexedItemTime(name, now);
+            }
+            boardService_->moveIndexedItemToFront(name);
+            qInfo().noquote() << QStringLiteral("[dedup] %1 already saved as %2, moved to front")
+                .arg(QString::fromLatin1(nItem.fingerprint().toHex().left(12)), name);
+            return false;
+        }
     }
 
     // Add item to model immediately so the UI can display it right away.

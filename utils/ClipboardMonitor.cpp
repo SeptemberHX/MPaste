@@ -710,7 +710,7 @@ QMimeData *ClipboardMonitor::cloneMimeData(const QMimeData *mimeData) {
         copy->setText(mimeData->text());
     }
     if (mimeData->hasHtml()) {
-        copy->setHtml(mimeData->html());
+        copy->setHtml(stripCfHtmlHeader(mimeData->html()));
     }
     if (mimeData->hasUrls()) {
         copy->setUrls(mimeData->urls());

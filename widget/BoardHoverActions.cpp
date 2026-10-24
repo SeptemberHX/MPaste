@@ -13,6 +13,7 @@
 #include "BoardInternalHelpers.h"
 #include "BoardViewWidgets.h"
 #include "CardMetrics.h"
+#include "ClipboardCardDelegate.h"
 #include "ClipboardBoardActionService.h"
 #include "ClipboardBoardModel.h"
 #include "ClipboardBoardProxyModel.h"
@@ -263,7 +264,9 @@ void ScrollItemsWidget::updateHoverActionBarPosition() {
 
     const int scale = MPasteSettings::getInst()->getItemScale();
     const QSize cardSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
-    const QRect cardRect(itemRect.topLeft() + cardOriginForScale(scale), cardSize);
+    const QRect cardRect(itemRect.topLeft() + cardOriginForScale(scale)
+                             + QPoint(ClipboardCardDelegate::dayGroupLead(hoverProxyIndex_, scale), 0),
+                         cardSize);
     const QPoint hostTopLeft = viewport->mapTo(overlayHost, cardRect.topLeft());
     hoverActionBar_->adjustSize();
     if (overlayHost->width() <= 0 || overlayHost->height() <= 0

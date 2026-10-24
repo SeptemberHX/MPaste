@@ -610,6 +610,13 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         themeCombo_->addItem(uiText("Dark", QStringLiteral("暗色")), static_cast<int>(MPasteSettings::ThemeDark));
         grid->addWidget(themeLabel_, 0, 0);
         grid->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+
+        cardStyleLabel_ = new QLabel(uiText("Card style", QStringLiteral("卡片风格")), this);
+        cardStyleLabel_->setMinimumHeight(44);
+        cardStyleCombo_ = new QComboBox(this);
+        cardStyleCombo_->setMinimumSize(QSize(140, 32));
+        cardStyleCombo_->addItem(uiText("Still", QStringLiteral("静物")), static_cast<int>(MPasteSettings::CardStill));
+        cardStyleCombo_->addItem(uiText("Aurora", QStringLiteral("流光")), static_cast<int>(MPasteSettings::CardAurora));
         connect(themeCombo_, &QComboBox::currentIndexChanged, this, [this]() {
             if (!themeCombo_) {
                 return;
@@ -730,6 +737,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         syncPathEdit_->setMinimumHeight(36);
         themeCombo_->setMinimumHeight(36);
         themeCombo_->setMaximumHeight(36);
+        cardStyleCombo_->setMinimumHeight(36);
+        cardStyleCombo_->setMaximumHeight(36);
         pasteShortcutCombo_->setMinimumHeight(36);
         pasteShortcutCombo_->setMaximumHeight(36);
         activationLayoutCombo_->setMinimumHeight(36);
@@ -817,8 +826,10 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             auto *g = makeSettingsGrid();
             g->addWidget(themeLabel_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
             g->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
-            g->addWidget(ui->label_autostart, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            g->addWidget(autoStartSwitch_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(cardStyleLabel_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(cardStyleCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(ui->label_autostart, 2, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(autoStartSwitch_, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
             gLayout->addWidget(makeCard(g));
         }
 
@@ -1005,6 +1016,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     connect(toggleSwitch_, &ToggleSwitch::toggled, this, save);
     connect(autoStartSwitch_, &ToggleSwitch::toggled, this, save);
     if (themeCombo_) connect(themeCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (cardStyleCombo_) connect(cardStyleCombo_, &QComboBox::currentIndexChanged, this, save);
     if (retentionUnitCombo_) connect(retentionUnitCombo_, &QComboBox::currentIndexChanged, this, save);
     if (pasteShortcutCombo_) connect(pasteShortcutCombo_, &QComboBox::currentIndexChanged, this, save);
     if (activationLayoutCombo_) connect(activationLayoutCombo_, &QComboBox::currentIndexChanged, this, save);
@@ -1090,6 +1102,10 @@ void MPasteSettingsWidget::loadSettings()
     ui->itemScaleSlider->setValue(settings->getItemScale());
     ui->scaleValueLabel->setText(QString("%1%").arg(settings->getItemScale()));
     toggleSwitch_->setChecked(settings->isPlaySound());
+    if (cardStyleCombo_) {
+        const int index = cardStyleCombo_->findData(static_cast<int>(settings->getCardStyle()));
+        cardStyleCombo_->setCurrentIndex(index >= 0 ? index : 0);
+    }
     if (themeCombo_) {
         const int index = themeCombo_->findData(static_cast<int>(settings->getThemeMode()));
         themeCombo_->setCurrentIndex(index >= 0 ? index : 0);
@@ -1166,6 +1182,9 @@ void MPasteSettingsWidget::saveAllSettings()
     const int newScale = ui->itemScaleSlider->value();
     settings->setItemScale(newScale);
     settings->setPlaySound(toggleSwitch_->isChecked());
+    if (cardStyleCombo_) {
+        settings->setCardStyle(static_cast<MPasteSettings::CardStyle>(cardStyleCombo_->currentData().toInt()));
+    }
     if (themeCombo_) {
         const auto mode = static_cast<MPasteSettings::ThemeMode>(themeCombo_->currentData().toInt());
         if (settings->getThemeMode() != mode) {

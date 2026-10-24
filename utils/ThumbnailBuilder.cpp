@@ -48,9 +48,8 @@ QSize previewLogicalSize(int itemScale) {
 void drawRichTextDocument(QTextDocument &document, QPainter *painter, const QSizeF &layoutSize) {
     QAbstractTextDocumentLayout::PaintContext paintContext;
     paintContext.clip = QRectF(QPointF(0, 0), layoutSize);
-    paintContext.palette.setColor(QPalette::Text, ThemeManager::instance()->isDark()
-                                                      ? QColor(QStringLiteral("#E4E7EC"))
-                                                      : QColor(QStringLiteral("#30343B")));
+    const bool dark = ThemeManager::instance()->isDark();
+    paintContext.palette.setColor(QPalette::Text, dark ? QColor(QStringLiteral("#E4E7EC")) : QColor(QStringLiteral("#30343B")));
     document.documentLayout()->draw(painter, paintContext);
 }
 
@@ -93,13 +92,16 @@ QString richTextThumbnailStyleSheet(int itemScale) {
         " word-break: break-word !important;"
         "}"
         "img { max-width: 100% !important; height: auto !important; }"
+        "a { color: %3; }"
         "pre, code {"
         " white-space: pre-wrap !important;"
         " overflow-wrap: anywhere !important;"
         " word-break: break-word !important;"
         "}")
         .arg(bodyPaddingX)
-        .arg(baseFontPx);
+        .arg(baseFontPx)
+        // HTML import bakes the link colour in, so it is set here, readable on either card ground.
+        .arg(ThemeManager::instance()->isDark() ? QStringLiteral("#7DB4F5") : QStringLiteral("#1F64C2"));
 }
 
 QString normalizeInlineTypography(QString tagStr) {
@@ -654,7 +656,7 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
         return QPixmap();
     }
 
-    const QString html = mimeData->html();
+    const QString html = item.getHtml();
     if (html.isEmpty()) {
         return QPixmap();
     }
@@ -776,7 +778,8 @@ QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targ
     return thumbnail;
 }
 
-QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray &imageBytes, qreal thumbnailDpr, int itemScale) {
+QImage buildRichTextThumbnailImageFromHtml(const QString &rawHtml, const QByteArray &imageBytes, qreal thumbnailDpr, int itemScale) {
+    const QString html = stripCfHtmlHeader(rawHtml);
     if (html.isEmpty()) {
         return QImage();
     }

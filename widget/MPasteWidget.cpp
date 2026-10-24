@@ -435,6 +435,9 @@ void MPasteWidget::setupConnections() {
     });
 
     connect(ui_.ui->searchEdit, &QLineEdit::textChanged, this, [this](const QString &str) {
+        if (!str.isEmpty() && !ui_.searchExpanded) {
+            setFocusOnSearch(true);
+        }
         this->currItemsWidget()->filterByKeyword(str);
     });
     connect(ui_.ui->searchButton, &QToolButton::clicked, this, [this](bool flag) {
@@ -531,7 +534,7 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
                 controller_->clearCopiedWhenHide();
                 ui_.clipboardWidget->scrollToFirst();
             }
-            if (!ui_.ui->searchEdit->text().isEmpty()) ui_.ui->searchEdit->setFocus();
+            ui_.ui->searchEdit->setFocus();
         } else {
             currItemsWidget()->cleanShortCutInfo();
         }
@@ -557,9 +560,7 @@ void MPasteWidget::setVisibleWithAnnimation(bool visible) {
 
         connect(animation, &QPropertyAnimation::finished, this, [this, animation]() {
             animation->deleteLater();
-            if (!ui_.ui->searchEdit->text().isEmpty()) {
-                ui_.ui->searchEdit->setFocus();
-            }
+            ui_.ui->searchEdit->setFocus();
 
             for (int i = 0; i < 10; ++i) {
                 if (PlatformRelated::currActiveWindow() == winId()) {
@@ -653,7 +654,7 @@ void MPasteWidget::showEvent(QShowEvent *event) {
     qInfo().noquote() << QStringLiteral("[wake] showEvent: stopKeepAliveTimer %1 ms").arg(t.elapsed());
     activateWindow();
     raise();
-    setFocus();
+    ui_.ui->searchEdit->setFocus();
     qInfo().noquote() << QStringLiteral("[wake] showEvent: activate/raise/focus %1 ms").arg(t.elapsed());
     controller_->onWidgetShown();
     // Show "Loading..." if data is still being loaded from disk,

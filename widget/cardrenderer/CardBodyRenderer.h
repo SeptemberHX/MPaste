@@ -58,6 +58,10 @@ namespace CardRenderUtils {
     QUrl singleWebUrl(const QString &text);
     // The icon is missing or MPaste's generic "unknown app" picture.
     bool isPlaceholderIcon(const QPixmap &icon);
+    // Code in a quiet inset block sized to its lines, in the monospace face;
+    // hyphens do not break lines, so "build-essential" stays whole.
+    void paintCodeBlock(QPainter *painter, const QRect &bodyRect, const QString &text, int scale,
+                        bool darkTheme, const QColor &textColor);
     // "github.com" from "https://www.github.com/...".
     QString displayHost(const QUrl &url);
     void clearCoverPixmapCache();

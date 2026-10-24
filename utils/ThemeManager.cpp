@@ -26,6 +26,10 @@ void ThemeManager::initialize() {
     initialized_ = true;
 
     auto *settings = MPasteSettings::getInst();
+    // A new card style redraws the cards the way a new theme does.
+    connect(settings, &MPasteSettings::cardStyleChanged, this, [this]() {
+        applyTheme();
+    });
     connect(settings, &MPasteSettings::themeModeChanged, this, [this]() {
         applyTheme();
     });

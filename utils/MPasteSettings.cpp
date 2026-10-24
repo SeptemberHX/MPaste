@@ -122,6 +122,8 @@ void MPasteSettings::loadSettings() {
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
     this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
+    this->cardStyle = settings.value("main/cardStyle", static_cast<int>(CardStill)).toInt() == CardAurora
+        ? CardAurora : CardStill;
     this->themeMode = static_cast<ThemeMode>(
         settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
     this->historyViewMode = static_cast<HistoryViewMode>(
@@ -147,6 +149,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/itemScale", this->itemScale);
     settings.setValue("main/playSound", this->playSound);
     settings.setValue("main/themeMode", static_cast<int>(this->themeMode));
+    settings.setValue("main/cardStyle", static_cast<int>(this->cardStyle));
     settings.setValue("main/historyViewMode", static_cast<int>(this->historyViewMode));
     settings.setValue("ocr/backend", static_cast<int>(this->ocrBackend));
     settings.setValue("ocr/baiduApiKey", this->baiduOcrApiKey);
@@ -168,6 +171,18 @@ MPasteSettings::ActivationLayout MPasteSettings::getActivationLayout() const {
 
 void MPasteSettings::setActivationLayout(MPasteSettings::ActivationLayout layout) {
     activationLayout = layout;
+}
+
+MPasteSettings::CardStyle MPasteSettings::getCardStyle() const {
+    return cardStyle;
+}
+
+void MPasteSettings::setCardStyle(MPasteSettings::CardStyle style) {
+    if (cardStyle == style) {
+        return;
+    }
+    cardStyle = style;
+    emit cardStyleChanged(cardStyle);
 }
 
 MPasteSettings::PasteShortcutMode MPasteSettings::getPasteShortcutMode() const {

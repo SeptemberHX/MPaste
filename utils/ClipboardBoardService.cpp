@@ -230,6 +230,7 @@ void ClipboardBoardService::refreshIndex() {
     waitForIndexRefresh();
     deferredLoadedItems_.clear();
     indexedItems_.clear();
+    indexReady_ = false;
     indexedFilePaths_.clear();
     pendingLoadFilePaths_.clear();
     {
@@ -314,6 +315,7 @@ void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBat
     waitForDeferredRead();
     deferredLoadedItems_.clear();
     indexedItems_.clear();
+    indexReady_ = false;
     indexedFilePaths_.clear();
     pendingLoadFilePaths_.clear();
     {
@@ -518,6 +520,8 @@ void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBat
                 }
                 guard->updateTotalItemCount(guard->indexedItems_.size());
                 emit guard->pendingCountChanged(guard->pendingLoadFilePaths_.size());
+                guard->indexReady_ = true;
+                emit guard->indexReady();
 
                 if (!earlyBatchPosted) {
                     // Nothing was streamed yet — load the first batch now.
@@ -710,6 +714,19 @@ bool ClipboardBoardService::containsFingerprint(const QByteArray &fingerprint) c
         }
     }
     return false;
+}
+
+const ClipboardBoardService::IndexedItemMeta *ClipboardBoardService::indexedItemForFingerprint(
+    const QByteArray &fingerprint) const {
+    if (fingerprint.isEmpty()) {
+        return nullptr;
+    }
+    for (const auto &entry : indexedItems_) {
+        if (entry.fingerprint == fingerprint) {
+            return &entry;
+        }
+    }
+    return nullptr;
 }
 
 // --- Index mutation ---

@@ -17,6 +17,7 @@
 #include <QQueue>
 #include <QSet>
 #include <QSize>
+#include <QDate>
 #include <QStyledItemDelegate>
 #include <QString>
 #include <QThreadPool>
@@ -80,6 +81,10 @@ public:
     void setHoverGlow(const QPersistentModelIndex &entering, qreal enteringLevel,
                       const QPersistentModelIndex &leaving, qreal leavingLevel);
     qreal hoverGlowLevel(const QModelIndex &index) const;
+    // The copy day an item belongs to (invalid for pinned items), and the extra
+    // room before a card that opens a new day, where the day's divider goes.
+    static QDate dayGroup(const QModelIndex &index);
+    static int dayGroupLead(const QModelIndex &index, int scale);
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 

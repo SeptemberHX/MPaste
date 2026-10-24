@@ -153,6 +153,11 @@ public:
                                                                   bool includeThumbnail = false);
     QSet<QByteArray> loadAllFingerprints();
     bool containsFingerprint(const QByteArray &fingerprint) const;
+    // Whether the saved history has been indexed since the last (re)load, so
+    // fingerprint lookups can tell new content from content already saved.
+    bool isIndexReady() const { return indexReady_; }
+    // The indexed entry holding this content, or nullptr.
+    const IndexedItemMeta *indexedItemForFingerprint(const QByteArray &fingerprint) const;
     const QList<IndexedItemMeta> &indexedItemsMeta() const { return indexedItems_; }
     void notifyItemAdded();
     bool moveIndexedItemToFront(const QString &name);
@@ -173,6 +178,7 @@ signals:
     void totalItemCountChanged(int total);
     void pendingCountChanged(int pending);
     void deferredLoadCompleted();
+    void indexReady();
 
 private slots:
     void continueDeferredLoad();
@@ -206,6 +212,7 @@ private:
     mutable QMutex failedFullLoadMutex_;
     mutable QReadWriteLock indexLock_;
     QList<IndexedItemMeta> indexedItems_;
+    bool indexReady_ = false;
     QStringList indexedFilePaths_;
     QStringList pendingLoadFilePaths_;
     QList<QPair<QString, QByteArray>> deferredLoadedItems_;

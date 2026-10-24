@@ -7,6 +7,7 @@
 #include <QColor>
 #include <QElapsedTimer>
 #include <QListView>
+#include <functional>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QWidget>
@@ -164,6 +165,9 @@ public:
         updateGeometries();
     }
 
+    // Painted under the cards on every repaint of the viewport (group dividers).
+    void setUnderlayPainter(std::function<void(QPainter &)> painter) { underlayPainter_ = std::move(painter); }
+
     // Allow the next scrollTo call to go through.
     void setExplicitScrollTo(bool allow) { explicitScrollTo_ = allow; }
 
@@ -194,6 +198,11 @@ protected:
 
         QElapsedTimer paintTimer;
         paintTimer.start();
+        if (underlayPainter_) {
+            QPainter underlay(viewport());
+            underlay.setClipRegion(event->region());
+            underlayPainter_(underlay);
+        }
         QListView::paintEvent(event);
         const qint64 paintMs = paintTimer.elapsed();
 
@@ -242,6 +251,7 @@ private:
     int jank20Count_ = 0;
     int jank33Count_ = 0;
     bool explicitScrollTo_ = false;
+    std::function<void(QPainter &)> underlayPainter_;
 };
 
 #endif // BOARDVIEWWIDGETS_H
