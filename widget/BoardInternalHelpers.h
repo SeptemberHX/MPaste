@@ -1,5 +1,5 @@
 // input: Depends on Qt, ClipboardItem, ThemeManager.
-// output: Compact themed menus with native backdrop blur when supported and translucent tint fallback.
+// output: Compact themed menus with native backdrop blur when supported and translucent tint fallback; menus the desktop style draws (ubuntu-tools Yaru) are left to it.
 // pos: Internal header -- not part of the public API, only included by BoardXxx.cpp and ScrollItemsWidgetMV.cpp.
 #ifndef BOARDINTERNALHELPERS_H
 #define BOARDINTERNALHELPERS_H
@@ -44,6 +44,16 @@ inline void applyMenuTheme(QMenu *menu) {
     if (!menu) {
         return;
     }
+    // ubuntu-tools' Yaru style draws menus as cards over the shell's own glass. That
+    // glass is decided per process and inset to Yaru's card, so a Fusion menu with
+    // our blur on top got a second, misplaced pane. Leave such menus to the desktop:
+    // its font and palette too (the style reads the palette when it polishes).
+    if (ThemeManager::instance()->desktopStyleDrawsMenus()) {
+        if (!menu->testAttribute(Qt::WA_WState_Polished))
+            menu->setPalette(ThemeManager::instance()->systemPalette());
+        return;
+    }
+
     const bool dark = ThemeManager::instance()->isDark();
     QFont font = QApplication::font();
     font.setPixelSize(13);

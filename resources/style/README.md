@@ -18,6 +18,7 @@ update: 修改本目录文件时，同步更新本 README。
 
 - `defaultStyle.qss`：应用默认样式表。
 - `darkStyle.qss`：深色主题叠加样式，用于覆写默认外观。
+- `menuStyle.qss`：菜单样式，在 `defaultStyle.qss` 的 `/* @menuStyle.qss */` 处原位插入；桌面 Qt 样式自己绘制菜单时（ubuntu-tools 的 Yaru）不插入，菜单交给系统样式。
 - `README.md`：当前目录说明文档。
 
 ## 维护约定

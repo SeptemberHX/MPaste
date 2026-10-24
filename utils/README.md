@@ -36,6 +36,7 @@ update: 修改本目录文件时，同步更新本 README。
 ## Recent Notes
 - ThemeManager now centralizes app-wide theme switching, palette updates, and QSS token resolution.
 - ThemeManager now emits integer-alpha `rgba(...)` tokens for QSS instead of float-alpha forms, reducing Qt stylesheet parse failures on Windows.
+- ThemeManager leaves menus to a desktop Qt style that draws them (ubuntu-tools' Yaru): no MPaste menu rules or palette, and the stylesheet qt5ct/qt6ct prepend is kept across theme changes.
 
 - `OpenGraphFetcher` now tracks whether a fetched image is a preview or favicon to preserve link preview thumbnails.
 - `ClipboardMonitor` currently prints detailed clipboard capture diagnostics (`dataChanged`, settle retries, MIME snapshot, duplicate suppression, and app-event emission) to help trace repeated copy handling.

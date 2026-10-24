@@ -55,5 +55,6 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 
         <file>resources/style/defaultStyle.qss</file>
         <file>resources/style/darkStyle.qss</file>
+        <file>resources/style/menuStyle.qss</file>
     </qresource>
 </RCC>

@@ -1,5 +1,5 @@
 ﻿// input: Depends on ThemeManager.h, MPasteSettings, Qt application and style hints.
-// output: Applies theme palette and merged QSS to the application.
+// output: Applies theme palette and merged QSS to the application; leaves menus to a desktop style that draws them.
 // pos: utils layer theme service implementation.
 // update: If I change, update this header block and utils/README.md.
 #include "ThemeManager.h"
@@ -8,6 +8,7 @@
 #include <QGuiApplication>
 #include <QStyleHints>
 #include <QApplication>
+#include <QMenu>
 
 #include "MPasteSettings.h"
 
@@ -42,9 +43,20 @@ void ThemeManager::initialize() {
 
 void ThemeManager::applyTheme() {
     const bool dark = MPasteSettings::getInst()->isDarkTheme();
+    if (!systemPaletteSaved_) {
+        // The desktop's palette, before MPaste replaces it.
+        systemPalette_ = QGuiApplication::palette();
+        systemPaletteSaved_ = true;
+    }
     const QString style = mergedStyleSheet(dark);
     if (!style.isEmpty()) {
-        qApp->setStyleSheet(style);
+        // qt5ct/qt6ct prepend the desktop's sheet to ours once the event loop
+        // runs; keep that prefix when our part is replaced on a theme change.
+        const QString current = qApp->styleSheet();
+        const QString desktop = !appliedStyleSheet_.isEmpty() && current.endsWith(appliedStyleSheet_)
+            ? current.chopped(appliedStyleSheet_.size()) : QString();
+        qApp->setStyleSheet(desktop + style);
+        appliedStyleSheet_ = style;
     }
     qApp->setPalette(palette(dark));
 
@@ -58,6 +70,20 @@ void ThemeManager::applyTheme() {
 
 bool ThemeManager::isDark() const {
     return dark_;
+}
+
+bool ThemeManager::desktopStyleDrawsMenus() const {
+    if (desktopDrawsMenus_ < 0) {
+        // The style flags each menu it draws at polish; ask it about a probe.
+        QMenu probe;
+        probe.ensurePolished();
+        desktopDrawsMenus_ = probe.property("ubuntuToolsYaruDrawn").toBool() ? 1 : 0;
+    }
+    return desktopDrawsMenus_ == 1;
+}
+
+QPalette ThemeManager::systemPalette() const {
+    return systemPaletteSaved_ ? systemPalette_ : QGuiApplication::palette();
 }
 
 QPalette ThemeManager::palette(bool dark) const {
@@ -84,6 +110,9 @@ QPalette ThemeManager::palette(bool dark) const {
 
 QString ThemeManager::mergedStyleSheet(bool dark) const {
     QString style = loadStyleFile(QStringLiteral(":/resources/resources/style/defaultStyle.qss"));
+    // A desktop style that draws menus brings their rules in its own sheet.
+    style.replace(QStringLiteral("/* @menuStyle.qss */\n"), desktopStyleDrawsMenus()
+        ? QString() : loadStyleFile(QStringLiteral(":/resources/resources/style/menuStyle.qss")));
     if (dark) {
         const QString darkStyle = loadStyleFile(QStringLiteral(":/resources/resources/style/darkStyle.qss"));
         if (!darkStyle.isEmpty()) {

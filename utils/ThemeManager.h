@@ -22,6 +22,11 @@ public:
 
     QPalette palette(bool dark) const;
     QString mergedStyleSheet(bool dark) const;
+    /// True when the desktop's Qt style draws menus itself (ubuntu-tools' Yaru style,
+    /// which pairs them with the shell's glass); MPaste then leaves menus alone.
+    bool desktopStyleDrawsMenus() const;
+    /// The palette the desktop gave the application, before MPaste's own.
+    QPalette systemPalette() const;
 
 signals:
     void themeChanged(bool dark);
@@ -35,6 +40,10 @@ private:
 
     bool dark_ = false;
     bool initialized_ = false;
+    mutable int desktopDrawsMenus_ = -1;
+    QPalette systemPalette_;
+    bool systemPaletteSaved_ = false;
+    QString appliedStyleSheet_;
 };
 
 #endif // MPASTE_THEME_MANAGER_H

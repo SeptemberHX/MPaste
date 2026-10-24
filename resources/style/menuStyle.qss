@@ -1,0 +1,20 @@
+QMenu {
+    background-color: {{menu_bg}};
+    border: 1px solid {{menu_border}};
+    padding: 6px 6px;
+    color: {{menu_text}};
+}
+QMenu::item {
+    padding: 6px 26px 6px 24px;
+    border-radius: 6px;
+}
+QMenu::item:selected {
+    background-color: {{menu_selected_bg}};
+    color: {{menu_selected_text}};
+}
+QMenu::separator {
+    height: 1px;
+    background-color: {{menu_border}};
+    margin: 4px 8px;
+}
+
