@@ -136,6 +136,9 @@ def inspect(path):
         if version >= 6:
             pinned = struct.unpack('>?', f.read(1))[0]
             print(f"Pinned: {pinned}")
+            if version >= 7:
+                source_app = read_qstring(f)
+                print(f"SourceApp: {source_app if source_app else '(null)'}")
 
     content_type = read_uint32(f)
     type_names = {0:'All', 1:'Text', 2:'Link', 3:'Image', 4:'RichText', 5:'File', 6:'Color', 7:'Office'}

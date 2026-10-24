@@ -78,6 +78,9 @@ GnomeBridge::GnomeBridge() : QObject(qApp) {
                 SLOT(receiveClipboard(QVariantMap,uint)));
     bus.connect(service, path, iface, "SourceIcon", this,
                 SLOT(receiveSourceIcon(uint,QStringList,QString)));
+    // Companion v8+; older companions never send it and items keep no app name.
+    bus.connect(service, path, iface, "SourceApp", this,
+                SLOT(receiveSourceApp(uint,QString)));
     bus.connect(service, path, iface, "HotkeyPressed", this, SLOT(receiveHotkey()));
     auto *watcher = new QDBusServiceWatcher(service, bus,
         QDBusServiceWatcher::WatchForRegistration, this);
@@ -129,6 +132,14 @@ void GnomeBridge::receiveSourceIcon(uint window, const QStringList &names, const
     }
     if (pixmap.isNull()) sourceIcons_.remove(window);
     else sourceIcons_.insert(window, new QPixmap(pixmap));
+}
+QString GnomeBridge::sourceName(uint window) const {
+    if (const auto *name = sourceNames_.object(window)) return *name;
+    return QString();
+}
+void GnomeBridge::receiveSourceApp(uint window, const QString &name) {
+    if (name.isEmpty()) sourceNames_.remove(window);
+    else sourceNames_.insert(window, new QString(name));
 }
 void GnomeBridge::receiveHotkey() { emit hotkeyPressed(); }
 

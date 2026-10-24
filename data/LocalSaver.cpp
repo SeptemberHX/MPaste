@@ -36,6 +36,17 @@ constexpr quint32 kLocalSaverFlagsV5 = 0;
 constexpr quint32 kLocalSaverVersionV6 = 6;
 const QString kLocalSaverMagicV6 = QStringLiteral("MPASTE_CLIP_V6");
 constexpr quint32 kLocalSaverFlagsV6 = 0;
+// V7 adds the source application's display name after `pinned`.
+constexpr quint32 kLocalSaverVersionV7 = 7;
+const QString kLocalSaverMagicV7 = QStringLiteral("MPASTE_CLIP_V7");
+constexpr quint32 kLocalSaverFlagsV7 = 0;
+
+bool isKnownFormat(const QString &magic, quint32 version) {
+    return (magic == kLocalSaverMagicV7 && version == kLocalSaverVersionV7)
+        || (magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
+        || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
+        || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4);
+}
 
 // Forward declaration — defined below the anonymous namespace.
 qreal maxThumbnailDevicePixelRatio();
@@ -100,10 +111,7 @@ ClipboardItem finalizeLoadedItem(const QPixmap &icon,
 bool readCurrentFormatPrefix(QDataStream &in, quint32 &flags, quint32 &version) {
     QString magic;
     in >> magic >> version >> flags;
-    return in.status() == QDataStream::Ok
-        && ((magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
-            || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
-            || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4));
+    return in.status() == QDataStream::Ok && isKnownFormat(magic, version);
 }
 
 struct CurrentFormatHeader {
@@ -115,6 +123,7 @@ struct CurrentFormatHeader {
     QString url;
     QString alias;
     bool pinned = false;
+    QString sourceApp;
     quint32 contentType = 0;
     QString normalizedText;
     QList<QUrl> normalizedUrls;
@@ -129,6 +138,9 @@ bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHead
         in >> header.alias;
         if (version >= kLocalSaverVersionV6) {
             in >> header.pinned;
+            if (version >= kLocalSaverVersionV7) {
+                in >> header.sourceApp;
+            }
         }
     }
     quint32 normalizedUrlCount = 0;
@@ -153,9 +165,9 @@ bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHead
 }
 
 qint64 writeCurrentFormatHeader(QDataStream &out, const CurrentFormatHeader &header, quint64 mimeDataOffsetPlaceholder = 0) {
-    out << kLocalSaverMagicV6 << kLocalSaverVersionV6 << kLocalSaverFlagsV6;
+    out << kLocalSaverMagicV7 << kLocalSaverVersionV7 << kLocalSaverFlagsV7;
     out << header.time << header.name << header.icon << header.favicon << header.title << header.url;
-    out << header.alias << header.pinned;
+    out << header.alias << header.pinned << header.sourceApp;
     out << header.contentType << header.normalizedText;
     out << quint32(header.normalizedUrls.size());
     for (const QUrl &url : header.normalizedUrls) {
@@ -178,10 +190,7 @@ bool isCurrentFormatDevice(QIODevice *device) {
     QString magic;
     quint32 version = 0;
     in >> magic >> version;
-    const bool isCurrent = in.status() == QDataStream::Ok
-        && ((magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
-            || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
-            || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4));
+    const bool isCurrent = in.status() == QDataStream::Ok && isKnownFormat(magic, version);
     device->seek(originalPos);
     return isCurrent;
 }
@@ -622,6 +631,7 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
                                             mimeData);
     if (!item.getName().isEmpty()) {
         item.setThumbnail(header.thumbnail);
+        item.setSourceApp(header.sourceApp);
     }
     return item;
 }
@@ -676,6 +686,7 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
     header.url = item.getUrl();
     header.alias = item.getAlias();
     header.pinned = item.isPinned();
+    header.sourceApp = item.getSourceApp();
     header.contentType = quint32(item.getContentType());
     header.normalizedText = item.getNormalizedText();
     header.normalizedUrls = item.getNormalizedUrls();
@@ -754,9 +765,7 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
     quint32 version = 0;
     quint32 flags = 0;
     in >> magic >> version >> flags;
-    const bool isCurrent = (magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
-        || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
-        || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4);
+    const bool isCurrent = isKnownFormat(magic, version);
     if (!isCurrent || in.status() != QDataStream::Ok) {
         qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
                     << "reason=invalid format or stream error, status=" << in.status();
@@ -919,9 +928,7 @@ bool LocalSaver::updateTimestamp(const QString &filePath, const QDateTime &time,
     quint32 version = 0, flags = 0;
     QString magic;
     in >> magic >> version >> flags;
-    const bool isCurrent = (magic == kLocalSaverMagicV6 && version == kLocalSaverVersionV6)
-        || (magic == kLocalSaverMagicV5 && version == kLocalSaverVersionV5)
-        || (magic == kLocalSaverMagicV4 && version == kLocalSaverVersionV4);
+    const bool isCurrent = isKnownFormat(magic, version);
     if (!isCurrent || in.status() != QDataStream::Ok) {
         return false;
     }
@@ -1037,6 +1044,7 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
     item.setUrl(header.url);
     item.setAlias(header.alias);
     item.setPinned(header.pinned);
+    item.setSourceApp(header.sourceApp);
     {
         constexpr int kMaxFaviconSize = 64;
         QPixmap fav = header.favicon;
@@ -1203,6 +1211,7 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     const QString savedUrl = item.getUrl();
     const QString savedAlias = item.getAlias();
     const bool savedPinned = item.isPinned();
+    const QString savedSourceApp = item.getSourceApp();
     const QPixmap savedFavicon = item.getFavicon();
     const QPixmap savedThumbnail = item.thumbnail();
     const QByteArray savedFingerprint = item.fingerprint();
@@ -1223,6 +1232,7 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     item.setUrl(savedUrl);
     item.setAlias(savedAlias);
     item.setPinned(savedPinned);
+    item.setSourceApp(savedSourceApp);
     item.setFavicon(savedFavicon);
     item.setThumbnail(savedThumbnail);
     item.setFingerprintCache(savedFingerprint);

@@ -42,7 +42,8 @@ public:
         TimeRole,
         ImageSizeRole,
         ColorRole,
-        NameRole
+        NameRole,
+        SourceAppRole
     };
 
     struct Entry {

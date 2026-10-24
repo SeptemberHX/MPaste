@@ -14,6 +14,7 @@
 #include "utils/IconResolver.h"
 #include <QShowEvent>
 #include <QMouseEvent>
+#include <QWindow>
 #include <QPainter>
 #include <QPainterPath>
 #include <QGridLayout>
@@ -632,6 +633,14 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         grid->addWidget(pasteShortcutLabel_, 12, 0);
         grid->addWidget(pasteShortcutCombo_, 12, 1, Qt::AlignRight | Qt::AlignVCenter);
 
+        activationLayoutLabel_ = new QLabel(uiText("Opens", QStringLiteral("唤出形态")), this);
+        activationLayoutLabel_->setMinimumHeight(44);
+        activationLayoutCombo_ = new QComboBox(this);
+        activationLayoutCombo_->setMinimumSize(QSize(140, 32));
+        activationLayoutCombo_->setMaximumHeight(32);
+        activationLayoutCombo_->addItem(uiText("Bottom panel", QStringLiteral("底部面板")), static_cast<int>(MPasteSettings::LayoutPanel));
+        activationLayoutCombo_->addItem(uiText("Stack by the caret", QStringLiteral("光标旁堆栈")), static_cast<int>(MPasteSettings::LayoutStack));
+
         auto *retentionWidget = new QWidget(this);
         auto *retentionLayout = new QHBoxLayout(retentionWidget);
         retentionLayout->setContentsMargins(0, 0, 0, 0);
@@ -723,6 +732,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         themeCombo_->setMaximumHeight(36);
         pasteShortcutCombo_->setMinimumHeight(36);
         pasteShortcutCombo_->setMaximumHeight(36);
+        activationLayoutCombo_->setMinimumHeight(36);
+        activationLayoutCombo_->setMaximumHeight(36);
         retentionUnitCombo_->setMinimumHeight(36);
         retentionUnitCombo_->setMaximumHeight(36);
         ui->daySpinBox->setMinimumHeight(36);
@@ -835,8 +846,10 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             auto *g = makeSettingsGrid();
             g->addWidget(ui->label_4, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
             g->addWidget(ui->shortcutEdit, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
-            g->addWidget(pasteShortcutLabel_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            g->addWidget(pasteShortcutCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(activationLayoutLabel_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(activationLayoutCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(pasteShortcutLabel_, 2, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(pasteShortcutCombo_, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
             sLayout->addWidget(makeCard(g));
         }
 
@@ -994,6 +1007,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     if (themeCombo_) connect(themeCombo_, &QComboBox::currentIndexChanged, this, save);
     if (retentionUnitCombo_) connect(retentionUnitCombo_, &QComboBox::currentIndexChanged, this, save);
     if (pasteShortcutCombo_) connect(pasteShortcutCombo_, &QComboBox::currentIndexChanged, this, save);
+    if (activationLayoutCombo_) connect(activationLayoutCombo_, &QComboBox::currentIndexChanged, this, save);
     if (ocrBackendCombo_) connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, save);
     if (autoOcrSwitch_) connect(autoOcrSwitch_, &ToggleSwitch::toggled, this, save);
     connect(ui->daySpinBox, &QSpinBox::valueChanged, this, save);
@@ -1020,6 +1034,12 @@ void MPasteSettingsWidget::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton) {
         // Only drag from the top 42px (title bar area)
         if (event->position().toPoint().y() <= 42) {
+            // Wayland ignores move(); the compositor drags the window instead.
+            if (QGuiApplication::platformName().startsWith(QStringLiteral("wayland"))
+                    && windowHandle() && windowHandle()->startSystemMove()) {
+                event->accept();
+                return;
+            }
             dragPos_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
         }
         event->accept();
@@ -1059,6 +1079,10 @@ void MPasteSettingsWidget::loadSettings()
         retentionUnitCombo_->setCurrentIndex(index >= 0 ? index : 0);
     }
     ui->shortcutEdit->setKeySequence(QKeySequence(settings->getShortcutStr()));
+    if (activationLayoutCombo_) {
+        const int index = activationLayoutCombo_->findData(static_cast<int>(settings->getActivationLayout()));
+        activationLayoutCombo_->setCurrentIndex(index >= 0 ? index : 0);
+    }
     if (pasteShortcutCombo_) {
         const int index = pasteShortcutCombo_->findData(static_cast<int>(settings->getPasteShortcutMode()));
         pasteShortcutCombo_->setCurrentIndex(index >= 0 ? index : 0);
@@ -1133,6 +1157,9 @@ void MPasteSettingsWidget::saveAllSettings()
         }
     }
 
+    if (activationLayoutCombo_) {
+        settings->setActivationLayout(static_cast<MPasteSettings::ActivationLayout>(activationLayoutCombo_->currentData().toInt()));
+    }
     if (pasteShortcutCombo_) {
         settings->setPasteShortcutMode(static_cast<MPasteSettings::PasteShortcutMode>(pasteShortcutCombo_->currentData().toInt()));
     }

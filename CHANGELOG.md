@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Quick paste stack
+
+- New activation layout (Settings → Shortcuts → Opens): the hotkey opens a compact stack of the nine most recent items beside the text caret instead of the bottom panel. `1`–`9` paste, `Shift` pastes plain text, typing filters, `Tab` opens the full panel, `Esc` closes.
+- Placement: GNOME Wayland via the companion (v8) from GNOME's input method or ubuntu-tools' kimpanel caret; Windows from the Win32 caret; otherwise at the pointer.
+- Items now record the source application's name, shown as "app · time · type". The history format is `.mpaste v7`; v4–v6 files remain readable, but older MPaste builds cannot read v7 files (relevant when a sync folder is shared with an older build).
+
+### Interface
+
+- Cards: one-line header with the app's colour at a shared saturation and lightness, body tinted from it; smaller default card (248×264) and type; selection is a ring outside the card; favourites show a star in the header; hovering lifts the card.
+- Text cards recognise colour values (swatch, hex and RGB), single web addresses (site first, path below) and one-line shell commands (monospace). File cards show the size and folder.
+- Empty clipboard, empty favourites, filters and searches without results now say so.
+- Top bar: steady layout while counts change; text that falls back to a font with a real medium weight when the UI font (e.g. Microsoft YaHei) has none.
+- Touchpad swipes in either direction follow the fingers and glide on after release.
+- Preview window shows the source app, type, copy time and size instead of the stored file name.
+- Settings window can be dragged and opens centred on GNOME Wayland (companion v7+).
+- Fix: rich-text previews no longer render white text in light mode under a dark platform palette.
+
 ## 0.7.5
 
 ### OCR

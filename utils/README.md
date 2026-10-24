@@ -87,3 +87,6 @@ update: 修改本目录文件时，同步更新本 README。
 - 在 GNOME Wayland 会话内使用 XWayland 预览时，热键仍由 GNOME 管理。`GnomeBridge` 在扩展未加载时创建独立的 MPaste 系统自定义快捷键（保留其他条目），通过 `--toggle` 唤起已有实例；扩展接管时释放该临时绑定。
 
 - `GnomeBridge` receives directed `SourceIcon` metadata, resolves theme/file icons to a 64px pixmap, and bounds the cache to 64 entries. `PlatformRelated::getWindowIcon` uses that cache for captured Wayland items; the normal `.mpaste` writer persists the icon. Missing metadata from older extensions safely falls back to the default.
+- `PlatformRelated::getWindowAppName` 返回来源窗口的应用名（Wayland：扩展的 `SourceApp` 信号经 `GnomeBridge` 缓存；X11：WM_CLASS；Windows：exe 的 FileDescription），`ClipboardMonitor::sourcedItem` 在采集时写入条目。
+- `PlatformRelated::caretRect` 在 Windows 上通过 `GetGUIThreadInfo` 读取前台窗口的文本光标并换算为 Qt 逻辑坐标；Linux 返回空（Wayland 由扩展摆放，X11 退回鼠标位置）。
+- `MPasteSettings` 新增 `activationLayout`（`main/activationLayout`：0 面板，1 光标旁堆栈）。

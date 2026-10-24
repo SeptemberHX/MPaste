@@ -22,6 +22,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QMenu>
+#include <QFontDatabase>
 
 #include "MPasteWidget.h"
 #include "ui_MPasteWidget.h"
@@ -35,6 +36,35 @@
 // ── helpers (anonymous namespace) ──────────────────────────────────────
 
 namespace {
+
+bool familyHasMediumWeight(const QString &family) {
+    const QStringList styles = QFontDatabase::styles(family);
+    for (const QString &style : styles) {
+        const int weight = QFontDatabase::weight(family, style);
+        if (weight >= QFont::Medium && weight <= QFont::DemiBold) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The top bar relies on 500/600 weights. Fonts such as Microsoft YaHei only
+// ship Light/Regular/Bold, so those weights snap back to Regular and the bar
+// reads thin; borrow a CJK sans that has a real Medium in that case.
+QString topBarFontFamily() {
+    const QString uiFamily = QApplication::font().family();
+    if (familyHasMediumWeight(uiFamily)) {
+        return uiFamily;
+    }
+    const QStringList available = QFontDatabase::families();
+    for (const QString &family : {QStringLiteral("Noto Sans CJK SC"), QStringLiteral("Source Han Sans SC"),
+                                  QStringLiteral("Source Han Sans CN"), QStringLiteral("Noto Sans SC")}) {
+        if (available.contains(family, Qt::CaseInsensitive) && familyHasMediumWeight(family)) {
+            return family;
+        }
+    }
+    return uiFamily;
+}
 
 QString menuText(const char *source, const QString &zhFallback) {
     const QString translated = QObject::tr(source);
@@ -89,7 +119,11 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing, true);
 
         const QRectF rectF = QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0);
-        painter.setPen(QPen(border_, 2));
+        if (border_.alpha() > 0) {
+            painter.setPen(QPen(border_, 2));
+        } else {
+            painter.setPen(Qt::NoPen);
+        }
         painter.setBrush(background_);
         painter.drawRoundedRect(rectF, cornerRadius_, cornerRadius_);
 
@@ -159,7 +193,7 @@ void MPasteWidget::initUI() {
     ui_.boardWidgetMap.insert(ui_.staredWidget->getCategory(), ui_.staredWidget);
 
     ui_.layout = new QHBoxLayout(ui_.ui->itemsWidget);
-    ui_.layout->setContentsMargins(0, 10, 0, 0);
+    ui_.layout->setContentsMargins(0, 4, 0, 0);
     ui_.layout->setSpacing(0);
     ui_.layout->addWidget(ui_.clipboardWidget);
     ui_.layout->addWidget(ui_.staredWidget);
@@ -205,13 +239,14 @@ void MPasteWidget::initUI() {
     ui_.pageComboBox->setCurrentIndex(0);
 
     ui_.pageNumberLabel = new QLabel(QStringLiteral("1"), ui_.pageSelectorWidget);
-    ui_.pageNumberLabel->setAlignment(Qt::AlignCenter);
+    // Fixed-width halves meeting at the slash: digits grow outward, nothing shifts.
+    ui_.pageNumberLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     ui_.pageNumberLabel->setCursor(Qt::PointingHandCursor);
     ui_.pageNumberLabel->setFixedWidth(28);
     ui_.pageNumberLabel->installEventFilter(this);
 
     ui_.pageTotalLabel = new QLabel(QStringLiteral("/ 1"), ui_.pageSelectorWidget);
-    ui_.pageTotalLabel->setAlignment(Qt::AlignCenter);
+    ui_.pageTotalLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     ui_.pageTotalLabel->setFixedWidth(36);
 
     ui_.pageSuffixLabel = new QLabel(QStringLiteral("\u9875"), ui_.pageSelectorWidget);
@@ -222,6 +257,9 @@ void MPasteWidget::initUI() {
     pageLayout->addWidget(ui_.pageNumberLabel);
     pageLayout->addWidget(ui_.pageTotalLabel);
     pageLayout->addWidget(ui_.pageSuffixLabel);
+    // "1 / 3": the 第…页 frame was Chinese in every locale.
+    ui_.pagePrefixLabel->hide();
+    ui_.pageSuffixLabel->hide();
     ui_.pageSelectorWidget->setFixedWidth(110);
 
     if (ui_.ui->horizontalLayout) {
@@ -230,6 +268,20 @@ void MPasteWidget::initUI() {
                                                ui_.pageSelectorWidget);
     }
     ui_.ui->countArea->setFixedWidth(72);
+
+    const QString chromeFamily = topBarFontFamily();
+    QList<QWidget *> chromeWidgets{ui_.ui->countArea, ui_.pageNumberLabel, ui_.pageTotalLabel};
+    for (QToolButton *button : ui_.ui->clipboardBtnWidget->findChildren<QToolButton *>()) {
+        chromeWidgets << button;
+    }
+    for (QToolButton *button : ui_.ui->typeBtnWidget->findChildren<QToolButton *>()) {
+        chromeWidgets << button;
+    }
+    for (QWidget *widget : chromeWidgets) {
+        QFont font = widget->font();
+        font.setFamily(chromeFamily);
+        widget->setFont(font);
+    }
 
     applyScale(MPasteSettings::getInst()->getItemScale());
 
@@ -527,12 +579,12 @@ void MPasteWidget::applyScale(int scale) {
     updatePageSelectorStyle();
 
     if (ui_.layout) {
-        ui_.layout->setContentsMargins(0, qMax(6, 10 * scale / 100), 0, 0);
+        ui_.layout->setContentsMargins(0, qMax(3, 4 * scale / 100), 0, 0);
     }
 
     const int newHeight = ui_.ui->widget->height()
         + ui_.ui->itemsWidget->sizeHint().height()
-        + qMax(6, 10 * scale / 100)
+        + qMax(3, 4 * scale / 100)
         + qMax(1, scale / 20);
     setFixedHeight(newHeight);
 
@@ -584,30 +636,32 @@ void MPasteWidget::updatePageSelector() {
     }
     ui_.pageComboBox->setCurrentIndex(qBound(0, (currentPage > 0 ? currentPage : 1) - 1, clampedTotalPages - 1));
     ui_.pageComboBox->blockSignals(false);
-    ui_.pageTotalLabel->setText(QStringLiteral("/ %1").arg(totalPages));
+    // Clamped like the current page: an unloaded board reads "1 / 1", never "/ 0".
+    ui_.pageTotalLabel->setText(QStringLiteral("/ %1").arg(clampedTotalPages));
 
     const int displayPage = qBound(1, currentPage > 0 ? currentPage : 1, clampedTotalPages);
     ui_.pageNumberLabel->setText(QString::number(displayPage));
 
+    // Room for three digits whatever the page count, so nothing beside it shifts as it changes.
+    const QString digitsReserve = QString(qMax(3, int(QString::number(clampedTotalPages).size())), QLatin1Char('8'));
     const QFontMetrics labelMetrics(ui_.pageNumberLabel->font());
-    const int labelWidth = qMax(20, labelMetrics.horizontalAdvance(QString::number(clampedTotalPages)) + 8);
+    const int labelWidth = qMax(20, labelMetrics.horizontalAdvance(digitsReserve) + 8);
     ui_.pageNumberLabel->setFixedWidth(labelWidth);
 
     const QFontMetrics totalMetrics(ui_.pageTotalLabel->font());
-    const int totalWidth = qMax(26, totalMetrics.horizontalAdvance(QStringLiteral("/ %1").arg(totalPages)) + 4);
+    const int totalWidth = qMax(26, totalMetrics.horizontalAdvance(QStringLiteral("/ ") + digitsReserve) + 4);
     ui_.pageTotalLabel->setFixedWidth(totalWidth);
 
     if (ui_.pageSelectorWidget && ui_.pageSelectorWidget->layout()) {
         const QMargins margins = ui_.pageSelectorWidget->layout()->contentsMargins();
         const int spacing = ui_.pageSelectorWidget->layout()->spacing();
+        auto shown = [spacing](QWidget *label) { return label->isHidden() ? 0 : label->width() + spacing; };
         ui_.pageSelectorWidget->setFixedWidth(margins.left()
-                                              + ui_.pagePrefixLabel->width()
-                                              + spacing
+                                              + shown(ui_.pagePrefixLabel)
                                               + labelWidth
                                               + spacing
                                               + totalWidth
-                                              + spacing
-                                              + ui_.pageSuffixLabel->width()
+                                              + shown(ui_.pageSuffixLabel)
                                               + margins.right());
     }
 }
@@ -618,34 +672,27 @@ void MPasteWidget::updatePageSelectorStyle() {
     }
 
     const int height = qMax(24, ui_.pageSelectorWidget->height());
-    const int radius = qMax(12, height / 2);
-    const QString background = darkTheme_
-        ? QStringLiteral("rgba(28, 34, 44, 235)")
-        : QStringLiteral("rgba(255, 255, 255, 242)");
-    const QString border = QStringLiteral("#4A90E2");
     const QString text = darkTheme_ ? QStringLiteral("#F2F6FB") : QStringLiteral("#2C3E50");
-    const QString divider = darkTheme_ ? QStringLiteral("rgba(242, 246, 251, 110)")
-                                       : QStringLiteral("rgba(44, 62, 80, 96)");
     if (auto *pill = static_cast<PageSelectorPill *>(ui_.pageSelectorWidget)) {
+        // The same quiet base as the tab groups beside it.
         ui_.pageSelectorWidget->layout()->activate();
-        pill->setColors(QColor(background), QColor(border), QColor(divider));
-        pill->setCornerRadius(radius);
-        pill->setDividerInset(3);
-        pill->setDividerPosition(ui_.pageNumberLabel->geometry().right() + 4);
-        pill->setPaintFrame(false);
+        pill->setColors(darkTheme_ ? QColor(255, 255, 255, 15) : QColor(0, 0, 0, 10), Qt::transparent, Qt::transparent);
+        pill->setCornerRadius(qMin(9, height / 2));
+        pill->setDividerPosition(0);
+        pill->setPaintFrame(true);
     }
     const QString hoverBg = darkTheme_ ? QStringLiteral("rgba(255, 255, 255, 22)") : QStringLiteral("rgba(0, 0, 0, 12)");
     const QString hoverColor = darkTheme_ ? QStringLiteral("#4A90E2") : QStringLiteral("#2A6FC9");
     ui_.pageNumberLabel->setStyleSheet(QStringLiteral(
-        "QLabel { color: %1; font-size: 13px; font-weight: 700; background: transparent;"
-        " border-radius: 4px; padding: 1px 3px; }"
+        "QLabel { color: %1; font-size: 13px; font-weight: 600; background: transparent;"
+        " border-radius: 5px; padding: 1px 3px; }"
         "QLabel:hover { color: %2; background: %3; }").arg(text, hoverColor, hoverBg));
     const QString secondary = darkTheme_ ? QStringLiteral("rgba(242, 246, 251, 185)")
                                          : QStringLiteral("rgba(44, 62, 80, 185)");
     ui_.pagePrefixLabel->setStyleSheet(QStringLiteral(
         "QLabel { color: %1; font-size: 13px; font-weight: 600; background: transparent; }").arg(secondary));
     ui_.pageTotalLabel->setStyleSheet(QStringLiteral(
-        "QLabel { color: %1; font-size: 13px; font-weight: 700; background: transparent; }").arg(secondary));
+        "QLabel { color: %1; font-size: 13px; font-weight: 500; background: transparent; }").arg(secondary));
     ui_.pageSuffixLabel->setStyleSheet(QStringLiteral(
         "QLabel { color: %1; font-size: 13px; font-weight: 600; background: transparent; }").arg(secondary));
 }

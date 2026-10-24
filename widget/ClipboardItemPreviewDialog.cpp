@@ -468,7 +468,9 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
 
     ui_.browser = new OfflineTextBrowser(this);
     QFont previewFont = ui_.browser->font();
+#ifdef Q_OS_WIN
     previewFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
+#endif
     previewFont.setPointSize(kPreviewBodyFontSize);
     ui_.browser->setFont(previewFont);
     ui_.browser->document()->setDefaultFont(previewFont);
@@ -536,12 +538,37 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
 
     const ContentType contentType = item.getContentType();
 
-    ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Preview"), QStringLiteral("剪贴板预览")));
-    ui_.subtitleLabel->setText(item.getName().isEmpty()
-        ? uiText(QStringLiteral("Read-only preview"), QStringLiteral("只读预览"))
-        : QStringLiteral("%1 | %2")
-              .arg(uiText(QStringLiteral("Read-only preview"), QStringLiteral("只读预览")))
-              .arg(item.getName()));
+    // The card's own name, then what it is and when it was copied (the stored file name means nothing to people).
+    const QString alias = item.getAlias().trimmed();
+    ui_.titleLabel->setText(!alias.isEmpty() ? alias
+        : (!item.getSourceApp().isEmpty() ? item.getSourceApp()
+                                          : uiText(QStringLiteral("Clipboard Preview"), QStringLiteral("剪贴板预览"))));
+    QStringList facts;
+    if (!alias.isEmpty() && !item.getSourceApp().isEmpty()) {
+        facts << item.getSourceApp();
+    }
+    switch (contentType) {
+        case Text: facts << uiText(QStringLiteral("Plain text"), QStringLiteral("纯文本")); break;
+        case RichText: facts << uiText(QStringLiteral("Rich text"), QStringLiteral("富文本")); break;
+        case Link: facts << uiText(QStringLiteral("Link"), QStringLiteral("链接")); break;
+        case Image: facts << uiText(QStringLiteral("Image"), QStringLiteral("图片")); break;
+        case File: facts << uiText(QStringLiteral("File"), QStringLiteral("文件")); break;
+        case Color: facts << uiText(QStringLiteral("Color"), QStringLiteral("颜色")); break;
+        case Office: facts << QStringLiteral("Office"); break;
+        default: break;
+    }
+    if (item.getTime().isValid()) {
+        facts << QLocale().toString(item.getTime(), QLocale::ShortFormat);
+    }
+    const QSize pixelSize = item.getImagePixelSize();
+    if ((contentType == Image || contentType == Office) && pixelSize.isValid()) {
+        facts << QStringLiteral("%1 \u00D7 %2").arg(pixelSize.width()).arg(pixelSize.height());
+    } else if (contentType == Text || contentType == RichText) {
+        facts << uiText(QStringLiteral("%1 characters"), QStringLiteral("%1 字符")).arg(item.getNormalizedText().size());
+    } else if (contentType == File && item.getNormalizedUrls().size() > 1) {
+        facts << uiText(QStringLiteral("%1 files"), QStringLiteral("%1 个文件")).arg(item.getNormalizedUrls().size());
+    }
+    ui_.subtitleLabel->setText(facts.join(QStringLiteral(" \u00B7 ")));
 
     ui_.browser->clear();
     ui_.browser->document()->clear();

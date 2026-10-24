@@ -46,6 +46,7 @@
 #include "ui_MPasteWidget.h"
 #include "BoardInternalHelpers.h"
 #include "ClipboardAppController.h"
+#include "QuickPasteStack.h"
 #include "ClipboardCardDelegate.h"
 #include "utils/PlatformRelated.h"
 #ifdef Q_OS_WIN
@@ -188,7 +189,36 @@ MPasteWidget::~MPasteWidget() {
 #ifdef Q_OS_WIN
     removeAltDigitHook();
 #endif
+    delete quickStack_;
     delete ui_.ui;
+}
+
+void MPasteWidget::showQuickStack() {
+    if (!quickStack_) {
+        quickStack_ = new QuickPasteStack(ui_.clipboardWidget->boardServiceRef());
+        connect(quickStack_, &QuickPasteStack::pasteRequested, this, &MPasteWidget::pasteItem);
+        connect(quickStack_, &QuickPasteStack::expandRequested, this, &MPasteWidget::expandToPanelRequested);
+    }
+    quickStack_->popup();
+}
+
+void MPasteWidget::hideQuickStack() {
+    if (quickStack_) quickStack_->hide();
+}
+
+bool MPasteWidget::isQuickStackVisible() const {
+    return quickStack_ && quickStack_->isVisible();
+}
+
+void MPasteWidget::pasteItem(const ClipboardItem &item, bool plainText) {
+    const WId previousWId = PlatformRelated::previousActiveWindow();
+    // Publish the selection before the stack's surface loses focus (see setClipboard).
+    if (!controller_->setClipboard(item, plainText)) return;
+    hideQuickStack();
+    qInfo().noquote() << QStringLiteral("[quick-paste] itemName=%1 plainText=%2 previousWId=%3")
+        .arg(item.getName()).arg(plainText).arg(reinterpret_cast<quintptr>(previousWId));
+    controller_->pasteToTarget(previousWId);
+    ui_.clipboardWidget->moveItemByNameToFirst(item.getName());
 }
 
 void MPasteWidget::initializeWidget() {

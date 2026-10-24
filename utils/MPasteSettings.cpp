@@ -117,6 +117,8 @@ void MPasteSettings::loadSettings() {
     this->saveDir = settings.value("main/saveDir", this->saveDir).toString();
     this->autoPaste = settings.value("main/autoPaste", this->autoPaste).toBool();
     this->pasteShortcutMode = static_cast<PasteShortcutMode>(settings.value("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode)).toInt());
+    this->activationLayout = settings.value("main/activationLayout", static_cast<int>(LayoutPanel)).toInt() == LayoutStack
+        ? LayoutStack : LayoutPanel;
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
     this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
@@ -140,6 +142,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("main/saveDir", this->saveDir);
     settings.setValue("main/autoPaste", this->autoPaste);
     settings.setValue("main/pasteShortcutMode", static_cast<int>(this->pasteShortcutMode));
+    settings.setValue("main/activationLayout", static_cast<int>(this->activationLayout));
     settings.setValue("main/shortcut", this->shortcutStr);
     settings.setValue("main/itemScale", this->itemScale);
     settings.setValue("main/playSound", this->playSound);
@@ -157,6 +160,14 @@ bool MPasteSettings::isAutoPaste() const {
 
 void MPasteSettings::setAutoPaste(bool autoPaste) {
     MPasteSettings::autoPaste = autoPaste;
+}
+
+MPasteSettings::ActivationLayout MPasteSettings::getActivationLayout() const {
+    return activationLayout;
+}
+
+void MPasteSettings::setActivationLayout(MPasteSettings::ActivationLayout layout) {
+    activationLayout = layout;
 }
 
 MPasteSettings::PasteShortcutMode MPasteSettings::getPasteShortcutMode() const {

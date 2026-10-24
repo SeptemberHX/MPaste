@@ -176,7 +176,8 @@ void ScrollItemsWidget::updateHoverFavoriteButton(bool favorite) {
     if (favorite) {
         hoverFavoriteBtn_->setIcon(QIcon(QStringLiteral(":/resources/resources/star_filled.svg")));
     } else {
-        hoverFavoriteBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("star_outline"), darkTheme_));
+        hoverFavoriteBtn_->setIcon(IconResolver::themedIcon(QStringLiteral("star_outline"),
+                                                            ThemeManager::instance()->isDark()));
     }
     hoverFavoriteBtn_->setToolTip(favoriteActionLabel(favorite));
 }
@@ -262,7 +263,7 @@ void ScrollItemsWidget::updateHoverActionBarPosition() {
 
     const int scale = MPasteSettings::getInst()->getItemScale();
     const QSize cardSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
-    const QRect cardRect(itemRect.topLeft(), cardSize);
+    const QRect cardRect(itemRect.topLeft() + cardOriginForScale(scale), cardSize);
     const QPoint hostTopLeft = viewport->mapTo(overlayHost, cardRect.topLeft());
     hoverActionBar_->adjustSize();
     if (overlayHost->width() <= 0 || overlayHost->height() <= 0

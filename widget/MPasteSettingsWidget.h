@@ -54,6 +54,8 @@ private:
     ToggleSwitch *autoStartSwitch_;
     QLabel *pasteShortcutLabel_ = nullptr;
     QComboBox *pasteShortcutCombo_ = nullptr;
+    QLabel *activationLayoutLabel_ = nullptr;
+    QComboBox *activationLayoutCombo_ = nullptr;
     QLabel *themeLabel_ = nullptr;
     QComboBox *themeCombo_ = nullptr;
     QComboBox *retentionUnitCombo_ = nullptr;

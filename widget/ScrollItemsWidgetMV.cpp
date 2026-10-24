@@ -13,11 +13,15 @@
 #include <QLabel>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
+#include <QCursor>
 #include <QScrollBar>
+#include <QVariantAnimation>
 #include <QScroller>
 #include <QShowEvent>
 #include <QGraphicsOpacityEffect>
 #include <QTimer>
+#include <QPainter>
+#include <QLocale>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -39,6 +43,32 @@
 #include "utils/IconResolver.h"
 
 using namespace BoardHelpers;
+
+namespace {
+
+QString emptyText(const char *source, const QString &zh) {
+    const QLocale locale = QLocale::system();
+    if (locale.language() == QLocale::Chinese) {
+        return zh;
+    }
+    return QString::fromUtf8(source);
+}
+
+QString typeNameForEmptyState(ContentType type) {
+    switch (type) {
+        case Text: return emptyText("text", QStringLiteral("文本"));
+        case Link: return emptyText("links", QStringLiteral("链接"));
+        case Image: return emptyText("images", QStringLiteral("图片"));
+        case Office: return QStringLiteral("Office");
+        case RichText: return emptyText("rich text", QStringLiteral("富文本"));
+        case File: return emptyText("files", QStringLiteral("文件"));
+        case Color: return emptyText("colors", QStringLiteral("颜色"));
+        case All: break;
+    }
+    return QString();
+}
+
+} // namespace
 
 ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &borderColor, QWidget *parent)
     : QWidget(parent),
@@ -103,10 +133,45 @@ ScrollItemsWidget::ScrollItemsWidget(const QString &category, const QString &bor
     listView_->setContextMenuPolicy(Qt::CustomContextMenu);
     listView_->setMouseTracking(true);
     listView_->setSpacing(qMax(6, 8 * scale / 100));
-    listView_->setGridSize(QSize(itemOuterSize.width() + listView_->spacing(), itemOuterSize.height()));
+    listView_->setGridSize(QSize(cardGridWidthForScale(scale, listView_->spacing()), itemOuterSize.height()));
     listView_->setStyleSheet(QStringLiteral("QListView { background: transparent; border: none; }"));
     listView_->setAttribute(Qt::WA_TranslucentBackground);
     listView_->viewport()->setAttribute(Qt::WA_TranslucentBackground);
+
+    emptyState_ = new QWidget(ui->viewHost);
+    emptyState_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    emptyState_->setAttribute(Qt::WA_TranslucentBackground);
+    {
+        auto *emptyLayout = new QVBoxLayout(emptyState_);
+        emptyLayout->setContentsMargins(0, 0, 0, 0);
+        emptyLayout->setSpacing(6);
+        emptyIcon_ = new QLabel(emptyState_);
+        emptyIcon_->setAlignment(Qt::AlignCenter);
+        emptyTitle_ = new QLabel(emptyState_);
+        emptyTitle_->setObjectName(QStringLiteral("emptyStateTitle"));
+        emptyTitle_->setAlignment(Qt::AlignCenter);
+        emptyHint_ = new QLabel(emptyState_);
+        emptyHint_->setObjectName(QStringLiteral("emptyStateHint"));
+        emptyHint_->setAlignment(Qt::AlignCenter);
+        emptyHint_->setWordWrap(true);
+        emptyLayout->addStretch(1);
+        emptyLayout->addWidget(emptyIcon_);
+        emptyLayout->addSpacing(4);
+        emptyLayout->addWidget(emptyTitle_);
+        emptyLayout->addWidget(emptyHint_);
+        emptyLayout->addStretch(1);
+    }
+    emptyState_->hide();
+    emptyStateTimer_ = new QTimer(this);
+    emptyStateTimer_->setSingleShot(true);
+    // Long enough for an async search to answer, so "no results" never flashes.
+    emptyStateTimer_->setInterval(220);
+    connect(emptyStateTimer_, &QTimer::timeout, this, &ScrollItemsWidget::showEmptyState);
+    for (auto signal : {&QAbstractItemModel::rowsInserted, &QAbstractItemModel::rowsRemoved}) {
+        connect(proxyModel_, signal, this, [this]() { updateEmptyState(); });
+    }
+    connect(proxyModel_, &QAbstractItemModel::modelReset, this, [this]() { updateEmptyState(); });
+    connect(proxyModel_, &QAbstractItemModel::layoutChanged, this, [this]() { updateEmptyState(); });
 
     loadingLabel_ = new QLabel(ui->viewHost);
     loadingLabel_->setObjectName(QStringLiteral("loadingOverlay"));
@@ -708,6 +773,7 @@ void ScrollItemsWidget::animateScrollTo(int targetValue) {
 
     scrollAnimation->stop();
     const int distance = qAbs(targetValue - scrollBar->value());
+    scrollAnimation->setEasingCurve(QEasingCurve::OutQuad);
     scrollAnimation->setDuration(qBound(28, 24 + distance / 12, 70));
     scrollAnimation->setStartValue(scrollBar->value());
     scrollAnimation->setEndValue(targetValue);
@@ -823,6 +889,81 @@ void ScrollItemsWidget::updateLoadingOverlay() {
         loadingLabel_->setGeometry(QRect(topLeft, labelSize));
         loadingLabel_->raise();
     }
+    updateEmptyState();
+}
+
+void ScrollItemsWidget::updateEmptyState() {
+    if (!emptyState_ || !proxyModel_) {
+        return;
+    }
+    const bool isLoading = boardService_ && (boardService_->hasPendingItems() || boardService_->deferredLoadActive());
+    const bool empty = proxyModel_->rowCount() == 0 && !isLoading;
+    if (!empty) {
+        emptyStateTimer_->stop();
+        emptyState_->hide();
+        return;
+    }
+    if (emptyState_->isVisible()) {
+        showEmptyState();   // refresh the wording for a new keyword or filter
+    } else if (!emptyStateTimer_->isActive()) {
+        emptyStateTimer_->start();
+    }
+}
+
+void ScrollItemsWidget::showEmptyState() {
+    if (!emptyState_ || !proxyModel_ || proxyModel_->rowCount() > 0 || !ui || !ui->viewHost) {
+        return;
+    }
+    const bool favorites = category == MPasteSettings::STAR_CATEGORY_NAME;
+    QString icon;
+    QString title;
+    QString hint;
+    if (!currentKeyword_.isEmpty()) {
+        icon = QStringLiteral("search");
+        title = emptyText("No matches for \u201C%1\u201D", QStringLiteral("没有找到\u201C%1\u201D"))
+                    .arg(currentKeyword_.left(40));
+        hint = emptyText("Try a different word, or clear the filter", QStringLiteral("换个关键词，或清除筛选再试"));
+    } else if (currentTypeFilter_ != All) {
+        icon = favorites ? QStringLiteral("star_outline") : QStringLiteral("text_plain");
+        title = emptyText("No %1 here yet", QStringLiteral("这里还没有%1")).arg(typeNameForEmptyState(currentTypeFilter_));
+        hint = emptyText("Switch to All to see everything", QStringLiteral("切换到\u201C全部\u201D查看所有内容"));
+    } else if (favorites) {
+        icon = QStringLiteral("star_outline");
+        title = emptyText("No favorites yet", QStringLiteral("还没有收藏"));
+        hint = emptyText("Hover a card and click the star to keep it here",
+                         QStringLiteral("悬停在卡片上，点星标即可收藏"));
+    } else {
+        icon = QStringLiteral("text_plain");
+        title = emptyText("Nothing copied yet", QStringLiteral("剪贴板还是空的"));
+        hint = emptyText("Copied text, images and files will show up here",
+                         QStringLiteral("复制的文本、图片和文件会出现在这里"));
+    }
+    const bool dark = ThemeManager::instance()->isDark();
+    const qreal dpr = devicePixelRatioF();
+    QPixmap glyph = IconResolver::themedIcon(icon, dark).pixmap(QSize(28, 28), dpr);
+    if (!glyph.isNull()) {
+        // A quiet glyph: the icon at reduced strength.
+        QPixmap faded(glyph.size());
+        faded.setDevicePixelRatio(glyph.devicePixelRatio());
+        faded.fill(Qt::transparent);
+        QPainter painter(&faded);
+        painter.setOpacity(0.55);
+        painter.drawPixmap(0, 0, glyph);
+        painter.end();
+        glyph = faded;
+    }
+    emptyIcon_->setPixmap(glyph);
+    emptyTitle_->setText(title);
+    emptyHint_->setText(hint);
+    emptyTitle_->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 14px; font-weight: 600; background: transparent; }")
+                                   .arg(dark ? QStringLiteral("rgba(236,238,242,215)") : QStringLiteral("rgba(44,62,80,220)")));
+    emptyHint_->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 12px; background: transparent; }")
+                                  .arg(dark ? QStringLiteral("rgba(236,238,242,130)") : QStringLiteral("rgba(44,62,80,140)")));
+    const QRect hostRect = ui->viewHost->rect();
+    const int width = qMin(hostRect.width(), 420);
+    emptyState_->setGeometry((hostRect.width() - width) / 2, 0, width, hostRect.height());
+    emptyState_->show();
+    emptyState_->raise();
 }
 
 void ScrollItemsWidget::updateEdgeFadeOverlays() {
@@ -1010,12 +1151,12 @@ void ScrollItemsWidget::filterByKeyword(const QString &keyword) {
     ++keywordSearchToken_;
     asyncKeywordMatchedNames_.clear();
     applyFilters();
-    startAsyncKeywordSearch();
+    startAsyncKeywordSearch();    updateEmptyState();
 }
 
 void ScrollItemsWidget::filterByType(ContentType type) {
     currentTypeFilter_ = type;
-    applyFilters();
+    applyFilters();    updateEmptyState();
 }
 
 QList<QModelIndex> ScrollItemsWidget::shortcutVisibleIndexes() const {
@@ -1146,7 +1287,7 @@ void ScrollItemsWidget::applyScale(int scale) {
     const QSize itemOuterSize = cardOuterSizeForScale(scale);
     const int spacing = qMax(6, 8 * scale / 100);
     listView_->setSpacing(spacing);
-    listView_->setGridSize(QSize(itemOuterSize.width() + spacing, itemOuterSize.height()));
+    listView_->setGridSize(QSize(cardGridWidthForScale(scale, spacing), itemOuterSize.height()));
 
     const int scrollbarHeight = qMax(12, listView_->horizontalScrollBar()->sizeHint().height());
     const int scrollHeight = itemOuterSize.height() + scrollbarHeight;
@@ -1450,14 +1591,14 @@ bool ScrollItemsWidget::handleWheelScroll(QWheelEvent *event) {
         return false;
     }
 
+    // A touchpad reports a gesture phase: track the fingers one to one, either
+    // swipe direction moving the row, and glide on once they lift.
+    if (event->phase() != Qt::NoScrollPhase) {
+        return handleTouchpadScroll(event, scrollBar);
+    }
+
     int delta = 0;
-    const QPoint pixelDelta = event->pixelDelta();
-    if (!pixelDelta.isNull()) {
-        if (qAbs(pixelDelta.x()) < qAbs(pixelDelta.y()) || pixelDelta.x() == 0) {
-            return false;
-        }
-        delta = qRound((-pixelDelta.x()) * 1.6);
-    } else {
+    {
         const QPoint angleDelta = event->angleDelta();
         const int dominantDelta = qAbs(angleDelta.x()) > qAbs(angleDelta.y()) ? angleDelta.x() : angleDelta.y();
         if (dominantDelta != 0) {
@@ -1470,6 +1611,92 @@ bool ScrollItemsWidget::handleWheelScroll(QWheelEvent *event) {
     }
 
     animateScrollTo(scrollBar->value() + delta);
+    event->accept();
+    return true;
+}
+
+void ScrollItemsWidget::setHoverGlowIndex(const QModelIndex &index, bool animated) {
+    if (!cardDelegate_ || !listView_ || QPersistentModelIndex(index) == hoverGlowIndex_) {
+        return;
+    }
+    hoverGlowPrevious_ = hoverGlowIndex_;
+    hoverGlowPreviousStart_ = cardDelegate_->hoverGlowLevel(hoverGlowPrevious_);
+    hoverGlowIndex_ = QPersistentModelIndex(index);
+
+    auto apply = [this](qreal progress) {
+        cardDelegate_->setHoverGlow(hoverGlowIndex_, progress, hoverGlowPrevious_, hoverGlowPreviousStart_ * (1.0 - progress));
+        for (const QPersistentModelIndex &glowing : {hoverGlowIndex_, hoverGlowPrevious_}) {
+            if (glowing.isValid()) {
+                listView_->viewport()->update(listView_->visualRect(glowing));
+            }
+        }
+    };
+    if (!hoverGlowAnimation_) {
+        hoverGlowAnimation_ = new QVariantAnimation(this);
+        hoverGlowAnimation_->setStartValue(0.0);
+        hoverGlowAnimation_->setEndValue(1.0);
+        hoverGlowAnimation_->setDuration(140);
+        hoverGlowAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+    }
+    hoverGlowAnimation_->stop();
+    hoverGlowAnimation_->disconnect(this);
+    if (!animated) {
+        apply(1.0);
+        return;
+    }
+    connect(hoverGlowAnimation_, &QVariantAnimation::valueChanged, this,
+            [apply](const QVariant &value) { apply(value.toReal()); });
+    apply(0.0);
+    hoverGlowAnimation_->start();
+}
+
+bool ScrollItemsWidget::handleTouchpadScroll(QWheelEvent *event, QScrollBar *scrollBar) {
+    const QPoint pixels = event->pixelDelta().isNull() ? event->angleDelta() / 4 : event->pixelDelta();
+    const int delta = -(qAbs(pixels.x()) >= qAbs(pixels.y()) ? pixels.x() : pixels.y());
+
+    switch (event->phase()) {
+    case Qt::ScrollBegin:
+        scrollAnimation->stop();
+        touchpadVelocity_ = 0.0;
+        touchpadClock_.restart();
+        break;
+    case Qt::ScrollUpdate: {
+        scrollAnimation->stop();
+        qint64 elapsed = 16;
+        if (touchpadClock_.isValid()) {
+            elapsed = touchpadClock_.restart();
+        } else {
+            touchpadClock_.start();
+        }
+        const qreal instant = delta / qreal(qMax<qint64>(1, elapsed));
+        // A pause before this event means the fingers had stopped: start over.
+        touchpadVelocity_ = elapsed > 80 ? instant : 0.6 * instant + 0.4 * touchpadVelocity_;
+        scrollBar->setValue(scrollBar->value() + delta);
+        break;
+    }
+    case Qt::ScrollEnd: {
+        const bool fingersStillAtEnd = touchpadClock_.isValid() && touchpadClock_.elapsed() > 60;
+        const qreal velocity = fingersStillAtEnd ? 0.0 : touchpadVelocity_;
+        touchpadVelocity_ = 0.0;
+        if (qAbs(velocity) > 0.2) {
+            // Exponential-like decay: travel v*tau, starting at the fingers' speed.
+            constexpr qreal tau = 325.0;
+            const int target = qBound(scrollBar->minimum(), scrollBar->value() + qRound(velocity * tau), scrollBar->maximum());
+            scrollAnimation->stop();
+            scrollAnimation->setEasingCurve(QEasingCurve::OutCubic);
+            scrollAnimation->setDuration(int(3 * tau));
+            scrollAnimation->setStartValue(scrollBar->value());
+            scrollAnimation->setEndValue(target);
+            scrollAnimation->start();
+        }
+        break;
+    }
+    default:
+        if (delta != 0) {
+            scrollBar->setValue(scrollBar->value() + delta);
+        }
+        break;
+    }
     event->accept();
     return true;
 }
@@ -1488,6 +1715,7 @@ void ScrollItemsWidget::showEvent(QShowEvent *event) {
 
 void ScrollItemsWidget::hideEvent(QHideEvent *event) {
     QWidget::hideEvent(event);
+    setHoverGlowIndex(QModelIndex(), false);
     hideHoverActionBar(false);
     if (boardService_) {
         boardService_->setVisibleHint(false);
@@ -1563,12 +1791,19 @@ bool ScrollItemsWidget::eventFilter(QObject *watched, QEvent *event) {
             }
         }
         const QModelIndex hoverIndex = listView_->indexAt(mouseEvent->pos());
+        setHoverGlowIndex(hoverIndex);
         updateHoverActionBar(hoverIndex);
         return QWidget::eventFilter(watched, event);
     }
 
     if ((watched == listView_ || watched == listView_->viewport())
         && (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave)) {
+        // Leaving for the hover bar keeps the card lit.
+        const bool ontoHoverBar = hoverActionBar_ && hoverActionBar_->isVisible()
+            && hoverActionBar_->rect().contains(hoverActionBar_->mapFromGlobal(QCursor::pos()));
+        if (!ontoHoverBar) {
+            setHoverGlowIndex(QModelIndex());
+        }
         if (hoverHideTimer_ && !hoverHideTimer_->isActive()) {
             hoverHideTimer_->start();
         }

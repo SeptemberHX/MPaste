@@ -30,46 +30,7 @@
 
 // ── anonymous-namespace helpers ────────────────────────────────────────
 
-namespace {
-
-static int shortcutIndexForKey(int key) {
-    switch (key) {
-        case Qt::Key_1:
-        case Qt::Key_Exclam:
-            return 0;
-        case Qt::Key_2:
-        case Qt::Key_At:
-            return 1;
-        case Qt::Key_3:
-        case Qt::Key_NumberSign:
-            return 2;
-        case Qt::Key_4:
-        case Qt::Key_Dollar:
-            return 3;
-        case Qt::Key_5:
-        case Qt::Key_Percent:
-            return 4;
-        case Qt::Key_6:
-        case Qt::Key_AsciiCircum:
-            return 5;
-        case Qt::Key_7:
-        case Qt::Key_Ampersand:
-            return 6;
-        case Qt::Key_8:
-        case Qt::Key_Asterisk:
-            return 7;
-        case Qt::Key_9:
-        case Qt::Key_ParenLeft:
-            return 8;
-        case Qt::Key_0:
-        case Qt::Key_ParenRight:
-            return 9;
-        default:
-            return -1;
-    }
-}
-
-} // anonymous namespace
+using BoardHelpers::shortcutIndexForKey;
 
 // QEvent::KeyPress conflicts with the KeyPress in X.h
 #undef KeyPress
@@ -301,7 +262,8 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
         auto *button = qobject_cast<QWidget *>(watched);
         // QSS discards oversized corner radii. Layout/font/DPI changes can make
         // the actual button smaller than the maximum height used by applyScale.
-        const int radius = qMax(0, qMin(button->width(), button->height()) / 2 - 1);
+        // Rounded rectangles on the spec's 7 px radius, not full pills.
+        const int radius = qMax(0, qMin(7, qMin(button->width(), button->height()) / 2 - 1));
         const QString style = QStringLiteral("border-radius: %1px;").arg(radius);
         if (button->styleSheet() != style) button->setStyleSheet(style);
     }
@@ -312,20 +274,20 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
         QPainter p(w);
         p.setRenderHint(QPainter::Antialiasing);
 
-        const qreal radius = 13.0;
+        const qreal radius = 9.0;   // segment radius 7 + the 2 px track padding
         QRectF r = QRectF(w->rect());
 
         if (darkTheme_) {
             // Glass pill container
             r = r.adjusted(0.5, 0.5, -0.5, -0.5);
-            p.setPen(QPen(QColor(255, 255, 255, 30), 1.0));
-            p.setBrush(QColor(255, 255, 255, 10));
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(255, 255, 255, 15));
             p.drawRoundedRect(r, radius, radius);
         } else {
             // Light: glass pill container with dark tint
             r = r.adjusted(0.5, 0.5, -0.5, -0.5);
-            p.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
-            p.setBrush(QColor(0, 0, 0, 8));
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(0, 0, 0, 10));
             p.drawRoundedRect(r, radius, radius);
         }
     }

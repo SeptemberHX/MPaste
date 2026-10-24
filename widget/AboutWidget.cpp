@@ -6,7 +6,9 @@
 #include "AboutWidget.h"
 #include "ui_AboutWidget.h"
 
+#include <QGuiApplication>
 #include <QMouseEvent>
+#include <QWindow>
 #include <QPainter>
 #include <QPainterPath>
 #include <QResizeEvent>
@@ -116,6 +118,13 @@ void AboutWidget::resizeEvent(QResizeEvent *event) {
 
 void AboutWidget::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
+        // Wayland ignores move(); the compositor drags the window instead.
+        if (QGuiApplication::platformName().startsWith(QStringLiteral("wayland"))
+                && windowHandle() && windowHandle()->startSystemMove()) {
+            dragPos_ = QPoint();
+            event->accept();
+            return;
+        }
         dragPos_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
         event->accept();
     }

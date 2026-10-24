@@ -143,6 +143,18 @@ QPixmap XUtils::getWindowIconX11(Window winId) {
     return QPixmap(":/resources/resources/unknown.svg");
 }
 
+QString XUtils::getWindowAppNameX11(Window winId) {
+    if (!winId) return QString();
+    openDisplay();
+    XClassHint hint{};
+    if (!XGetClassHint(m_display, winId, &hint)) return QString();
+    // WM_CLASS class is the application's name ("Firefox"), the instance its binary.
+    const QString name = QString::fromLocal8Bit(hint.res_class ? hint.res_class : hint.res_name);
+    if (hint.res_name) XFree(hint.res_name);
+    if (hint.res_class) XFree(hint.res_class);
+    return name;
+}
+
 QPixmap XUtils::convertFromNative(const void* data, int width, int height) {
     QImage image(width, height, QImage::Format_ARGB32);
     const long* long_data = static_cast<const long*>(data);
@@ -179,6 +191,16 @@ QPixmap PlatformRelated::getWindowIcon(WId wId) {
     if (GnomeBridge::isWayland())
         return GnomeBridge::instance()->sourceIcon(uint(wId) & ~0x40000000u);
     return XUtils::getWindowIconX11((Window)wId);
+}
+
+QRect PlatformRelated::caretRect() {
+    return QRect();
+}
+
+QString PlatformRelated::getWindowAppName(WId wId) {
+    if (GnomeBridge::isWayland())
+        return GnomeBridge::instance()->sourceName(uint(wId) & ~0x40000000u);
+    return XUtils::getWindowAppNameX11((Window)wId);
 }
 
 WId PlatformRelated::currActiveWindow() {
@@ -555,6 +577,48 @@ HWND WinUtils::currentWinId() {
     return GetForegroundWindow();
 }
 
+QString WinUtils::getWindowAppNameWin32(HWND hwnd) {
+    if (!hwnd) return QString();
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) return QString();
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) return QString();
+    WCHAR exePath[MAX_PATH] = {};
+    DWORD pathLen = MAX_PATH;
+    const bool havePath = QueryFullProcessImageNameW(hProc, 0, exePath, &pathLen) && pathLen > 0;
+    CloseHandle(hProc);
+    if (!havePath) return QString();
+
+    // The executable's FileDescription ("Microsoft Edge", "微信"), else its file name.
+    const QString path = QString::fromWCharArray(exePath, int(pathLen));
+    DWORD handle = 0;
+    const DWORD size = GetFileVersionInfoSizeW(exePath, &handle);
+    if (size > 0) {
+        QByteArray info(int(size), Qt::Uninitialized);
+        if (GetFileVersionInfoW(exePath, 0, size, info.data())) {
+            struct Translation { WORD language; WORD codePage; } *translations = nullptr;
+            UINT length = 0;
+            if (VerQueryValueW(info.data(), L"\\VarFileInfo\\Translation",
+                               reinterpret_cast<LPVOID *>(&translations), &length)
+                && translations && length >= sizeof(Translation)) {
+                const QString key = QStringLiteral("\\StringFileInfo\\%1%2\\FileDescription")
+                    .arg(translations[0].language, 4, 16, QLatin1Char('0'))
+                    .arg(translations[0].codePage, 4, 16, QLatin1Char('0'));
+                LPWSTR value = nullptr;
+                UINT valueLength = 0;
+                if (VerQueryValueW(info.data(), reinterpret_cast<LPCWSTR>(key.utf16()),
+                                   reinterpret_cast<LPVOID *>(&value), &valueLength)
+                    && value && valueLength > 1) {
+                    const QString description = QString::fromWCharArray(value).trimmed();
+                    if (!description.isEmpty()) return description;
+                }
+            }
+        }
+    }
+    return QFileInfo(path).completeBaseName();
+}
+
 QPixmap WinUtils::getWindowIconWin32(HWND hwnd) {
     if (!hwnd) {
         return QPixmap(":/resources/resources/unknown.svg");
@@ -661,6 +725,35 @@ void PlatformRelated::activateWindow(WId wId) {
 
 QPixmap PlatformRelated::getWindowIcon(WId wId) {
     return WinUtils::getWindowIconWin32((HWND)wId);
+}
+
+QString PlatformRelated::getWindowAppName(WId wId) {
+    return WinUtils::getWindowAppNameWin32((HWND)wId);
+}
+
+QRect PlatformRelated::caretRect() {
+    HWND target = GetForegroundWindow();
+    if (!target) return QRect();
+    GUITHREADINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetGUIThreadInfo(GetWindowThreadProcessId(target, nullptr), &info) || !info.hwndCaret)
+        return QRect();
+    POINT topLeft{info.rcCaret.left, info.rcCaret.top};
+    POINT bottomRight{info.rcCaret.right, info.rcCaret.bottom};
+    ClientToScreen(info.hwndCaret, &topLeft);
+    ClientToScreen(info.hwndCaret, &bottomRight);
+    // Physical pixels to Qt's logical ones: screens keep their native origin.
+    for (QScreen *screen : QGuiApplication::screens()) {
+        const QRect geometry = screen->geometry();
+        const qreal dpr = screen->devicePixelRatio();
+        const QRect native(geometry.topLeft(), geometry.size() * dpr);
+        if (!native.contains(topLeft.x, topLeft.y)) continue;
+        const QPoint origin = geometry.topLeft()
+            + QPoint(qRound((topLeft.x - geometry.x()) / dpr), qRound((topLeft.y - geometry.y()) / dpr));
+        return QRect(origin, QSize(qMax(1, qRound((bottomRight.x - topLeft.x) / dpr)),
+                                   qMax(1, qRound((bottomRight.y - topLeft.y) / dpr))));
+    }
+    return QRect();
 }
 
 WId PlatformRelated::currActiveWindow() {

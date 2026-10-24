@@ -20,10 +20,15 @@ class PlatformRelated {
 public:
     static void activateWindow(WId wId);
     static QPixmap getWindowIcon(WId wId);
+    // Display name of the window's application; empty when unknown.
+    static QString getWindowAppName(WId wId);
     static WId currActiveWindow();
     static void triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode = MPasteSettings::AutoPasteShortcut);
     static void startWindowTracking();
     static WId previousActiveWindow();
+    // The text caret of the foreground window in global logical coordinates; null when unknown
+    // (no Win32 caret, or Linux, where the GNOME companion places windows itself).
+    static QRect caretRect();
     static bool revealInFileManager(const QList<QUrl> &urls);
 };
 
@@ -43,6 +48,7 @@ public:
     static void triggerPasteShortcut(Window winId, MPasteSettings::PasteShortcutMode mode);
     static Window currentWinId();
     static QPixmap getWindowIconX11(Window winId);
+    static QString getWindowAppNameX11(Window winId);
 
     static xdo_t *m_xdo;
     static Display *m_display;
@@ -63,6 +69,7 @@ public:
     static void triggerPasteShortcut(HWND hwnd, MPasteSettings::PasteShortcutMode mode);
     static HWND currentWinId();
     static QPixmap getWindowIconWin32(HWND hwnd);
+    static QString getWindowAppNameWin32(HWND hwnd);
     static void startWindowTracking();
     static HWND getPreviousWindow();
     static bool revealInExplorer(const QList<QUrl> &urls);

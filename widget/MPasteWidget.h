@@ -29,6 +29,7 @@
 #include "ScrollItemsWidget.h"
 
 class ClipboardAppController;
+class QuickPasteStack;
 
 namespace Ui {
 class MPasteWidget;
@@ -42,6 +43,13 @@ public:
     ~MPasteWidget();
     void setVisibleWithAnnimation(bool visible);
 
+    // The second activation layout: recent items beside the text caret.
+    void showQuickStack();
+    void hideQuickStack();
+    bool isQuickStackVisible() const;
+    // Paste an item into the window that was focused before MPaste.
+    void pasteItem(const ClipboardItem &item, bool plainText);
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
@@ -54,6 +62,7 @@ protected:
 
 signals:
     void shortcutChanged(const QString &newShortcut);
+    void expandToPanelRequested();
 
 private slots:
     void updateItemCount(int itemCount);
@@ -137,6 +146,7 @@ private:
     } ui_;
 
     ClipboardAppController *controller_ = nullptr;
+    QuickPasteStack *quickStack_ = nullptr;
     QPointer<QDialog> ocrLoadingDialog_;
 
     struct {

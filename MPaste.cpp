@@ -53,6 +53,7 @@ QString chooseInstalledUiFontFamily(const QStringList &preferredFamilies, const 
 }
 
 void configureApplicationFont(QApplication &app) {
+#ifdef Q_OS_WIN
     QFont font = app.font();
     const QString chosenFamily = chooseInstalledUiFontFamily(
         {
@@ -66,6 +67,11 @@ void configureApplicationFont(QApplication &app) {
     font.setFamily(chosenFamily);
     font.setStyleHint(QFont::SansSerif, QFont::PreferDefault);
     app.setFont(font);
+#else
+    // Elsewhere the platform theme (qt6ct, GNOME) already supplies the
+    // desktop UI font; forcing YaHei there loses its medium weights.
+    Q_UNUSED(app);
+#endif
 }
 
 #ifdef Q_OS_WIN
@@ -303,6 +309,8 @@ int main(int argc, char* argv[]) {
             [&widget, &isShowingWidget](Qt::ApplicationState state) {
                 if (state == Qt::ApplicationInactive) {
                     QTimer::singleShot(100, [&widget, &isShowingWidget]() {
+                        if (QGuiApplication::applicationState() != Qt::ApplicationActive)
+                            widget.hideQuickStack();
                         if (isShowingWidget) {
                             widget.setVisibleWithAnnimation(false);
                             isShowingWidget = false;
@@ -331,8 +339,16 @@ int main(int argc, char* argv[]) {
 #endif
                 return;
             }
+            if (MPasteSettings::getInst()->getActivationLayout() == MPasteSettings::LayoutStack) {
+                if (widget.isQuickStackVisible()) widget.hideQuickStack();
+                else widget.showQuickStack();
+                return;
+            }
             showWidget(altHotkey);
         };
+        // Tab in the stack opens the full panel for the same paste target.
+        QObject::connect(&widget, &MPasteWidget::expandToPanelRequested,
+                         [showWidget]() { showWidget(false); });
         QObject::connect(&widget, &MPasteWidget::shortcutChanged,
             [&hotkeyManager, &widget, &shortcutStr](const QString &newShortcut) {
                 hotkeyManager.unregisterHotkey();

@@ -11,6 +11,7 @@
 #include <QApplication>
 #include <QCache>
 #include <QDebug>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFileIconProvider>
@@ -63,9 +64,62 @@ QColor blendColor(const QColor &from, const QColor &to, qreal factor) {
         qRound(from.alpha() + (to.alpha() - from.alpha()) * t));
 }
 
+// The app's hue at one shared saturation ceiling and lightness, so a row of
+// cards from different apps reads as one calm set instead of a paint box.
+QColor cardToneForColor(const QColor &color, bool darkTheme) {
+    const QColor hsl = color.toHsl();
+    const qreal hue = qMax<qreal>(0.0, hsl.hslHueF());
+    const qreal saturation = hsl.hslSaturationF() < 0.08 ? 0.0 : hsl.hslSaturationF();
+    return darkTheme ? QColor::fromHslF(hue, qMin<qreal>(saturation, 0.62), 0.30)
+                     : QColor::fromHslF(hue, qMin<qreal>(saturation, 0.72), 0.85);
+}
+
+// Card corner radius; the selection ring follows the same curve.
+qreal cardRadiusForScale(int scale) {
+    return qMax(10, 14 * scale / 100);
+}
+
+qreal relativeLuminance(const QColor &color) {
+    auto channel = [](qreal c) { return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); };
+    return 0.2126 * channel(color.redF()) + 0.7152 * channel(color.greenF()) + 0.0722 * channel(color.blueF());
+}
+
+// Items from windows without an application icon carry the generic unknown.svg
+// (embedded in older history too); those get a type monogram instead.
+bool isPlaceholderIcon(const QPixmap &icon) {
+    return CardRenderUtils::isPlaceholderIcon(icon);
+}
+
+// Absolute and short, so a cached card never shows a stale "3 minutes ago".
+QString compactTimeLabel(const QDateTime &time) {
+    if (!time.isValid()) {
+        return QString();
+    }
+    const bool chinese = QLocale::system().language() == QLocale::Chinese;
+    const QDate today = QDate::currentDate();
+    const QString clock = time.toString(QStringLiteral("HH:mm"));
+    if (time.date() == today) {
+        return clock;
+    }
+    if (time.date() == today.addDays(-1)) {
+        return (chinese ? QStringLiteral("昨天 ") : QStringLiteral("Yesterday ")) + clock;
+    }
+    if (time.date().year() == today.year()) {
+        return QLocale::system().toString(time.date(), chinese ? QStringLiteral("M月d日") : QStringLiteral("MMM d"))
+            + QLatin1Char(' ') + clock;
+    }
+    return QLocale::system().toString(time.date(), QLocale::ShortFormat);
+}
+
 QString typeLabelForCard(const CardData &card) {
     switch (card.contentType) {
         case Text:
+            if (ColorCardBody::colorFromText(card.normalizedText).isValid()) {
+                return QObject::tr("Color");
+            }
+            if (CardRenderUtils::singleWebUrl(card.normalizedText).isValid()) {
+                return QObject::tr("Link");
+            }
             return QObject::tr("Plain Text");
         case Link:
             return QObject::tr("Link");
@@ -78,7 +132,7 @@ QString typeLabelForCard(const CardData &card) {
         case File:
             return card.normalizedUrls.size() > 1
                 ? QStringLiteral("%1 %2").arg(card.normalizedUrls.size()).arg(QObject::tr("Files"))
-                : QStringLiteral("1 %1").arg(QObject::tr("File"));
+                : QObject::tr("File");
         case Color:
             return QObject::tr("Color");
         case All:
@@ -92,10 +146,17 @@ QString countLabelForCard(const CardData &card) {
         case Image:
         case Office:
             return card.imageSize.isValid()
-                ? QStringLiteral("%1 x %2 %3").arg(card.imageSize.width()).arg(card.imageSize.height()).arg(QObject::tr("Pixels"))
+                ? QStringLiteral("%1 \u00D7 %2 %3").arg(card.imageSize.width()).arg(card.imageSize.height()).arg(QObject::tr("Pixels"))
                 : QString();
-        case RichText:
         case Text:
+            if (ColorCardBody::colorFromText(card.normalizedText).isValid()) {
+                return QString();
+            }
+            if (const QUrl url = CardRenderUtils::singleWebUrl(card.normalizedText); url.isValid()) {
+                return CardRenderUtils::displayHost(url);
+            }
+            return QStringLiteral("%1 %2").arg(card.textLength).arg(QObject::tr("Characters"));
+        case RichText:
             return QStringLiteral("%1 %2").arg(card.textLength).arg(QObject::tr("Characters"));
         case Link: {
             if (!card.url.isEmpty()) {
@@ -114,7 +175,18 @@ QString countLabelForCard(const CardData &card) {
             if (card.normalizedUrls.size() == 1) {
                 const QUrl url = card.normalizedUrls.front();
                 if (url.isLocalFile()) {
-                    return QFileInfo(url.toLocalFile()).absolutePath();
+                    // Size, then the folder with the home directory shortened to ~.
+                    const QFileInfo info(url.toLocalFile());
+                    QString folder = QDir::toNativeSeparators(info.absolutePath());
+                    const QString home = QDir::toNativeSeparators(QDir::homePath());
+                    if (folder == home || folder.startsWith(home + QDir::separator())) {
+                        folder = QStringLiteral("~") + folder.mid(home.size());
+                    }
+                    if (info.isFile()) {
+                        return QLocale().formattedDataSize(info.size(), 1, QLocale::DataSizeTraditionalFormat)
+                            + QStringLiteral(" \u00B7 ") + folder;
+                    }
+                    return folder;
                 }
                 return url.toDisplayString(QUrl::PreferLocalFile);
             }
@@ -427,7 +499,9 @@ QPixmap buildLinkFallbackPreviewUncached(const QUrl &url, const QString &title, 
 
     const QRectF headlineRect(heroRect.left(), badgeRect.bottom() + 16.0, heroRect.width(), 34.0);
     QFont headlineFont = painter.font();
+#ifdef Q_OS_WIN
     headlineFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
+#endif
     headlineFont.setBold(true);
     headlineFont.setPointSizeF(qMax(9.0, bounds.height() * 0.048));
     painter.setFont(headlineFont);
@@ -736,6 +810,7 @@ void ClipboardCardDelegate::preRenderAll(QAbstractItemModel *model, const QStyle
         card.title = index.data(ClipboardBoardModel::TitleRole).toString();
         card.url = index.data(ClipboardBoardModel::UrlRole).toString();
         card.alias = index.data(ClipboardBoardModel::AliasRole).toString();
+        card.sourceApp = index.data(ClipboardBoardModel::SourceAppRole).toString();
         card.pinned = index.data(ClipboardBoardModel::PinnedRole).toBool();
         card.time = index.data(ClipboardBoardModel::TimeRole).toDateTime();
         card.imageSize = index.data(ClipboardBoardModel::ImageSizeRole).toSize();
@@ -961,15 +1036,58 @@ void ClipboardCardDelegate::drawSelectionBorder(QPainter *painter, const QStyleO
     if (!selected) {
         return;
     }
-    const QRect cardRect(option.rect.topLeft(),
+    const QRect cardRect(option.rect.topLeft() + cardOriginForScale(scale),
                          QSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100));
-    const int cardRadius = qMax(8, 12 * scale / 100);
-    const int borderWidth = qMax(2, 3 * scale / 100);
+    // A ring outside the card with a gap, concentric with the card's corners.
+    const qreal cardRadius = cardRadiusForScale(scale);
+    const qreal margin = cardSelectionMarginForScale(scale);
+    const qreal borderWidth = qMax(2, 2 * scale / 100);
+    const qreal offset = margin - borderWidth / 2.0;
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->setPen(QPen(borderColor_, borderWidth));
     painter->setBrush(Qt::NoBrush);
-    painter->drawRoundedRect(QRectF(cardRect).adjusted(0.5, 0.5, -0.5, -0.5), cardRadius, cardRadius);
+    painter->drawRoundedRect(QRectF(cardRect).adjusted(-offset, -offset, offset, offset),
+                             cardRadius + offset, cardRadius + offset);
+    painter->restore();
+}
+
+void ClipboardCardDelegate::setHoverGlow(const QPersistentModelIndex &entering, qreal enteringLevel,
+                                         const QPersistentModelIndex &leaving, qreal leavingLevel) {
+    glowEntering_ = entering;
+    glowEnteringLevel_ = enteringLevel;
+    glowLeaving_ = leaving;
+    glowLeavingLevel_ = leavingLevel;
+}
+
+qreal ClipboardCardDelegate::hoverGlowLevel(const QModelIndex &index) const {
+    if (!index.isValid()) {
+        return 0.0;
+    }
+    if (index == glowEntering_) {
+        return glowEnteringLevel_;
+    }
+    if (index == glowLeaving_) {
+        return glowLeavingLevel_;
+    }
+    return 0.0;
+}
+
+void ClipboardCardDelegate::drawHoverGlow(QPainter *painter, const QStyleOptionViewItem &option,
+                                          qreal level, int scale) const {
+    if (level <= 0.0) {
+        return;
+    }
+    const QRect cardRect(option.rect.topLeft() + cardOriginForScale(scale),
+                         QSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100));
+    const qreal radius = cardRadiusForScale(scale);
+    const bool dark = ThemeManager::instance()->isDark();
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    // A lift of the whole card, and its edge catching a little more light.
+    painter->setPen(QPen(QColor(255, 255, 255, qRound((dark ? 34 : 120) * level)), 1));
+    painter->setBrush(QColor(255, 255, 255, qRound((dark ? 14 : 30) * level)));
+    painter->drawRoundedRect(QRectF(cardRect).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
     painter->restore();
 }
 
@@ -978,7 +1096,7 @@ void ClipboardCardDelegate::drawShortcutOverlay(QPainter *painter, const QStyleO
     if (shortcutText.isEmpty()) {
         return;
     }
-    const QRect cardRect(option.rect.topLeft(),
+    const QRect cardRect(option.rect.topLeft() + cardOriginForScale(scale),
                          QSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100));
     const int footerHeight = kCardFooterHeight * scale / 100;
     const QRect footerRect(cardRect.left(), cardRect.bottom() - footerHeight + 1, cardRect.width(), footerHeight);
@@ -1038,6 +1156,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
 
     if (const QPixmap *cached = cardPixmapCache_.object(cardCacheKey)) {
         painter->drawPixmap(option.rect.topLeft(), *cached);
+        drawHoverGlow(painter, option, hoverGlowLevel(index), scale);
         drawSelectionBorder(painter, option, isSelected, scale);
         drawShortcutOverlay(painter, option, shortcutText, scale);
         return;
@@ -1054,6 +1173,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     card.title = index.data(ClipboardBoardModel::TitleRole).toString();
     card.url = index.data(ClipboardBoardModel::UrlRole).toString();
     card.alias = index.data(ClipboardBoardModel::AliasRole).toString();
+    card.sourceApp = index.data(ClipboardBoardModel::SourceAppRole).toString();
     card.pinned = index.data(ClipboardBoardModel::PinnedRole).toBool();
     card.time = index.data(ClipboardBoardModel::TimeRole).toDateTime();
     card.imageSize = index.data(ClipboardBoardModel::ImageSizeRole).toSize();
@@ -1083,6 +1203,7 @@ void ClipboardCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
 
     cardPixmapCache_.insert(cardCacheKey, new QPixmap(cardPixmap), 1);
     painter->drawPixmap(option.rect.topLeft(), cardPixmap);
+    drawHoverGlow(painter, option, hoverGlowLevel(index), scale);
     drawSelectionBorder(painter, option, isSelected, scale);
     drawShortcutOverlay(painter, option, shortcutText, scale);
 }
@@ -1091,15 +1212,17 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
                                               const QModelIndex &index, const CardData &card, int scale) const {
     const QSize outerSize = cardOuterSizeForScale(scale);
     const QSize innerSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
-    const int topHeight = kCardHeaderHeight * scale / 100;
+    // A single-line band: icon, title, time. (kCardHeaderHeight still sizes stored thumbnails.)
+    const int topHeight = qMax(32, 40 * scale / 100);
     const int footerHeight = kCardFooterHeight * scale / 100;
     const bool hideFooter = false;
     const int effectiveFooterHeight = hideFooter ? 0 : footerHeight;
-    const int iconLabelSize = 48 * scale / 100;
-    const int iconPixmapSize = 40 * scale / 100;
-    const qreal cardRadius = qMax(10, 12 * scale / 100);
+    // One left edge for the icon, the body and the footer (see the visual spec).
+    const int inset = qMax(8, 12 * scale / 100);
+    const int iconSize = qMax(20, 26 * scale / 100);
+    const qreal cardRadius = cardRadiusForScale(scale);
     const QRect outerRect(option.rect.topLeft(), outerSize);
-    const QRect cardRect(outerRect.topLeft(), innerSize);
+    const QRect cardRect(outerRect.topLeft() + cardOriginForScale(scale), innerSize);
     const QRect topRect(cardRect.left(), cardRect.top(), cardRect.width(), topHeight);
     const QRect bodyRect(cardRect.left(), topRect.bottom(), cardRect.width(), cardRect.height() - topHeight - effectiveFooterHeight);
     const QRect footerRect(cardRect.left(), cardRect.bottom() - effectiveFooterHeight + 1, cardRect.width(), effectiveFooterHeight);
@@ -1111,7 +1234,15 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     const QColor footerTextColor = theme.footerTextColor;
     const QColor subtleBorderColor = theme.subtleBorderColor;
     const QColor topColor = headerColorForIcon(card.icon);
-    const QColor bgColor = blendColor(topColor, baseSurface, theme.headerBlendFactor);
+    const QColor bandColor = cardToneForColor(topColor, darkTheme);
+    const bool lightBand = relativeLuminance(bandColor) > 0.42;
+    const QColor headerInk = lightBand ? QColor(QStringLiteral("#15181E")) : QColor(Qt::white);
+    QColor headerInkSoft = headerInk;
+    headerInkSoft.setAlpha(200);
+    // The body follows the header and fades from it: no flat slab meets a flat slab.
+    QLinearGradient bgColor(QPointF(cardRect.left(), cardRect.top() + topHeight), QPointF(cardRect.left(), cardRect.bottom()));
+    bgColor.setColorAt(0.0, blendColor(bandColor, baseSurface, darkTheme ? 0.55 : 0.55));
+    bgColor.setColorAt(1.0, blendColor(bandColor, baseSurface, darkTheme ? 0.82 : 0.85));
     // Selection border is drawn as overlay after cache blit — always
     // render the cached card in the unselected state.
     const bool selected = false;
@@ -1125,135 +1256,102 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     QPainterPath cardPath;
     cardPath.addRoundedRect(QRectF(cardRect), cardRadius, cardRadius);
 
-    if (card.favorite && !selected) {
-        painter->setPen(QPen(theme.favoriteBorderColor, 5.0));
-        painter->setBrush(Qt::NoBrush);
-        painter->drawRoundedRect(QRectF(cardRect).adjusted(3.0, 3.0, -3.0, -3.0), cardRadius, cardRadius);
-    }
-
     painter->save();
     painter->setClipPath(cardPath);
     painter->setPen(Qt::NoPen);
     painter->setBrush(bgColor);
     painter->drawRoundedRect(cardRect, cardRadius, cardRadius);
 
-    QLinearGradient topGradient(topRect.topLeft(), topRect.topRight());
-    topGradient.setColorAt(0.0, topColor.lighter(122));
-    topGradient.setColorAt(1.0, topColor.darker(112));
-    painter->fillRect(topRect, topGradient);
+    painter->fillRect(topRect, bandColor);
+    // A soft top highlight instead of a sideways hue sweep.
+    QLinearGradient sheen(QPointF(topRect.topLeft()), QPointF(topRect.left(), topRect.top() + topRect.height() * 0.6));
+    sheen.setColorAt(0.0, QColor(255, 255, 255, 26));
+    sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
+    painter->fillRect(topRect, sheen);
     painter->fillRect(bodyRect, bgColor);
     if (!hideFooter) {
         painter->fillRect(footerRect, bgColor);
     }
     painter->restore();
 
-    const int topRightMargin = 10 * scale / 100;
-    const int baseTextLeftMargin = 24 * scale / 100;
-    const QRect iconRect(topRect.right() - topRightMargin - iconLabelSize + 1,
-                         topRect.top() + (topHeight - iconLabelSize) / 2,
-                         iconLabelSize, iconLabelSize);
-    const QRect iconPixmapRect(iconRect.left() + (iconRect.width() - iconPixmapSize) / 2,
-                               iconRect.top() + (iconRect.height() - iconPixmapSize) / 2,
-                               iconPixmapSize, iconPixmapSize);
     const qreal paintDpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
-    const QPixmap headerIcon = headerIconForPixmap(card.icon, iconPixmapRect.size(), paintDpr);
-    {
-        // Draw a dark shadow behind the icon.
-        QImage shadowImg = headerIcon.toImage();
-        shadowImg.fill(QColor(0, 0, 0, 80));
-        shadowImg.setDevicePixelRatio(headerIcon.devicePixelRatioF());
-        // Use the original icon's alpha as mask so the shadow has the same shape.
-        QPainter shadowPainter(&shadowImg);
-        shadowPainter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-        shadowPainter.drawPixmap(0, 0, headerIcon);
-        shadowPainter.end();
-        painter->drawImage(iconPixmapRect.topLeft() + QPoint(1, 2), shadowImg);
+    const QRect iconRect(cardRect.left() + inset, topRect.top() + (topHeight - iconSize) / 2, iconSize, iconSize);
+    if (isPlaceholderIcon(card.icon)) {
+        // A quiet tile with the type's first character instead of a placeholder picture.
+        QColor tile = headerInk;
+        tile.setAlpha(lightBand ? 28 : 46);
+        painter->save();   // the body renderers start from the painter's font
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(tile);
+        painter->drawRoundedRect(QRectF(iconRect), qMax(5, 7 * scale / 100), qMax(5, 7 * scale / 100));
+        QFont glyphFont = painter->font();
+        CardRenderUtils::applyUiFontDefaults(glyphFont);
+        glyphFont.setPointSizeF(qMax(8.0, 10.0 * scale / 100));
+        glyphFont.setWeight(QFont::DemiBold);
+        painter->setFont(glyphFont);
+        painter->setPen(headerInk);
+        painter->drawText(iconRect, Qt::AlignCenter, typeLabelForCard(card).left(1).toUpper());
+        painter->restore();
+    } else {
+        painter->drawPixmap(iconRect, headerIconForPixmap(card.icon, iconRect.size(), paintDpr));
     }
-    painter->drawPixmap(iconPixmapRect.topLeft(), headerIcon);
 
-    QFont typeFont = painter->font();
-    typeFont.setFamily(QStringLiteral("Microsoft YaHei"));
-    typeFont.setPointSize(qMax(10, 12 * scale / 100));
-    typeFont.setBold(true);
-    typeFont.setWeight(QFont::ExtraBold);
+    QString footerLabel;
+    QString footerSuffix;
+    int textRight = topRect.right() - inset;
+    if (card.favorite) {
+        const int starSize = qMax(12, 14 * scale / 100);
+        const QRect starRect(textRight - starSize + 1, topRect.top() + (topHeight - starSize) / 2, starSize, starSize);
+        painter->drawPixmap(starRect, starPixmap(starRect.size()));
+        textRight = starRect.left() - qMax(5, 6 * scale / 100);
+    }
+    if (card.pinned) {
+        const int pinSize = qMax(12, 16 * scale / 100);
+        const QRect pinRect(textRight - pinSize + 1, topRect.top() + (topHeight - pinSize) / 2, pinSize, pinSize);
+        painter->drawPixmap(pinRect, pinPixmap(pinRect.size(), !lightBand));
+        textRight = pinRect.left() - qMax(6, 8 * scale / 100);
+    }
+
+    QFont titleFont = painter->font();
+    CardRenderUtils::applyUiFontDefaults(titleFont);
+    titleFont.setPointSizeF(qMax(8.5, 10.0 * scale / 100));
+    titleFont.setWeight(QFont::DemiBold);
     QFont timeFont = painter->font();
     CardRenderUtils::applyUiFontDefaults(timeFont);
-    timeFont.setPointSize(qMax(8, 9 * scale / 100));
+    timeFont.setPointSizeF(qMax(7.5, 8.5 * scale / 100));
 
-    const int textRightPadding = iconLabelSize + topRightMargin + 12 * scale / 100;
-    const QFontMetrics typeMetrics(typeFont);
-    const QFontMetrics timeMetrics(timeFont);
-    const int typeHeight = qMax(18, typeMetrics.height());
-    const int timeHeight = qMax(14, timeMetrics.height());
-    const int textGap = qMax(2, 4 * scale / 100);
-    const int textBlockHeight = typeHeight + textGap + timeHeight;
-    const int textBlockTop = topRect.top() + qMax(0, (topRect.height() - textBlockHeight) / 2);
-    int effectiveTextLeftMargin = baseTextLeftMargin;
-    QRect pinRect;
-    if (card.pinned) {
-        const int pinSize = qMax(14, 20 * scale / 100);
-        pinRect = QRect(cardRect.left() + qMax(4, 6 * scale / 100),
-                        cardRect.top() + qMax(4, 6 * scale / 100),
-                        pinSize,
-                        pinSize);
-        effectiveTextLeftMargin = qMax(baseTextLeftMargin, pinRect.right() + qMax(6, 8 * scale / 100));
-    }
-
-    const QRect typeRect(topRect.left() + effectiveTextLeftMargin,
-                         textBlockTop,
-                         topRect.width() - effectiveTextLeftMargin - textRightPadding,
-                         typeHeight);
-    const QRect timeRect(typeRect.left(),
-                         typeRect.bottom() + 1 + textGap,
-                         typeRect.width(),
-                         timeHeight);
-    if (card.pinned && pinRect.isValid()) {
-        painter->drawPixmap(pinRect, pinPixmap(pinRect.size(), darkTheme));
-    }
+    // Title (alias, else source app, else type) left; time right; the type goes to the footer.
     const QString typeLabel = typeLabelForCard(card);
-    QString timeLabel = QLocale::system().toString(card.time, QLocale::ShortFormat);
+    QString suffix;
     if (card.contentType == RichText && MxGraphRenderer::isMxGraphContent(card.normalizedText)) {
-        timeLabel += QStringLiteral(" \u00B7 draw.io");
+        suffix += QStringLiteral(" \u00B7 draw.io");
     } else if (!card.title.isEmpty() && card.contentType == Office) {
-        timeLabel += QStringLiteral(" \u00B7 ") + card.title;
+        suffix += QStringLiteral(" \u00B7 ") + card.title;
     } else if ((card.contentType == Text || card.contentType == RichText)
                && CardRenderUtils::looksLikeCode(card.normalizedText)) {
-        timeLabel += QStringLiteral(" \u00B7 Code");
+        suffix += QStringLiteral(" \u00B7 Code");
     }
     if (isOcrPending(card.name)) {
-        timeLabel += QStringLiteral(" \u00B7 OCR...");
+        suffix += QStringLiteral(" \u00B7 OCR...");
     }
-    const QString aliasLabel = card.alias.trimmed();
-    if (!aliasLabel.isEmpty()) {
-        CardRenderUtils::drawElidedText(painter, typeRect, aliasLabel, typeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
+    const QString alias = card.alias.trimmed();
+    const QString title = !alias.isEmpty() ? alias : (!card.sourceApp.isEmpty() ? card.sourceApp : typeLabel);
+    QStringList footerParts;
+    if (!alias.isEmpty() && !card.sourceApp.isEmpty()) footerParts << card.sourceApp;
+    if (title != typeLabel) footerParts << typeLabel;
+    footerLabel = footerParts.join(QStringLiteral(" \u00B7 "));
+    footerSuffix = suffix;
 
-        QFont metaTypeFont = timeFont;
-        metaTypeFont.setFamilies(typeFont.families());
-        metaTypeFont.setBold(true);
-        metaTypeFont.setWeight(QFont::ExtraBold);
+    const QString when = compactTimeLabel(card.time);
+    // Measured on the paint device (its DPI may differ from the screen's), with slack for hinting.
+    const int timeWidth = QFontMetrics(timeFont, painter->device()).horizontalAdvance(when) + qMax(2, 4 * scale / 100);
+    const QRect timeRect(textRight - timeWidth + 1, topRect.top(), timeWidth, topHeight);
+    const int textLeft = iconRect.right() + 1 + qMax(6, 8 * scale / 100);
+    const QRect titleRect(textLeft, topRect.top(), qMax(0, timeRect.left() - qMax(6, 8 * scale / 100) - textLeft), topHeight);
+    CardRenderUtils::drawElidedText(painter, titleRect, title, titleFont, headerInk, Qt::AlignLeft | Qt::AlignVCenter);
+    CardRenderUtils::drawElidedText(painter, timeRect, when, timeFont, headerInkSoft, Qt::AlignRight | Qt::AlignVCenter);
 
-        const QFontMetrics metaTypeMetrics(metaTypeFont);
-        const int metaGap = qMax(6, 8 * scale / 100);
-        const int typeTextWidth = metaTypeMetrics.horizontalAdvance(typeLabel);
-        const int typeDrawWidth = qMin(typeTextWidth, timeRect.width());
-        const QRect typeMetaRect(timeRect.left(), timeRect.top(),
-                                 typeDrawWidth, timeRect.height());
-        CardRenderUtils::drawElidedText(painter, typeMetaRect, typeLabel, metaTypeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
-
-        const QString timeSuffix = QStringLiteral("- %1").arg(timeLabel);
-        const int timeX = timeRect.left() + typeDrawWidth + metaGap;
-        if (timeX < timeRect.right()) {
-            const QRect timeMetaRect(timeX, timeRect.top(),
-                                     timeRect.right() - timeX, timeRect.height());
-            CardRenderUtils::drawElidedText(painter, timeMetaRect, timeSuffix, timeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
-        }
-    } else {
-        CardRenderUtils::drawElidedText(painter, typeRect, typeLabel, typeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
-        CardRenderUtils::drawElidedText(painter, timeRect, timeLabel,
-                       timeFont, QColor(Qt::white), Qt::AlignLeft | Qt::AlignVCenter);
-    }
-
-    const QRect previewRect = bodyRect.adjusted(10 * scale / 100, 8 * scale / 100, -10 * scale / 100, -6 * scale / 100);
+    const QRect previewRect = bodyRect.adjusted(inset, 8 * scale / 100, -inset, -4 * scale / 100);
     // Clip body rendering to the card shape so thumbnails/text
     // don't bleed outside the rounded corners.
     painter->save();
@@ -1280,7 +1378,7 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         QFont footerFont = painter->font();
         CardRenderUtils::applyUiFontDefaults(footerFont);
         footerFont.setPointSize(qMax(8, 8 * scale / 100));
-        const int footerPadding = qMax(6, 8 * scale / 100);
+        const int footerPadding = inset;
         const QFontMetrics footerMetrics(footerFont);
         // Shortcut text is drawn as overlay after cache blit, not baked in.
         const QRect countRect(
@@ -1290,21 +1388,17 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
             footerRect.height());
         const bool useMiddleElide = card.contentType == Link
             || (card.contentType == File && card.normalizedUrls.size() == 1);
-        CardRenderUtils::drawElidedText(painter, countRect, countLabelForCard(card), footerFont, footerTextColor,
+        const QString countLabel = countLabelForCard(card);
+        const QString footerText = (footerLabel.isEmpty() ? countLabel
+                                    : (countLabel.isEmpty() ? footerLabel : footerLabel + QStringLiteral(" \u00B7 ") + countLabel))
+            + footerSuffix;
+        CardRenderUtils::drawElidedText(painter, countRect, footerText, footerFont, footerTextColor,
                        Qt::AlignLeft | Qt::AlignVCenter,
                        useMiddleElide ? Qt::ElideMiddle : Qt::ElideRight);
     }
 
-    if (card.favorite) {
-        const int starSize = qMax(12, 16 * scale / 100);
-        const QRect starRect(cardRect.right() - starSize - 8 * scale / 100,
-                             cardRect.bottom() - starSize - 8 * scale / 100,
-                             starSize, starSize);
-        painter->drawPixmap(starRect, starPixmap(starRect.size()));
-    }
-
     const int borderWidth = selected ? qMax(2, 3 * scale / 100) : qMax(1, scale / 100);
-    const QColor borderColor = selected ? borderColor_ : (card.favorite ? QColor(QStringLiteral("#F4C542")) : subtleBorderColor);
+    const QColor borderColor = selected ? borderColor_ : subtleBorderColor;
     painter->setPen(QPen(borderColor, borderWidth));
     painter->setBrush(Qt::NoBrush);
     painter->drawRoundedRect(QRectF(cardRect).adjusted(0.5, 0.5, -0.5, -0.5), cardRadius, cardRadius);

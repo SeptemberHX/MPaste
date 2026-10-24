@@ -531,6 +531,7 @@ ClipboardItem::ClipboardItem(const ClipboardItem &other) : icon_(other.icon_) {
     url_ = other.url_;
     alias_ = other.alias_;
     pinned_ = other.pinned_;
+    sourceApp_ = other.sourceApp_;
     icon_ = other.icon_;
     fingerprintCache_ = other.fingerprintCache_;
     searchableTextCache_ = other.searchableTextCache_;
@@ -560,6 +561,7 @@ ClipboardItem& ClipboardItem::operator=(const ClipboardItem &other) {
         url_ = other.url_;
         alias_ = other.alias_;
         pinned_ = other.pinned_;
+        sourceApp_ = other.sourceApp_;
         icon_ = other.icon_;
         fingerprintCache_ = other.fingerprintCache_;
         searchableTextCache_ = other.searchableTextCache_;

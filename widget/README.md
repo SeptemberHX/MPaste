@@ -23,6 +23,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `MPasteSettingsWidget.*`：设置窗口。
 - `MPasteWidget.*`：主窗口与主要交互入口。
 - `MTextBrowser.*`：用于卡片正文展示的轻量文本浏览控件。
+- `QuickPasteStack.*`：第二种唤出形态「光标旁堆栈」：最近 9 条，数字键粘贴、Shift 纯文本、输入筛选、Tab 展开完整面板；窗口标题 `MPaste Quick`，GNOME Wayland 下由扩展摆放到光标旁。
 - `ScrollItemsWidget.*`：横向滚动的条目列表容器。
 - `ToggleSwitch.*`：设置界面中使用的开关控件。
 

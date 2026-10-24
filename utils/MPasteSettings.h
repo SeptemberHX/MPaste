@@ -22,6 +22,8 @@ public:
     enum ThemeMode { ThemeSystem = 0, ThemeLight, ThemeDark };
     enum HistoryViewMode { ViewModePaged = 0, ViewModeContinuous };
     enum OcrBackend { OcrWindowsBuiltin = 0, OcrBaiduApi = 1 };
+    // What the activation shortcut opens: the bottom panel or the stack by the caret.
+    enum ActivationLayout { LayoutPanel = 0, LayoutStack = 1 };
 
     static MPasteSettings* getInst();
 
@@ -53,6 +55,9 @@ public:
     static QString pasteShortcutModeLabel(PasteShortcutMode mode);
 
     const QString &getShortcutStr() const;
+
+    ActivationLayout getActivationLayout() const;
+    void setActivationLayout(ActivationLayout layout);
 
     void setShortcutStr(const QString &shortcutStr);
 
@@ -110,6 +115,7 @@ private:
     bool autoPaste;
     PasteShortcutMode pasteShortcutMode;
     QString shortcutStr;
+    ActivationLayout activationLayout = LayoutPanel;
     int itemScale;
     bool playSound;
     ThemeMode themeMode;

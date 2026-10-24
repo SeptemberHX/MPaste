@@ -426,7 +426,7 @@ void ClipboardMonitor::captureClipboard() {
     stabilizeTimer_.setInterval(STABILIZE_INTERVAL);
     wpsSettlePending_ = false;
 
-    ClipboardItem immediateItem = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(pendingWId_), mimeData);
+    ClipboardItem immediateItem = sourcedItem(pendingWId_, mimeData);
 
 #ifdef Q_OS_WIN
     // Preserve raw CF_HTML for faithful clipboard export.  Qt's html()
@@ -783,6 +783,13 @@ void ClipboardMonitor::rememberCapturedItem(const ClipboardItem &item, int wId) 
     lastCaptureAtMs_ = QDateTime::currentMSecsSinceEpoch();
 }
 
+ClipboardItem ClipboardMonitor::sourcedItem(WId wId, const QMimeData *mimeData) {
+    // The source application's icon and display name travel with the item.
+    ClipboardItem item = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeData);
+    item.setSourceApp(PlatformRelated::getWindowAppName(wId));
+    return item;
+}
+
 void ClipboardMonitor::emitCapturedItem(const ClipboardItem &item, int wId) {
     // Compute captureKey once and reuse for dup-check, remember, and logging.
     const QByteArray key = captureKeyForItem(item);
@@ -880,14 +887,14 @@ void ClipboardMonitor::scheduleDeferredMimeCapture(const QString &itemName) {
 void ClipboardMonitor::fetchWpsImageAndEmit(const QMimeData *mimeData, const QUrl &url, int wId, quint64 captureToken) {
     if (!imageFetchManager_) {
         qInfo().noquote() << QStringLiteral("[clipboard-monitor] no network manager, emit immediate token=%1").arg(captureToken);
-        emitCapturedItem(ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeData), wId);
+        emitCapturedItem(sourcedItem(wId, mimeData), wId);
         return;
     }
 
     std::shared_ptr<QMimeData> mimeDataCopy(cloneMimeData(mimeData));
     if (!mimeDataCopy) {
         qInfo().noquote() << QStringLiteral("[clipboard-monitor] clone mime failed, emit immediate token=%1").arg(captureToken);
-        emitCapturedItem(ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeData), wId);
+        emitCapturedItem(sourcedItem(wId, mimeData), wId);
         return;
     }
 
@@ -898,7 +905,7 @@ void ClipboardMonitor::fetchWpsImageAndEmit(const QMimeData *mimeData, const QUr
     *startNextRequest = [this, mimeDataCopy, wId, captureToken, candidates, startNextRequest]() {
         if (candidates->isEmpty()) {
             qInfo().noquote() << QStringLiteral("[clipboard-monitor] image fetch exhausted token=%1, emit fallback").arg(captureToken);
-            emitCapturedItem(ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeDataCopy.get()), wId);
+            emitCapturedItem(sourcedItem(wId, mimeDataCopy.get()), wId);
             return;
         }
 
@@ -940,7 +947,7 @@ void ClipboardMonitor::fetchWpsImageAndEmit(const QMimeData *mimeData, const QUr
                                 .arg(pixmap.width())
                                 .arg(pixmap.height());
                             materializePng(mimeDataCopy.get(), pngBytes);
-                            emitCapturedItem(ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeDataCopy.get()), wId);
+                            emitCapturedItem(sourcedItem(wId, mimeDataCopy.get()), wId);
                             return;
                         }
                     }
@@ -995,7 +1002,7 @@ void ClipboardMonitor::captureGnomeClipboard(const QVariantMap &formats, uint wi
     const auto signature = computeEchoSignature(&mime);
     if (!selfPasteEchoSig_.isEmpty() && signature == selfPasteEchoSig_) return;
     selfPasteEchoSig_.clear();
-    auto item = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(window), &mime);
+    auto item = sourcedItem(window, &mime);
     // The bridge already owns a complete snapshot: no later read from QClipboard.
     for (const auto &format : mime.formats()) item.setMimeFormat(format, mime.data(format));
     if (isDuplicateRecentCapture(item, int(window))) return;

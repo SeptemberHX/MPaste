@@ -41,6 +41,7 @@ struct CardData {
     QString title;
     QString url;
     QString alias;
+    QString sourceApp;
     QString normalizedText;
     int textLength = 0;
     QList<QUrl> normalizedUrls;
@@ -75,6 +76,10 @@ public:
                              bool selected, int scale) const;
     void drawShortcutOverlay(QPainter *painter, const QStyleOptionViewItem &option,
                              const QString &shortcutText, int scale) const;
+    // Hover brightening: the card under the pointer fades in while the one it left fades out.
+    void setHoverGlow(const QPersistentModelIndex &entering, qreal enteringLevel,
+                      const QPersistentModelIndex &leaving, qreal leavingLevel);
+    qreal hoverGlowLevel(const QModelIndex &index) const;
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
@@ -94,6 +99,13 @@ public:
                           const QModelIndex &index) const;
 
 private:
+    void drawHoverGlow(QPainter *painter, const QStyleOptionViewItem &option, qreal level, int scale) const;
+
+    QPersistentModelIndex glowEntering_;
+    QPersistentModelIndex glowLeaving_;
+    qreal glowEnteringLevel_ = 0.0;
+    qreal glowLeavingLevel_ = 0.0;
+
     struct FileIconRequest {
         QString cacheKey;
         QString filePath;

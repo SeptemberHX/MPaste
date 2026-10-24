@@ -147,6 +147,7 @@ if(WIN32)
             shell32
             ole32
             psapi
+            version
     )
 else()
     target_link_libraries(${BIN_NAME} PRIVATE

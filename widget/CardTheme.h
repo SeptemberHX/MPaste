@@ -45,10 +45,10 @@ struct CardTheme {
         const bool dark = ThemeManager::instance()->isDark();
         CardTheme t;
         if (dark) {
-            t.baseSurface           = QColor(QStringLiteral("#1C232C"));
-            t.bodyTextColor         = QColor(QStringLiteral("#D8E1EB"));
-            t.footerTextColor       = QColor(QStringLiteral("#93A2B3"));
-            t.subtleBorderColor     = QColor(255, 255, 255, 24);
+            t.baseSurface           = QColor(QStringLiteral("#1D2028"));
+            t.bodyTextColor         = QColor(QStringLiteral("#E4E7EC"));
+            t.footerTextColor       = QColor(QStringLiteral("#8D93A0"));
+            t.subtleBorderColor     = QColor(255, 255, 255, 18);
             t.headerBlendFactor     = 0.86;
             t.linkTitleColor        = QColor(QStringLiteral("#E6EDF5"));
             t.linkUrlColor          = QColor(QStringLiteral("#B7C3D4"));

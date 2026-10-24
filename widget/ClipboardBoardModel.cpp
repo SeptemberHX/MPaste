@@ -110,6 +110,8 @@ QVariant ClipboardBoardModel::data(const QModelIndex &index, int role) const {
             return entry.item.getUrl();
         case AliasRole:
             return entry.item.getAlias();
+        case SourceAppRole:
+            return entry.item.getSourceApp();
         case PinnedRole:
             return entry.item.isPinned();
         case NormalizedTextRole: {

@@ -14,9 +14,10 @@ void OfficeCardBody::paint(QPainter *painter, const CardBodyContext &ctx) const 
     if (!text.isEmpty()) {
         QFont previewFont = painter->font();
         CardRenderUtils::applyUiFontDefaults(previewFont);
-        previewFont.setPointSize(qMax(9, 11 * ctx.scale / 100));
-        const int pad = qMax(6, 8 * ctx.scale / 100);
-        QRect textRect = ctx.bodyRect.adjusted(pad, pad, -pad, 0);
+        previewFont.setPointSize(qMax(8, 10 * ctx.scale / 100));
+        const int padX = qMax(8, 12 * ctx.scale / 100);
+        const int padY = qMax(6, 8 * ctx.scale / 100);
+        QRect textRect = ctx.bodyRect.adjusted(padX, padY, -padX, 0);
         if (textRect.width() > 0 && textRect.height() > 0) {
             CardRenderUtils::drawWrappedText(painter, textRect, text,
                                              previewFont, ctx.bodyTextColor);

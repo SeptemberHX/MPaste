@@ -157,6 +157,8 @@ QHash<QString, QString> ThemeManager::themeTokens(bool dark) const {
         tokens.insert(QStringLiteral("accent_blue"), QStringLiteral("#4A90E2"));
         tokens.insert(QStringLiteral("accent_orange"), QStringLiteral("#fc9867"));
         tokens.insert(QStringLiteral("tab_text"), QStringLiteral("#F2F6FB"));
+        tokens.insert(QStringLiteral("tab_text_muted"), QStringLiteral("rgba(236, 238, 242, 165)"));
+        tokens.insert(QStringLiteral("tab_hover_bg"), QStringLiteral("rgba(255, 255, 255, 14)"));
         tokens.insert(QStringLiteral("tab_checked_bg"), QStringLiteral("rgba(255, 255, 255, 28)"));
         tokens.insert(QStringLiteral("type_checked_bg"), QStringLiteral("rgba(255, 255, 255, 24)"));
         tokens.insert(QStringLiteral("tab_border_width"), QStringLiteral("1px"));
@@ -198,6 +200,8 @@ QHash<QString, QString> ThemeManager::themeTokens(bool dark) const {
         tokens.insert(QStringLiteral("accent_blue"), QStringLiteral("#4A90E2"));
         tokens.insert(QStringLiteral("accent_orange"), QStringLiteral("#fc9867"));
         tokens.insert(QStringLiteral("tab_text"), QStringLiteral("#2C3E50"));
+        tokens.insert(QStringLiteral("tab_text_muted"), QStringLiteral("rgba(44, 62, 80, 175)"));
+        tokens.insert(QStringLiteral("tab_hover_bg"), QStringLiteral("rgba(0, 0, 0, 10)"));
         tokens.insert(QStringLiteral("tab_checked_bg"), QStringLiteral("rgba(255, 255, 255, 242)"));
         tokens.insert(QStringLiteral("type_checked_bg"), QStringLiteral("rgba(255, 255, 255, 242)"));
         tokens.insert(QStringLiteral("tab_border_width"), QStringLiteral("2px"));

@@ -1,5 +1,5 @@
 // input: GNOME Shell selection, keybinding and window APIs; authenticated session client.
-// output: Directed clipboard snapshots and desktop actions; panel follows the pointer's monitor before its first frame.
+// output: Directed clipboard snapshots and desktop actions; panel follows the pointer's monitor before its first frame; dialogs are centred on map.
 // pos: GNOME 51 Wayland companion. No clipboard data is written to disk here.
 // update: Keep utils/GnomeBridge and extensions/README.md in sync.
 import Gio from 'gi://Gio';
@@ -8,6 +8,7 @@ import St from 'gi://St';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import Clutter from 'gi://Clutter';
+import Mtk from 'gi://Mtk';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -23,9 +24,14 @@ const XML = `<node><interface name="${NAME}">
 <method name="Paste"><arg type="u" direction="in" name="mode"/></method>
 <signal name="HotkeyPressed"/>
 <signal name="SourceIcon"><arg type="u" name="window"/><arg type="as" name="names"/><arg type="s" name="path"/></signal>
+<signal name="SourceApp"><arg type="u" name="window"/><arg type="s" name="name"/></signal>
 <signal name="ClipboardChanged"><arg type="a{sv}" name="formats"/><arg type="u" name="window"/></signal>
 </interface></node>`;
 const IMAGE_PREFERENCE = ['image/png', 'image/tiff', 'image/bmp', 'image/webp', 'image/jpeg'];
+// MPaste's own windows besides the panel and preview (settings, about, details,
+// rename): popups and tooltips are placed by their parent, not here.
+const DIALOG_TYPES = new Set([Meta.WindowType.NORMAL, Meta.WindowType.DIALOG,
+    Meta.WindowType.MODAL_DIALOG, Meta.WindowType.UTILITY]);
 
 export default class MPasteExtension extends Extension {
     enable() {
@@ -44,7 +50,11 @@ export default class MPasteExtension extends Extension {
         this._acceleratorId = global.display.connect('accelerator-activated', (_d, action) => {
             if (action !== this._action || !this._client) return;
             const focus = global.display.focus_window;
-            if (focus?.get_pid() !== this._pid) this._previous = focus;
+            if (focus?.get_pid() !== this._pid) {
+                this._previous = focus;
+                // Read the caret now: once MPaste takes focus it is gone.
+                this._anchor = this._caretAnchor(focus);
+            }
             this._emit('HotkeyPressed', null);
         });
         // map runs when the committed surface and its real size are available,
@@ -54,6 +64,8 @@ export default class MPasteExtension extends Extension {
             if (window.get_pid() !== this._pid) return;
             if (window.get_title() === 'MPaste') this._showPanel(window);
             else if (window.get_title() === 'MPaste Preview') this._placePreview(window);
+            else if (window.get_title() === 'MPaste Quick') this._placeQuick(window);
+            else if (DIALOG_TYPES.has(window.get_window_type())) this._centerDialog(window);
         });
         this._dbusId = Gio.DBus.session.register_object(PATH,
             Gio.DBusNodeInfo.new_for_xml(XML).interfaces[0],
@@ -173,12 +185,84 @@ export default class MPasteExtension extends Extension {
             area.width, frame.height);
         Main.activateWindow(panel);
     }
+    _caretAnchor(focus) {
+        // The text caret of the focused window in stage coordinates, else null.
+        // GNOME's own input method knows it for text-input clients; fcitx clients
+        // report it to the kimpanel, which ubuntu-tools exposes. Both keep stale
+        // values, so only a rect inside the focused window counts.
+        const candidates = [];
+        try {
+            const im = Main.inputMethod;
+            if (im?._currentFocus && im._cursorRect) candidates.push(im._cursorRect);
+        } catch (_e) {}
+        try {
+            const tools = Main.extensionManager.lookup('ubuntu-tools@ubuntu-tools');
+            const rect = tools?.stateObj?._impls?.get('kimpanel')?.caretRect?.();
+            if (rect) candidates.push(rect);
+        } catch (_e) {}
+        const frame = focus?.get_frame_rect();
+        for (const r of candidates) {
+            const x = r.x, y = r.y, width = r.width ?? 0, height = r.height ?? 0;
+            if (!frame || !Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) continue;
+            if (x >= frame.x && x <= frame.x + frame.width && y >= frame.y && y <= frame.y + frame.height)
+                return {x, y, width: Math.max(1, width), height: Math.max(1, height)};
+        }
+        return null;
+    }
+    _placeQuick(window) {
+        // Below the caret, else above, else beside it, inside the work area of its
+        // monitor; the pointer stands in when no caret is known.
+        let anchor = this._anchor;
+        if (!anchor) {
+            const [x, y] = global.get_pointer();
+            anchor = {x, y, width: 1, height: 1};
+        }
+        const monitor = global.display.get_monitor_index_for_rect(new Mtk.Rectangle({
+            x: anchor.x, y: anchor.y, width: anchor.width, height: anchor.height}));
+        const area = Main.layoutManager.getWorkAreaForMonitor(monitor >= 0 ? monitor : Main.layoutManager.primaryIndex);
+        const frame = window.get_frame_rect();
+        const gap = 6;
+        const below = anchor.y + anchor.height + gap;
+        const above = anchor.y - gap - frame.height;
+        let x = Math.max(area.x, Math.min(anchor.x, area.x + area.width - frame.width));
+        let y;
+        if (below + frame.height <= area.y + area.height) {
+            y = below;
+        } else if (above >= area.y) {
+            y = above;
+        } else {
+            // Neither fits: beside the caret, never over it.
+            y = Math.max(area.y, Math.min(anchor.y + anchor.height / 2 - frame.height / 3,
+                area.y + area.height - frame.height));
+            const right = anchor.x + anchor.width + 2 * gap;
+            x = right + frame.width <= area.x + area.width ? right
+                : Math.max(area.x, anchor.x - 2 * gap - frame.width);
+        }
+        y = Math.round(y);
+        window.move_to_monitor(monitor >= 0 ? monitor : Main.layoutManager.primaryIndex);
+        window.move_frame(false, x, y);
+        Main.activateWindow(window);
+    }
+    _dialogMonitor(window) {
+        // The owning panel's monitor, else the paste target's, else the current one.
+        const parent = window.get_transient_for();
+        return parent?.get_monitor() ?? this._previous?.get_monitor()
+            ?? global.display.get_current_monitor();
+    }
+    _centerDialog(window) {
+        // Qt centres its dialogs with move(), which Wayland ignores; keep the
+        // window's own size and centre it in the work area, as on Windows.
+        const monitor = this._dialogMonitor(window);
+        const area = Main.layoutManager.getWorkAreaForMonitor(monitor);
+        const frame = window.get_frame_rect();
+        window.move_to_monitor(monitor);
+        window.move_frame(false, area.x + Math.max(0, Math.floor((area.width - frame.width) / 2)),
+            area.y + Math.max(0, Math.floor((area.height - frame.height) / 2)));
+    }
     _placePreview(window) {
         // Match the Qt/Windows preview: 980x760 logical pixels, centered in the
         // owning panel's work area. Wayland clients cannot position top-levels.
-        const parent = window.get_transient_for();
-        const monitor = parent?.get_monitor() ?? this._previous?.get_monitor()
-            ?? global.display.get_current_monitor();
+        const monitor = this._dialogMonitor(window);
         const area = Main.layoutManager.getWorkAreaForMonitor(monitor);
         const width = Math.min(980, Math.max(1, area.width - 32));
         const height = Math.min(760, Math.max(1, area.height - 32));
@@ -236,8 +320,11 @@ export default class MPasteExtension extends Extension {
         const icon = app?.get_app_info()?.get_icon();
         const names = icon instanceof Gio.ThemedIcon ? icon.get_names() : [];
         const path = icon instanceof Gio.FileIcon ? icon.get_file().get_path() : '';
+        // A window without a desktop entry gets an app named after its title
+        // (a document name); its WM class says which program it is.
+        const name = (app && !app.is_window_backed() ? app.get_name() : window?.get_wm_class()) ?? '';
         return {window: window?.get_stable_sequence() ?? 0,
-            own: window?.get_pid() === this._pid, names, path: path ?? ''};
+            own: window?.get_pid() === this._pid, names, path: path ?? '', name};
     }
     _capture(source = this._clipboardSource()) {
         const generation = ++this._generation;
@@ -260,6 +347,7 @@ export default class MPasteExtension extends Extension {
                     // Separate metadata keeps the clipboard protocol backward compatible
                     // and never inserts app information into the pasted MIME payload.
                     this._emit('SourceIcon', new GLib.Variant('(uass)', [window, source.names, source.path]));
+                    this._emit('SourceApp', new GLib.Variant('(us)', [window, source.name]));
                     this._emit('ClipboardChanged', new GLib.Variant('(a{sv}u)', [data, window]));
                 }
                 return;

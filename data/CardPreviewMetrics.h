@@ -7,12 +7,14 @@
 
 #include <QtGlobal>
 
-constexpr int kCardBaseWidth = 275;
-constexpr int kCardBaseHeight = 300;
+constexpr int kCardBaseWidth = 248;
+constexpr int kCardBaseHeight = 264;
 constexpr int kCardHeaderHeight = 56;
 constexpr int kCardFooterHeight = 20;
-constexpr int kCardPreviewWidth = kCardBaseWidth;
-constexpr int kCardPreviewHeight = kCardBaseHeight - kCardHeaderHeight - kCardFooterHeight;
+// Stored thumbnails keep their original 275x224 size: loaded thumbnails are
+// rescaled to this size ignoring aspect, so it must not follow the card size.
+constexpr int kCardPreviewWidth = 275;
+constexpr int kCardPreviewHeight = 224;
 
 static_assert(kCardPreviewHeight > 0, "Card preview height must be positive.");
 

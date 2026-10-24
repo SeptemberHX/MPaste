@@ -38,6 +38,7 @@ private:
     QString url_;
     QString alias_;
     bool pinned_ = false;
+    QString sourceApp_;   // Display name of the application it was copied from.
     mutable std::optional<QByteArray> fingerprintCache_;
     mutable std::optional<QString> searchableTextCache_;
     mutable std::optional<QList<QUrl>> normalizedUrlsCache_;
@@ -209,6 +210,8 @@ public:
     void setUrl(const QString &url) { url_ = url; invalidateSearchCache(); }
     void setAlias(const QString &alias) { alias_ = alias; invalidateSearchCache(); }
     void setPinned(bool pinned) { pinned_ = pinned; }
+    const QString &getSourceApp() const { return sourceApp_; }
+    void setSourceApp(const QString &name) { sourceApp_ = name; }
 
     void setName(const QString &name) { name_ = name; }
     QString getName() const { return name_; }

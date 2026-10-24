@@ -7,6 +7,7 @@
 #define SCROLLITEMSWIDGET_H
 
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QList>
 #include <QMap>
 #include <QModelIndex>
@@ -30,6 +31,7 @@ class QWheelEvent;
 class QShowEvent;
 class QListView;
 class QGraphicsOpacityEffect;
+class QVariantAnimation;
 class QToolButton;
 class QLabel;
 
@@ -88,6 +90,8 @@ public:
     bool handleWheelScroll(QWheelEvent *event);
     void applyTheme(bool dark);
     void updateLoadingOverlay();
+    void updateEmptyState();
+    void showEmptyState();
     ClipboardBoardService *boardServiceRef() const { return boardService_; }
     ClipboardCardDelegate *cardDelegateRef() const { return cardDelegate_; }
     ClipboardBoardModel *boardModel() const { return boardModel_; }
@@ -153,6 +157,8 @@ private:
     int moveItemToFirst(int sourceRow);
     void animateScrollTo(int targetValue);
     int wheelStepPixels() const;
+    bool handleTouchpadScroll(QWheelEvent *event, QScrollBar *scrollBar);
+    void setHoverGlowIndex(const QModelIndex &index, bool animated = true);
     void ensureAllItemsLoaded();
     void maybeLoadMoreItems();
     int itemCountForDisplay() const;
@@ -210,6 +216,14 @@ private:
     ClipboardBoardProxyModel *proxyModel_ = nullptr;
     ClipboardCardDelegate *cardDelegate_ = nullptr;
     QPropertyAnimation *scrollAnimation;
+    // Touchpad swipes: follow the fingers, then glide on with this speed (px/ms).
+    QElapsedTimer touchpadClock_;
+    // The card under the pointer and the animation that brightens it.
+    QPersistentModelIndex hoverGlowIndex_;
+    QPersistentModelIndex hoverGlowPrevious_;
+    qreal hoverGlowPreviousStart_ = 0.0;
+    QVariantAnimation *hoverGlowAnimation_ = nullptr;
+    qreal touchpadVelocity_ = 0.0;
     QWidget *leftEdgeFadeOverlay_ = nullptr;
     QWidget *rightEdgeFadeOverlay_ = nullptr;
     QWidget *hoverActionBar_ = nullptr;
@@ -220,6 +234,12 @@ private:
     QToolButton *hoverDeleteBtn_ = nullptr;
     QGraphicsOpacityEffect *hoverOpacity_ = nullptr;
     QLabel *loadingLabel_ = nullptr;
+    // Shown when nothing matches: an icon, a title and a hint for the context.
+    QWidget *emptyState_ = nullptr;
+    QLabel *emptyIcon_ = nullptr;
+    QLabel *emptyTitle_ = nullptr;
+    QLabel *emptyHint_ = nullptr;
+    QTimer *emptyStateTimer_ = nullptr;
     QPersistentModelIndex hoverProxyIndex_;
     QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;

@@ -116,6 +116,44 @@ inline void applyMenuTheme(QMenu *menu) {
                dark ? QStringLiteral("#6F7C8E") : QStringLiteral("#8B96A5")));
 }
 
+// Number-row key (or its shifted symbol) to a 0-based paste index: 1-9 -> 0-8, 0 -> 9.
+inline int shortcutIndexForKey(int key) {
+    switch (key) {
+        case Qt::Key_1:
+        case Qt::Key_Exclam:
+            return 0;
+        case Qt::Key_2:
+        case Qt::Key_At:
+            return 1;
+        case Qt::Key_3:
+        case Qt::Key_NumberSign:
+            return 2;
+        case Qt::Key_4:
+        case Qt::Key_Dollar:
+            return 3;
+        case Qt::Key_5:
+        case Qt::Key_Percent:
+            return 4;
+        case Qt::Key_6:
+        case Qt::Key_AsciiCircum:
+            return 5;
+        case Qt::Key_7:
+        case Qt::Key_Ampersand:
+            return 6;
+        case Qt::Key_8:
+        case Qt::Key_Asterisk:
+            return 7;
+        case Qt::Key_9:
+        case Qt::Key_ParenLeft:
+            return 8;
+        case Qt::Key_0:
+        case Qt::Key_ParenRight:
+            return 9;
+        default:
+            return -1;
+    }
+}
+
 inline bool looksBrokenTranslation(const QString &text) {
     if (text.isEmpty()) {
         return true;

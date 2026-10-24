@@ -3,6 +3,7 @@
 
 #include <QPainter>
 #include <QRect>
+#include <QUrl>
 #include <QModelIndex>
 #include "widget/ClipboardCardDelegate.h"
 
@@ -45,10 +46,20 @@ namespace CardRenderUtils {
     void drawCoverPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &pixmap,
                          const QString &debugName = QString(), const QSize &debugImageSize = QSize());
     void drawContainPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &pixmap);
+    // The rounded panel a visual preview sits in: equal side margins below the header.
+    QRect insetPreviewRect(const QRect &bodyRect, int scale);
+    void drawInsetVisualPreview(QPainter *painter, const QRect &bodyRect, const CardData &card,
+                                int scale, bool darkTheme, int loadingPhase, bool containMode);
     void drawManagedVisualPreview(QPainter *painter, const QRect &rect, const CardData &card,
                                   int scale, bool darkTheme, int loadingPhase, bool containMode);
     QString previewTextForCard(const CardData &card);
     bool looksLikeCode(const QString &text);
+    // The text is a single http(s) address and nothing else; invalid otherwise.
+    QUrl singleWebUrl(const QString &text);
+    // The icon is missing or MPaste's generic "unknown app" picture.
+    bool isPlaceholderIcon(const QPixmap &icon);
+    // "github.com" from "https://www.github.com/...".
+    QString displayHost(const QUrl &url);
     void clearCoverPixmapCache();
 }
 

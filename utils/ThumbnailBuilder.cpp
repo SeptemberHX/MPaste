@@ -10,6 +10,7 @@
 #include <QImage>
 #include <QImageReader>
 #include <QLinearGradient>
+#include <QAbstractTextDocumentLayout>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -40,6 +41,17 @@ QSize previewLogicalSize(int itemScale) {
     const int scale = qMax(50, itemScale);
     return QSize(qMax(1, kCardPreviewWidth * scale / 100),
                  qMax(1, kCardPreviewHeight * scale / 100));
+}
+
+// Unstyled text takes MPaste's own card text colour, not the platform palette's,
+// which can be dark while MPaste is light (or the reverse).
+void drawRichTextDocument(QTextDocument &document, QPainter *painter, const QSizeF &layoutSize) {
+    QAbstractTextDocumentLayout::PaintContext paintContext;
+    paintContext.clip = QRectF(QPointF(0, 0), layoutSize);
+    paintContext.palette.setColor(QPalette::Text, ThemeManager::instance()->isDark()
+                                                      ? QColor(QStringLiteral("#E4E7EC"))
+                                                      : QColor(QStringLiteral("#30343B")));
+    document.documentLayout()->draw(painter, paintContext);
 }
 
 QString richTextThumbnailStyleSheet(int itemScale) {
@@ -694,7 +706,7 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
     painter.translate(leftPadding, topPadding);
     painter.scale(previewZoom, previewZoom);
     painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
+    drawRichTextDocument(document, &painter, layoutSize);
     painter.end();
 
     if (!richTextHtmlHasImageContent(html)) {
@@ -813,7 +825,7 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &html, const QByteArray
     painter.translate(leftPadding, topPadding);
     painter.scale(previewZoom, previewZoom);
     painter.setClipRect(QRectF(0, 0, layoutSize.width(), layoutSize.height()));
-    document.drawContents(&painter, QRectF(0, 0, layoutSize.width(), layoutSize.height()));
+    drawRichTextDocument(document, &painter, layoutSize);
     painter.end();
 
     if (!richTextHtmlHasImageContent(truncatedHtml)) {

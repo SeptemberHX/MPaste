@@ -20,6 +20,7 @@ Dark mode:
 - Keyword search and content-type filters.
 - Paged and continuous history browsing modes.
 - Quick paste shortcuts: `Alt+[1-9, 0]` to paste by visible position.
+- Two activation layouts for the global hotkey: the bottom panel, or a compact stack of the nine most recent items beside the text caret (Settings → Shortcuts → Opens). In the stack, `1`–`9` paste, `Shift` pastes plain text, typing filters and `Tab` opens the full panel.
 - Plain-text paste shortcuts: `Ctrl+Enter` for the current selection, or `Alt+Shift+[1-9, 0]` for quick slots.
 - Large preview dialog on `Space`, with zoom support for image previews.
 - Detailed inspector dialog for viewing normalized content and raw MIME data.
@@ -27,7 +28,7 @@ Dark mode:
 - Export selected items to image, HTML, or text files when supported.
 - Link preview fetching with OpenGraph metadata, preview images, and favicons.
 - Persistent history stored in `.mpaste` files with embedded preview thumbnails.
-- Current on-disk format is `.mpaste v6`; older v4/v5 files are still readable.
+- Current on-disk format is `.mpaste v7` (adds the source application's name); older v4–v6 files are still readable, but older MPaste builds cannot read v7.
 - Configurable history retention, max history size, item scale, theme mode, sound, and paste shortcut mode.
 - Configurable global hotkey and optional auto-paste on selection.
 - Optional external sync folder watching with incremental reloads.
@@ -46,6 +47,19 @@ Dark mode:
 | Any printable character | Start search |
 
 Hold `Alt` to show shortcut hints on visible cards.
+
+In the stack beside the caret:
+
+| Shortcut | Action |
+|---|---|
+| `1`–`9` | Paste that item |
+| `Shift+[1-9]` / `Shift+Enter` | Paste as plain text |
+| `Up` / `Down`, `Enter` | Select, paste |
+| Any other printable character | Filter the recent items |
+| `Tab` | Open the full panel |
+| `Esc` | Close |
+
+The stack opens below the caret (above or beside it when there is no room). On GNOME Wayland the companion reads the caret from GNOME's input method or, for fcitx, from ubuntu-tools' kimpanel; on Windows from the Win32 caret. Otherwise it opens at the pointer.
 
 ## Platform Notes
 
@@ -86,6 +100,7 @@ Default settings:
 | Item scale | `100%` |
 | Copy sound | `On` |
 | Global hotkey | `Alt+Q` |
+| Hotkey opens | Bottom panel |
 
 ## Build from Source
 

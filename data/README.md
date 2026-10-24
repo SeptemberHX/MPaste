@@ -56,3 +56,4 @@ update: 修改本目录文件时，同步更新本 README。
 - `CardPreviewMetrics.h`: `kCardHeaderHeight` reduced from 64 to 56, giving card content areas more vertical space.
 - `ContentClassifier`: Link classification now requires http/https scheme URLs; arbitrary-scheme strings are no longer classified as links.
 - `ClipboardItem::buildFingerprint` no longer includes `contentType` in the hash, so fingerprints are now purely content-based.
+- `ClipboardItem` 现在保存来源应用名（`sourceApp`）；`LocalSaver` 写入 `.mpaste v7`（在 pinned 之后增加 sourceApp），仍可读取 v4–v6，旧文件的应用名为空。

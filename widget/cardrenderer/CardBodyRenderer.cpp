@@ -1,11 +1,15 @@
 #include "CardBodyRenderer.h"
 
+#include <QRegularExpression>
+#include <QImage>
+
 #include <QApplication>
 #include <QCache>
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QLinearGradient>
+#include <QPainterPath>
 #include <QTextLayout>
 #include <QObject>
 #include <QUrl>
@@ -28,6 +32,7 @@ QString chooseInstalledFontFamily(const QStringList &preferredFamilies, const QS
 }
 
 const QString &preferredUiFontFamily() {
+#ifdef Q_OS_WIN
     static const QString family = chooseInstalledFontFamily(
         {
             QStringLiteral("Microsoft YaHei UI"),
@@ -37,6 +42,10 @@ const QString &preferredUiFontFamily() {
             QStringLiteral("Arial")
         },
         QApplication::font().family());
+#else
+    // Follow the desktop UI font; YaHei on Linux has no medium weights.
+    static const QString family = QApplication::font().family();
+#endif
     return family;
 }
 
@@ -211,7 +220,11 @@ void CardRenderUtils::drawWrappedText(QPainter *painter, const QRect &rect, cons
     // QPainter::drawText with TextWordWrap can produce overlapping
     // lines on certain fonts / DPI configurations.
     const qreal effectiveSpacing = lineSpacing > 0 ? lineSpacing : 1.2;
-    QTextLayout layout(text, font, painter->device());
+    // QTextLayout breaks lines only at U+2028, not at '\n': keep the text's own lines.
+    QString laidOut = text;
+    laidOut.replace(QLatin1String("\r\n"), QString(QChar::LineSeparator));
+    laidOut.replace(QLatin1Char('\n'), QChar::LineSeparator);
+    QTextLayout layout(laidOut, font, painter->device());
     QTextOption option;
     option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     layout.setTextOption(option);
@@ -292,6 +305,31 @@ void CardRenderUtils::drawCoverPixmap(QPainter *painter, const QRect &targetRect
     cropped.setDevicePixelRatio(targetDpr);
     coverPixmapCache().insert(cacheKey, new QPixmap(cropped), 1);
     painter->drawPixmap(targetRect.topLeft(), cropped);
+}
+
+QRect CardRenderUtils::insetPreviewRect(const QRect &bodyRect, int scale) {
+    const int side = qMax(6, 8 * scale / 100);
+    const int top = qMax(4, 6 * scale / 100);
+    return bodyRect.adjusted(side, top, -side, -qMax(2, 2 * scale / 100));
+}
+
+void CardRenderUtils::drawInsetVisualPreview(QPainter *painter, const QRect &bodyRect, const CardData &card,
+                                             int scale, bool darkTheme, int loadingPhase, bool containMode) {
+    // Framed like the rich-text panel instead of bleeding into the header and edges.
+    const QRect panelRect = insetPreviewRect(bodyRect, scale);
+    const qreal radius = qMax(6, 8 * scale / 100);
+    QPainterPath panel;
+    panel.addRoundedRect(QRectF(panelRect), radius, radius);
+    painter->save();
+    painter->setClipPath(panel, Qt::IntersectClip);
+    drawManagedVisualPreview(painter, panelRect, card, scale, darkTheme, loadingPhase, containMode);
+    painter->restore();
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(QPen(darkTheme ? QColor(255, 255, 255, 20) : QColor(0, 0, 0, 18), 1.0));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawPath(panel);
+    painter->restore();
 }
 
 void CardRenderUtils::drawContainPixmap(QPainter *painter, const QRect &targetRect, const QPixmap &pixmap) {
@@ -403,6 +441,54 @@ QString CardRenderUtils::previewTextForCard(const CardData &card) {
     return card.normalizedText.trimmed();
 }
 
+bool CardRenderUtils::isPlaceholderIcon(const QPixmap &icon) {
+    if (icon.isNull()) {
+        return true;
+    }
+    static QCache<qint64, bool> cache(512);
+    if (const bool *hit = cache.object(icon.cacheKey())) {
+        return *hit;
+    }
+    auto signature = [](const QPixmap &pixmap) {
+        return pixmap.toImage().convertToFormat(QImage::Format_ARGB32)
+            .scaled(12, 12, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    };
+    static const QImage reference = signature(QPixmap(QStringLiteral(":/resources/resources/unknown.svg")));
+    const QImage sample = signature(icon);
+    qint64 difference = 0;
+    for (int y = 0; y < 12; ++y) {
+        for (int x = 0; x < 12; ++x) {
+            const QRgb a = sample.pixel(x, y), b = reference.pixel(x, y);
+            difference += qAbs(qRed(a) - qRed(b)) + qAbs(qGreen(a) - qGreen(b))
+                + qAbs(qBlue(a) - qBlue(b)) + qAbs(qAlpha(a) - qAlpha(b));
+        }
+    }
+    const bool placeholder = difference / (12 * 12 * 4) < 14;
+    cache.insert(icon.cacheKey(), new bool(placeholder));
+    return placeholder;
+}
+
+QUrl CardRenderUtils::singleWebUrl(const QString &text) {
+    const QString value = text.trimmed();
+    if (value.isEmpty() || value.size() > 2048 || value.contains(QRegularExpression(QStringLiteral("\\s")))) {
+        return {};
+    }
+    if (!value.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive)
+        && !value.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
+        return {};
+    }
+    const QUrl url(value, QUrl::StrictMode);
+    return url.isValid() && !url.host().isEmpty() ? url : QUrl();
+}
+
+QString CardRenderUtils::displayHost(const QUrl &url) {
+    QString host = url.host();
+    if (host.startsWith(QStringLiteral("www."), Qt::CaseInsensitive)) {
+        host = host.mid(4);
+    }
+    return host;
+}
+
 bool CardRenderUtils::looksLikeCode(const QString &text) {
     if (text.size() < 10 || text.size() > 50000) {
         return false;
@@ -412,7 +498,14 @@ bool CardRenderUtils::looksLikeCode(const QString &text) {
     const QString sample = text.left(2000);
     const QStringList lines = sample.split(QLatin1Char('\n'));
     if (lines.size() < 2) {
-        return false;
+        // A one-line shell command. Words that are also English need a flag, path or pipe too.
+        static const QRegularExpression shellCommand(QStringLiteral(
+            "^\\s*(?:\\$\\s+)?(?:"
+            "(?:sudo|git|npm|npx|pnpm|yarn|pip3?|python3?|docker|kubectl|apt|apt-get|dnf|yum|pacman|brew|cmake|cargo|"
+            "curl|wget|ssh|scp|rsync|chmod|chown|mkdir|systemctl|journalctl)\\s+\\S"
+            "|(?:cd|ls|cp|mv|rm|cat|grep|find|make|go|node|tar|echo|export)\\s+.*(?:\\s--?\\w|/|\\||&&|=)"
+            "|\\./\\S+)"));
+        return sample.size() <= 300 && shellCommand.match(sample).hasMatch();
     }
 
     int codeSignals = 0;
