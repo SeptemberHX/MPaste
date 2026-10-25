@@ -33,6 +33,7 @@
 #include <QtMath>
 #include <QToolButton>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QVBoxLayout>
 #include <QWindow>
 #include <QPointer>
@@ -68,6 +69,23 @@ public:
 
 
 namespace {
+// What show() does first: a hidden widget only records a resize, so the layouts
+// below it keep the previous preview's geometry until the event is delivered.
+// Parents go first, since their layout resizes the children.
+void deliverPendingResizes(QWidget *widget) {
+    if (widget->testAttribute(Qt::WA_PendingResizeEvent)) {
+        widget->setAttribute(Qt::WA_PendingResizeEvent, false);
+        QResizeEvent event(widget->size(), QSize());
+        QCoreApplication::sendEvent(widget, &event);
+    }
+    for (QObject *child : widget->children()) {
+        auto *childWidget = qobject_cast<QWidget *>(child);
+        if (childWidget && !childWidget->isWindow()) {
+            deliverPendingResizes(childWidget);
+        }
+    }
+}
+
 constexpr int kPreviewDialogWidth = 980;
 constexpr int kPreviewDialogHeight = 760;
 constexpr int kPreviewBodyFontSize = 16;
@@ -901,16 +919,15 @@ connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     }
     if (targetScreen) {
         screenArea_ = targetScreen->availableGeometry();
-        resize(qMin(kPreviewDialogWidth, qMax(1, screenArea_.width() - 32)),
-               qMin(kPreviewDialogHeight, qMax(1, screenArea_.height() - 32)));
+        const int fullWidth = qMin(kPreviewDialogWidth, qMax(1, screenArea_.width() - 32));
+        // An open preview keeps its height until the new content is in.
+        resize(fullWidth, isVisible() ? height()
+                                      : qMin(kPreviewDialogHeight, qMax(1, screenArea_.height() - 32)));
     }
 
-    // Shown once the content is in, at the height it needs; a slow load shows
-    // the window (at the full height) after a moment instead of keeping it back.
-    if (isVisible()) {
-        revealPending_ = false;
-        return;
-    }
+    // Shown (or, when already open, refitted) once the content is in, at the
+    // height it needs; a slow load shows the window (at the full height) after a
+    // moment instead of keeping it back.
     revealPending_ = true;
     QTimer::singleShot(400, this, [this, token]() {
         if (revealPending_ && previewToken_ == token) {
@@ -932,9 +949,12 @@ int ClipboardItemPreviewDialog::heightForContent() const {
             content = qCeil(imageOriginal_.height() * scale);
         }
     } else if (ui_.browser) {
-        const int frame = ui_.browser->height() - ui_.browser->viewport()->height();
+        // The browser's own box, not its viewport: the viewport also loses the
+        // width of a scroll bar the previous, longer preview needed.
+        const QRect inner = ui_.browser->contentsRect(); // frame + stylesheet padding removed
+        const int frame = ui_.browser->height() - inner.height();
         QTextDocument *document = ui_.browser->document();
-        document->setTextWidth(ui_.browser->viewport()->width());
+        document->setTextWidth(inner.width());
         content = qCeil(document->size().height()) + frame + 4;
     }
     const int maxHeight = screenArea_.isValid() ? qRound(screenArea_.height() * 0.85) : kPreviewDialogHeight;
@@ -943,9 +963,11 @@ int ClipboardItemPreviewDialog::heightForContent() const {
 
 void ClipboardItemPreviewDialog::revealSizedToContent() {
     revealPending_ = false;
+    ensurePolished();
     if (layout()) {
         layout()->activate();
     }
+    deliverPendingResizes(this);
     resize(width(), heightForContent());
     if (screenArea_.isValid()) {
         move(screenArea_.center() - QPoint(width() / 2, height() / 2));

@@ -146,7 +146,8 @@ def main():
         assert all(r[0] == ax and r[2] == aw and r[1] + r[3] == ay + ah for r in frames), frames
         print('PASS first visible frame and every mapped frame at screen bottom', flush=True)
         print('PASS global hotkey and bottom panel geometry', flush=True)
-        for attempt in range(2):
+        heights = []
+        for attempt in range(3):
             key('space')
             wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste Preview'"), 'Space preview focus')
             time.sleep(.2)
@@ -159,10 +160,13 @@ def main():
             # Fixed width; the height follows the content, from 240 up to 85% of the work area.
             assert w==min(980,aw-32) and 240<=h<=max(240,round(ah*0.85)),geometry
             assert abs(x-(ax+(aw-w)//2))<=1 and abs(y-(ay+(ah-h)//2))<=1,geometry
+            heights.append(h)
             panel = evaluate("(()=>{const w=global.get_window_actors().map(a=>a.meta_window).find(w=>w.get_title()==='MPaste');const r=w.get_frame_rect();return [r.x,r.y,r.width,r.height];})()")
             assert panel == rect, (panel,rect)
             key('Escape')
             wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste'"), 'preview dismissal')
+        # The same item opens at the same height every time.
+        assert len(set(heights)) == 1, heights
         print('PASS preview geometry fitted to content, repeat opening and unchanged panel bounds',flush=True)
         key('Home')
         for _ in range(3): key('Right')
