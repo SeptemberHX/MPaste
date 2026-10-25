@@ -1,0 +1,145 @@
+# Builds the Windows zip and the Ubuntu .deb.
+# - Pushing a version tag (0.8.1 or v0.8.1) builds both and publishes a GitHub
+#   release with them, its notes taken from that version's CHANGELOG.md section.
+# - Running it by hand (Actions → Release → Run workflow) only builds, and keeps
+#   the packages as workflow artifacts: a dry run before tagging.
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Check version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        name: Read the version from CMakeLists.txt
+        shell: bash
+        run: |
+          part() { sed -nE "s/^set\(_VERSION_$1 ([0-9]+)\)$/\1/p" CMakeLists.txt; }
+          version="$(part MAJOR).$(part MINOR).$(part PATCH)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "CMakeLists.txt version: $version"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the version in CMakeLists.txt ($version)."
+            exit 1
+          fi
+
+  windows:
+    name: Windows (MinGW, Qt 6.8)
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt and MinGW
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: qtmultimedia
+          tools: tools_mingw1310
+          cache: true
+
+      - name: Put MinGW on PATH
+        shell: pwsh
+        run: |
+          $mingw = Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter 'mingw*' | Select-Object -First 1
+          if (-not $mingw) { throw "MinGW was not installed under $env:IQTA_TOOLS" }
+          "$($mingw.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build and package
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release "-DMPASTE_QT_ROOT=$env:QT_ROOT_DIR"
+          cmake --build build --target package --parallel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MPaste-${{ needs.version.outputs.version }}-win64
+          path: build/MPaste-${{ needs.version.outputs.version }}-win64.zip
+          if-no-files-found: error
+
+  ubuntu:
+    name: Ubuntu 26.10 (.deb)
+    needs: version
+    runs-on: ubuntu-latest
+    # The package depends on the Qt of the release it is built on, and the GNOME
+    # companion targets GNOME 51, so it is built in that release.
+    container: ubuntu:26.10
+    steps:
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential cmake ninja-build pkg-config dpkg-dev file \
+            qt6-base-dev qt6-base-private-dev qt6-multimedia-dev qt6-tools-dev qt6-tools-dev-tools \
+            qt6-wayland libx11-dev libxcb-keysyms1-dev libxdo-dev \
+            libwayland-dev libwayland-bin wayland-protocols
+
+      - uses: actions/checkout@v4
+
+      - name: Build and package
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          cd build && cpack -G DEB
+
+      - name: Show the package
+        run: |
+          deb=build/mpaste_${{ needs.version.outputs.version }}_amd64.deb
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpaste_${{ needs.version.outputs.version }}_amd64
+          path: build/mpaste_${{ needs.version.outputs.version }}_amd64.deb
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: github.ref_type == 'tag'
+    needs: [version, windows, ubuntu]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          version='${{ needs.version.outputs.version }}'
+          # The lines under "## <version>", up to the next "## " heading.
+          awk -v v="## $version" '$0 == v { on = 1; next } on && /^## / { exit } on' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::warning::CHANGELOG.md has no '## $version' section; the release has no notes."
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: MPaste ${{ needs.version.outputs.version }}
+          body_path: notes.md
+          files: dist/*
+          fail_on_unmatched_files: true

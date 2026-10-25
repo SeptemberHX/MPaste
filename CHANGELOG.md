@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Releases are built on GitHub Actions: pushing a version tag builds the Windows zip and the Ubuntu 26.10 `.deb` and publishes them with that version's CHANGELOG notes; running the workflow by hand builds them without releasing.
 - Build: dependencies come from the system and are checked at configure time, which names the package to install (`qt6-multimedia-dev`, `qt6-tools-dev`, `libxcb-keysyms1-dev`, `libxdo-dev`...) instead of failing later on a missing header; libxdo is found rather than assumed; `CXXFLAGS` and `-DCMAKE_CXX_FLAGS` are no longer overwritten.
 - Debian package (`cpack -G DEB` → `mpaste_<version>_<arch>.deb`) brought up to date: Qt 6 dependencies read from the binary (it listed Qt 5), the GNOME companion and a login autostart entry included, the binary stripped and without the build's RUNPATH, the upstream changelog shipped. In a Wayland session MPaste now picks the Wayland platform itself, so `/usr/bin/MPaste` behaves like the per-user launcher.
 - Settings: a roomier sidebar (wider, 40 px tabs that keep their height, the mark aligned with the tab icons); the close button of the Aurora windows is no longer clipped on Windows, where the native style padded it past its 32 px row.

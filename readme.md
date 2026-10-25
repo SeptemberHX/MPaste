@@ -175,6 +175,21 @@ Optional CMake flags:
 | `-DMPASTE_MINGW_BIN_DIR=<path>` | MinGW runtime directory used for Windows deployment |
 | `-DMPASTE_ENABLE_WINDOWS_DEPLOY=OFF` | Disable post-build Windows deployment packaging |
 
+### Releasing
+
+`.github/workflows/release.yml` builds the Windows zip (MinGW, Qt 6.8) and the
+Ubuntu 26.10 `.deb` on GitHub Actions. To release:
+
+1. Set the version in `CMakeLists.txt` (`_VERSION_MAJOR/MINOR/PATCH`) and rename
+   `## Unreleased` in `CHANGELOG.md` to `## <version>`.
+2. Commit, then push a tag with that version: `git tag 0.8.1 && git push origin 0.8.1`
+   (`v0.8.1` works too).
+
+The workflow stops if the tag and `CMakeLists.txt` disagree; otherwise it publishes
+a GitHub release with both packages, its notes taken from that CHANGELOG section.
+Running the workflow by hand (Actions → Release → Run workflow) builds the
+packages as artifacts without releasing — a dry run before tagging.
+
 ### Rendering Backend
 
 You can control the OpenGL backend with the `MPASTE_OPENGL_BACKEND` environment variable:
