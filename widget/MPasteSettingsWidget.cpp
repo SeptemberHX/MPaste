@@ -542,8 +542,9 @@ static QString settingsAuroraStyle(bool dark) {
         "QLabel { color: %1; font-size: 13.5px; background: transparent; }"
         "QLabel#section { color: %3; font-size: 12px; font-weight: 500; padding-left: 4px; background: transparent; }"
         "QFrame#card { background: %7; border: 1px solid %8; border-radius: 16px; }"
-        "QToolButton#navBtn { border: none; border-radius: 15px; padding: 0 12px; text-align: left; background: transparent;"
-        "  color: %2; font-size: 13.5px; }"
+        // Every box property is set: a native style would otherwise size the tabs itself.
+        "QToolButton#navBtn { min-height: 40px; max-height: 40px; margin: 0px; border: none; border-radius: 19px;"
+        "  padding: 0 14px; text-align: left; background: transparent; color: %2; font-size: 14px; }"
         "QToolButton#navBtn:hover:!checked { background: %4; color: %1; }"
         "QToolButton#navBtn:checked { background: %6; color: %1; font-weight: 600; }"
         "QComboBox, QLineEdit, QSpinBox, QKeySequenceEdit { min-height: 32px; max-height: 32px; padding: 0 12px;"
@@ -674,8 +675,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 {
     ui->setupUi(this);
 
-    setMinimumWidth(760);
-    setMaximumWidth(760);
+    setMinimumWidth(784);
+    setMaximumWidth(784);
     setMinimumHeight(0);
     setMaximumHeight(QWIDGETSIZE_MAX);
     if (layout()) {
@@ -921,13 +922,14 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         // ── Sidebar with QToolButtons (MTodo pattern) ──
         auto *sideWidget = new QWidget(ui->generalCard);
-        sideWidget->setFixedWidth(184);
+        sideWidget->setFixedWidth(208);
         auto *sideLayout = new QVBoxLayout(sideWidget);
-        sideLayout->setContentsMargins(12, 0, 12, 12);
-        sideLayout->setSpacing(4);
+        sideLayout->setContentsMargins(14, 2, 14, 14);
+        sideLayout->setSpacing(6);
         {
             auto *brand = new QHBoxLayout;
-            brand->setContentsMargins(6, 0, 0, 14);
+            // The mark lines up with the tab icons (the tabs' 14 px padding).
+            brand->setContentsMargins(14, 0, 0, 20);
             brand->setSpacing(10);
             auto *mark = new QLabel(sideWidget);
             mark->setPixmap(QIcon(QStringLiteral(":/resources/resources/mpaste.svg")).pixmap(QSize(28, 28), devicePixelRatioF()));
@@ -945,11 +947,11 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             auto *btn = new QToolButton();
             btn->setObjectName(QStringLiteral("navBtn"));
             btn->setIcon(IconResolver::themedIcon(iconName, ThemeManager::instance()->isDark()));
-            btn->setIconSize(QSize(16, 16));
+            btn->setIconSize(QSize(18, 18));
             btn->setText(text);
             btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
             btn->setCheckable(true);
-            btn->setFixedSize(160, 36);
+            btn->setFixedSize(180, 40);
             btn->setCursor(Qt::PointingHandCursor);
             btn->setFocusPolicy(Qt::NoFocus);
             navGroup->addButton(btn, id);

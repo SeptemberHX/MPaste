@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings: a roomier sidebar (wider, 40 px tabs that keep their height, the mark aligned with the tab icons); the close button of the Aurora windows is no longer clipped on Windows, where the native style padded it past its 32 px row.
 - Privacy (Settings → Privacy, on by default): what a password manager marks as secret is never recorded — KDE's `x-kde-passwordManagerHint`, and on Windows `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ignore` or `CanIncludeInClipboardHistory` = 0 — nor written to the log. Copies from the apps listed there (Bitwarden, KeePassXC, KeePass and 1Password to begin with) are skipped entirely. Items already in history stay. On GNOME Wayland this needs companion v10 (log out and back in).
 
 ## 0.8.0

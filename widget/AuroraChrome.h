@@ -99,8 +99,10 @@ inline QString styleSheet(bool dark) {
         "QLabel#auroraSubtitle { color: %2; font-size: 12px; background: transparent; }"
         "QLabel#auroraHint { color: %3; font-size: 12px; background: transparent; }"
         "QLabel#auroraSection { color: %3; font-size: 12px; font-weight: 500; background: transparent; padding-left: 4px; }"
+        // Padding and margin set too: without them a native style (Windows 11)
+        // pads the button past 32 px and the title row clips it.
         "QToolButton#auroraClose { min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;"
-        "  border: none; border-radius: 15px; background: %4; color: %2; font-size: 15px; }"
+        "  padding: 0px; margin: 0px; border: none; border-radius: 15px; background: %4; color: %2; font-size: 15px; }"
         "QToolButton#auroraClose:hover { background: %5; color: %1; }"
         "QPushButton#auroraSecondary { min-height: 32px; max-height: 32px; padding: 0 14px; border: none;"
         "  border-radius: 15px; background: %4; color: %1; font-size: 13px; }"
