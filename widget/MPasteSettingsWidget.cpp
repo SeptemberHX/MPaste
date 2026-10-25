@@ -12,6 +12,7 @@
 #include "SurfacePainter.h"
 #include "ToggleSwitch.h"
 #include "utils/IconResolver.h"
+#include <QRegularExpression>
 #include <QShowEvent>
 #include <QMouseEvent>
 #include <QWindow>
@@ -958,9 +959,10 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         makeNavBtn(QStringLiteral("settings"), uiText("General", QStringLiteral("通用")), 0);
         makeNavBtn(QStringLiteral("rename"), uiText("Shortcuts", QStringLiteral("快捷键")), 1);
         makeNavBtn(QStringLiteral("save_black"), uiText("Sync", QStringLiteral("同步")), 2);
-        makeNavBtn(QStringLiteral("text_plain"), uiText("Text recognition", QStringLiteral("文字识别")), 3);
+        makeNavBtn(QStringLiteral("shield"), uiText("Privacy", QStringLiteral("隐私")), 3);
+        makeNavBtn(QStringLiteral("text_plain"), uiText("Text recognition", QStringLiteral("文字识别")), 4);
         sideLayout->addStretch();
-        makeNavBtn(QStringLiteral("info"), uiText("About", QStringLiteral("关于")), 4);
+        makeNavBtn(QStringLiteral("info"), uiText("About", QStringLiteral("关于")), 5);
 
         auto *stack = new QStackedWidget(ui->generalCard);
         stack->setObjectName(QStringLiteral("settingsStack"));
@@ -1058,6 +1060,42 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         syncPageLayout->addWidget(syncHelp);
         syncPageLayout->addStretch();
         stack->addWidget(syncPage);
+
+        // ── Privacy page ──
+        auto *privacyPage = new QWidget(stack);
+        auto *pLayout = createPageLayout(privacyPage);
+        pLayout->addWidget(makeSectionLabel(uiText("Privacy", QStringLiteral("隐私")), privacyPage));
+        {
+            auto *g = makeSettingsGrid();
+            auto *sensitiveLabel = new QLabel(uiText("Skip what password managers mark as secret",
+                                                     QStringLiteral("不记录密码管理器标记为敏感的内容")), privacyPage);
+            sensitiveLabel->setMinimumHeight(44);
+            sensitiveSwitch_ = new ToggleSwitch(privacyPage);
+            g->addWidget(sensitiveLabel, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(sensitiveSwitch_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+
+            auto *appsLabel = new QLabel(uiText("Never record from", QStringLiteral("不记录这些应用")), privacyPage);
+            appsLabel->setMinimumHeight(24);
+            ignoredAppsEdit_ = new QLineEdit(privacyPage);
+            ignoredAppsEdit_->setMinimumHeight(36);
+            ignoredAppsEdit_->setPlaceholderText(uiText("App names, separated by commas", QStringLiteral("应用名，用逗号分隔")));
+            ignoredAppsEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            g->addWidget(appsLabel, 1, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(ignoredAppsEdit_, 2, 0, 1, 2);
+            pLayout->addWidget(makeCard(g));
+        }
+        auto *privacyHelp = new QLabel(uiText(
+            "Password managers such as KeePassXC mark the passwords they copy; those copies are left out of history. "
+            "Copies from the apps listed are left out entirely; use the name a card shows as its source. "
+            "Items already in history stay until you delete them.",
+            QStringLiteral("KeePassXC 等密码管理器复制密码时会附带“敏感”标记，带标记的内容不会被记录。"
+                           "列表里的应用复制的任何内容都不会被记录，名称与卡片上显示的来源应用一致。"
+                           "已经记录下来的条目不受影响，需要手动删除。")), privacyPage);
+        privacyHelp->setObjectName(QStringLiteral("auroraHint"));
+        privacyHelp->setWordWrap(true);
+        pLayout->addWidget(privacyHelp);
+        pLayout->addStretch();
+        stack->addWidget(privacyPage);
 
         // ── Text recognition page ──
         auto *maintenancePage = new QWidget(stack);
@@ -1194,6 +1232,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     if (activationLayoutCombo_) connect(activationLayoutCombo_, &QComboBox::currentIndexChanged, this, save);
     if (ocrBackendCombo_) connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, save);
     if (autoOcrSwitch_) connect(autoOcrSwitch_, &ToggleSwitch::toggled, this, save);
+    if (sensitiveSwitch_) connect(sensitiveSwitch_, &ToggleSwitch::toggled, this, save);
+    if (ignoredAppsEdit_) connect(ignoredAppsEdit_, &QLineEdit::editingFinished, this, save);
     connect(ui->daySpinBox, &QSpinBox::valueChanged, this, save);
     connect(ui->itemScaleSlider, &QSlider::valueChanged, this, save);
     connect(ui->shortcutEdit, &QKeySequenceEdit::editingFinished, this, save);
@@ -1297,6 +1337,12 @@ void MPasteSettingsWidget::loadSettings()
     if (autoOcrSwitch_) {
         autoOcrSwitch_->setChecked(settings->isAutoOcr());
     }
+    if (sensitiveSwitch_) {
+        sensitiveSwitch_->setChecked(settings->isSkipSensitive());
+    }
+    if (ignoredAppsEdit_) {
+        ignoredAppsEdit_->setText(settings->getIgnoredApps().join(QStringLiteral(", ")));
+    }
     // Trigger visibility update for Baidu fields.
     if (ocrBackendCombo_) {
         const bool isBaidu = ocrBackendCombo_->currentData().toInt() == 1;
@@ -1388,6 +1434,14 @@ void MPasteSettingsWidget::saveAllSettings()
     if (autoOcrSwitch_) {
         settings->setAutoOcr(autoOcrSwitch_->isChecked());
     }
+    if (sensitiveSwitch_) {
+        settings->setSkipSensitive(sensitiveSwitch_->isChecked());
+    }
+    if (ignoredAppsEdit_) {
+        // Commas, or the Chinese ones a Chinese input method types.
+        static const QRegularExpression separators(QStringLiteral("[,，;；\\n]"));
+        settings->setIgnoredApps(ignoredAppsEdit_->text().split(separators, Qt::SkipEmptyParts));
+    }
 
 #ifdef Q_OS_WIN
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
@@ -1417,7 +1471,7 @@ void MPasteSettingsWidget::applyTheme(bool dark) {
     // Update sidebar icons for the new theme.
     static const QStringList navIcons = {
         QStringLiteral("settings"), QStringLiteral("rename"), QStringLiteral("save_black"),
-        QStringLiteral("text_plain"), QStringLiteral("info")
+        QStringLiteral("shield"), QStringLiteral("text_plain"), QStringLiteral("info")
     };
     const auto navBtns = findChildren<QToolButton *>(QStringLiteral("navBtn"));
     for (int i = 0; i < navBtns.size() && i < navIcons.size(); ++i) {

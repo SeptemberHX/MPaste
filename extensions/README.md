@@ -43,6 +43,8 @@ Panel placement runs from the compositor `map` event before the first painted fr
 
 On native Wayland the Qt panel width stays resizable: the compositor sets it to the pointer's monitor work-area width on each opening. Do not lock it to the Qt primary screen width, which prevents correct placement across differently sized monitors.
 
+Version 10 also passes the `x-kde-passwordManagerHint` target (it has no `/`, so it was dropped with the X11 protocol targets): with it MPaste leaves a password manager's copies out of history.
+
 Version 9 only positions `MPaste Preview` (centered in the work area) and no longer resizes it: MPaste sizes it, its height fitting the content.
 
 Version 5 selects the panel monitor from the global pointer position. The previously focused window remains the paste destination and does not control panel placement. Preview windows stay centered on the panel's monitor.

@@ -73,6 +73,8 @@ private:
     QComboBox *ocrBackendCombo_ = nullptr;
     QLabel *autoOcrLabel_ = nullptr;
     ToggleSwitch *autoOcrSwitch_ = nullptr;
+    ToggleSwitch *sensitiveSwitch_ = nullptr;
+    QLineEdit *ignoredAppsEdit_ = nullptr;
     QLabel *baiduApiKeyLabel_ = nullptr;
     QLineEdit *baiduApiKeyEdit_ = nullptr;
     QLabel *baiduSecretKeyLabel_ = nullptr;

@@ -36,6 +36,8 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
         <file>resources/quit.svg</file>
         <file>resources/info.svg</file>
         <file>resources/info_light.svg</file>
+        <file>resources/shield.svg</file>
+        <file>resources/shield_light.svg</file>
         <file>resources/settings.svg</file>
         <file>resources/settings_light.svg</file>
         <file>resources/menu_more.svg</file>

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Privacy (Settings → Privacy, on by default): what a password manager marks as secret is never recorded — KDE's `x-kde-passwordManagerHint`, and on Windows `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ignore` or `CanIncludeInClipboardHistory` = 0 — nor written to the log. Copies from the apps listed there (Bitwarden, KeePassXC, KeePass and 1Password to begin with) are skipped entirely. Items already in history stay. On GNOME Wayland this needs companion v10 (log out and back in).
+
 ## 0.8.0
 
 A new look (Still and Aurora cards, Aurora windows), the quick paste stack beside the caret, and the source app on every item. History files move to `.mpaste v7`: older MPaste builds cannot read them.

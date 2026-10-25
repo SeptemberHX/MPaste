@@ -20,7 +20,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `AboutWidget.*`：关于窗口。
 - `ClipboardBoardActionService.*`：板块条目操作 helper，承接模型/持久化层的非视觉动作。
 - `ClipboardItemDetailsDialog.*`：条目详情与检查器弹窗。
-- `MPasteSettingsWidget.*`：设置窗口。
+- `MPasteSettingsWidget.*`：设置窗口。侧栏依次为通用、快捷键、同步、隐私、文字识别、关于；按钮编号即页面顺序，`applyTheme` 的图标列表与之对应。
 - `MPasteWidget.*`：主窗口与主要交互入口。
 - `MTextBrowser.*`：用于卡片正文展示的轻量文本浏览控件。
 - `AuroraChrome.h`：「流光」窗口外观：圆角窗体、左上角应用色光晕、细边与顶部高光，以及标题、胶囊按钮、分段控件、输入框、面板的共享样式表；预览、OCR、设置、详情、别名、关于窗口共用。`attachBackdrop()` 让背景与画出的圆角一致：Linux 只模糊该形状；Windows 不开 acrylic（DWM 只能圆 8 px，会在 20 px 圆角外露出），去掉 DWM 圆角与边框，由逐像素透明画出同样的窗体。

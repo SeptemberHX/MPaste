@@ -62,6 +62,7 @@ private:
     void cancelPendingImageFetch();
     void emitCapturedItem(const ClipboardItem &item, int wId);
     static ClipboardItem sourcedItem(WId wId, const QMimeData *mimeData);
+    bool isPrivateCopy(const QMimeData *mimeData, WId wId, bool readSystemClipboard) const;
     bool isDuplicateRecentCapture(const ClipboardItem &item, int wId) const;
     void rememberCapturedItem(const ClipboardItem &item, int wId);
     void fetchWpsImageAndEmit(const QMimeData *mimeData, const QUrl &url, int wId, quint64 captureToken);

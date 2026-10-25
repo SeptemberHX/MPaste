@@ -9,6 +9,7 @@
 
 #include "ClipboardMonitor.h"
 
+#include "MPasteSettings.h"
 #include "PlatformRelated.h"
 #ifdef Q_OS_LINUX
 #include "GnomeBridge.h"
@@ -171,7 +172,47 @@ QString itemSummary(const ClipboardItem &item) {
         .arg(item.getHtml().size());
 }
 
+// A password manager's request, by KDE's convention (KeePassXC and others set
+// it on any Linux desktop), that the copy stay out of clipboard history.
+bool mimeMarkedSensitive(const QMimeData *mimeData) {
+    static const QString hint = QStringLiteral("x-kde-passwordManagerHint");
+    return mimeData && mimeData->hasFormat(hint) && mimeData->data(hint).trimmed() == "secret";
+}
+
 #ifdef Q_OS_WIN
+/// The Windows conventions for the same request, on the clipboard as it is now:
+/// the formats documented for clipboard monitors and history, and the older one
+/// clipboard viewers share. Only their presence (or one DWORD) is read.
+bool windowsClipboardMarkedSensitive() {
+    IDataObject *pDataObj = nullptr;
+    if (FAILED(OleGetClipboard(&pDataObj)) || !pDataObj) {
+        return false;
+    }
+    auto formatFor = [](const wchar_t *name) {
+        return FORMATETC{ static_cast<CLIPFORMAT>(RegisterClipboardFormatW(name)), nullptr,
+                          DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    };
+    FORMATETC exclude = formatFor(L"ExcludeClipboardContentFromMonitorProcessing");
+    FORMATETC viewerIgnore = formatFor(L"Clipboard Viewer Ignore");
+    bool marked = pDataObj->QueryGetData(&exclude) == S_OK || pDataObj->QueryGetData(&viewerIgnore) == S_OK;
+    if (!marked) {
+        // A DWORD; 0 keeps the copy out of history.
+        FORMATETC history = formatFor(L"CanIncludeInClipboardHistory");
+        STGMEDIUM medium = {};
+        if (SUCCEEDED(pDataObj->GetData(&history, &medium))) {
+            if (medium.tymed == TYMED_HGLOBAL && medium.hGlobal && GlobalSize(medium.hGlobal) >= sizeof(DWORD)) {
+                if (const void *data = GlobalLock(medium.hGlobal)) {
+                    marked = *static_cast<const DWORD *>(data) == 0;
+                    GlobalUnlock(medium.hGlobal);
+                }
+            }
+            ReleaseStgMedium(&medium);
+        }
+    }
+    pDataObj->Release();
+    return marked;
+}
+
 /// Read the raw CF_HTML bytes from the OLE clipboard.
 /// Qt's QWindowsMimeHtml only extracts the fragment between StartFragment
 /// and EndFragment markers, discarding the <head><style> block.  CSS
@@ -359,6 +400,10 @@ void ClipboardMonitor::captureClipboard() {
     } captureScope(this);
 
     const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
+    // First, before the snapshot below logs a preview of the text.
+    if (isPrivateCopy(mimeData, pendingWId_, true)) {
+        return;
+    }
     qInfo().noquote() << QStringLiteral("[clipboard-monitor] mime snapshot token=%1 %2")
         .arg(captureToken_)
         .arg(mimeSummary(mimeData));
@@ -783,6 +828,30 @@ void ClipboardMonitor::rememberCapturedItem(const ClipboardItem &item, int wId) 
     lastCaptureAtMs_ = QDateTime::currentMSecsSinceEpoch();
 }
 
+// Checked before anything of the copy is kept or logged: what a password
+// manager marks as not for history, and anything from an app on the list.
+bool ClipboardMonitor::isPrivateCopy(const QMimeData *mimeData, WId wId, bool readSystemClipboard) const {
+    const MPasteSettings *settings = MPasteSettings::getInst();
+    if (settings->isSkipSensitive()) {
+        bool marked = mimeMarkedSensitive(mimeData);
+#ifdef Q_OS_WIN
+        marked = marked || (readSystemClipboard && windowsClipboardMarkedSensitive());
+#else
+        Q_UNUSED(readSystemClipboard);
+#endif
+        if (marked) {
+            qInfo().noquote() << QStringLiteral("[clipboard-monitor] not recorded: marked sensitive token=%1").arg(captureToken_);
+            return true;
+        }
+    }
+    const QString appName = PlatformRelated::getWindowAppName(wId);
+    if (settings->isIgnoredApp(appName)) {
+        qInfo().noquote() << QStringLiteral("[clipboard-monitor] not recorded: copied from %1 token=%2").arg(appName).arg(captureToken_);
+        return true;
+    }
+    return false;
+}
+
 ClipboardItem ClipboardMonitor::sourcedItem(WId wId, const QMimeData *mimeData) {
     // The source application's icon and display name travel with the item.
     ClipboardItem item = ClipboardItem::createLightweight(PlatformRelated::getWindowIcon(wId), mimeData);
@@ -999,6 +1068,7 @@ void ClipboardMonitor::captureGnomeClipboard(const QVariantMap &formats, uint wi
         if (!png.isEmpty()) materializePng(&mime, png);
     }
     if (!hasMeaningfulContent(&mime)) return;
+    if (isPrivateCopy(&mime, window, false)) return;
     const auto signature = computeEchoSignature(&mime);
     if (!selfPasteEchoSig_.isEmpty() && signature == selfPasteEchoSig_) return;
     selfPasteEchoSig_.clear();

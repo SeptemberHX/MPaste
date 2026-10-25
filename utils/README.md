@@ -17,9 +17,9 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## 文件说明
 
-- `ClipboardMonitor.h` / `ClipboardMonitor.cpp`：系统剪贴板监听与采集逻辑。
+- `ClipboardMonitor.h` / `ClipboardMonitor.cpp`：系统剪贴板监听与采集逻辑。`isPrivateCopy` 在读取或记录日志之前拦下不该进历史的复制：密码管理器的“敏感”标记（`x-kde-passwordManagerHint=secret`；Windows 上还有 `ExcludeClipboardContentFromMonitorProcessing`、`Clipboard Viewer Ignore` 和值为 0 的 `CanIncludeInClipboardHistory`），以及忽略列表里的来源应用。
 - `HotKeyManager.h` / `HotKeyManager.cpp`：全局快捷键注册与管理。
-- `MPasteSettings.h` / `MPasteSettings.cpp`：运行配置、持久化设置与默认值管理。
+- `MPasteSettings.h` / `MPasteSettings.cpp`：运行配置、持久化设置与默认值管理。`privacy/skipSensitive`（默认开）与 `privacy/ignoredApps`（默认预填 Bitwarden、KeePassXC、KeePass、1Password，按来源应用名不区分大小写匹配）。
 - `ThemeManager.h` / `ThemeManager.cpp`：统一管理应用主题切换、调色板更新与 QSS token 替换。
 - `IconResolver.h` / `IconResolver.cpp`：解析亮色 / 暗色图标资源并提供主题化图标。
 - `OpenGraphFetcher.h` / `OpenGraphFetcher.cpp`：抓取网页 Open Graph 元数据，供链接卡片预览使用。

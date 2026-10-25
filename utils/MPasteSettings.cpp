@@ -59,6 +59,10 @@ MPasteSettings::MPasteSettings()
     this->historyViewMode = ViewModePaged;
 
     this->terminalNames << tr("Terminal");
+    // Password managers, by the names their windows report (GNOME's app name,
+    // the executable's description on Windows).
+    this->ignoredApps = {QStringLiteral("Bitwarden"), QStringLiteral("KeePassXC"),
+                         QStringLiteral("KeePass"), QStringLiteral("1Password")};
 
     this->loadSettings();
 
@@ -133,6 +137,8 @@ void MPasteSettings::loadSettings() {
     this->baiduOcrApiKey = settings.value("ocr/baiduApiKey").toString();
     this->baiduOcrSecretKey = settings.value("ocr/baiduSecretKey").toString();
     this->autoOcr = settings.value("ocr/autoOcr", false).toBool();
+    this->skipSensitive = settings.value("privacy/skipSensitive", this->skipSensitive).toBool();
+    setIgnoredApps(settings.value("privacy/ignoredApps", this->ignoredApps).toStringList());
 }
 
 void MPasteSettings::saveSettings() {
@@ -155,6 +161,36 @@ void MPasteSettings::saveSettings() {
     settings.setValue("ocr/baiduApiKey", this->baiduOcrApiKey);
     settings.setValue("ocr/baiduSecretKey", this->baiduOcrSecretKey);
     settings.setValue("ocr/autoOcr", this->autoOcr);
+    settings.setValue("privacy/skipSensitive", this->skipSensitive);
+    settings.setValue("privacy/ignoredApps", this->ignoredApps);
+}
+
+bool MPasteSettings::isSkipSensitive() const {
+    return skipSensitive;
+}
+
+void MPasteSettings::setSkipSensitive(bool enabled) {
+    skipSensitive = enabled;
+}
+
+const QStringList &MPasteSettings::getIgnoredApps() const {
+    return ignoredApps;
+}
+
+void MPasteSettings::setIgnoredApps(const QStringList &apps) {
+    QStringList cleaned;
+    for (const QString &app : apps) {
+        const QString name = app.trimmed();
+        if (!name.isEmpty() && !cleaned.contains(name, Qt::CaseInsensitive)) {
+            cleaned << name;
+        }
+    }
+    ignoredApps = cleaned;
+}
+
+bool MPasteSettings::isIgnoredApp(const QString &appName) const {
+    const QString name = appName.trimmed();
+    return !name.isEmpty() && ignoredApps.contains(name, Qt::CaseInsensitive);
 }
 
 bool MPasteSettings::isAutoPaste() const {

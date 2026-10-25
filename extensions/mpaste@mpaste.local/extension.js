@@ -353,7 +353,9 @@ export default class MPasteExtension extends Extension {
                 return;
             }
             // Skip X11 protocol targets; preserve application MIME formats verbatim.
-            if (!format.includes('/')) { next(); return; }
+            // A password manager's "secret" hint has no slash either, and MPaste
+            // needs it to leave the copy out of history.
+            if (!format.includes('/') && format !== 'x-kde-passwordManagerHint') { next(); return; }
             this._clipboard.get_content(St.ClipboardType.CLIPBOARD, format, (_c, bytes) => {
                 if (generation !== this._generation) return;
                 const array = bytes instanceof GLib.Bytes ? bytes.toArray() : bytes;

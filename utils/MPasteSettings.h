@@ -90,6 +90,14 @@ public:
     bool isAutoOcr() const;
     void setAutoOcr(bool enabled);
 
+    // Privacy: content a password manager marks as not for history, and
+    // anything copied from the listed apps, is never recorded.
+    bool isSkipSensitive() const;
+    void setSkipSensitive(bool enabled);
+    const QStringList &getIgnoredApps() const;
+    void setIgnoredApps(const QStringList &apps);
+    bool isIgnoredApp(const QString &appName) const;
+
     bool isTerminalTitle(const QString &title);
 
     int getCurrFocusWinId() const;
@@ -130,6 +138,8 @@ private:
     QString baiduOcrApiKey;
     QString baiduOcrSecretKey;
     bool autoOcr = false;
+    bool skipSensitive = true;
+    QStringList ignoredApps;
 
     int currFocusWinId;
 
