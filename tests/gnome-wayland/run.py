@@ -156,13 +156,14 @@ def main():
                 return [r.x,r.y,r.width,r.height,a.x,a.y,a.width,a.height];
             })()""")
             x,y,w,h,ax,ay,aw,ah=geometry
-            assert (w,h)==(min(980,aw-32),min(760,ah-32)),geometry
+            # Fixed width; the height follows the content, from 240 up to 85% of the work area.
+            assert w==min(980,aw-32) and 240<=h<=max(240,round(ah*0.85)),geometry
             assert abs(x-(ax+(aw-w)//2))<=1 and abs(y-(ay+(ah-h)//2))<=1,geometry
             panel = evaluate("(()=>{const w=global.get_window_actors().map(a=>a.meta_window).find(w=>w.get_title()==='MPaste');const r=w.get_frame_rect();return [r.x,r.y,r.width,r.height];})()")
             assert panel == rect, (panel,rect)
             key('Escape')
             wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste'"), 'preview dismissal')
-        print('PASS preview Windows geometry, repeat opening and unchanged panel bounds',flush=True)
+        print('PASS preview geometry fitted to content, repeat opening and unchanged panel bounds',flush=True)
         key('Home')
         for _ in range(3): key('Right')
         key('Return')

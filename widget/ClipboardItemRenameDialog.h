@@ -5,7 +5,9 @@
 #ifndef MPASTE_CLIPBOARD_ITEM_RENAME_DIALOG_H
 #define MPASTE_CLIPBOARD_ITEM_RENAME_DIALOG_H
 
+#include <QColor>
 #include <QDialog>
+#include <QPixmap>
 
 class QFrame;
 class QLabel;
@@ -18,9 +20,12 @@ class ClipboardItemRenameDialog : public QDialog {
 public:
     explicit ClipboardItemRenameDialog(const QString &currentAlias, QWidget *parent = nullptr);
     QString alias() const;
+    // The item's source app: its icon heads the dialog and its colour lights it.
+    void setSource(const QPixmap &icon, const QString &appName);
 
 protected:
     void showEvent(QShowEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
 
 private:
     void applyTheme(bool dark);
@@ -31,6 +36,9 @@ private:
     QLineEdit *input_ = nullptr;
     QPushButton *okButton_ = nullptr;
     QPushButton *cancelButton_ = nullptr;
+    QLabel *iconLabel_ = nullptr;
+    QColor accent_;
+    bool dark_ = true;
 };
 
 #endif // MPASTE_CLIPBOARD_ITEM_RENAME_DIALOG_H

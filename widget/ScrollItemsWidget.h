@@ -48,6 +48,8 @@ class ScrollItemsWidget : public QWidget
     Q_OBJECT
 
 public:
+    // Asks where to save the item and writes it there.
+    void saveItemToFile(const ClipboardItem &item);
     explicit ScrollItemsWidget(const QString &category, const QString &borderColor, QWidget *parent = nullptr);
     ~ScrollItemsWidget();
 
@@ -191,7 +193,6 @@ private:
     int pinnedInsertRow() const;
     int unpinnedInsertRowForItem(const ClipboardItem &item, int excludeRow) const;
     void setItemPinned(const ClipboardItem &item, bool pinned);
-    void saveItemToFile(const ClipboardItem &item);
     QPair<int, int> displaySequenceForIndex(const QModelIndex &proxyIndex) const;
     int selectedSourceRow() const;
     const ClipboardItem *cacheSelectedItem(int sourceRow) const;

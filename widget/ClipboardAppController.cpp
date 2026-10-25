@@ -420,6 +420,7 @@ void ClipboardAppController::ensureOcrService() {
 
 void ClipboardAppController::handleOcrRequest(ScrollItemsWidget *boardWidget, const ClipboardItem &item) {
     ensureOcrService();
+    lastOcrItem_ = item;
     // Check sidecar cache.
     {
         auto *bs = boardWidget->boardServiceRef();

@@ -24,6 +24,13 @@ public:
     void reject() override;
     void applyTheme(bool dark);
 
+signals:
+    // The header's actions on the item shown; the board carries them out.
+    void pasteRequested(const ClipboardItem &item);
+    void copyRequested(const ClipboardItem &item);
+    void ocrRequested(const ClipboardItem &item);
+    void saveRequested(const ClipboardItem &item);
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
@@ -40,6 +47,10 @@ private:
     void resetImageZoom();
     bool handleImageZoomKey(QKeyEvent *event);
     bool isImagePreviewActive() const;
+    // The window height that shows the loaded content whole, within the screen.
+    int heightForContent() const;
+    // Sizes the window to its content and puts it on screen (centred on first show).
+    void revealSizedToContent();
 
     struct {
         QLabel *titleLabel = nullptr;
@@ -49,7 +60,16 @@ private:
         QScrollArea *imageScrollArea = nullptr;
         QLabel *imageLabel = nullptr;
         QToolButton *closeButton = nullptr;
+        QLabel *iconLabel = nullptr;
+        QWidget *actions = nullptr;
+        QWidget *ocrButton = nullptr;
+        QWidget *saveButton = nullptr;
+        QLabel *footerLabel = nullptr;
     } ui_;
+    ClipboardItem currentItem_;
+    QColor accent_;
+    QRect screenArea_;
+    bool revealPending_ = false;
 
     QPoint dragOffset_;
     bool imageDragActive_ = false;

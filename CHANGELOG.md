@@ -17,6 +17,9 @@
 - Touchpad swipes in either direction follow the fingers and glide on after release.
 - Typing to search with an input method (fcitx, IBus) no longer loses the first key: the search box keeps the keyboard focus while the panel is open, folded away while empty, and the arrow keys, Space, Enter and Esc still act on the cards until something is typed.
 - Tooltips have a solid ground in the dark theme.
+- Preview, OCR, settings, details, alias and About windows take the Aurora look: a rounded window lit in the item's app colour, a header with the app's icon, pill buttons. The preview gains Paste, Copy, Read text and Save as, and Enter pastes, and its height follows the content (from a short strip for one line up to 85% of the screen, then it scrolls; the GNOME companion v9 keeps that size); the OCR result is editable and can be pasted directly; details lead with the content and the facts that matter; settings has a sidebar (General, Shortcuts, Sync, Text recognition, About), a segmented theme switch and pictured card-style choices.
+- Fix: Save as no longer closes the moment it opens, dragging it no longer drags the panel along, and cancelling it no longer quits MPaste.
+- Pictures on cards are no longer cut at the top and bottom: thumbnails are made in the shape of the card's picture area instead of being cropped twice, and the Aurora caption sits in a small pill rather than a shade over the picture's foot.
 - Fix: rich text copied from WPS no longer shows its Windows clipboard header ("Version:0.9 StartHTML:…") in the card, the preview or when pasted; rich-text previews are no longer cut off at the card's top and left.
 - Fix: starting MPaste while the clipboard still held something already saved (an image, typically) saved it again; captures that arrive before the history is indexed now wait for the index and are recognised.
 - Preview window shows the source app, type, copy time and size instead of the stored file name.

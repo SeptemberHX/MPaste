@@ -194,6 +194,9 @@ int main(int argc, char* argv[]) {
     qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
 
     QApplication app(argc, argv);
+    // MPaste lives in the tray: closing a parentless window (the save dialog)
+    // while the panel is hidden must not quit it.
+    app.setQuitOnLastWindowClosed(false);
     configureApplicationFont(app);
     SingleApplication singleApp("com.mpaste.app");
 
@@ -309,6 +312,11 @@ int main(int argc, char* argv[]) {
             [&widget, &isShowingWidget](Qt::ApplicationState state) {
                 if (state == Qt::ApplicationInactive) {
                     QTimer::singleShot(100, [&widget, &isShowingWidget]() {
+                        // A file dialog of ours (or the desktop portal's, which is
+                        // another process) takes focus; the panel it hangs on stays.
+                        if (qApp->property("mpasteFileDialogOpen").toBool()) {
+                            return;
+                        }
                         if (QGuiApplication::applicationState() != Qt::ApplicationActive)
                             widget.hideQuickStack();
                         if (isShowingWidget) {

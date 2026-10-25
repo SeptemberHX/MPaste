@@ -1064,7 +1064,12 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
         const qreal currentDpr = maxThumbnailDevicePixelRatio();
         const QSize targetPixelSize = QSize(kCardPreviewWidth, kCardPreviewHeight) * currentDpr;
         if (thumb.size() != targetPixelSize) {
-            thumb = thumb.scaled(targetPixelSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+            // Keep the picture's proportions: a thumbnail saved in another shape
+            // is scaled to cover the target and its centre kept.
+            const QPixmap covered = thumb.scaled(targetPixelSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+            thumb = covered.copy((covered.width() - targetPixelSize.width()) / 2,
+                                 (covered.height() - targetPixelSize.height()) / 2,
+                                 targetPixelSize.width(), targetPixelSize.height());
         }
         thumb.setDevicePixelRatio(currentDpr);
         item.setThumbnail(thumb);

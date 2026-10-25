@@ -260,15 +260,15 @@ export default class MPasteExtension extends Extension {
             area.y + Math.max(0, Math.floor((area.height - frame.height) / 2)));
     }
     _placePreview(window) {
-        // Match the Qt/Windows preview: 980x760 logical pixels, centered in the
-        // owning panel's work area. Wayland clients cannot position top-levels.
+        // Position only: MPaste sizes the preview itself (its height fits the
+        // content); centre it in the owning panel's work area, since Wayland
+        // clients cannot position top-levels.
         const monitor = this._dialogMonitor(window);
         const area = Main.layoutManager.getWorkAreaForMonitor(monitor);
-        const width = Math.min(980, Math.max(1, area.width - 32));
-        const height = Math.min(760, Math.max(1, area.height - 32));
         window.move_to_monitor(monitor);
-        window.move_resize_frame(false, area.x + Math.floor((area.width - width) / 2),
-            area.y + Math.floor((area.height - height) / 2), width, height);
+        const frame = window.get_frame_rect();
+        window.move_frame(false, area.x + Math.max(0, Math.floor((area.width - frame.width) / 2)),
+            area.y + Math.max(0, Math.floor((area.height - frame.height) / 2)));
         Main.activateWindow(window);
     }
     _paste(mode) {

@@ -11,10 +11,11 @@ constexpr int kCardBaseWidth = 256;
 constexpr int kCardBaseHeight = 216;
 constexpr int kCardHeaderHeight = 56;
 constexpr int kCardFooterHeight = 20;
-// Stored thumbnails keep their original 275x224 size: loaded thumbnails are
-// rescaled to this size ignoring aspect, so it must not follow the card size.
-constexpr int kCardPreviewWidth = 275;
-constexpr int kCardPreviewHeight = 224;
+// Stored thumbnails take the shape of the picture area on a card (about 1.42:1),
+// so the card shows them whole instead of cropping a second time. Thumbnails
+// saved at the earlier 275x224 are cover-cropped to this on load.
+constexpr int kCardPreviewWidth = 256;
+constexpr int kCardPreviewHeight = 180;
 
 static_assert(kCardPreviewHeight > 0, "Card preview height must be positive.");
 

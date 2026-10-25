@@ -391,6 +391,7 @@ void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
         return;
     }
     ClipboardItemRenameDialog dialog(item.getAlias(), this);
+    dialog.setSource(item.getIcon(), item.getSourceApp());
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }

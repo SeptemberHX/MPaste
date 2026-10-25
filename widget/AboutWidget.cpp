@@ -13,8 +13,17 @@
 #include <QPainterPath>
 #include <QResizeEvent>
 #include <QToolButton>
+#include <QVBoxLayout>
+#include <QUrl>
+#include <QPushButton>
+#include <QLabel>
+#include <QIcon>
+#include <QHBoxLayout>
+#include <QDesktopServices>
 
 #include "WindowBlurHelper.h"
+#include "AuroraChrome.h"
+#include "BoardInternalHelpers.h"
 #include "utils/ThemeManager.h"
 
 AboutWidget::AboutWidget(QWidget *parent) :
@@ -24,17 +33,77 @@ AboutWidget::AboutWidget(QWidget *parent) :
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
     setModal(false);
     setAttribute(Qt::WA_TranslucentBackground);
+    setFixedSize(400, 340);
+    const bool zh = BoardHelpers::prefersChineseUi();
 
-    ui->setupUi(this);
+    // Laid out here rather than from AboutWidget.ui: a centred mark, name,
+    // version and one line, then the links as pills and the credits small.
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(24, 30, 24, 18);
+    layout->setSpacing(6);
+
+    auto *mark = new QLabel(this);
+    mark->setAlignment(Qt::AlignCenter);
+    mark->setPixmap(QIcon(QStringLiteral(":/resources/resources/mpaste.svg")).pixmap(QSize(64, 64), devicePixelRatioF()));
+    layout->addWidget(mark);
+    layout->addSpacing(6);
+
+    auto *name = new QLabel(QStringLiteral("MPaste"), this);
+    name->setObjectName(QStringLiteral("aboutName"));
+    name->setAlignment(Qt::AlignCenter);
+    layout->addWidget(name);
+
 #ifdef MPASTE_VERSION
-    ui->label_2->setText(QStringLiteral("MPaste V%1").arg(QStringLiteral(MPASTE_VERSION)));
+    const QString version = QStringLiteral(MPASTE_VERSION);
+#else
+    const QString version;
 #endif
+    auto *versionLabel = new QLabel((zh ? QStringLiteral("版本 ") : QStringLiteral("Version ")) + version, this);
+    versionLabel->setObjectName(QStringLiteral("auroraSubtitle"));
+    versionLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(versionLabel);
+
+    auto *tagline = new QLabel(zh ? QStringLiteral("剪贴板历史，随手找回复制过的一切。")
+                                  : QStringLiteral("Clipboard history: get back anything you copied."), this);
+    tagline->setObjectName(QStringLiteral("aboutTagline"));
+    tagline->setAlignment(Qt::AlignCenter);
+    tagline->setWordWrap(true);
+    layout->addWidget(tagline);
+    layout->addStretch(1);
+
+    auto *links = new QHBoxLayout;
+    links->setSpacing(8);
+    links->addStretch(1);
+    auto addLink = [this, links](const QString &text, const QString &url) {
+        auto *button = new QPushButton(text, this);
+        button->setObjectName(QStringLiteral("auroraSecondary"));
+        button->setCursor(Qt::PointingHandCursor);
+        connect(button, &QPushButton::clicked, this, [url]() { QDesktopServices::openUrl(QUrl(url)); });
+        links->addWidget(button);
+    };
+    addLink(QStringLiteral("GitHub"), QStringLiteral("https://github.com/SeptemberHX/MPaste"));
+    addLink(zh ? QStringLiteral("更新日志") : QStringLiteral("Releases"),
+            QStringLiteral("https://github.com/SeptemberHX/MPaste/releases"));
+    links->addStretch(1);
+    layout->addLayout(links);
+    layout->addSpacing(10);
+
+    auto *credits = new QLabel(QStringLiteral(
+        "SeptemberHX · september_hx@outlook.com<br>"
+        "Icons by Pixel perfect from <a href=\"https://www.flaticon.com\">flaticon.com</a> · "
+        "sound from <a href=\"https://www.zapsplat.com\">zapsplat.com</a>"), this);
+    credits->setObjectName(QStringLiteral("auroraHint"));
+    credits->setAlignment(Qt::AlignCenter);
+    credits->setWordWrap(true);
+    credits->setOpenExternalLinks(true);
+    credits->setTextFormat(Qt::RichText);
+    layout->addWidget(credits);
 
     closeButton_ = new QToolButton(this);
-    closeButton_->setObjectName(QStringLiteral("aboutCloseButton"));
-    closeButton_->setText(QStringLiteral("\u00D7"));
+    closeButton_->setObjectName(QStringLiteral("auroraClose"));
+    closeButton_->setText(QStringLiteral("✕"));
     closeButton_->setCursor(Qt::PointingHandCursor);
-    closeButton_->setFixedSize(28, 28);
+    closeButton_->setFixedSize(32, 32);
     connect(closeButton_, &QToolButton::clicked, this, &QDialog::reject);
 
     applyTheme(ThemeManager::instance()->isDark());
@@ -49,64 +118,19 @@ AboutWidget::~AboutWidget()
 void AboutWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
     WindowBlurHelper::enableBlurBehind(this, darkTheme_);
-
-    const QString text = dark ? QStringLiteral("#E6EDF5") : QStringLiteral("#1E2936");
-    const QString link = QStringLiteral("#4A90E2");
-    const QString sub = dark ? QStringLiteral("#9AA7B5") : QStringLiteral("#5E7084");
-    const QString btnBg = dark ? QStringLiteral("rgba(255,255,255,14)") : QStringLiteral("rgba(0,0,0,8)");
-    const QString btnBorder = dark ? QStringLiteral("rgba(255,255,255,25)") : QStringLiteral("rgba(0,0,0,18)");
-    const QString btnHoverBg = dark ? QStringLiteral("rgba(255,255,255,28)") : QStringLiteral("rgba(0,0,0,16)");
-    const QString btnColor = dark ? QStringLiteral("#C9D4E0") : QStringLiteral("#5E7084");
-
-    setStyleSheet(QStringLiteral(
-        "QLabel { color: %1; background: transparent; }"
-        "QLabel#label_2 { font-weight: bold; font-size: 16px; }"
-        "QLabel#label_9, QLabel#label_10 { color: %2; font-size: 9pt; }"
-        "QToolButton#aboutCloseButton {"
-        "  background-color: %3; border: 1px solid %4; border-radius: 14px;"
-        "  color: %5; font-size: 17px; font-weight: 700;"
-        "  min-width: 28px; min-height: 28px;"
-        "}"
-        "QToolButton#aboutCloseButton:hover {"
-        "  background-color: %6;"
-        "}"
-    ).arg(text, sub, btnBg, btnBorder, btnColor, btnHoverBg));
-
-    for (QLabel *lbl : {ui->label_6, ui->label_8, ui->label_9, ui->label_10}) {
-        if (lbl) {
-            lbl->setStyleSheet(QStringLiteral("QLabel a { color: %1; }").arg(link));
-        }
-    }
+    setStyleSheet(AuroraChrome::styleSheet(dark) + QStringLiteral(
+        "QLabel#aboutName { color: %1; font-size: 20px; font-weight: 700; background: transparent; }"
+        "QLabel#aboutTagline { color: %2; font-size: 13px; background: transparent; }"
+        "QLabel#auroraHint a { color: %3; }")
+        .arg(dark ? QStringLiteral("#ECEDF2") : QStringLiteral("#1C1E25"),
+             dark ? QStringLiteral("rgba(255,255,255,175)") : QStringLiteral("rgba(28,30,37,175)"),
+             dark ? QStringLiteral("#A9C4FF") : QStringLiteral("#2F68D8")));
     update();
 }
 
 void AboutWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    if (WindowBlurHelper::useOpaqueFallback() || WindowBlurHelper::hasNativeBlur()) {
-        SurfacePainter::paintPanel(p, QRectF(rect()), 8.0, darkTheme_, 1);
-        return;
-    }
-
-
-    const qreal radius = 8.0;
-    QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-
-    // Fill with near-transparent color so the blur shows through
-    // while still capturing mouse events on the entire area.
-    QPainterPath shape;
-    shape.addRoundedRect(r, radius, radius);
-    p.setClipPath(shape);
-    p.fillRect(rect(), QColor(0, 0, 0, 1));
-    p.setClipping(false);
-
-    if (darkTheme_) {
-        p.setPen(QPen(QColor(255, 255, 255, 40), 1.0));
-    } else {
-        p.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
-    }
-    p.setBrush(Qt::NoBrush);
-    p.drawRoundedRect(r, radius, radius);
+    AuroraChrome::paintWindow(p, QRectF(rect()), darkTheme_, QColor(QStringLiteral("#5B8DEF")));
 }
 
 void AboutWidget::resizeEvent(QResizeEvent *event) {

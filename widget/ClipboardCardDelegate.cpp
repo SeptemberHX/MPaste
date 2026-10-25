@@ -1397,24 +1397,27 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         const CardBodyContext ctx {bodyRect, visual ? bodyRect : content, card, scale, darkTheme, loadingPhase_, paintDpr,
                                    theme.bodyTextColor, index, this, cachedTheme_};
         bodyRendererForType(card.contentType).paint(painter, ctx);
-        QColor footInk = muted;
-        if (visual) {
-            // The caption rests on a shade over the picture's foot.
-            QLinearGradient shade(QPointF(footer.left(), footer.top() - px(10)), QPointF(footer.left(), footer.bottom()));
-            const QColor base = darkTheme ? QColor(13, 14, 18) : QColor(252, 252, 254);
-            QColor clear = base;
-            clear.setAlpha(0);
-            QColor solid = base;
-            solid.setAlpha(225);
-            shade.setColorAt(0.0, clear);
-            shade.setColorAt(1.0, solid);
-            painter->fillRect(footer.adjusted(0, -px(10), 0, 0), shade);
-            footInk = darkTheme ? QColor(255, 255, 255, 190) : QColor(31, 33, 41, 190);
-        }
         painter->restore();
-        CardRenderUtils::drawElidedText(painter, footer.adjusted(pad + px(2), 0, -pad, 0), detailText,
-                                        uiFont(8.5, QFont::Normal), footInk, Qt::AlignLeft | Qt::AlignVCenter,
-                                        middleElide ? Qt::ElideMiddle : Qt::ElideRight);
+        if (visual) {
+            // The caption sits in a small pill on the picture, leaving the rest of it clear.
+            const QFont capFont = uiFont(8.5, QFont::Normal);
+            const QFontMetrics capMetrics(capFont, painter->device());
+            const int capWidth = qMin(capMetrics.horizontalAdvance(detailText) + px(16), cardRect.width() - pad * 2);
+            const int capHeight = px(20);
+            const QRect cap(cardRect.left() + px(8), cardRect.bottom() - px(8) - capHeight + 1, capWidth, capHeight);
+            painter->save();
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(QColor(12, 13, 17, 170));
+            painter->drawRoundedRect(QRectF(cap), capHeight / 2.0, capHeight / 2.0);
+            painter->restore();
+            CardRenderUtils::drawElidedText(painter, cap.adjusted(px(8), 0, -px(8), 0), detailText, capFont,
+                                            QColor(255, 255, 255, 215), Qt::AlignLeft | Qt::AlignVCenter,
+                                            middleElide ? Qt::ElideMiddle : Qt::ElideRight);
+        } else {
+            CardRenderUtils::drawElidedText(painter, footer.adjusted(pad + px(2), 0, -pad, 0), detailText,
+                                            uiFont(8.5, QFont::Normal), muted, Qt::AlignLeft | Qt::AlignVCenter,
+                                            middleElide ? Qt::ElideMiddle : Qt::ElideRight);
+        }
     } else {
         // Still: the content takes the card; one line at the foot says from where and when.
         const int metaHeight = px(18);
@@ -1470,6 +1473,34 @@ QSize ClipboardCardDelegate::sizeHint(const QStyleOptionViewItem &option, const 
     Q_UNUSED(option)
     const int scale = MPasteSettings::getInst()->getItemScale();
     return cardOuterSizeForScale(scale) + QSize(cardSpacingForScale(scale) + dayGroupLead(index, scale), 0);
+}
+
+QColor ClipboardCardDelegate::appAccentColor(const QPixmap &icon) {
+    if (isPlaceholderIcon(icon)) {
+        return QColor(QStringLiteral("#5B8DEF"));
+    }
+    return cardToneForColor(computeDominantHeaderColor(icon), false);
+}
+
+QPixmap ClipboardCardDelegate::appIconTile(const QPixmap &icon, const QString &label, int size, qreal dpr) {
+    if (!isPlaceholderIcon(icon)) {
+        return buildHeaderIconPixmapUncached(icon, QSize(size, size), dpr);
+    }
+    QPixmap tile(QSize(size, size) * dpr);
+    tile.setDevicePixelRatio(dpr);
+    tile.fill(Qt::transparent);
+    QPainter painter(&tile);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(appAccentColor(icon));
+    painter.drawRoundedRect(QRectF(0, 0, size, size), size * 0.28, size * 0.28);
+    QFont glyph = QApplication::font();
+    glyph.setWeight(QFont::DemiBold);
+    glyph.setPixelSize(qMax(7, int(size * 0.46)));
+    painter.setFont(glyph);
+    painter.setPen(Qt::white);
+    painter.drawText(QRect(0, 0, size, size), Qt::AlignCenter, label.left(1).toUpper());
+    return tile;
 }
 
 QDate ClipboardCardDelegate::dayGroup(const QModelIndex &index) {

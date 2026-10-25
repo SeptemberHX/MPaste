@@ -34,6 +34,8 @@
 #include <QToolButton>
 #include <QUrl>
 #include <QDesktopServices>
+#include <QIcon>
+#include "AuroraChrome.h"
 
 static const int BORDER_WIDTH = 2;
 static const int CORNER_RADIUS = 8;
@@ -523,14 +525,156 @@ static QString settingsStyleSheet(bool dark) {
     )");
 }
 
+// The Aurora look for the settings pages, on top of AuroraChrome's shared rules.
+static QString settingsAuroraStyle(bool dark) {
+    const QString ink = dark ? QStringLiteral("#ECEDF2") : QStringLiteral("#1C1E25");
+    const QString soft = dark ? QStringLiteral("rgba(255,255,255,165)") : QStringLiteral("rgba(28,30,37,165)");
+    const QString faint = dark ? QStringLiteral("rgba(255,255,255,115)") : QStringLiteral("rgba(28,30,37,125)");
+    const QString fill = dark ? QStringLiteral("rgba(255,255,255,18)") : QStringLiteral("rgba(0,0,0,13)");
+    const QString fillHover = dark ? QStringLiteral("rgba(255,255,255,28)") : QStringLiteral("rgba(0,0,0,20)");
+    const QString chosen = dark ? QStringLiteral("rgba(255,255,255,26)") : QStringLiteral("rgba(255,255,255,235)");
+    const QString panel = dark ? QStringLiteral("rgba(255,255,255,9)") : QStringLiteral("rgba(255,255,255,170)");
+    const QString edge = dark ? QStringLiteral("rgba(255,255,255,16)") : QStringLiteral("rgba(0,0,0,16)");
+    return QStringLiteral(
+        "QWidget#generalCard, QFrame#generalCard, QStackedWidget#settingsStack, QStackedWidget#settingsStack > QWidget"
+        "  { background: transparent; border: none; }"
+        "QLabel { color: %1; font-size: 13.5px; background: transparent; }"
+        "QLabel#section { color: %3; font-size: 12px; font-weight: 500; padding-left: 4px; background: transparent; }"
+        "QFrame#card { background: %7; border: 1px solid %8; border-radius: 16px; }"
+        "QToolButton#navBtn { border: none; border-radius: 15px; padding: 0 12px; text-align: left; background: transparent;"
+        "  color: %2; font-size: 13.5px; }"
+        "QToolButton#navBtn:hover:!checked { background: %4; color: %1; }"
+        "QToolButton#navBtn:checked { background: %6; color: %1; font-weight: 600; }"
+        "QComboBox, QLineEdit, QSpinBox, QKeySequenceEdit { min-height: 32px; max-height: 32px; padding: 0 12px;"
+        "  border: 1px solid %8; border-radius: 15px; background: %4; color: %1; }"
+        "QComboBox:hover, QLineEdit:hover, QSpinBox:hover { background: %5; }"
+        "QComboBox::drop-down { border: none; width: 22px; }"
+        "QPushButton { min-height: 30px; padding: 0 14px; border: none; border-radius: 15px; background: %4; color: %1; }"
+        "QPushButton:hover { background: %5; }"
+        "QToolButton#cardStyleChoice { border: 1px solid %8; border-radius: 14px; background: %7; color: %1;"
+        "  padding: 10px; font-size: 12.5px; }"
+        "QToolButton#cardStyleChoice:checked { border: 1.5px solid #5B8DEF; background: %6; }"
+        "QToolButton#cardStyleChoice:hover:!checked { background: %5; }")
+        .arg(ink, soft, faint, fill, fillHover, chosen, panel, edge);
+}
+
+QWidget *MPasteSettingsWidget::makeSegmentFor(QComboBox *combo, QWidget *parent) {
+    auto *segment = new QWidget(parent);
+    segment->setObjectName(QStringLiteral("auroraSegment"));
+    segment->setAttribute(Qt::WA_StyledBackground, true);
+    auto *layout = new QHBoxLayout(segment);
+    layout->setContentsMargins(3, 2, 3, 2);
+    layout->setSpacing(2);
+    auto *group = new QButtonGroup(segment);
+    group->setExclusive(true);
+    for (int i = 0; i < combo->count(); ++i) {
+        auto *button = new QPushButton(combo->itemText(i), segment);
+        button->setCheckable(true);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setFocusPolicy(Qt::NoFocus);
+        group->addButton(button, i);
+        layout->addWidget(button);
+    }
+    if (auto *current = group->button(combo->currentIndex())) {
+        current->setChecked(true);
+    }
+    connect(group, &QButtonGroup::idClicked, combo, &QComboBox::setCurrentIndex);
+    connect(combo, &QComboBox::currentIndexChanged, segment, [group](int index) {
+        if (auto *button = group->button(index)) {
+            button->setChecked(true);
+        }
+    });
+    return segment;
+}
+
+QWidget *MPasteSettingsWidget::makeCardStyleChoices(QWidget *parent) {
+    auto *row = new QWidget(parent);
+    auto *layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(12);
+    auto *group = new QButtonGroup(row);
+    group->setExclusive(true);
+    const qreal dpr = devicePixelRatioF();
+    // A miniature of each style: Still a neutral card, Aurora a coloured corner light.
+    auto miniature = [dpr](bool aurora) {
+        const QSize size(220, 72);
+        QPixmap pixmap(size * dpr);
+        pixmap.setDevicePixelRatio(dpr);
+        pixmap.fill(Qt::transparent);
+        QPainter p(&pixmap);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        QPainterPath card;
+        card.addRoundedRect(QRectF(0.5, 0.5, size.width() - 1, size.height() - 1), 10, 10);
+        p.fillPath(card, QColor(aurora ? QStringLiteral("#17181E") : QStringLiteral("#18191D")));
+        if (aurora) {
+            QRadialGradient light(QPointF(0, 0), size.width() * 0.9);
+            light.setColorAt(0.0, QColor(7, 193, 96, 110));
+            light.setColorAt(0.6, QColor(7, 193, 96, 0));
+            p.save();
+            p.setClipPath(card);
+            p.fillRect(QRectF(QPointF(0, 0), QSizeF(size)), light);
+            p.restore();
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(QStringLiteral("#07C160")));
+            p.drawRoundedRect(QRectF(12, 12, 14, 14), 4, 4);
+            p.setBrush(QColor(255, 255, 255, 110));
+            p.drawRoundedRect(QRectF(32, 16, 80, 6), 3, 3);
+            p.setBrush(QColor(255, 255, 255, 55));
+            p.drawRoundedRect(QRectF(12, 40, 150, 5), 2.5, 2.5);
+        } else {
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(255, 255, 255, 95));
+            p.drawRoundedRect(QRectF(12, 14, 150, 6), 3, 3);
+            p.setBrush(QColor(255, 255, 255, 50));
+            p.drawRoundedRect(QRectF(12, 28, 110, 5), 2.5, 2.5);
+            p.setBrush(QColor(QStringLiteral("#07C160")));
+            p.drawRoundedRect(QRectF(12, 52, 10, 10), 3, 3);
+            p.setBrush(QColor(255, 255, 255, 60));
+            p.drawRoundedRect(QRectF(27, 55, 60, 4), 2, 2);
+        }
+        p.setPen(QPen(QColor(255, 255, 255, 22), 1));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(card);
+        return pixmap;
+    };
+    const struct { const char *name; QString zhName; const char *note; QString zhNote; bool aurora; } styles[] = {
+        {"Still", QStringLiteral("静物"), "A neutral card, the content first", QStringLiteral("中性卡片，内容优先"), false},
+        {"Aurora", QStringLiteral("流光"), "The app's colour as a corner light", QStringLiteral("应用色化作角落的光"), true},
+    };
+    for (int i = 0; i < 2; ++i) {
+        auto *button = new QToolButton(row);
+        button->setObjectName(QStringLiteral("cardStyleChoice"));
+        button->setCheckable(true);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        button->setIcon(QIcon(miniature(styles[i].aurora)));
+        button->setIconSize(QSize(220, 72));
+        button->setText(uiText(styles[i].name, styles[i].zhName) + QStringLiteral("\n")
+                        + uiText(styles[i].note, styles[i].zhNote));
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        group->addButton(button, cardStyleCombo_->findData(styles[i].aurora ? MPasteSettings::CardAurora : MPasteSettings::CardStill));
+        layout->addWidget(button, 1);
+    }
+    if (auto *current = group->button(cardStyleCombo_->currentIndex())) {
+        current->setChecked(true);
+    }
+    connect(group, &QButtonGroup::idClicked, cardStyleCombo_, &QComboBox::setCurrentIndex);
+    connect(cardStyleCombo_, &QComboBox::currentIndexChanged, row, [group](int index) {
+        if (auto *button = group->button(index)) {
+            button->setChecked(true);
+        }
+    });
+    return row;
+}
+
 MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     : QDialog(parent)
     , ui(new Ui::MPasteSettingsWidget)
 {
     ui->setupUi(this);
 
-    setMinimumWidth(580);
-    setMaximumWidth(580);
+    setMinimumWidth(760);
+    setMaximumWidth(760);
     setMinimumHeight(0);
     setMaximumHeight(QWIDGETSIZE_MAX);
     if (layout()) {
@@ -562,14 +706,15 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         f.setBold(true);
         f.setPointSizeF(f.pointSizeF() + 0.5);
         titleLabel->setFont(f);
-        tb->addWidget(titleLabel);
+        titleLabel->hide();   // the sidebar carries the title
         tb->addStretch();
         auto *closeBtn = new QToolButton(titleBar);
         closeBtn->setText(QStringLiteral("\u00D7"));
         closeBtn->setFocusPolicy(Qt::NoFocus);
         closeBtn->setCursor(Qt::PointingHandCursor);
-        closeBtn->setFixedSize(22, 22);
-        closeBtn->setObjectName(QStringLiteral("closeBtn"));
+        closeBtn->setText(QStringLiteral("\u2715"));
+        closeBtn->setFixedSize(32, 32);
+        closeBtn->setObjectName(QStringLiteral("auroraClose"));
         connect(closeBtn, &QToolButton::clicked, this, &QDialog::close);
         tb->addWidget(closeBtn);
         ui->mainLayout->insertWidget(0, titleBar);
@@ -775,10 +920,22 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         // ── Sidebar with QToolButtons (MTodo pattern) ──
         auto *sideWidget = new QWidget(ui->generalCard);
-        sideWidget->setFixedWidth(80);
+        sideWidget->setFixedWidth(184);
         auto *sideLayout = new QVBoxLayout(sideWidget);
-        sideLayout->setContentsMargins(0, 8, 0, 8);
-        sideLayout->setSpacing(6);
+        sideLayout->setContentsMargins(12, 0, 12, 12);
+        sideLayout->setSpacing(4);
+        {
+            auto *brand = new QHBoxLayout;
+            brand->setContentsMargins(6, 0, 0, 14);
+            brand->setSpacing(10);
+            auto *mark = new QLabel(sideWidget);
+            mark->setPixmap(QIcon(QStringLiteral(":/resources/resources/mpaste.svg")).pixmap(QSize(28, 28), devicePixelRatioF()));
+            brand->addWidget(mark);
+            auto *brandTitle = new QLabel(uiText("MPaste Settings", QStringLiteral("MPaste 设置")), sideWidget);
+            brandTitle->setObjectName(QStringLiteral("auroraTitle"));
+            brand->addWidget(brandTitle, 1);
+            sideLayout->addLayout(brand);
+        }
 
         auto *navGroup = new QButtonGroup(this);
         navGroup->setExclusive(true);
@@ -787,11 +944,11 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             auto *btn = new QToolButton();
             btn->setObjectName(QStringLiteral("navBtn"));
             btn->setIcon(IconResolver::themedIcon(iconName, ThemeManager::instance()->isDark()));
-            btn->setIconSize(QSize(22, 22));
+            btn->setIconSize(QSize(16, 16));
             btn->setText(text);
-            btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+            btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
             btn->setCheckable(true);
-            btn->setFixedSize(72, 52);
+            btn->setFixedSize(160, 36);
             btn->setCursor(Qt::PointingHandCursor);
             btn->setFocusPolicy(Qt::NoFocus);
             navGroup->addButton(btn, id);
@@ -800,9 +957,10 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         makeNavBtn(QStringLiteral("settings"), uiText("General", QStringLiteral("通用")), 0);
         makeNavBtn(QStringLiteral("rename"), uiText("Shortcuts", QStringLiteral("快捷键")), 1);
-        makeNavBtn(QStringLiteral("menu_more"), uiText("Advanced", QStringLiteral("高级")), 2);
+        makeNavBtn(QStringLiteral("save_black"), uiText("Sync", QStringLiteral("同步")), 2);
+        makeNavBtn(QStringLiteral("text_plain"), uiText("Text recognition", QStringLiteral("文字识别")), 3);
         sideLayout->addStretch();
-        makeNavBtn(QStringLiteral("info"), uiText("About", QStringLiteral("关于")), 3);
+        makeNavBtn(QStringLiteral("info"), uiText("About", QStringLiteral("关于")), 4);
 
         auto *stack = new QStackedWidget(ui->generalCard);
         stack->setObjectName(QStringLiteral("settingsStack"));
@@ -824,12 +982,16 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         gLayout->addWidget(makeSectionLabel(uiText("Appearance", QStringLiteral("外观")), generalPage));
         {
             auto *g = makeSettingsGrid();
+            // Theme as a segmented control and card style as two pictured choices;
+            // both drive the (hidden) combo boxes the settings load and save through.
             g->addWidget(themeLabel_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            g->addWidget(themeCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
-            g->addWidget(cardStyleLabel_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            g->addWidget(cardStyleCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
-            g->addWidget(ui->label_autostart, 2, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            g->addWidget(autoStartSwitch_, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
+            g->addWidget(makeSegmentFor(themeCombo_, generalPage), 0, 1, Qt::AlignRight | Qt::AlignVCenter);
+            themeCombo_->hide();
+            g->addWidget(cardStyleLabel_, 1, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(makeCardStyleChoices(generalPage), 2, 0, 1, 2);
+            cardStyleCombo_->hide();
+            g->addWidget(ui->label_autostart, 3, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(autoStartSwitch_, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
             gLayout->addWidget(makeCard(g));
         }
 
@@ -878,18 +1040,28 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         sLayout->addStretch();
         stack->addWidget(shortcutsPage);
 
-        // ── Advanced page ──
-        auto *maintenancePage = new QWidget(stack);
-        auto *mLayout = createPageLayout(maintenancePage);
-
-        mLayout->addWidget(makeSectionLabel(uiText("Sync", QStringLiteral("同步")), maintenancePage));
+        // ── Sync page ──
+        auto *syncPage = new QWidget(stack);
+        auto *syncPageLayout = createPageLayout(syncPage);
+        syncPageLayout->addWidget(makeSectionLabel(uiText("Sync", QStringLiteral("同步")), syncPage));
         {
             auto *g = makeSettingsGrid();
             g->addWidget(syncLabel_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
             g->addWidget(syncPathEdit_, 0, 1);
             g->addWidget(syncButtonsRow, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
-            mLayout->addWidget(makeCard(g));
+            syncPageLayout->addWidget(makeCard(g));
         }
+        auto *syncHelp = new QLabel(uiText("Point this at a folder a sync tool keeps (Syncthing, a cloud drive) to share history between machines.",
+                                           QStringLiteral("把它指向同步工具管理的文件夹（Syncthing、网盘等），即可在多台电脑间共享历史。")), syncPage);
+        syncHelp->setObjectName(QStringLiteral("auroraHint"));
+        syncHelp->setWordWrap(true);
+        syncPageLayout->addWidget(syncHelp);
+        syncPageLayout->addStretch();
+        stack->addWidget(syncPage);
+
+        // ── Text recognition page ──
+        auto *maintenancePage = new QWidget(stack);
+        auto *mLayout = createPageLayout(maintenancePage);
 
         ocrLabel_ = new QLabel(uiText("OCR Backend", QStringLiteral("OCR 引擎")), maintenancePage);
         ocrBackendCombo_ = new QComboBox(maintenancePage);
@@ -921,7 +1093,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         autoOcrLabel_ = new QLabel(uiText("Auto OCR for images", QStringLiteral("图片自动 OCR")), maintenancePage);
         autoOcrSwitch_ = new ToggleSwitch(maintenancePage);
 
-        mLayout->addWidget(makeSectionLabel(uiText("OCR", QStringLiteral("OCR")), maintenancePage));
+        mLayout->addWidget(makeSectionLabel(uiText("Text recognition", QStringLiteral("文字识别")), maintenancePage));
         {
             auto *g = makeSettingsGrid();
             g->addWidget(ocrLabel_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
@@ -1037,8 +1209,7 @@ MPasteSettingsWidget::~MPasteSettingsWidget()
 void MPasteSettingsWidget::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
-    SurfacePainter::paintPanel(p, QRectF(rect()), 12.0, darkTheme_, 45);
+    AuroraChrome::paintWindow(p, QRectF(rect()), darkTheme_, QColor(QStringLiteral("#5B8DEF")));
 }
 
 void MPasteSettingsWidget::mousePressEvent(QMouseEvent *event)
@@ -1240,16 +1411,14 @@ void MPasteSettingsWidget::saveAllSettings()
 
 void MPasteSettingsWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
-    setProperty("mpasteBlurRadius", 12.0);
+    setProperty("mpasteBlurRadius", AuroraChrome::kRadius);
     WindowBlurHelper::enableBlurBehind(this, darkTheme_);
-    setStyleSheet(settingsStyleSheet(darkTheme_) + QStringLiteral(
-        "QLabel#glassSettingsTitle { color: %1; background: transparent; }")
-        .arg(darkTheme_ ? QStringLiteral("#E6EDF5") : QStringLiteral("#1E2936")));
+    setStyleSheet(settingsStyleSheet(darkTheme_) + AuroraChrome::styleSheet(darkTheme_) + settingsAuroraStyle(darkTheme_));
 
     // Update sidebar icons for the new theme.
     static const QStringList navIcons = {
-        QStringLiteral("settings"), QStringLiteral("rename"),
-        QStringLiteral("menu_more"), QStringLiteral("info")
+        QStringLiteral("settings"), QStringLiteral("rename"), QStringLiteral("save_black"),
+        QStringLiteral("text_plain"), QStringLiteral("info")
     };
     const auto navBtns = findChildren<QToolButton *>(QStringLiteral("navBtn"));
     for (int i = 0; i < navBtns.size() && i < navIcons.size(); ++i) {

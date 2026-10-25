@@ -28,6 +28,8 @@ class ClipboardAppController : public QObject {
     Q_OBJECT
 
 public:
+    // The item the latest OCR request was made for (its picture and source app).
+    const ClipboardItem &lastOcrItem() const { return lastOcrItem_; }
     explicit ClipboardAppController(
         const QMap<QString, ScrollItemsWidget*> &boardWidgetMap,
         ScrollItemsWidget *clipboardWidget,
@@ -78,6 +80,7 @@ private:
     void initSound();
     void ensureOcrService();
     void handleOcrRequest(ScrollItemsWidget *boardWidget, const ClipboardItem &item);
+    ClipboardItem lastOcrItem_;
 
     QWidget *parentWidget_;
     QMap<QString, ScrollItemsWidget*> boardWidgetMap_;

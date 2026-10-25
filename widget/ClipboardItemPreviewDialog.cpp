@@ -4,6 +4,8 @@
 // update: If I change, update this header block and my folder README.md (tuned preview font size + hidden caret/focus).
 // note: Adds fallback decoding for Qt serialized image payloads and image zoom interactions.
 #include "SurfacePainter.h"
+#include "AuroraChrome.h"
+#include "ClipboardCardDelegate.h"
 #include "ClipboardItemPreviewDialog.h"
 
 #include <QCursor>
@@ -28,7 +30,9 @@
 #include <QTextDocument>
 #include <QThread>
 #include <QTimer>
+#include <QtMath>
 #include <QToolButton>
+#include <QPushButton>
 #include <QVBoxLayout>
 #include <QWindow>
 #include <QPointer>
@@ -436,37 +440,79 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     resize(kPreviewDialogWidth, kPreviewDialogHeight);
 
     auto *cardLayout = new QVBoxLayout(this);
-    cardLayout->setContentsMargins(16, 14, 16, 16);
+    cardLayout->setContentsMargins(20, 16, 16, 12);
     cardLayout->setSpacing(12);
 
+    // Header: the source app, what and when, the actions, close.
     auto *headerLayout = new QHBoxLayout;
     headerLayout->setContentsMargins(0, 0, 0, 0);
     headerLayout->setSpacing(12);
 
+    ui_.iconLabel = new QLabel(this);
+    ui_.iconLabel->setFixedSize(32, 32);
+    headerLayout->addWidget(ui_.iconLabel, 0, Qt::AlignVCenter);
+
     auto *titleLayout = new QVBoxLayout;
     titleLayout->setContentsMargins(0, 0, 0, 0);
-    titleLayout->setSpacing(2);
-
+    titleLayout->setSpacing(1);
     ui_.titleLabel = new QLabel(this);
-    ui_.titleLabel->setObjectName(QStringLiteral("previewTitle"));
+    ui_.titleLabel->setObjectName(QStringLiteral("auroraTitle"));
     titleLayout->addWidget(ui_.titleLabel);
-
     ui_.subtitleLabel = new QLabel(this);
-    ui_.subtitleLabel->setObjectName(QStringLiteral("previewSubtitle"));
-    ui_.subtitleLabel->setWordWrap(true);
+    ui_.subtitleLabel->setObjectName(QStringLiteral("auroraSubtitle"));
     titleLayout->addWidget(ui_.subtitleLabel);
+    headerLayout->addLayout(titleLayout, 1);
+
+    ui_.actions = new QWidget(this);
+    ui_.actions->setObjectName(QStringLiteral("auroraSegment"));
+    ui_.actions->setAttribute(Qt::WA_StyledBackground, true);
+    auto *actionsLayout = new QHBoxLayout(ui_.actions);
+    actionsLayout->setContentsMargins(3, 2, 3, 2);
+    actionsLayout->setSpacing(2);
+    auto addAction = [this, actionsLayout](const QString &text, bool primary, auto handler) {
+        auto *button = new QPushButton(text, ui_.actions);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setFocusPolicy(Qt::NoFocus);
+        button->setCheckable(true);
+        button->setChecked(primary);   // the chosen look marks the main action
+        connect(button, &QPushButton::clicked, this, [this, button, primary, handler]() {
+            button->setChecked(primary);
+            handler();
+        });
+        actionsLayout->addWidget(button);
+        return button;
+    };
+    addAction(uiText(QStringLiteral("Paste"), QStringLiteral("粘贴")), true, [this]() {
+        const ClipboardItem item = currentItem_;
+        reject();
+        emit pasteRequested(item);
+    });
+    addAction(uiText(QStringLiteral("Copy"), QStringLiteral("复制")), false, [this]() {
+        const ClipboardItem item = currentItem_;
+        reject();
+        emit copyRequested(item);
+    });
+    ui_.ocrButton = addAction(uiText(QStringLiteral("Read text"), QStringLiteral("识别文字")), false, [this]() {
+        const ClipboardItem item = currentItem_;
+        reject();
+        emit ocrRequested(item);
+    });
+    ui_.saveButton = addAction(uiText(QStringLiteral("Save as"), QStringLiteral("另存为")), false, [this]() {
+        emit saveRequested(currentItem_);
+    });
+    headerLayout->addWidget(ui_.actions, 0, Qt::AlignVCenter);
 
     ui_.closeButton = new QToolButton(this);
-    ui_.closeButton->setObjectName(QStringLiteral("closeButton"));
-    ui_.closeButton->setText(QStringLiteral("×"));
+    ui_.closeButton->setObjectName(QStringLiteral("auroraClose"));
+    ui_.closeButton->setText(QStringLiteral("\u2715"));
     ui_.closeButton->setCursor(Qt::PointingHandCursor);
+    ui_.closeButton->setToolTip(uiText(QStringLiteral("Close"), QStringLiteral("关闭")));
     connect(ui_.closeButton, &QToolButton::clicked, this, &ClipboardItemPreviewDialog::reject);
-
-    headerLayout->addLayout(titleLayout, 1);
-    headerLayout->addWidget(ui_.closeButton, 0, Qt::AlignTop);
+    headerLayout->addWidget(ui_.closeButton, 0, Qt::AlignVCenter);
     cardLayout->addLayout(headerLayout);
 
     ui_.browser = new OfflineTextBrowser(this);
+    ui_.browser->setObjectName(QStringLiteral("auroraWell"));
     QFont previewFont = ui_.browser->font();
 #ifdef Q_OS_WIN
     previewFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
@@ -513,6 +559,12 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     ui_.contentLayout->setCurrentWidget(ui_.browser);
     cardLayout->addWidget(contentHost, 1);
 
+    ui_.footerLabel = new QLabel(this);
+    ui_.footerLabel->setObjectName(QStringLiteral("auroraHint"));
+    ui_.footerLabel->setText(uiText(QStringLiteral("Enter  paste      Space / Esc  close"),
+                                    QStringLiteral("↵  粘贴      Space / Esc  关闭")));
+    cardLayout->addWidget(ui_.footerLabel);
+
     applyTheme(ThemeManager::instance()->isDark());
     connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &ClipboardItemPreviewDialog::applyTheme);
 }
@@ -537,6 +589,13 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     resize(kPreviewDialogWidth, kPreviewDialogHeight);
 
     const ContentType contentType = item.getContentType();
+
+    currentItem_ = item;
+    accent_ = ClipboardCardDelegate::appAccentColor(item.getIcon());
+    ui_.iconLabel->setPixmap(ClipboardCardDelegate::appIconTile(
+        item.getIcon(), item.getSourceApp().isEmpty() ? QStringLiteral("M") : item.getSourceApp(), 32, devicePixelRatioF()));
+    ui_.ocrButton->setVisible(contentType == Image || contentType == Office);
+    ui_.saveButton->setVisible(contentType != File);
 
     // The card's own name, then what it is and when it was copied (the stored file name means nothing to people).
     const QString alias = item.getAlias().trimmed();
@@ -819,6 +878,9 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
                         guard->ui_.contentLayout->setCurrentWidget(guard->ui_.browser);
                         break;
                 }
+                if (guard->revealPending_) {
+                    guard->revealSizedToContent();
+                }
             }, Qt::QueuedConnection);
         }
     });
@@ -838,16 +900,66 @@ connect(thread, &QThread::finished, thread, &QObject::deleteLater);
         targetScreen = QGuiApplication::primaryScreen();
     }
     if (targetScreen) {
-        const QRect target = targetScreen->availableGeometry();
-        resize(qMin(kPreviewDialogWidth, qMax(1, target.width() - 32)),
-               qMin(kPreviewDialogHeight, qMax(1, target.height() - 32)));
-        move(target.center() - QPoint(width() / 2, height() / 2));
+        screenArea_ = targetScreen->availableGeometry();
+        resize(qMin(kPreviewDialogWidth, qMax(1, screenArea_.width() - 32)),
+               qMin(kPreviewDialogHeight, qMax(1, screenArea_.height() - 32)));
     }
 
+    // Shown once the content is in, at the height it needs; a slow load shows
+    // the window (at the full height) after a moment instead of keeping it back.
+    if (isVisible()) {
+        revealPending_ = false;
+        return;
+    }
+    revealPending_ = true;
+    QTimer::singleShot(400, this, [this, token]() {
+        if (revealPending_ && previewToken_ == token) {
+            revealSizedToContent();
+        }
+    });
+}
+
+int ClipboardItemPreviewDialog::heightForContent() const {
+    QWidget *host = ui_.contentLayout ? ui_.contentLayout->parentWidget() : nullptr;
+    if (!host) {
+        return height();
+    }
+    const int chrome = height() - host->height();
+    int content = host->height();
+    if (isImagePreviewActive()) {
+        if (!imageOriginal_.isNull()) {
+            const qreal scale = qMin<qreal>(1.0, host->width() / qMax<qreal>(1.0, imageOriginal_.width()));
+            content = qCeil(imageOriginal_.height() * scale);
+        }
+    } else if (ui_.browser) {
+        const int frame = ui_.browser->height() - ui_.browser->viewport()->height();
+        QTextDocument *document = ui_.browser->document();
+        document->setTextWidth(ui_.browser->viewport()->width());
+        content = qCeil(document->size().height()) + frame + 4;
+    }
+    const int maxHeight = screenArea_.isValid() ? qRound(screenArea_.height() * 0.85) : kPreviewDialogHeight;
+    return qBound(240, chrome + content, qMax(240, maxHeight));
+}
+
+void ClipboardItemPreviewDialog::revealSizedToContent() {
+    revealPending_ = false;
+    if (layout()) {
+        layout()->activate();
+    }
+    resize(width(), heightForContent());
+    if (screenArea_.isValid()) {
+        move(screenArea_.center() - QPoint(width() / 2, height() / 2));
+    }
     show();
     WindowBlurHelper::enableBlurBehind(this, darkTheme_);
     raise();
     activateWindow();
+    if (isImagePreviewActive()) {
+        QTimer::singleShot(0, this, [this]() {
+            imageZoomFactor_ = 1.0;
+            updateImagePreview();
+        });
+    }
 }
 
 void ClipboardItemPreviewDialog::reject() {
@@ -861,7 +973,8 @@ void ClipboardItemPreviewDialog::applyTheme(bool dark) {
     if (ui_.browser) {
         ui_.browser->setStyleSheet(QString());
     }
-    setStyleSheet(previewStyleSheet(darkTheme_));
+    setStyleSheet(AuroraChrome::styleSheet(darkTheme_)
+                  + QStringLiteral("QTextBrowser#auroraWell { font-size: 15px; padding: 12px 14px; }"));
     update();
 }
 
@@ -1060,30 +1173,20 @@ void ClipboardItemPreviewDialog::keyPressEvent(QKeyEvent *event) {
         event->accept();
         return;
     }
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        const ClipboardItem item = currentItem_;
+        reject();
+        emit pasteRequested(item);
+        event->accept();
+        return;
+    }
 
     QDialog::keyPressEvent(event);
 }
 
 void ClipboardItemPreviewDialog::paintEvent(QPaintEvent *) {
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    if (WindowBlurHelper::useOpaqueFallback() || WindowBlurHelper::hasNativeBlur()) {
-        SurfacePainter::paintPanel(painter, QRectF(rect()), 8.0, darkTheme_, 1);
-        return;
-    }
-
-
-    // Match the DWM DWMWCP_ROUND corner radius (~8px on Windows 11)
-    const qreal radius = 8.0;
-    QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-
-    if (darkTheme_) {
-        painter.setPen(QPen(QColor(255, 255, 255, 40), 1.0));
-    } else {
-        painter.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
-    }
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRoundedRect(r, radius, radius);
+    AuroraChrome::paintWindow(painter, QRectF(rect()), darkTheme_, accent_);
 }
 
 void ClipboardItemPreviewDialog::mousePressEvent(QMouseEvent *event) {

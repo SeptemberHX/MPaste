@@ -2,6 +2,8 @@
 // output: Context menus that hide card hover tools while the menu is open.
 // pos: Split from ScrollItemsWidgetMV.cpp -- context menu population and save-to-file.
 #include <QFileDialog>
+#include <QScopeGuard>
+#include <QApplication>
 #include <QListView>
 #include <QMenu>
 #include <QMessageBox>
@@ -208,10 +210,15 @@ void ScrollItemsWidget::saveItemToFile(const ClipboardItem &item) {
 
     QString selectedFilter;
     QString filePath;
+    // Keep the panel up while the dialog has the focus (see the auto-hide in MPaste.cpp).
+    // The dialog has no parent window: GNOME attaches a modal dialog to its parent,
+    // and dragging it would drag the docked panel along.
+    qApp->setProperty("mpasteFileDialogOpen", true);
+    const auto clearFlag = qScopeGuard([]() { qApp->setProperty("mpasteFileDialogOpen", false); });
     switch (contentType) {
         case Image:
             selectedFilter = QStringLiteral("PNG Image (*.png)");
-            filePath = QFileDialog::getSaveFileName(this,
+            filePath = QFileDialog::getSaveFileName(nullptr,
                                                     saveDialogTitle(contentType),
                                                     suggestedExportPath(item, QStringLiteral(".png")),
                                                     imageSaveFilters(),
@@ -219,14 +226,14 @@ void ScrollItemsWidget::saveItemToFile(const ClipboardItem &item) {
             filePath = ensureFileSuffix(filePath, defaultImageSuffixForFilter(selectedFilter));
             break;
         case RichText:
-            filePath = QFileDialog::getSaveFileName(this,
+            filePath = QFileDialog::getSaveFileName(nullptr,
                                                     saveDialogTitle(contentType),
                                                     suggestedExportPath(item, QStringLiteral(".html")),
                                                     QStringLiteral("HTML Files (*.html *.htm);;All Files (*)"));
             filePath = ensureFileSuffix(filePath, QStringLiteral(".html"));
             break;
         case Text:
-            filePath = QFileDialog::getSaveFileName(this,
+            filePath = QFileDialog::getSaveFileName(nullptr,
                                                     saveDialogTitle(contentType),
                                                     suggestedExportPath(item, QStringLiteral(".txt")),
                                                     QStringLiteral("Text Files (*.txt);;All Files (*)"));

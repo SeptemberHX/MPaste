@@ -69,7 +69,14 @@ private:
         QTextEdit *rawHtmlEdit = nullptr;
         QTextEdit *rawUrlsEdit = nullptr;
         QTextEdit *mimeFormatsEdit = nullptr;
+
+        QLabel *iconLabel = nullptr;
+        QLabel *subtitleLabel = nullptr;
+        QLabel *sourceValue = nullptr;
+        QWidget *titleRow = nullptr;
+        QWidget *urlRow = nullptr;
     } ui_;
+    QColor accent_;
 
     QPoint dragOffset_;
     bool darkTheme_ = false;

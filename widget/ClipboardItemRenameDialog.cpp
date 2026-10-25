@@ -5,6 +5,9 @@
 // note: Rename dialog now explicitly activates and focuses the input field.
 #include "ClipboardItemRenameDialog.h"
 #include "WindowBlurHelper.h"
+#include <QPainter>
+#include "ClipboardCardDelegate.h"
+#include "AuroraChrome.h"
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -31,111 +34,6 @@ QString fallbackText(const QString &translated, const QString &source, const QSt
     return translated;
 }
 
-QString renameDialogStyleSheet(bool dark) {
-    if (dark) {
-        return QStringLiteral(R"(
-            QDialog {
-                background: transparent;
-            }
-            QFrame#renameCard {
-                background: #181F2B;
-                border: 1px solid rgba(255, 255, 255, 20);
-                border-radius: 12px;
-            }
-            QLabel#renameTitle {
-                color: #F2F6FB;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            QLabel#renameHint {
-                color: #93A2B3;
-                font-size: 11px;
-            }
-            QLineEdit#renameInput {
-                background: rgba(24, 29, 36, 242);
-                border: 1px solid #3A4655;
-                border-radius: 8px;
-                color: #F2F6FB;
-                padding: 6px 10px;
-            }
-            QLineEdit#renameInput:focus {
-                border-color: #4A90E2;
-            }
-            QPushButton#renameOk {
-                background: #2D7FD3;
-                color: #FFFFFF;
-                border: none;
-                border-radius: 8px;
-                padding: 6px 16px;
-            }
-            QPushButton#renameOk:hover {
-                background: #328BE6;
-            }
-            QPushButton#renameCancel {
-                background: transparent;
-                color: #93A2B3;
-                border: 1px solid #3A4655;
-                border-radius: 8px;
-                padding: 6px 16px;
-            }
-            QPushButton#renameCancel:hover {
-                color: #F2F6FB;
-                border-color: #4A90E2;
-            }
-        )");
-    }
-
-    return QStringLiteral(R"(
-        QDialog {
-            background: transparent;
-        }
-        QFrame#renameCard {
-            background: #F5F8FC;
-            border: 1px solid rgba(0, 0, 0, 31);
-            border-radius: 12px;
-        }
-        QLabel#renameTitle {
-            color: #2C3E50;
-            font-size: 14px;
-            font-weight: 600;
-        }
-        QLabel#renameHint {
-            color: #556270;
-            font-size: 11px;
-        }
-        QLineEdit#renameInput {
-            background: #F5F8FC;
-            border: 1px solid #D6D6D6;
-            border-radius: 8px;
-            color: #2C3E50;
-            padding: 6px 10px;
-        }
-        QLineEdit#renameInput:focus {
-            border-color: #4A90E2;
-        }
-        QPushButton#renameOk {
-            background: #4A90E2;
-            color: #FFFFFF;
-            border: none;
-            border-radius: 8px;
-            padding: 6px 16px;
-        }
-        QPushButton#renameOk:hover {
-            background: #5AA0F0;
-        }
-        QPushButton#renameCancel {
-            background: transparent;
-            color: #556270;
-            border: 1px solid #D6D6D6;
-            border-radius: 8px;
-            padding: 6px 16px;
-        }
-        QPushButton#renameCancel:hover {
-            color: #2C3E50;
-            border-color: #4A90E2;
-        }
-    )");
-}
 }
 
 ClipboardItemRenameDialog::ClipboardItemRenameDialog(const QString &currentAlias, QWidget *parent)
@@ -143,7 +41,7 @@ ClipboardItemRenameDialog::ClipboardItemRenameDialog(const QString &currentAlias
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
     setModal(true);
-    setFixedWidth(360);
+    setFixedWidth(420);
 
     auto *rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(10, 10, 10, 10);
@@ -153,58 +51,54 @@ ClipboardItemRenameDialog::ClipboardItemRenameDialog(const QString &currentAlias
     rootLayout->addWidget(card_);
 
     auto *cardLayout = new QVBoxLayout(card_);
-    cardLayout->setContentsMargins(16, 14, 16, 16);
-    cardLayout->setSpacing(12);
+    cardLayout->setContentsMargins(20, 18, 20, 18);
+    cardLayout->setSpacing(14);
 
     const QString aliasText = fallbackText(tr("Alias"), QStringLiteral("Alias"), QStringLiteral("别名"));
+    const QString titleText = fallbackText(tr("Name this item"), QStringLiteral("Name this item"),
+                                           QStringLiteral("给这条起个名字"));
     const QString customNameText = fallbackText(tr("Alias name"), QStringLiteral("Alias name"), QStringLiteral("别名名称"));
     const QString hintText = fallbackText(tr("Leave empty to clear alias."),
                                           QStringLiteral("Leave empty to clear alias."),
-                                          QStringLiteral("留空可清除别名。"));
+                                          QStringLiteral("留空可清除别名"));
     const QString cancelText = fallbackText(tr("Cancel"), QStringLiteral("Cancel"), QStringLiteral("取消"));
     const QString saveText = fallbackText(tr("Save"), QStringLiteral("Save"), QStringLiteral("保存"));
 
-    titleLabel_ = new QLabel(aliasText, card_);
-    titleLabel_->setObjectName(QStringLiteral("renameTitle"));
-    cardLayout->addWidget(titleLabel_);
+    auto *titleRow = new QHBoxLayout;
+    titleRow->setSpacing(10);
+    iconLabel_ = new QLabel(card_);
+    iconLabel_->setFixedSize(24, 24);
+    iconLabel_->hide();
+    titleRow->addWidget(iconLabel_);
+    titleLabel_ = new QLabel(titleText, card_);
+    titleLabel_->setObjectName(QStringLiteral("auroraTitle"));
+    titleRow->addWidget(titleLabel_, 1);
+    cardLayout->addLayout(titleRow);
 
     input_ = new QLineEdit(card_);
-    input_->setObjectName(QStringLiteral("renameInput"));
+    input_->setObjectName(QStringLiteral("auroraInput"));
     input_->setText(currentAlias);
     input_->setPlaceholderText(customNameText);
     input_->setMaxLength(80);
     input_->setFocusPolicy(Qt::StrongFocus);
-    {
-        QFont emojiFont = input_->font();
-        emojiFont.setFamilies({
-            QStringLiteral("Segoe UI Emoji"),
-            QStringLiteral("Segoe UI Symbol"),
-            QStringLiteral("Segoe UI"),
-            QStringLiteral("Microsoft YaHei UI"),
-            QStringLiteral("Microsoft YaHei"),
-            QStringLiteral("Noto Color Emoji"),
-            QStringLiteral("Noto Emoji")
-        });
-        input_->setFont(emojiFont);
-    }
     cardLayout->addWidget(input_);
-
-    hintLabel_ = new QLabel(hintText, card_);
-    hintLabel_->setObjectName(QStringLiteral("renameHint"));
-    cardLayout->addWidget(hintLabel_);
 
     auto *buttonRow = new QHBoxLayout;
     buttonRow->setContentsMargins(0, 0, 0, 0);
-    buttonRow->setSpacing(10);
-    buttonRow->addStretch(1);
+    buttonRow->setSpacing(8);
+    hintLabel_ = new QLabel(hintText, card_);
+    hintLabel_->setObjectName(QStringLiteral("auroraHint"));
+    buttonRow->addWidget(hintLabel_, 1);
 
     cancelButton_ = new QPushButton(cancelText, card_);
-    cancelButton_->setObjectName(QStringLiteral("renameCancel"));
+    cancelButton_->setObjectName(QStringLiteral("auroraSecondary"));
+    cancelButton_->setCursor(Qt::PointingHandCursor);
     connect(cancelButton_, &QPushButton::clicked, this, &QDialog::reject);
     buttonRow->addWidget(cancelButton_);
 
     okButton_ = new QPushButton(saveText, card_);
-    okButton_->setObjectName(QStringLiteral("renameOk"));
+    okButton_->setObjectName(QStringLiteral("auroraPrimary"));
+    okButton_->setCursor(Qt::PointingHandCursor);
     okButton_->setDefault(true);
     connect(okButton_, &QPushButton::clicked, this, &QDialog::accept);
     buttonRow->addWidget(okButton_);
@@ -232,14 +126,25 @@ void ClipboardItemRenameDialog::showEvent(QShowEvent *event) {
     });
 }
 
+void ClipboardItemRenameDialog::setSource(const QPixmap &icon, const QString &appName) {
+    accent_ = ClipboardCardDelegate::appAccentColor(icon);
+    iconLabel_->setPixmap(ClipboardCardDelegate::appIconTile(icon, appName.isEmpty() ? QStringLiteral("M") : appName,
+                                                             24, devicePixelRatioF()));
+    iconLabel_->show();
+    update();
+}
+
+void ClipboardItemRenameDialog::paintEvent(QPaintEvent *) {
+    QPainter painter(this);
+    // The window keeps a 10 px margin for the blur; the surface is the card inside it.
+    AuroraChrome::paintWindow(painter, QRectF(rect()).adjusted(10, 10, -10, -10), dark_, accent_);
+}
+
 void ClipboardItemRenameDialog::applyTheme(bool dark) {
-    setProperty("mpasteBlurRadius", 12.0);
+    dark_ = dark;
+    setProperty("mpasteBlurRadius", AuroraChrome::kRadius);
     setProperty("mpasteBlurInset", 10.0);
     WindowBlurHelper::enableBlurBehind(this, dark);
-    QString style = renameDialogStyleSheet(dark);
-    if (!WindowBlurHelper::useOpaqueFallback()) {
-        style.replace("#181F2B", "rgba(24, 31, 43, 175)");
-        style.replace("#F5F8FC", "rgba(245, 248, 252, 185)");
-    }
-    setStyleSheet(style);
+    setStyleSheet(AuroraChrome::styleSheet(dark) + QStringLiteral("QFrame#renameCard { background: transparent; border: none; }"));
+    update();
 }

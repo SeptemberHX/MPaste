@@ -5,6 +5,10 @@
 // note: Added dark theme styling support.
 #include "SurfacePainter.h"
 #include "ClipboardItemDetailsDialog.h"
+#include <QPushButton>
+#include <QClipboard>
+#include "ClipboardCardDelegate.h"
+#include "AuroraChrome.h"
 
 #include <QApplication>
 #include <QCursor>
@@ -36,7 +40,7 @@
 
 namespace {
 constexpr int kDetailsDialogWidth = 860;
-constexpr int kDetailsDialogHeight = 640;
+constexpr int kDetailsDialogHeight = 600;
 
 QString zh(const char16_t *text) {
     return QString::fromUtf16(text);
@@ -82,198 +86,31 @@ QFont preferredEditorFont() {
     return font;
 }
 
-QString detailsStyleSheet(bool dark) {
-    if (dark) {
-        return QStringLiteral(R"(
-            QFrame#detailsCard {
-                background: transparent;
-                border: none;
-                border-radius: 18px;
-            }
-            QLabel#detailsTitle {
-                color: #E6EDF5;
-                font-size: 19px;
-                font-weight: 700;
-                background: transparent;
-            }
-            QLabel#sectionLabel {
-                color: #8B97A6;
-                font-size: 11px;
-                font-weight: 700;
-                background: transparent;
-                letter-spacing: 0.4px;
-                padding-bottom: 1px;
-            }
-            QLabel#valueLabel {
-                color: #D6DEE8;
-                font-size: 13px;
-                background: transparent;
-            }
-            QLabel#previewVisual, QLabel#previewThumbnail {
-                background-color: #1F242D;
-                border: 1px solid rgba(116, 154, 214, 40);
-                border-radius: 14px;
-                color: #9AA7B5;
-                padding: 12px;
-            }
-            QLabel#previewThumbnail {
-                padding: 8px;
-            }
-            QFrame#metaCard, QFrame#previewCard {
-                background-color: #1E232B;
-                border: 1px solid rgba(116, 154, 214, 40);
-                border-radius: 14px;
-            }
-            QTextEdit {
-                background-color: #1F242D;
-                border: 1px solid rgba(116, 154, 214, 40);
-                border-radius: 12px;
-                padding: 10px 12px;
-                color: #E6EDF5;
-                selection-background-color: rgba(74, 144, 226, 110);
-            }
-            QTextEdit:focus {
-                border-color: rgba(116, 154, 214, 80);
-            }
-            QToolButton#closeButton {
-                background-color: #1F242D;
-                border: 1px solid rgba(116, 154, 214, 40);
-                border-radius: 14px;
-                color: #C9D4E0;
-                font-size: 17px;
-                font-weight: 700;
-                min-width: 28px;
-                min-height: 28px;
-            }
-            QToolButton#closeButton:hover {
-                background-color: #27303A;
-                border-color: rgba(116, 154, 214, 80);
-            }
-            QTabWidget::pane {
-                border-left: 1px solid rgba(116, 154, 214, 40);
-                border-right: 1px solid rgba(116, 154, 214, 40);
-                border-bottom: 1px solid rgba(116, 154, 214, 40);
-                border-top: none;
-                border-radius: 14px;
-                background-color: #1E232B;
-                margin-top: 10px;
-                top: 0px;
-            }
-            QTabBar::tab {
-                background-color: #1F242D;
-                border: 1px solid rgba(116, 154, 214, 40);
-                color: #9AA7B5;
-                border-radius: 12px;
-                padding: 6px 12px;
-                margin-right: 6px;
-                font-weight: 600;
-                font-size: 12px;
-            }
-            QTabBar::tab:selected {
-                background-color: #1E232B;
-                border-color: rgba(116, 154, 214, 80);
-                color: #E6EDF5;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #27303A;
-            }
-        )");
-    }
-
-    return QStringLiteral(R"(
-        QFrame#detailsCard {
-            background: transparent;
-            border: none;
-            border-radius: 18px;
-        }
-        QLabel#detailsTitle {
-            color: #1E2936;
-            font-size: 19px;
-            font-weight: 700;
-            background: transparent;
-        }
-        QLabel#sectionLabel {
-            color: #6A7A8C;
-            font-size: 11px;
-            font-weight: 700;
-            background: transparent;
-            letter-spacing: 0.4px;
-            padding-bottom: 1px;
-        }
-        QLabel#valueLabel {
-            color: #1E2936;
-            font-size: 13px;
-            background: transparent;
-        }
-        QLabel#previewVisual, QLabel#previewThumbnail {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 16);
-            border-radius: 14px;
-            color: #5F7286;
-            padding: 12px;
-        }
-        QLabel#previewThumbnail {
-            padding: 8px;
-        }
-        QFrame#metaCard, QFrame#previewCard {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 16);
-            border-radius: 14px;
-        }
-        QTextEdit {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 16);
-            border-radius: 12px;
-            padding: 10px 12px;
-            color: #1E2936;
-            selection-background-color: rgba(74, 144, 226, 76);
-        }
-        QTextEdit:focus {
-            border-color: rgba(74, 144, 226, 30);
-        }
-        QToolButton#closeButton {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 16);
-            border-radius: 14px;
-            color: #5E7084;
-            font-size: 17px;
-            font-weight: 700;
-            min-width: 28px;
-            min-height: 28px;
-        }
-        QToolButton#closeButton:hover {
-            background-color: #F7FAFF;
-            border-color: rgba(74, 144, 226, 24);
-        }
-        QTabWidget::pane {
-            border-left: 1px solid rgba(74, 144, 226, 18);
-            border-right: 1px solid rgba(74, 144, 226, 18);
-            border-bottom: 1px solid rgba(74, 144, 226, 18);
-            border-top: none;
-            border-radius: 14px;
-            background-color: #FFFFFF;
-            margin-top: 10px;
-            top: 0px;
-        }
-        QTabBar::tab {
-            background-color: #FFFFFF;
-            border: 1px solid rgba(74, 144, 226, 14);
-            color: #54687A;
-            border-radius: 12px;
-            padding: 6px 12px;
-            margin-right: 6px;
-            font-weight: 600;
-            font-size: 12px;
-        }
-        QTabBar::tab:selected {
-            background-color: #FFFFFF;
-            border-color: rgba(74, 144, 226, 26);
-            color: #17324D;
-        }
-        QTabBar::tab:hover:!selected {
-            background-color: #F7FAFF;
-        }
-    )");
+QString detailsAuroraStyle(bool dark) {
+    const QString ink = dark ? QStringLiteral("rgba(255,255,255,225)") : QStringLiteral("rgba(28,30,37,225)");
+    const QString faint = dark ? QStringLiteral("rgba(255,255,255,115)") : QStringLiteral("rgba(28,30,37,125)");
+    const QString well = dark ? QStringLiteral("rgba(0,0,0,82)") : QStringLiteral("rgba(255,255,255,200)");
+    const QString edge = dark ? QStringLiteral("rgba(255,255,255,16)") : QStringLiteral("rgba(0,0,0,16)");
+    const QString fill = dark ? QStringLiteral("rgba(255,255,255,13)") : QStringLiteral("rgba(0,0,0,11)");
+    const QString chosen = dark ? QStringLiteral("rgba(255,255,255,36)") : QStringLiteral("#FFFFFF");
+    const QString soft = dark ? QStringLiteral("rgba(255,255,255,150)") : QStringLiteral("rgba(28,30,37,150)");
+    return QStringLiteral(
+        "QFrame#detailsCard { background: transparent; border: none; }"
+        "QLabel#sectionLabel { color: %2; font-size: 11.5px; background: transparent; }"
+        "QLabel#valueLabel { color: %1; font-size: 13px; background: transparent; }"
+        "QLabel#fingerprintValue { color: %7; font-family: monospace; font-size: 11.5px; background: transparent; }"
+        "QLabel#contentWell { background: %3; border: 1px solid %4; border-radius: 14px; padding: 14px 16px;"
+        "  color: %1; font-size: 14px; }"
+        "QTabWidget::pane { border: none; background: transparent; }"
+        "QTabBar { background: transparent; }"
+        "QTabBar::tab { min-height: 28px; max-height: 28px; padding: 0 14px; margin-right: 2px; border: none;"
+        "  border-radius: 13px; background: transparent; color: %7; font-size: 12.5px; }"
+        "QTabBar::tab:first { margin-left: 3px; }"
+        "QTabBar::tab:selected { background: %6; color: %1; font-weight: 600; }"
+        "QTabBar::tab:hover:!selected { color: %1; background: %5; }"
+        "QTextEdit { background: %3; border: 1px solid %4; border-radius: 14px; color: %1; padding: 8px 10px;"
+        "  font-family: monospace; font-size: 12.5px; selection-background-color: rgba(91,141,239,150); }")
+        .arg(ink, faint, well, edge, fill, chosen, soft);
 }
 }
 
@@ -306,22 +143,28 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
     cardLayout->addLayout(contentLayout);
 
     auto *headerLayout = new QHBoxLayout;
-    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setContentsMargins(4, 2, 0, 4);
     headerLayout->setSpacing(12);
 
+    ui_.iconLabel = new QLabel(ui_.card);
+    ui_.iconLabel->setFixedSize(32, 32);
+    headerLayout->addWidget(ui_.iconLabel, 0, Qt::AlignVCenter);
+    auto *titles = new QVBoxLayout;
+    titles->setSpacing(1);
     ui_.titleLabel = new QLabel(ui_.card);
-    ui_.titleLabel->setObjectName("detailsTitle");
-    ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Item Details"), zh(u"剪贴板条目详情")));
+    ui_.titleLabel->setObjectName("auroraTitle");
+    titles->addWidget(ui_.titleLabel);
+    ui_.subtitleLabel = new QLabel(ui_.card);
+    ui_.subtitleLabel->setObjectName("auroraSubtitle");
+    titles->addWidget(ui_.subtitleLabel);
+    headerLayout->addLayout(titles, 1);
 
     ui_.closeButton = new QToolButton(ui_.card);
-    ui_.closeButton->setObjectName("closeButton");
-    ui_.closeButton->setText(QStringLiteral("×"));
+    ui_.closeButton->setObjectName("auroraClose");
+    ui_.closeButton->setText(QStringLiteral("✕"));
     ui_.closeButton->setCursor(Qt::PointingHandCursor);
     connect(ui_.closeButton, &QToolButton::clicked, this, &QDialog::reject);
-
-    headerLayout->addWidget(ui_.titleLabel);
-    headerLayout->addStretch(1);
-    headerLayout->addWidget(ui_.closeButton);
+    headerLayout->addWidget(ui_.closeButton, 0, Qt::AlignVCenter);
     contentLayout->addLayout(headerLayout);
 
     auto createValueLabel = [this]() {
@@ -343,111 +186,95 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
     ui_.tabs->setDocumentMode(true);
     contentLayout->addWidget(ui_.tabs, 1);
 
+    // Overview: the content itself, the facts in two columns, the fingerprint last.
     auto *overviewTab = new QWidget(ui_.tabs);
     auto *overviewLayout = new QVBoxLayout(overviewTab);
-    overviewLayout->setContentsMargins(14, 14, 14, 14);
-    overviewLayout->setSpacing(10);
+    overviewLayout->setContentsMargins(0, 12, 0, 0);
+    overviewLayout->setSpacing(12);
 
-    auto *overviewTopLayout = new QHBoxLayout;
-    overviewTopLayout->setContentsMargins(0, 0, 0, 0);
-    overviewTopLayout->setSpacing(10);
-
-    auto *previewCard = new QFrame(overviewTab);
-    previewCard->setObjectName("previewCard");
-    previewCard->setFixedWidth(230);
-    auto *previewLayout = new QVBoxLayout(previewCard);
-    previewLayout->setContentsMargins(12, 12, 12, 12);
-    previewLayout->setSpacing(10);
-    ui_.previewVisual = new QLabel(previewCard);
-    ui_.previewVisual->setObjectName("previewVisual");
-    ui_.previewVisual->setAlignment(Qt::AlignCenter);
-    ui_.previewVisual->setMinimumSize(180, 108);
-    ui_.previewVisual->setMaximumHeight(144);
-    ui_.previewVisual->setScaledContents(false);
+    ui_.previewVisual = new QLabel(overviewTab);
+    ui_.previewVisual->setObjectName("contentWell");
+    ui_.previewVisual->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    ui_.previewVisual->setMinimumHeight(96);
+    ui_.previewVisual->setMaximumHeight(170);
     ui_.previewVisual->setWordWrap(true);
-    ui_.previewThumbnail = new QLabel(previewCard);
-    ui_.previewThumbnail->setObjectName("previewThumbnail");
-    ui_.previewThumbnail->setAlignment(Qt::AlignCenter);
-    ui_.previewThumbnail->setFixedSize(180, 143);
-    ui_.previewThumbnail->setScaledContents(false);
+    ui_.previewVisual->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    ui_.previewVisual->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    overviewLayout->addWidget(ui_.previewVisual);
+    // Kept for the code that fills them; the overview no longer shows them.
+    ui_.previewThumbnail = new QLabel(overviewTab);
     ui_.previewThumbnail->hide();
     ui_.previewSummaryValue = createValueLabel();
-    previewLayout->addWidget(ui_.previewVisual, 0);
-    previewLayout->addWidget(ui_.previewThumbnail, 0, Qt::AlignHCenter);
-    previewLayout->addWidget(createSectionLabel(QStringLiteral("Preview"), zh(u"预览")));
-    previewLayout->addWidget(ui_.previewSummaryValue, 0);
-    overviewTopLayout->addWidget(previewCard, 0);
-
+    ui_.previewSummaryValue->hide();
     ui_.sequenceValue = createValueLabel();
-    ui_.typeValue = createValueLabel();
-    ui_.timeValue = createValueLabel();
+    ui_.sequenceValue->hide();
     ui_.nameValue = createValueLabel();
+    ui_.nameValue->hide();
+    ui_.urlCountValue = createValueLabel();
+    ui_.urlCountValue->hide();
+
+    ui_.typeValue = createValueLabel();
+    ui_.sourceValue = createValueLabel();
+    ui_.timeValue = createValueLabel();
     ui_.titleValue = createValueLabel();
     ui_.urlValue = createValueLabel();
     ui_.fingerprintValue = createValueLabel();
+    ui_.fingerprintValue->setObjectName("fingerprintValue");
+    ui_.fingerprintValue->setWordWrap(false);
     ui_.formatCountValue = createValueLabel();
     ui_.mimeBytesValue = createValueLabel();
     ui_.textLengthValue = createValueLabel();
-    ui_.urlCountValue = createValueLabel();
 
     auto *metaCard = new QFrame(overviewTab);
-    metaCard->setObjectName("metaCard");
+    metaCard->setObjectName("auroraPanel");
     auto *metaGrid = new QGridLayout(metaCard);
-    metaGrid->setContentsMargins(14, 12, 14, 12);
-    metaGrid->setHorizontalSpacing(12);
-    metaGrid->setVerticalSpacing(6);
+    metaGrid->setContentsMargins(16, 14, 16, 14);
+    metaGrid->setHorizontalSpacing(24);
+    metaGrid->setVerticalSpacing(12);
     metaGrid->setColumnStretch(0, 1);
     metaGrid->setColumnStretch(1, 1);
+    auto fact = [&](const QString &source, const QString &zhText, QLabel *value) {
+        auto *box = new QWidget(metaCard);
+        auto *boxLayout = new QVBoxLayout(box);
+        boxLayout->setContentsMargins(0, 0, 0, 0);
+        boxLayout->setSpacing(2);
+        boxLayout->addWidget(createSectionLabel(source, zhText));
+        value->setParent(box);
+        boxLayout->addWidget(value);
+        return box;
+    };
+    metaGrid->addWidget(fact(QStringLiteral("Type"), zh(u"类型"), ui_.typeValue), 0, 0);
+    metaGrid->addWidget(fact(QStringLiteral("Source"), zh(u"来源"), ui_.sourceValue), 0, 1);
+    metaGrid->addWidget(fact(QStringLiteral("Copied"), zh(u"复制时间"), ui_.timeValue), 1, 0);
+    metaGrid->addWidget(fact(QStringLiteral("Text Length"), zh(u"文本长度"), ui_.textLengthValue), 1, 1);
+    metaGrid->addWidget(fact(QStringLiteral("Formats"), zh(u"格式数"), ui_.formatCountValue), 2, 0);
+    metaGrid->addWidget(fact(QStringLiteral("Size"), zh(u"大小"), ui_.mimeBytesValue), 2, 1);
+    ui_.titleRow = fact(QStringLiteral("Title"), zh(u"标题"), ui_.titleValue);
+    metaGrid->addWidget(ui_.titleRow, 3, 0, 1, 2);
+    ui_.urlRow = fact(QStringLiteral("URL"), zh(u"链接"), ui_.urlValue);
+    metaGrid->addWidget(ui_.urlRow, 4, 0, 1, 2);
+    overviewLayout->addWidget(metaCard);
 
-    int row = 0;
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Type"), zh(u"类型")), row, 0);
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Time"), zh(u"时间")), row, 1);
-    ++row;
-    metaGrid->addWidget(ui_.typeValue, row, 0);
-    metaGrid->addWidget(ui_.timeValue, row, 1);
-    ++row;
-
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Sequence"), zh(u"序号")), row, 0);
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Record Name"), zh(u"记录名")), row, 1);
-    ++row;
-    metaGrid->addWidget(ui_.sequenceValue, row, 0);
-    metaGrid->addWidget(ui_.nameValue, row, 1);
-    ++row;
-
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Formats"), zh(u"格式数")), row, 0);
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("MIME Bytes"), zh(u"MIME 大小")), row, 1);
-    ++row;
-    metaGrid->addWidget(ui_.formatCountValue, row, 0);
-    metaGrid->addWidget(ui_.mimeBytesValue, row, 1);
-    ++row;
-
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("URL Count"), zh(u"链接数量")), row, 0);
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Text Length"), zh(u"文本长度")), row, 1);
-    ++row;
-    metaGrid->addWidget(ui_.urlCountValue, row, 0);
-    metaGrid->addWidget(ui_.textLengthValue, row, 1);
-    ++row;
-
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Title"), zh(u"标题")), row, 0, 1, 2);
-    ++row;
-    metaGrid->addWidget(ui_.titleValue, row, 0, 1, 2);
-    ++row;
-
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("URL"), zh(u"链接")), row, 0, 1, 2);
-    ++row;
-    metaGrid->addWidget(ui_.urlValue, row, 0, 1, 2);
-    ++row;
-
-    metaGrid->addWidget(createSectionLabel(QStringLiteral("Fingerprint"), zh(u"指纹")), row, 0, 1, 2);
-    ++row;
-    metaGrid->addWidget(ui_.fingerprintValue, row, 0, 1, 2);
-    overviewTopLayout->addWidget(metaCard, 1);
-    overviewLayout->addLayout(overviewTopLayout);
+    auto *fingerprintRow = new QHBoxLayout;
+    fingerprintRow->setContentsMargins(4, 0, 0, 0);
+    fingerprintRow->setSpacing(10);
+    fingerprintRow->addWidget(createSectionLabel(QStringLiteral("Fingerprint"), zh(u"指纹")));
+    ui_.fingerprintValue->setParent(overviewTab);
+    fingerprintRow->addWidget(ui_.fingerprintValue, 1);
+    auto *copyFingerprint = new QPushButton(uiText(QStringLiteral("Copy"), zh(u"复制")), overviewTab);
+    copyFingerprint->setObjectName("auroraSecondary");
+    copyFingerprint->setCursor(Qt::PointingHandCursor);
+    connect(copyFingerprint, &QPushButton::clicked, this, [this]() {
+        QGuiApplication::clipboard()->setText(ui_.fingerprintValue->text());
+    });
+    fingerprintRow->addWidget(copyFingerprint);
+    overviewLayout->addLayout(fingerprintRow);
+    overviewLayout->addStretch(1);
     ui_.tabs->addTab(overviewTab, uiText(QStringLiteral("Overview"), zh(u"概览")));
 
     auto *normalizedTab = new QWidget(ui_.tabs);
     auto *normalizedLayout = new QVBoxLayout(normalizedTab);
-    normalizedLayout->setContentsMargins(14, 14, 14, 14);
+    normalizedLayout->setContentsMargins(0, 12, 0, 0);
     normalizedLayout->setSpacing(10);
     ui_.normalizedTextEdit = createReadOnlyEditor(false);
     ui_.normalizedUrlsEdit = createReadOnlyEditor(true);
@@ -461,7 +288,7 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
 
     auto *rawTab = new QWidget(ui_.tabs);
     auto *rawLayout = new QVBoxLayout(rawTab);
-    rawLayout->setContentsMargins(14, 14, 14, 14);
+    rawLayout->setContentsMargins(0, 12, 0, 0);
     rawLayout->setSpacing(10);
     ui_.rawTextEdit = createReadOnlyEditor(false);
     ui_.rawHtmlEdit = createReadOnlyEditor(true);
@@ -479,7 +306,7 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
 
     auto *mimeTab = new QWidget(ui_.tabs);
     auto *mimeLayout = new QVBoxLayout(mimeTab);
-    mimeLayout->setContentsMargins(14, 14, 14, 14);
+    mimeLayout->setContentsMargins(0, 12, 0, 0);
     mimeLayout->setSpacing(10);
     ui_.mimeFormatsEdit = createReadOnlyEditor(true);
     ui_.mimeFormatsEdit->setMinimumHeight(360);
@@ -490,34 +317,17 @@ ClipboardItemDetailsDialog::ClipboardItemDetailsDialog(QWidget *parent)
 
 void ClipboardItemDetailsDialog::paintEvent(QPaintEvent *) {
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    const qreal borderWidth = 3.0;
-    const qreal radius = 8.0;
-    const QRectF outerRect = QRectF(rect()).adjusted(borderWidth / 2.0,
-                                                     borderWidth / 2.0,
-                                                     -borderWidth / 2.0,
-                                                     -borderWidth / 2.0);
-
-    QConicalGradient gradient(outerRect.center(), 135);
-    gradient.setColorAt(0.00, QColor("#4A90E2"));
-    gradient.setColorAt(0.25, QColor("#1abc9c"));
-    gradient.setColorAt(0.50, QColor("#fc9867"));
-    gradient.setColorAt(0.75, QColor("#9B59B6"));
-    gradient.setColorAt(1.00, QColor("#4A90E2"));
-
-    painter.setPen(QPen(QBrush(gradient), borderWidth));
-    painter.setBrush(SurfacePainter::bodyColor(darkTheme_, WindowBlurHelper::useOpaqueFallback(), 1));
-    painter.drawRoundedRect(outerRect, radius, radius);
+    AuroraChrome::paintWindow(painter, QRectF(rect()).adjusted(10, 10, -10, -10), darkTheme_, accent_);
 }
 
 void ClipboardItemDetailsDialog::applyTheme(bool dark) {
     darkTheme_ = dark;
     WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    const QString style = AuroraChrome::styleSheet(darkTheme_) + detailsAuroraStyle(darkTheme_);
     if (ui_.card) {
-        ui_.card->setStyleSheet(detailsStyleSheet(darkTheme_));
+        ui_.card->setStyleSheet(style);
     } else {
-        setStyleSheet(detailsStyleSheet(darkTheme_));
+        setStyleSheet(style);
     }
     update();
 }
@@ -706,7 +516,18 @@ void ClipboardItemDetailsDialog::updatePreviewVisual(const ClipboardItem &item) 
             break;
     }
 
-    if (!previewPixmap.isNull()) {
+    // Words show as words; only pictures show as pictures.
+    const ContentType type = item.getContentType();
+    const bool showsText = (type == Text || type == Link || type == File
+                            || (type == RichText && !item.hasThumbnail()))
+        && !item.getNormalizedText().trimmed().isEmpty();
+    if (showsText) {
+        ui_.previewVisual->setPixmap(QPixmap());
+        ui_.previewVisual->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        ui_.previewVisual->setText(item.getNormalizedText().trimmed().left(600).toHtmlEscaped()
+                                       .replace(QLatin1Char('\n'), QStringLiteral("<br>")));
+    } else if (!previewPixmap.isNull()) {
+        ui_.previewVisual->setAlignment(Qt::AlignCenter);
         ui_.previewVisual->setPixmap(scalePixmapForLabel(previewPixmap,
                                                         ui_.previewVisual->size(),
                                                         ui_.previewVisual->devicePixelRatioF()));
@@ -743,7 +564,25 @@ void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item, int sequenc
     const QString rawUrls = mimeData ? joinUrls(mimeData->urls()).trimmed() : QString();
     const QByteArray fingerprint = item.fingerprint();
 
-    ui_.titleLabel->setText(uiText(QStringLiteral("Clipboard Item Details"), zh(u"剪贴板条目详情")));
+    const QString app = item.getSourceApp();
+    accent_ = ClipboardCardDelegate::appAccentColor(item.getIcon());
+    ui_.iconLabel->setPixmap(ClipboardCardDelegate::appIconTile(item.getIcon(), app.isEmpty() ? QStringLiteral("M") : app,
+                                                                32, devicePixelRatioF()));
+    ui_.titleLabel->setText(app.isEmpty() ? contentTypeLabel(item.getContentType())
+                                          : app + QStringLiteral(" \u00B7 ") + contentTypeLabel(item.getContentType()));
+    {
+        QStringList parts;
+        if (sequence > 0) {
+            parts << (totalCount > 0 ? uiText(QStringLiteral("Item %1 of %2"), zh(u"第 %1 / %2 条")).arg(sequence).arg(totalCount)
+                                     : QString::number(sequence));
+        }
+        parts << QLocale::system().toString(item.getTime(), QLocale::ShortFormat);
+        ui_.subtitleLabel->setText(parts.join(QStringLiteral(" \u00B7 ")));
+    }
+    ui_.sourceValue->setText(app.isEmpty() ? dashText() : app);
+    ui_.titleRow->setVisible(!title.isEmpty());
+    ui_.urlRow->setVisible(!url.isEmpty());
+    update();
     if (sequence > 0) {
         ui_.sequenceValue->setText(totalCount > 0
             ? QStringLiteral("%1 / %2").arg(sequence).arg(totalCount)
@@ -752,14 +591,14 @@ void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item, int sequenc
         ui_.sequenceValue->setText(dashText());
     }
     ui_.typeValue->setText(contentTypeLabel(item.getContentType()));
-    ui_.timeValue->setText(QLocale::system().toString(item.getTime(), QLocale::LongFormat));
+    ui_.timeValue->setText(QLocale::system().toString(item.getTime(), QStringLiteral("yyyy/MM/dd HH:mm:ss")));
     ui_.nameValue->setText(item.getName().isEmpty() ? dashText() : item.getName());
     ui_.titleValue->setText(title.isEmpty() ? dashText() : title);
     ui_.urlValue->setText(url.isEmpty() ? dashText() : url);
     ui_.fingerprintValue->setText(fingerprint.isEmpty() ? dashText() : QString::fromLatin1(fingerprint.toHex()));
     ui_.formatCountValue->setText(mimeData ? QString::number(mimeData->formats().size()) : QStringLiteral("0"));
     ui_.mimeBytesValue->setText(byteCountLabel(totalMimeBytes(mimeData)));
-    ui_.textLengthValue->setText(QString::number(normalizedText.size()));
+    ui_.textLengthValue->setText(uiText(QStringLiteral("%1 characters"), zh(u"%1 字符")).arg(normalizedText.size()));
     ui_.urlCountValue->setText(QString::number(normalizedUrlsList.size()));
 
     ui_.normalizedTextEdit->setPlainText(normalizedText.isEmpty() ? dashText() : normalizedText);

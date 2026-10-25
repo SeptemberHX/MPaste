@@ -46,6 +46,10 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
 
 private:
+    // A pill segment of the combo's choices, kept in step with it both ways.
+    QWidget *makeSegmentFor(QComboBox *combo, QWidget *parent);
+    // The card styles as two pictured choices, driving cardStyleCombo_.
+    QWidget *makeCardStyleChoices(QWidget *parent);
     void loadSettings();
     void saveAllSettings();
 

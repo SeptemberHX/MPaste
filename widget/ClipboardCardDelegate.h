@@ -84,6 +84,10 @@ public:
     // The copy day an item belongs to (invalid for pinned items), and the extra
     // room before a card that opens a new day, where the day's divider goes.
     static QDate dayGroup(const QModelIndex &index);
+    // The source app's colour at the strength the cards use, and its icon (or a
+    // tile in that colour with `label`'s first character) for window headers.
+    static QColor appAccentColor(const QPixmap &icon);
+    static QPixmap appIconTile(const QPixmap &icon, const QString &label, int size, qreal dpr);
     static int dayGroupLead(const QModelIndex &index, int scale);
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
