@@ -98,15 +98,6 @@ namespace {
 #include <windows.h>
 #include <dwmapi.h>
 
-// Windows 11 backdrop types (DWMWA_SYSTEMBACKDROP_TYPE = 38)
-enum DWM_SYSTEMBACKDROP_TYPE {
-    DWMSBT_AUTO            = 0,
-    DWMSBT_NONE            = 1,
-    DWMSBT_MAINWINDOW      = 2, // Mica
-    DWMSBT_TRANSIENTWINDOW = 3, // Acrylic
-    DWMSBT_TABBEDWINDOW    = 4  // Mica Alt
-};
-
 // Undocumented but stable blur-behind API
 enum ACCENT_STATE {
     ACCENT_DISABLED = 0,
