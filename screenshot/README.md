@@ -13,5 +13,9 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 - 输出：用于说明产品效果的截图资源。
 
 ## Files
-- `mpaste_on_windows_11.png`: 地位=位图资源；功能=提供 mpaste_on_windows_11.png 对应的图片资产。
+- `panel-still-dark.png` / `panel-still-light.png` / `panel-aurora-dark.png`: 地位=位图资源；功能=底部面板（静物深色、静物浅色、流光深色）。
+- `preview.png`: 地位=位图资源；功能=预览窗口叠在面板上方。
+- `quick-paste-stack.png`: 地位=位图资源；功能=光标旁的快速粘贴堆栈。
+- `settings.png`: 地位=位图资源；功能=设置窗口。
+- 截图均在隔离的 GNOME 51 测试会话中拍摄（2 倍缩放后缩为 1×），内容为合成示例数据，不含真实剪贴板历史。
 - `README.md`: 地位=目录说明；功能=总结本目录职责、约束与文件清单。

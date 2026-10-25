@@ -4,34 +4,60 @@ A modern clipboard manager for Windows and Linux, inspired by [Paste](https://pa
 
 > MPaste has no affiliation with Paste for Mac. It is a Qt implementation inspired by that workflow and visual style.
 
-Light mode:
+![MPaste on GNOME, dark theme, Still cards](./screenshot/panel-still-dark.png)
 
-![Screenshot on Windows 11](./screenshot/mpaste_on_windows_11_light.png)
+<table>
+  <tr>
+    <td><img src="./screenshot/panel-aurora-dark.png" alt="Aurora cards"></td>
+    <td><img src="./screenshot/panel-still-light.png" alt="Light theme"></td>
+  </tr>
+  <tr>
+    <td align="center">Aurora cards: the app's colour as a corner light</td>
+    <td align="center">Light theme</td>
+  </tr>
+</table>
 
-Dark mode:
+| Preview (`Space`) | Quick paste stack beside the caret |
+|---|---|
+| ![Preview](./screenshot/preview.png) | ![Quick paste stack](./screenshot/quick-paste-stack.png) |
 
-![Screenshot on Windows 11](./screenshot/mpaste_on_windows_11.png)
+![Settings](./screenshot/settings.png)
+
+<sub>Screenshots are taken in an isolated GNOME 51 session with made-up sample content.</sub>
+
+## Download
+
+Get the latest build from [Releases](https://github.com/SeptemberHX/MPaste/releases):
+
+- **Windows** — `MPaste-<version>-win64.zip`: unzip and run `MPaste.exe`.
+- **Ubuntu 26.10** — `mpaste_<version>_amd64.deb`: `sudo apt install ./mpaste_<version>_amd64.deb`. On GNOME Wayland,
+  enable the companion once with `gnome-extensions enable mpaste@mpaste.local` and log out and back in.
+
+Other Linux setups can build from source (below).
 
 ## Features
 
 - Clipboard history for text, links, rich text, images, files, colors, and Office clipboard payloads.
-- Card-based browsing with thumbnails, app icons, favicons, and metadata.
+- Two card styles: **Still**, a neutral card with the content first, and **Aurora**, the source app's colour as a light in the card's corner. Light and dark themes.
+- Every item records the app it was copied from (name and icon) and when; the list marks where the day changes.
+- Text cards recognise colours, single links and shell commands; long strips and tall pages are shown whole.
 - Separate clipboard and favorites boards, with independent pinning and favoriting.
 - Keyword search and content-type filters.
 - Paged and continuous history browsing modes.
 - Quick paste shortcuts: `Alt+[1-9, 0]` to paste by visible position.
 - Two activation layouts for the global hotkey: the bottom panel, or a compact stack of the nine most recent items beside the text caret (Settings → Shortcuts → Opens). In the stack, `1`–`9` paste, `Shift` pastes plain text, typing filters and `Tab` opens the full panel.
 - Plain-text paste shortcuts: `Ctrl+Enter` for the current selection, or `Alt+Shift+[1-9, 0]` for quick slots.
-- Large preview dialog on `Space`, with zoom support for image previews.
+- Preview window on `Space` that fits its content, with Paste, Copy, text recognition (OCR) and Save as; image zoom.
+- Privacy: what a password manager marks as secret is never recorded, nor are copies from apps you list (Settings → Privacy, on by default).
 - Detailed inspector dialog for viewing normalized content and raw MIME data.
 - Alias rename, pin-to-top, multi-select, batch favorite/unfavorite, and batch delete actions.
 - Export selected items to image, HTML, or text files when supported.
 - Link preview fetching with OpenGraph metadata, preview images, and favicons.
 - Persistent history stored in `.mpaste` files with embedded preview thumbnails.
 - Current on-disk format is `.mpaste v7` (adds the source application's name); older v4–v6 files are still readable, but older MPaste builds cannot read v7.
-- Configurable history retention, max history size, item scale, theme mode, sound, and paste shortcut mode.
+- Configurable history retention, item scale, theme, card style, sound, and paste shortcut mode.
 - Configurable global hotkey and optional auto-paste on selection.
-- Optional external sync folder watching with incremental reloads.
+- Optional sync folder (Syncthing, a cloud drive) watched for changes from other machines.
 
 ## Keyboard Shortcuts
 
@@ -76,7 +102,7 @@ The stack opens below the caret (above or beside it when there is no room). On G
 - X11 build/runtime integration depends on X11, `xcb-keysyms`, and `xdo` / `xdotool`; GNOME Wayland integration uses Qt DBus.
 - On GNOME Wayland, install the companion after building: `python3 tools/install_gnome_wayland.py --autostart`, then log out and log back in. See [Wayland setup](extensions/README.md). Source-app icons are resolved through GNOME (unknown apps use a fallback); other Wayland desktops are not supported by this bridge.
 - On GNOME, [Focus My Window](https://extensions.gnome.org/extension/1005/focus-my-window/) can improve focus restoration after the global hotkey.
-- A `.deb` (built as below) installs MPaste for every user, starts it at login and ships the GNOME companion; each user enables the companion once with `gnome-extensions enable mpaste@mpaste.local` and logs in again.
+- The `.deb` (from [Releases](https://github.com/SeptemberHX/MPaste/releases), or built as below) installs MPaste for every user, starts it at login and ships the GNOME companion; each user enables the companion once with `gnome-extensions enable mpaste@mpaste.local` and logs in again.
 
 ## Configuration
 
@@ -90,12 +116,13 @@ Default settings:
 
 | Setting | Default |
 |---|---|
-| Max history size | `500` |
 | Retention policy | `30 days` |
 | History save folder | `~/.MPaste` |
 | Auto paste | `On` |
 | Paste shortcut mode | `Auto` |
 | Theme | `Dark` |
+| Card style | Still |
+| Skip password managers' secrets | `On` |
 | History view mode | `Paged` |
 | Item scale | `100%` |
 | Copy sound | `On` |

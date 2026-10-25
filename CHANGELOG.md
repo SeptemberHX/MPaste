@@ -4,6 +4,7 @@
 
 - Card foot lines are shorter: "1600 × 1000" without a unit, "58 chars" in English (字符 in Chinese), so the app's name keeps more room.
 - The favorites board is called "Favorites" in English (it read "Stared").
+- README: new screenshots (taken in an isolated session with sample content), a Download section and an updated feature list.
 
 ## 0.8.0
 
