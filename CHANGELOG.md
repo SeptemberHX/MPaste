@@ -4,6 +4,7 @@
 
 - Card foot lines are shorter: "1600 × 1000" without a unit, "58 chars" in English (字符 in Chinese), so the app's name keeps more room.
 - The favorites board is called "Favorites" in English (it read "Stared").
+- Aurora windows (preview, settings, OCR, details): the accent light from the top-left corner now reaches across to the right edge instead of fading out halfway, and stays as shallow.
 - README: new screenshots (taken in an isolated session with sample content), a Download section and an updated feature list.
 
 ## 0.8.0

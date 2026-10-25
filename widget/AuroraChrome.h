@@ -43,14 +43,19 @@ inline void paintWindow(QPainter &p, const QRectF &widgetRect, bool dark, const 
     p.fillPath(body, base);
 
     if (accent.isValid()) {
-        const qreal radiusX = r.width() * 0.75;
-        const qreal radiusY = qMin(r.height() * 0.45, 260.0);
+        // Reaches across to the right edge, still faintly lit there; the depth
+        // down the window stays shallow.
+        const qreal radiusX = r.width() * 1.08;
+        const qreal radiusY = qMin(r.height() * 0.32, 180.0);
         QRadialGradient light(QPointF(0, 0), radiusX);
         QColor glow = accent;
-        glow.setAlpha(dark ? 70 : 46);
+        const int peak = dark ? 70 : 46;
+        glow.setAlpha(peak);
         light.setColorAt(0.0, glow);
+        glow.setAlpha(peak * 45 / 100);
+        light.setColorAt(0.5, glow);
         glow.setAlpha(0);
-        light.setColorAt(0.7, glow);
+        light.setColorAt(1.0, glow);
         QBrush brush(light);
         QTransform place;
         place.translate(r.left(), r.top());
