@@ -1,16 +1,18 @@
 # Changelog
 
-## Unreleased
-
-- Releases are built on GitHub Actions: pushing a version tag builds the Windows zip and the Ubuntu 26.10 `.deb` and publishes them with that version's CHANGELOG notes; running the workflow by hand builds them without releasing.
-- Build: dependencies come from the system and are checked at configure time, which names the package to install (`qt6-multimedia-dev`, `qt6-tools-dev`, `libxcb-keysyms1-dev`, `libxdo-dev`...) instead of failing later on a missing header; libxdo is found rather than assumed; `CXXFLAGS` and `-DCMAKE_CXX_FLAGS` are no longer overwritten.
-- Debian package (`cpack -G DEB` → `mpaste_<version>_<arch>.deb`) brought up to date: Qt 6 dependencies read from the binary (it listed Qt 5), the GNOME companion and a login autostart entry included, the binary stripped and without the build's RUNPATH, the upstream changelog shipped. In a Wayland session MPaste now picks the Wayland platform itself, so `/usr/bin/MPaste` behaves like the per-user launcher.
-- Settings: a roomier sidebar (wider, 40 px tabs that keep their height, the mark aligned with the tab icons); the close button of the Aurora windows is no longer clipped on Windows, where the native style padded it past its 32 px row.
-- Privacy (Settings → Privacy, on by default): what a password manager marks as secret is never recorded — KDE's `x-kde-passwordManagerHint`, and on Windows `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ignore` or `CanIncludeInClipboardHistory` = 0 — nor written to the log. Copies from the apps listed there (Bitwarden, KeePassXC, KeePass and 1Password to begin with) are skipped entirely. Items already in history stay. On GNOME Wayland this needs companion v10 (log out and back in).
-
 ## 0.8.0
 
-A new look (Still and Aurora cards, Aurora windows), the quick paste stack beside the caret, and the source app on every item. History files move to `.mpaste v7`: older MPaste builds cannot read them.
+A new look (Still and Aurora cards, Aurora windows), the quick paste stack beside the caret, the source app on every item, password managers' copies kept out of history, and a working `.deb` with releases built on GitHub Actions. History files move to `.mpaste v7`: older MPaste builds cannot read them. On GNOME Wayland the companion is now v10 (log out and back in once).
+
+### Privacy
+
+- Privacy (Settings → Privacy, on by default): what a password manager marks as secret is never recorded — KDE's `x-kde-passwordManagerHint`, and on Windows `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ignore` or `CanIncludeInClipboardHistory` = 0 — nor written to the log. Copies from the apps listed there (Bitwarden, KeePassXC, KeePass and 1Password to begin with) are skipped entirely. Items already in history stay. On GNOME Wayland this needs companion v10 (log out and back in).
+
+### Packaging and releases
+
+- Debian package (`cpack -G DEB` → `mpaste_<version>_<arch>.deb`) brought up to date: Qt 6 dependencies read from the binary (it listed Qt 5), the GNOME companion and a login autostart entry included, the binary stripped and without the build's RUNPATH, the upstream changelog shipped. In a Wayland session MPaste now picks the Wayland platform itself, so `/usr/bin/MPaste` behaves like the per-user launcher.
+- Build: dependencies come from the system and are checked at configure time, which names the package to install (`qt6-multimedia-dev`, `qt6-tools-dev`, `libxcb-keysyms1-dev`, `libxdo-dev`...) instead of failing later on a missing header; libxdo is found rather than assumed; `CXXFLAGS` and `-DCMAKE_CXX_FLAGS` are no longer overwritten.
+- Releases are built on GitHub Actions: pushing a version tag builds the Windows zip and the Ubuntu 26.10 `.deb` and publishes them with that version's CHANGELOG notes; running the workflow by hand builds them without releasing.
 
 ### Quick paste stack
 
@@ -20,6 +22,7 @@ A new look (Still and Aurora cards, Aurora windows), the quick paste stack besid
 
 ### Interface
 
+- Settings: a roomier sidebar (wider, 40 px tabs that keep their height, the mark aligned with the tab icons); the close button of the Aurora windows is no longer clipped on Windows, where the native style padded it past its 32 px row.
 - Cards: one-line header with the app's colour at a shared saturation and lightness, body tinted from it; smaller default card (248×264) and type; selection is a ring outside the card; favourites show a star in the header; hovering lifts the card.
 - Text cards recognise colour values (swatch, hex and RGB), single web addresses (site first, path below) and one-line shell commands (monospace). File cards show the size and folder.
 - Empty clipboard, empty favourites, filters and searches without results now say so.
