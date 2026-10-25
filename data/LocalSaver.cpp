@@ -44,6 +44,15 @@ constexpr quint32 kLocalSaverFlagsV7 = 0;
 // the card (ThumbnailBuilder). Without it the thumbnail predates that (dark
 // page text could vanish on a dark card) and is drawn again from the HTML.
 constexpr quint32 kFlagAdaptedRichTextThumbnail = 0x1;
+// Header flag: the rich-text thumbnail is that HTML render. A save without one
+// used to take a picture from another format instead (on Windows the source
+// app's PNG of the selection), which then stood in for the text after a reload.
+constexpr quint32 kFlagHtmlRichTextThumbnail = 0x2;
+constexpr quint32 kRichTextThumbnailFlags = kFlagAdaptedRichTextThumbnail | kFlagHtmlRichTextThumbnail;
+
+bool isCurrentRichTextThumbnail(quint32 flags) {
+    return (flags & kRichTextThumbnailFlags) == kRichTextThumbnailFlags;
+}
 
 bool isKnownFormat(const QString &magic, quint32 version) {
     return (magic == kLocalSaverMagicV7 && version == kLocalSaverVersionV7)
@@ -580,7 +589,7 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     if (!readCurrentFormatHeader(in, version, header)) {
         return ClipboardItem();
     }
-    if (header.contentType == quint32(RichText) && !(flags & kFlagAdaptedRichTextThumbnail)) {
+    if (header.contentType == quint32(RichText) && !isCurrentRichTextThumbnail(flags)) {
         header.thumbnail = QPixmap();
     }
     in >> formatCount;
@@ -654,9 +663,18 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
         const QSize maxPixelSize = QSize(kCardPreviewWidth, kCardPreviewHeight) * dpr;
         if (thumbnail.width() > maxPixelSize.width() * 1.5
             || thumbnail.height() > maxPixelSize.height() * 1.5) {
-            thumbnail = buildCardThumbnailPixmap(thumbnail);
+            if (item.getContentType() == RichText) {
+                // Text keeps its top, not a close-up of its middle.
+                QPixmap scaled = QPixmap::fromImage(cardTextThumbnail(thumbnail.toImage(), maxPixelSize));
+                scaled.setDevicePixelRatio(dpr);
+                thumbnail = scaled;
+            } else {
+                thumbnail = buildCardThumbnailPixmap(thumbnail);
+            }
         }
-    } else {
+    } else if (item.getContentType() != RichText) {
+        // Not for rich text: its card shows the HTML, and a picture the source
+        // app also put on the clipboard would stand in for it after a reload.
         QPixmap fullImage = item.getImage();
         if (!fullImage.isNull()) {
             thumbnail = buildCardThumbnailPixmap(fullImage);
@@ -692,9 +710,9 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
     header.normalizedUrls = item.getNormalizedUrls();
     header.fingerprint = item.fingerprint();
     header.thumbnail = thumbnail;
-    // Loading leaves out a rich-text thumbnail without the flag, so any this
-    // item still has was drawn with adapted colours.
-    header.flags = kFlagAdaptedRichTextThumbnail;
+    // Loading leaves out a rich-text thumbnail without these flags, and a rich
+    // text one here never comes from a picture, so any it has is the HTML render.
+    header.flags = kRichTextThumbnailFlags;
 
     QDataStream out(&file);
     const qint64 mimeDataOffsetPos = writeCurrentFormatHeader(out, header);
@@ -789,7 +807,7 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
     }
     if (thumbnailOverride) {
         header.thumbnail = *thumbnailOverride;
-        header.flags |= kFlagAdaptedRichTextThumbnail;
+        header.flags |= kRichTextThumbnailFlags;
     }
     if (timeOverride && timeOverride->isValid()) {
         header.time = *timeOverride;
@@ -1070,7 +1088,7 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
         const bool otherShape = qAbs(thumb.width() * qreal(targetPixelSize.height())
                                      - thumb.height() * qreal(targetPixelSize.width()))
                                 > 0.02 * thumb.height() * targetPixelSize.width();
-        if (effectiveType == RichText && (otherShape || !(flags & kFlagAdaptedRichTextThumbnail))) {
+        if (effectiveType == RichText && (otherShape || !isCurrentRichTextThumbnail(flags))) {
             // Rendered for the earlier card shape, or before inline colours were
             // adapted to the card: left out, so the card makes it again from the
             // HTML (it keeps its thumbnail hint).

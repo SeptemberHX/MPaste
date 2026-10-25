@@ -103,7 +103,8 @@ def inspect(path):
     magic = read_qstring(f)
     version = read_uint32(f)
     flags = read_uint32(f)
-    flag_names = ["adapted rich-text thumbnail"] if flags & 0x1 else []
+    flag_names = [name for bit, name in ((0x1, "adapted rich-text thumbnail"),
+                                         (0x2, "rich-text thumbnail from HTML")) if flags & bit]
     print(f"Magic: {magic}  Version: {version}  Flags: {flags}" + (f" ({', '.join(flag_names)})" if flag_names else ""))
 
     # QDateTime: julianDay(qint64) + msOfDay(qint32) + timeSpec(quint8)
