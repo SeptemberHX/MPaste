@@ -72,6 +72,12 @@ inline void paintWindow(QPainter &p, const QRectF &widgetRect, bool dark, const 
     p.drawPath(body);
 }
 
+// The backdrop under paintWindow's shape: call wherever the window used to ask
+// for blur (after show and on theme changes). `inset` matches a paint rect inset.
+inline void attachBackdrop(QWidget *window, bool dark, qreal inset = 0) {
+    WindowBlurHelper::enableShapedBackdrop(window, dark, kRadius, inset);
+}
+
 // Controls by object name: auroraTitle / auroraSubtitle labels, auroraClose
 // (round), auroraPrimary / auroraSecondary pills, auroraSegment groups of
 // checkable pill buttons, auroraWell text areas, auroraInput fields,

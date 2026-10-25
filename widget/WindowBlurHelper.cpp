@@ -1,5 +1,6 @@
 // input: Native Windows acrylic or optional Wayland background-effect protocol.
-// output: Native blur with rounded popup regions and surface lifecycle cleanup.
+// output: Native blur with rounded popup regions, shaped backdrops for self-painted
+//         windows (no acrylic on Windows), and surface lifecycle cleanup.
 // pos: Shared window/menu blur backend; update widget/README.md with behavior changes.
 #include "WindowBlurHelper.h"
 
@@ -80,6 +81,23 @@ void WindowBlurHelper::enableBlurBehind(QWidget *widget, bool dark, bool extendF
     enableNativeBlur(widget);
     Q_UNUSED(dark);
     Q_UNUSED(extendFrame);
+#endif
+}
+
+void WindowBlurHelper::enableShapedBackdrop(QWidget *widget, bool dark, qreal radius, qreal inset) {
+    if (!widget) return;
+    widget->setProperty("mpasteBlurRadius", radius);
+    widget->setProperty("mpasteBlurInset", inset);
+#ifdef Q_OS_WIN
+    Q_UNUSED(dark);
+    HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    DWORD preference = 1; // DWMWCP_DONOTROUND
+    DwmSetWindowAttribute(hwnd, 33, &preference, sizeof(preference));
+    COLORREF border = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+    DwmSetWindowAttribute(hwnd, 34, &border, sizeof(border));
+#else
+    Q_UNUSED(dark);
+    enableNativeBlur(widget);
 #endif
 }
 

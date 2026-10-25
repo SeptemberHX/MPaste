@@ -142,9 +142,7 @@ void ClipboardItemRenameDialog::paintEvent(QPaintEvent *) {
 
 void ClipboardItemRenameDialog::applyTheme(bool dark) {
     dark_ = dark;
-    setProperty("mpasteBlurRadius", AuroraChrome::kRadius);
-    setProperty("mpasteBlurInset", 10.0);
-    WindowBlurHelper::enableBlurBehind(this, dark);
+    AuroraChrome::attachBackdrop(this, dark, 10);
     setStyleSheet(AuroraChrome::styleSheet(dark) + QStringLiteral("QFrame#renameCard { background: transparent; border: none; }"));
     update();
 }

@@ -951,7 +951,7 @@ void ClipboardItemPreviewDialog::revealSizedToContent() {
         move(screenArea_.center() - QPoint(width() / 2, height() / 2));
     }
     show();
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    AuroraChrome::attachBackdrop(this, darkTheme_);
     raise();
     activateWindow();
     if (isImagePreviewActive()) {
@@ -969,7 +969,7 @@ void ClipboardItemPreviewDialog::reject() {
 
 void ClipboardItemPreviewDialog::applyTheme(bool dark) {
     darkTheme_ = dark;
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    AuroraChrome::attachBackdrop(this, darkTheme_);
     if (ui_.browser) {
         ui_.browser->setStyleSheet(QString());
     }

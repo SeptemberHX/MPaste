@@ -1411,8 +1411,7 @@ void MPasteSettingsWidget::saveAllSettings()
 
 void MPasteSettingsWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
-    setProperty("mpasteBlurRadius", AuroraChrome::kRadius);
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    AuroraChrome::attachBackdrop(this, darkTheme_);
     setStyleSheet(settingsStyleSheet(darkTheme_) + AuroraChrome::styleSheet(darkTheme_) + settingsAuroraStyle(darkTheme_));
 
     // Update sidebar icons for the new theme.

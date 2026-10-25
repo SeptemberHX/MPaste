@@ -117,7 +117,7 @@ AboutWidget::~AboutWidget()
 
 void AboutWidget::applyTheme(bool dark) {
     darkTheme_ = dark;
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    AuroraChrome::attachBackdrop(this, darkTheme_);
     setStyleSheet(AuroraChrome::styleSheet(dark) + QStringLiteral(
         "QLabel#aboutName { color: %1; font-size: 20px; font-weight: 700; background: transparent; }"
         "QLabel#aboutTagline { color: %2; font-size: 13px; background: transparent; }"

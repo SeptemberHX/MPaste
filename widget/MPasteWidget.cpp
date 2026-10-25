@@ -272,7 +272,7 @@ void MPasteWidget::initializeWidget() {
             dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
         }
         dlg->show();
-        WindowBlurHelper::enableBlurBehind(dlg, dark);
+        AuroraChrome::attachBackdrop(dlg, dark);
         dlg->raise();
         ocrLoadingDialog_ = dlg;
     });
@@ -963,7 +963,7 @@ void MPasteWidget::showOcrResultDialog(const QString &text) {
     }
 
     dialog->show();
-    WindowBlurHelper::enableBlurBehind(dialog, dark);
+    AuroraChrome::attachBackdrop(dialog, dark);
     dialog->raise();
     dialog->activateWindow();
 }

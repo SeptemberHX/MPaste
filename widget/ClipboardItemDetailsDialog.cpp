@@ -322,7 +322,7 @@ void ClipboardItemDetailsDialog::paintEvent(QPaintEvent *) {
 
 void ClipboardItemDetailsDialog::applyTheme(bool dark) {
     darkTheme_ = dark;
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    AuroraChrome::attachBackdrop(this, darkTheme_, 10);
     const QString style = AuroraChrome::styleSheet(darkTheme_) + detailsAuroraStyle(darkTheme_);
     if (ui_.card) {
         ui_.card->setStyleSheet(style);
@@ -629,7 +629,7 @@ void ClipboardItemDetailsDialog::showItem(const ClipboardItem &item, int sequenc
     }
 
     show();
-    WindowBlurHelper::enableBlurBehind(this, darkTheme_);
+    AuroraChrome::attachBackdrop(this, darkTheme_, 10);
     raise();
     activateWindow();
 }
