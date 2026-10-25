@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Card foot lines are shorter: "1600 × 1000" without a unit, "58 chars" in English (字符 in Chinese), so the app's name keeps more room.
+- The favorites board is called "Favorites" in English (it read "Stared").
+
 ## 0.8.0
 
 A new look (Still and Aurora cards, Aurora windows), the quick paste stack beside the caret, the source app on every item, password managers' copies kept out of history, and a working `.deb` with releases built on GitHub Actions. History files move to `.mpaste v7`: older MPaste builds cannot read them. On GNOME Wayland the companion is now v10 (log out and back in once).

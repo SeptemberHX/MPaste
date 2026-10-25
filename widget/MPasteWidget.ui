@@ -227,7 +227,7 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
             </font>
            </property>
            <property name="text">
-            <string>Stared</string>
+            <string>Favorites</string>
            </property>
            <property name="checkable">
             <bool>true</bool>

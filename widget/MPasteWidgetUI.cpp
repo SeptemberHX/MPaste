@@ -201,7 +201,7 @@ void MPasteWidget::initUI() {
     ui_.staredWidget->hide();
 
     ui_.ui->clipboardButton->setText(menuText("Clipboard", QStringLiteral("\u526A\u8D34\u677F")));
-    ui_.ui->staredButton->setText(menuText("Stared", QStringLiteral("\u6536\u85CF\u5939")));
+    ui_.ui->staredButton->setText(menuText("Favorites", QStringLiteral("\u6536\u85CF\u5939")));
     ui_.ui->allTypeBtn->setText(menuText("All", QStringLiteral("\u5168\u90E8")));
     ui_.ui->textTypeBtn->setText(menuText("Text", QStringLiteral("\u6587\u672C")));
     ui_.ui->linkTypeBtn->setText(menuText("Link", QStringLiteral("\u94FE\u63A5")));

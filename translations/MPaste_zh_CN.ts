@@ -250,7 +250,7 @@
     </message>
     <message>
         <location filename="../widget/MPasteWidget.ui" line="230"/>
-        <source>Stared</source>
+        <source>Favorites</source>
         <translation>收藏夹</translation>
     </message>
     <message>
@@ -420,7 +420,7 @@
     </message>
     <message>
         <location filename="../widget/ClipboardCardDelegate.cpp" line="99"/>
-        <source>Characters</source>
+        <source>chars</source>
         <translation type="unfinished">字符</translation>
     </message>
     <message>

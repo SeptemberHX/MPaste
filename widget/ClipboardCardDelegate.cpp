@@ -151,8 +151,9 @@ QString countLabelForCard(const CardData &card) {
     switch (card.contentType) {
         case Image:
         case Office:
+            // "1600 × 1000": the × says pixels, and a card's foot line has no room to spare.
             return card.imageSize.isValid()
-                ? QStringLiteral("%1 \u00D7 %2 %3").arg(card.imageSize.width()).arg(card.imageSize.height()).arg(QObject::tr("Pixels"))
+                ? QStringLiteral("%1 \u00D7 %2").arg(card.imageSize.width()).arg(card.imageSize.height())
                 : QString();
         case Text:
             if (ColorCardBody::colorFromText(card.normalizedText).isValid()) {
@@ -161,9 +162,9 @@ QString countLabelForCard(const CardData &card) {
             if (const QUrl url = CardRenderUtils::singleWebUrl(card.normalizedText); url.isValid()) {
                 return CardRenderUtils::displayHost(url);
             }
-            return QStringLiteral("%1 %2").arg(card.textLength).arg(QObject::tr("Characters"));
+            return QStringLiteral("%1 %2").arg(card.textLength).arg(QObject::tr("chars"));
         case RichText:
-            return QStringLiteral("%1 %2").arg(card.textLength).arg(QObject::tr("Characters"));
+            return QStringLiteral("%1 %2").arg(card.textLength).arg(QObject::tr("chars"));
         case Link: {
             if (!card.url.isEmpty()) {
                 return card.url;
