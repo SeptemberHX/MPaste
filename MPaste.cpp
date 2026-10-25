@@ -192,6 +192,14 @@ int main(int argc, char* argv[]) {
     QSurfaceFormat::setDefaultFormat(format);
 
     qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
+#ifdef Q_OS_LINUX
+    // In a Wayland session MPaste runs as a Wayland client (the GNOME companion
+    // works with its windows there), however it was started; a platform the
+    // user chose still wins.
+    if (qgetenv("XDG_SESSION_TYPE") == "wayland" && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
+        qputenv("QT_QPA_PLATFORM", "wayland");
+    }
+#endif
 
     QApplication app(argc, argv);
     // MPaste lives in the tray: closing a parentless window (the save dialog)
@@ -212,6 +220,7 @@ int main(int argc, char* argv[]) {
         QStringList searchPaths = {
             appDir + "/translations/MPaste_" + locale + ".qm",
             appDir + "/../translations/MPaste_" + locale + ".qm",
+            appDir + "/../share/MPaste/translations/MPaste_" + locale + ".qm", // the .deb layout
             QStringLiteral(":/translations/MPaste_") + locale + ".qm"
         };
 

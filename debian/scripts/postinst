@@ -1,7 +1,14 @@
-#!/bin/bash
+#!/bin/sh
 # input: 依赖 Debian 安装生命周期与目标系统文件路径。
-# output: 对外提供安装后修正动作。
+# output: 安装后提示每位用户启用 GNOME Wayland 配套扩展。
 # pos: debian/scripts 目录中的安装期脚本。
 # update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+set -e
 
-chmod +x /usr/bin/MPaste
+if [ "$1" = configure ]; then
+    # Shell extensions are enabled per user; a package cannot do it for them.
+    echo "MPaste: on GNOME Wayland, each user enables the companion once:"
+    echo "  gnome-extensions enable mpaste@mpaste.local   (then log out and back in)"
+fi
+
+exit 0

@@ -14,3 +14,6 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 
 ## Files
 - `README.md`: 地位=目录说明；功能=总结本目录职责、约束与文件清单。
+- `MPaste-autostart.desktop`: 地位=自启动入口；功能=由 `deb.cmake` 安装为 `/etc/xdg/autostart/MPaste.desktop`，登录时在后台启动（不打开面板）。
+- `doc/`: 地位=文档；功能=Debian 版权说明（changelog 由根目录 `CHANGELOG.md` 压缩而来）。
+- `scripts/postinst`: 地位=安装期脚本；功能=提示每位用户启用 GNOME 配套扩展。

@@ -1,0 +1,14 @@
+# input: 依赖 XDG 自启动规范与 /usr/bin/MPaste。
+# output: 对外提供登录时在后台启动 MPaste 的入口（不打开面板）。
+# pos: debian 目录中由 deb.cmake 安装到 /etc/xdg/autostart 的文件。
+# update: 一旦我被更新，务必更新我的开头注释，以及所属的文件夹的 README.md。
+[Desktop Entry]
+Type=Application
+Name=MPaste
+Comment=Clipboard history
+Comment[zh_CN]=剪贴板历史
+Exec=/usr/bin/MPaste
+Icon=mpaste
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

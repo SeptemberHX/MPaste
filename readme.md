@@ -76,7 +76,7 @@ The stack opens below the caret (above or beside it when there is no room). On G
 - X11 build/runtime integration depends on X11, `xcb-keysyms`, and `xdo` / `xdotool`; GNOME Wayland integration uses Qt DBus.
 - On GNOME Wayland, install the companion after building: `python3 tools/install_gnome_wayland.py --autostart`, then log out and log back in. See [Wayland setup](extensions/README.md). Source-app icons are resolved through GNOME (unknown apps use a fallback); other Wayland desktops are not supported by this bridge.
 - On GNOME, [Focus My Window](https://extensions.gnome.org/extension/1005/focus-my-window/) can improve focus restoration after the global hotkey.
-- Deepin V20 users can use the packaged `.deb` from the releases page.
+- A `.deb` (built as below) installs MPaste for every user, starts it at login and ships the GNOME companion; each user enables the companion once with `gnome-extensions enable mpaste@mpaste.local` and logs in again.
 
 ## Configuration
 
@@ -144,6 +144,21 @@ Log out and back in once to load the new extension. Alt+Q opens the panel;
 selecting an item restores the original window and pastes it. `--show` opens the
 panel on first launch. `MPASTE_LOG_DIR` optionally redirects application logs.
 To run the isolated desktop regression, use `python3 tests/gnome-wayland/run.py`.
+
+To build the Debian package instead of installing for one user:
+
+```sh
+cmake -S . -B build-deb -DCMAKE_BUILD_TYPE=Release
+cmake --build build-deb -j4
+(cd build-deb && cpack -G DEB)   # build-deb/mpaste_<version>_<arch>.deb
+sudo apt install ./build-deb/mpaste_*.deb
+```
+
+The package depends on the distribution's Qt 6 (its libraries are read from the
+binary by `dpkg-shlibdeps`), installs `/usr/bin/MPaste`, a menu entry, a login
+autostart entry (`/etc/xdg/autostart`) and the companion under
+`/usr/share/gnome-shell/extensions`. A per-user install from
+`tools/install_gnome_wayland.py` takes precedence over it.
 
 ### Windows
 

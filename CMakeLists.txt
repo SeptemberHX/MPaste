@@ -25,7 +25,8 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON) 
-set(CMAKE_CXX_FLAGS "-g -Wall")
+# Appended, so flags given on the command line or in CXXFLAGS still apply.
+string(APPEND CMAKE_CXX_FLAGS " -g -Wall")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DQT_DEBUG")
@@ -41,14 +42,20 @@ file(GLOB SRCS CONFIGURE_DEPENDS
         "utils/*.h" "utils/*.cpp"
 )
 
+# Build dependencies come from the system. A missing one stops the configure
+# step with the package to install (Debian/Ubuntu names) rather than a missing
+# header later in the build.
 find_package(Qt6 COMPONENTS
         Widgets
         Multimedia
         Network
         LinguistTools
         Xml
-        REQUIRED
 )
+if(NOT Qt6_FOUND)
+    message(FATAL_ERROR "Qt 6 development files are missing. On Debian/Ubuntu: "
+            "sudo apt install qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-tools-dev-tools")
+endif()
 
 set(TS_FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/translations/MPaste_zh_CN.ts
@@ -60,11 +67,19 @@ qt6_add_translation(QM_FILES ${TS_FILES})
 if(UNIX)
     find_package(PkgConfig REQUIRED)
     find_package(X11 REQUIRED)
-    pkg_check_modules(XCB REQUIRED xcb xcb-keysyms)
+    pkg_check_modules(XCB xcb xcb-keysyms)
+    if(NOT XCB_FOUND)
+        message(FATAL_ERROR "xcb-keysyms is missing. On Debian/Ubuntu: sudo apt install libxcb-keysyms1-dev")
+    endif()
+    find_path(XDO_INCLUDE_DIR xdo.h)
+    find_library(XDO_LIBRARY xdo)
+    if(NOT XDO_INCLUDE_DIR OR NOT XDO_LIBRARY)
+        message(FATAL_ERROR "libxdo is missing. On Debian/Ubuntu: sudo apt install libxdo-dev")
+    endif()
     find_package(Qt6 REQUIRED COMPONENTS DBus)
 
     set(PLATFORM_SPECIFIC_LIBS
-            xdo
+            ${XDO_LIBRARY}
             ${X11_LIBRARIES}
             ${XCB_LIBRARIES}
             Qt6::DBus
@@ -73,6 +88,7 @@ if(UNIX)
     set(PLATFORM_SPECIFIC_INCLUDES
             ${X11_INCLUDE_DIR}
             ${XCB_INCLUDE_DIRS}
+            ${XDO_INCLUDE_DIR}
     )
 
     set(PLATFORM_SPECIFIC_SOURCES
