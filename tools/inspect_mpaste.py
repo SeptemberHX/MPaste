@@ -103,7 +103,8 @@ def inspect(path):
     magic = read_qstring(f)
     version = read_uint32(f)
     flags = read_uint32(f)
-    print(f"Magic: {magic}  Version: {version}  Flags: {flags}")
+    flag_names = ["adapted rich-text thumbnail"] if flags & 0x1 else []
+    print(f"Magic: {magic}  Version: {version}  Flags: {flags}" + (f" ({', '.join(flag_names)})" if flag_names else ""))
 
     # QDateTime: julianDay(qint64) + msOfDay(qint32) + timeSpec(quint8)
     julian = struct.unpack('>q', f.read(8))[0]
@@ -172,17 +173,30 @@ def inspect(path):
     fmt_count = read_uint32(f)
     print(f"MIME Formats: {fmt_count}")
     total_payload = 0
+    blobs = []
     for i in range(fmt_count):
+        # Each entry: format name, index of its payload, payload. A format whose
+        # bytes equal an earlier one's is written empty and points to that index.
         fmt_name = read_qstring(f)
+        data_index = read_uint32(f)
         payload = read_qbytearray(f)
+        shared = not payload and data_index < len(blobs)
+        if payload:
+            while len(blobs) <= data_index:
+                blobs.append(b'')
+            blobs[data_index] = payload
+        elif shared:
+            payload = blobs[data_index]
         pl = len(payload) if payload else 0
-        total_payload += pl
+        if not shared:
+            total_payload += pl
         label = fmt_name or "(null)"
-        if label == "text/html" and payload:
+        note = f" (same bytes as payload #{data_index})" if shared else ""
+        if "html" in label and payload:
             html_preview = payload.decode('utf-8', errors='replace')[:120].replace('\n', '\\n')
-            print(f"  [{i:2d}] {label} => {pl:,} bytes  preview: {html_preview}")
+            print(f"  [{i:2d}] {label} => {pl:,} bytes{note}  preview: {html_preview}")
         else:
-            print(f"  [{i:2d}] {label} => {pl:,} bytes")
+            print(f"  [{i:2d}] {label} => {pl:,} bytes{note}")
     print(f"  Total MIME payload: {total_payload:,} bytes")
     print(f"  File position after MIME: 0x{f.tell():x} ({f.tell():,})")
 

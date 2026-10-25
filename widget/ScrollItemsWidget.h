@@ -203,6 +203,8 @@ private:
     void updateVisibleThumbnails();
     bool shouldManageThumbnail(const ClipboardItem &item) const;
     void requestThumbnailForItem(const ClipboardItem &item);
+    bool isStaleCloseUpThumbnail(const ClipboardItem &item) const;
+    void requestStaleCloseUpThumbnails();
     void applyManagedThumbnailNames(const QSet<QString> &desiredNames);
     void setVisibleLoadingThumbnailNames(const QSet<QString> &names);
     void updateThumbnailViewport(const QSet<QString> &names);

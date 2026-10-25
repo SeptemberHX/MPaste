@@ -40,6 +40,10 @@ constexpr quint32 kLocalSaverFlagsV6 = 0;
 constexpr quint32 kLocalSaverVersionV7 = 7;
 const QString kLocalSaverMagicV7 = QStringLiteral("MPASTE_CLIP_V7");
 constexpr quint32 kLocalSaverFlagsV7 = 0;
+// Header flag: a rich-text thumbnail drawn with its inline colours adapted to
+// the card (ThumbnailBuilder). Without it the thumbnail predates that (dark
+// page text could vanish on a dark card) and is drawn again from the HTML.
+constexpr quint32 kFlagAdaptedRichTextThumbnail = 0x1;
 
 bool isKnownFormat(const QString &magic, quint32 version) {
     return (magic == kLocalSaverMagicV7 && version == kLocalSaverVersionV7)
@@ -130,6 +134,7 @@ struct CurrentFormatHeader {
     QByteArray fingerprint;
     QPixmap thumbnail;
     quint64 mimeDataOffset = 0;
+    quint32 flags = kLocalSaverFlagsV7;
 };
 
 bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHeader &header) {
@@ -165,7 +170,7 @@ bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHead
 }
 
 qint64 writeCurrentFormatHeader(QDataStream &out, const CurrentFormatHeader &header, quint64 mimeDataOffsetPlaceholder = 0) {
-    out << kLocalSaverMagicV7 << kLocalSaverVersionV7 << kLocalSaverFlagsV7;
+    out << kLocalSaverMagicV7 << kLocalSaverVersionV7 << header.flags;
     out << header.time << header.name << header.icon << header.favicon << header.title << header.url;
     out << header.alias << header.pinned << header.sourceApp;
     out << header.contentType << header.normalizedText;
@@ -219,17 +224,10 @@ QPixmap buildCardThumbnailPixmap(const QPixmap &fullImage) {
         return fullImage;
     }
 
-    QPixmap scaled = fullImage.scaled(pixelTargetSize,
-        Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    if (scaled.isNull()) {
+    QPixmap thumbnail = QPixmap::fromImage(cardPictureThumbnail(fullImage.toImage(), pixelTargetSize));
+    if (thumbnail.isNull()) {
         return QPixmap();
     }
-
-    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
-    QPixmap thumbnail = scaled.copy(x, y,
-                                    qMin(scaled.width(), pixelTargetSize.width()),
-                                    qMin(scaled.height(), pixelTargetSize.height()));
     thumbnail.setDevicePixelRatio(thumbnailDpr);
     return thumbnail;
 }
@@ -578,10 +576,12 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     if (!readCurrentFormatPrefix(in, flags, version)) {
         return ClipboardItem();
     }
-    Q_UNUSED(flags);
 
     if (!readCurrentFormatHeader(in, version, header)) {
         return ClipboardItem();
+    }
+    if (header.contentType == quint32(RichText) && !(flags & kFlagAdaptedRichTextThumbnail)) {
+        header.thumbnail = QPixmap();
     }
     in >> formatCount;
     if (in.status() != QDataStream::Ok) {
@@ -692,6 +692,9 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
     header.normalizedUrls = item.getNormalizedUrls();
     header.fingerprint = item.fingerprint();
     header.thumbnail = thumbnail;
+    // Loading leaves out a rich-text thumbnail without the flag, so any this
+    // item still has was drawn with adapted colours.
+    header.flags = kFlagAdaptedRichTextThumbnail;
 
     QDataStream out(&file);
     const qint64 mimeDataOffsetPos = writeCurrentFormatHeader(out, header);
@@ -771,12 +774,12 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
                     << "reason=invalid format or stream error, status=" << in.status();
         return false;
     }
-    Q_UNUSED(flags);
 
     CurrentFormatHeader header;
     if (!readCurrentFormatHeader(in, version, header)) {
         return false;
     }
+    header.flags = flags; // the thumbnail stays as it was, and so does what it says of it
 
     if (aliasOverride) {
         header.alias = *aliasOverride;
@@ -786,6 +789,7 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
     }
     if (thumbnailOverride) {
         header.thumbnail = *thumbnailOverride;
+        header.flags |= kFlagAdaptedRichTextThumbnail;
     }
     if (timeOverride && timeOverride->isValid()) {
         header.time = *timeOverride;
@@ -937,6 +941,7 @@ bool LocalSaver::updateTimestamp(const QString &filePath, const QDateTime &time,
     if (!readCurrentFormatHeader(in, version, header)) {
         return false;
     }
+    header.flags = flags;
 
     // Apply overrides.
     if (time.isValid()) header.time = time;
@@ -1014,7 +1019,6 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
     if (!readCurrentFormatPrefix(in, flags, version)) {
         return ClipboardItem();
     }
-    Q_UNUSED(flags);
     CurrentFormatHeader header;
     if (!readCurrentFormatHeader(in, version, header)) {
         return ClipboardItem();
@@ -1063,16 +1067,29 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
         // the correct logical dimensions.
         const qreal currentDpr = maxThumbnailDevicePixelRatio();
         const QSize targetPixelSize = QSize(kCardPreviewWidth, kCardPreviewHeight) * currentDpr;
-        if (thumb.size() != targetPixelSize) {
-            // Keep the picture's proportions: a thumbnail saved in another shape
-            // is scaled to cover the target and its centre kept.
-            const QPixmap covered = thumb.scaled(targetPixelSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-            thumb = covered.copy((covered.width() - targetPixelSize.width()) / 2,
-                                 (covered.height() - targetPixelSize.height()) / 2,
-                                 targetPixelSize.width(), targetPixelSize.height());
+        const bool otherShape = qAbs(thumb.width() * qreal(targetPixelSize.height())
+                                     - thumb.height() * qreal(targetPixelSize.width()))
+                                > 0.02 * thumb.height() * targetPixelSize.width();
+        if (effectiveType == RichText && (otherShape || !(flags & kFlagAdaptedRichTextThumbnail))) {
+            // Rendered for the earlier card shape, or before inline colours were
+            // adapted to the card: left out, so the card makes it again from the
+            // HTML (it keeps its thumbnail hint).
+            thumb = QPixmap();
+        } else if (thumb.size() != targetPixelSize) {
+            // A thumbnail saved in another shape keeps its proportions: a picture
+            // around its centre, text from its top, where its first lines are.
+            const bool picture = effectiveType == Image || effectiveType == Office || effectiveType == Link;
+            const QImage source = thumb.toImage();
+            const QImage reshaped = picture ? cardPictureThumbnail(source, targetPixelSize)
+                                            : cardTextThumbnail(source, targetPixelSize);
+            if (!reshaped.isNull()) {
+                thumb = QPixmap::fromImage(reshaped);
+            }
         }
-        thumb.setDevicePixelRatio(currentDpr);
-        item.setThumbnail(thumb);
+        if (!thumb.isNull()) {
+            thumb.setDevicePixelRatio(currentDpr);
+            item.setThumbnail(thumb);
+        }
     }
     item.setSourceFilePath(filePath);
     item.setMimeDataFileOffset(header.mimeDataOffset);

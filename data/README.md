@@ -18,9 +18,9 @@ update: 修改本目录文件时，同步更新本 README。
 ## 文件说明
 
 - `ClipboardItem.h`：剪贴板条目核心模型，负责文本、图片、文件、链接等内容的统一表示。
-- `CardPreviewMetrics.h`：卡片预览尺寸常量，供缩略图生成与 UI 渲染保持一致。
+- `CardPreviewMetrics.h`：卡片预览尺寸常量，供缩略图生成与 UI 渲染保持一致；`cardPictureThumbnail` 把图片裁成卡片比例，形状差太多（细长条、超长页，超过 `kCardPictureCoverLimit`）时改为完整缩放、四周透明；`cardTextThumbnail` 让旧比例的文字类缩略图按宽度缩放、保留顶部。
 - `CfHtml.h`：去掉部分应用（如 WPS）放进 text/html 的 Windows CF_HTML 头（Version/StartHTML…），采集、缩略图、预览与粘贴都用它。
-- `LocalSaver.h` / `LocalSaver.cpp`：本地存储服务，负责当前格式条目的序列化、反序列化与懒加载。
+- `LocalSaver.h` / `LocalSaver.cpp`：本地存储服务，负责当前格式条目的序列化、反序列化与懒加载。文件头 Flags 的 `0x1` 表示富文本缩略图已按卡片底色调整过内联颜色；没有它的富文本缩略图读取时会被丢弃，卡片出现时从 HTML 重新生成（旧版本读取时忽略 Flags）。
 - `OpenGraphItem.h` / `OpenGraphItem.cpp`：链接元数据模型，用于保存标题、描述、预览图等信息。
 
 ## 维护约定

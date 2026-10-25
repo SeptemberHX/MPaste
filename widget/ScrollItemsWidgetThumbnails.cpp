@@ -13,13 +13,39 @@
 #include "ClipboardBoardProxyModel.h"
 #include "CardMetrics.h"
 #include "ClipboardCardDelegate.h"
+#include "data/CardPreviewMetrics.h"
 #include "utils/MPasteSettings.h"
 #include "ScrollItemsWidget.h"
 
 using namespace BoardHelpers;
 
 void ScrollItemsWidget::scheduleThumbnailUpdate() {
-    // No-op: cardPixmapCache_ manages all rendering.
+    // cardPixmapCache_ manages all rendering; what is left is asking for the
+    // thumbnails the cards in view lack (a page loaded while the panel was
+    // hidden asks for none) or should replace, once the layout has settled.
+    QTimer::singleShot(0, this, [this]() {
+        requestVisibleThumbnails();
+        requestStaleCloseUpThumbnails();
+    });
+}
+
+void ScrollItemsWidget::requestStaleCloseUpThumbnails() {
+    if (!boardService_ || !boardModel_ || !proxyModel_ || !listView_ || !isBoardUiVisible()) {
+        return;
+    }
+    const int proxyCount = proxyModel_->rowCount();
+    const QRect viewportRect = listView_->viewport()->rect();
+    const QModelIndex leftIndex = listView_->indexAt(QPoint(viewportRect.left() + 1, viewportRect.center().y()));
+    const int startRow = leftIndex.isValid() ? leftIndex.row() : 0;
+    const int endRow = qMin(proxyCount - 1, startRow + estimateVisibleCardCount() - 1);
+    for (int proxyRow = startRow; proxyRow <= endRow; ++proxyRow) {
+        const int sourceRow = sourceRowForProxyIndex(proxyModel_->index(proxyRow, 0));
+        const ClipboardItem *item = sourceRow >= 0 ? boardModel_->itemPtrAt(sourceRow) : nullptr;
+        if (item && isStaleCloseUpThumbnail(*item)) {
+            desiredThumbnailNames_.insert(item->getName());
+            requestThumbnailForItem(*item);
+        }
+    }
 }
 
 int ScrollItemsWidget::estimateVisibleCardCount() const {
@@ -84,6 +110,21 @@ void ScrollItemsWidget::requestVisibleThumbnails() {
         desiredThumbnailNames_.insert(item->getName());
         requestThumbnailForItem(*item);
     }
+}
+
+// A long strip or a very tall page saved before such pictures were fitted
+// whole: its thumbnail is a close-up of the middle, without the transparent
+// margins a fitted one has. The card already knows the picture's size.
+bool ScrollItemsWidget::isStaleCloseUpThumbnail(const ClipboardItem &item) const {
+    if (item.getContentType() != Image || item.sourceFilePath().isEmpty()) {
+        return false;
+    }
+    const QPixmap thumbnail = item.thumbnail();
+    const QSize pictureSize = item.getImagePixelSize();
+    if (thumbnail.isNull() || !pictureSize.isValid() || cardPictureCovers(pictureSize, thumbnail.size())) {
+        return false;
+    }
+    return qAlpha(thumbnail.toImage().pixel(0, 0)) != 0;
 }
 
 bool ScrollItemsWidget::shouldManageThumbnail(const ClipboardItem &item) const {

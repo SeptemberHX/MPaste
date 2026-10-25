@@ -4,6 +4,7 @@
 // update: If I change, update this header block and my folder README.md.
 #include "ClipboardBoardService.h"
 #include "ClipboardBoardServiceInternal.h"
+#include "data/CardPreviewMetrics.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -254,8 +255,18 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                 }
             }
 
+            // A long strip or a very tall page saved before such pictures were
+            // fitted whole: its thumbnail is a close-up of the middle. A fitted one
+            // has transparent margins, so this is made again once only.
+            const bool staleCloseUp = type == Image && !preparedItem.thumbnail().isNull() && [&]() {
+                const QSize pictureSize = loaded.getImagePixelSize();
+                const QImage stored = preparedItem.thumbnail().toImage();
+                return pictureSize.isValid() && !cardPictureCovers(pictureSize, stored.size())
+                    && qAlpha(stored.pixel(0, 0)) != 0;
+            }();
             const bool shouldRebuild =
                 (type == RichText && loaded.getPreviewKind() == VisualPreview)
+                || staleCloseUp
                 || (preparedItem.thumbnail().isNull()
                     && (type == Image
                         || type == Office));
@@ -348,6 +359,9 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                 } else {
                     ClipboardItem fullItem = saver.loadFromFile(filePath);
                     if (!fullItem.getName().isEmpty()) {
+                        if (staleCloseUp) {
+                            fullItem.setThumbnail(QPixmap());
+                        }
                         preparedItem = ThumbnailBuilder::prepareItemForDisplayAndSave(fullItem);
                         generatedThumbnail = !preparedItem.thumbnail().isNull()
                             && preparedItem.thumbnail().cacheKey() != loaded.thumbnail().cacheKey();

@@ -65,6 +65,9 @@ namespace CardRenderUtils {
     // "github.com" from "https://www.github.com/...".
     QString displayHost(const QUrl &url);
     void clearCoverPixmapCache();
+    // Drops one item's scaled pictures, for when its thumbnail is replaced: they
+    // are keyed by the item's name, not the pixmap.
+    void forgetCoverPixmaps(const QString &name);
 }
 
 #endif // MPASTE_CARDBODYRENDERER_H

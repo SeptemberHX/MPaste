@@ -181,6 +181,19 @@ void CardRenderUtils::clearCoverPixmapCache() {
     coverPixmapCache().clear();
 }
 
+void CardRenderUtils::forgetCoverPixmaps(const QString &name) {
+    if (name.isEmpty()) {
+        return;
+    }
+    const QString prefix = name + QLatin1Char(':');
+    const QList<QString> keys = coverPixmapCache().keys();
+    for (const QString &key : keys) {
+        if (key.startsWith(prefix)) {
+            coverPixmapCache().remove(key);
+        }
+    }
+}
+
 void CardRenderUtils::applyUiFontDefaults(QFont &font) {
     font.setFamily(preferredUiFontFamily());
     font.setStyleHint(QFont::SansSerif, QFont::PreferDefault);

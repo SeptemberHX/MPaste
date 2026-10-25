@@ -25,6 +25,8 @@
 #include "utils/MxGraphRenderer.h"
 #include "utils/ThemeManager.h"
 
+#include <cmath>
+
 namespace ThumbnailBuilder {
 
 QVariant OfflineTextDocument::loadResource(int type, const QUrl &url) {
@@ -124,83 +126,89 @@ QString normalizeInlineTypography(QString tagStr) {
     return tagStr;
 }
 
-// Neutralize near-black and near-white inline colors so that text
-// remains readable on both light and dark card backgrounds.
-// Replaces color values where all RGB components are <= darkThresh
-// with darkReplace, and >= lightThresh with lightReplace.
-QString neutralizeExtremeColors(const QString &tagStr) {
-    static const auto nearBlack = [](int r, int g, int b) {
-        return r <= 0x30 && g <= 0x30 && b <= 0x30;
-    };
-    static const auto nearWhite = [](int r, int g, int b) {
-        return r >= 0xE0 && g >= 0xE0 && b >= 0xE0;
-    };
-    static const QString darkReplace  = QStringLiteral("#444444");
-    static const QString lightReplace = QStringLiteral("#CCCCCC");
-
-    // Match color property values in style attributes and <font color=""> attrs.
-    // Covers: #RGB, #RRGGBB, rgb(r,g,b), named black/white.
-    static const QRegularExpression colorValueRx(
-        QStringLiteral(R"((?:(?:[\s;:"']|^)color\s*[:=]\s*["']?\s*)(#[0-9a-fA-F]{3,6}|rgb\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)|black|white))"),
+// A CSS colour as written inline: #rgb, #rrggbb, rgb()/rgba() or a named colour.
+QColor parseInlineCssColor(const QString &value) {
+    const QString v = value.trimmed();
+    static const QRegularExpression rgbRx(
+        QStringLiteral(R"(^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$)"),
         QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch m = rgbRx.match(v);
+    if (m.hasMatch()) {
+        QColor color(qBound(0, m.captured(1).toInt(), 255), qBound(0, m.captured(2).toInt(), 255),
+                     qBound(0, m.captured(3).toInt(), 255));
+        if (!m.captured(4).isEmpty()) {
+            color.setAlphaF(qBound(0.0, m.captured(4).toDouble(), 1.0));
+        }
+        return color;
+    }
+    return QColor::fromString(v);
+}
+
+qreal relativeLuminance(const QColor &color) {
+    auto channel = [](qreal c) { return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); };
+    return 0.2126 * channel(color.redF()) + 0.7152 * channel(color.greenF()) + 0.0722 * channel(color.blueF());
+}
+
+qreal contrastRatio(const QColor &a, const QColor &b) {
+    const qreal la = relativeLuminance(a);
+    const qreal lb = relativeLuminance(b);
+    return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
+}
+
+// Inline colours are written for the page they were copied from, which may be
+// light or dark whatever MPaste's theme is. Against the card (or the preview
+// window, the same ground) they are adapted:
+// - a near-white or near-black background is that page's own ground, and goes;
+//   coloured ones (highlights, code blocks) stay;
+// - a text colour that reads poorly on what is behind it (its own remaining
+//   background, else the card) takes the theme's text colour; colours that read
+//   (links, emphasis) stay as they are.
+QString adaptInlineColorsToCard(const QString &tagStr) {
+    const bool dark = ThemeManager::instance()->isDark();
+    const QColor lightInk(QStringLiteral("#E4E7EC"));
+    const QColor darkInk(QStringLiteral("#30343B"));
+    QColor ground = dark ? QColor(0x17, 0x18, 0x1E) : QColor(0xFC, 0xFC, 0xFE);
 
     QString result = tagStr;
-    int offset = 0;
-    QRegularExpressionMatchIterator it = colorValueRx.globalMatch(result);
-    while (it.hasNext()) {
+    static const QRegularExpression backgroundRx(
+        QStringLiteral(R"((?:(?<=[\s;"'])|^)(background(?:-color)?\s*:\s*([^;"']+);?))"),
+        QRegularExpression::CaseInsensitiveOption);
+    QList<QRegularExpressionMatch> pageGrounds;
+    for (QRegularExpressionMatchIterator it = backgroundRx.globalMatch(result); it.hasNext();) {
         const QRegularExpressionMatch m = it.next();
-        const QString val = m.captured(1);
-        const int valStart = m.capturedStart(1) + offset;
-        int r = -1, g = -1, b = -1;
-
-        if (val.compare(QStringLiteral("black"), Qt::CaseInsensitive) == 0) {
-            r = g = b = 0;
-        } else if (val.compare(QStringLiteral("white"), Qt::CaseInsensitive) == 0) {
-            r = g = b = 255;
-        } else if (val.startsWith(QLatin1Char('#'))) {
-            const QString hex = val.mid(1);
-            if (hex.size() == 3) {
-                bool ok;
-                r = hex.mid(0, 1).toInt(&ok, 16) * 17; if (!ok) continue;
-                g = hex.mid(1, 1).toInt(&ok, 16) * 17; if (!ok) continue;
-                b = hex.mid(2, 1).toInt(&ok, 16) * 17; if (!ok) continue;
-            } else if (hex.size() == 6) {
-                bool ok;
-                r = hex.mid(0, 2).toInt(&ok, 16); if (!ok) continue;
-                g = hex.mid(2, 2).toInt(&ok, 16); if (!ok) continue;
-                b = hex.mid(4, 2).toInt(&ok, 16); if (!ok) continue;
-            }
-        } else if (val.startsWith(QStringLiteral("rgb"), Qt::CaseInsensitive)) {
-            static const QRegularExpression rgbRx(QStringLiteral(R"(rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\))"),
-                                                  QRegularExpression::CaseInsensitiveOption);
-            const QRegularExpressionMatch rm = rgbRx.match(val);
-            if (rm.hasMatch()) {
-                r = rm.captured(1).toInt();
-                g = rm.captured(2).toInt();
-                b = rm.captured(3).toInt();
-            }
-        }
-
-        if (r < 0) continue;
-
-        QString replacement;
-        if (nearBlack(r, g, b)) {
-            replacement = darkReplace;
-        } else if (nearWhite(r, g, b)) {
-            replacement = lightReplace;
-        } else {
+        const QColor background = parseInlineCssColor(m.captured(2));
+        if (!background.isValid() || background.alpha() == 0) {
             continue;
         }
+        const qreal luminance = relativeLuminance(background);
+        if (luminance > 0.85 || luminance < 0.02) {
+            pageGrounds.prepend(m); // removed back to front, so earlier offsets hold
+        } else {
+            ground = background;
+        }
+    }
+    for (const QRegularExpressionMatch &m : pageGrounds) {
+        result.remove(m.capturedStart(1), m.capturedLength(1));
+    }
 
-        result.replace(valStart, val.size(), replacement);
-        offset += replacement.size() - val.size();
+    static const QRegularExpression colorRx(
+        QStringLiteral(R"((?:(?:[\s;"']|^)color\s*[:=]\s*["']?\s*)(#[0-9a-fA-F]{3,6}\b|rgba?\s*\([^)]*\)|[a-zA-Z]+))"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QString ink = (contrastRatio(lightInk, ground) >= contrastRatio(darkInk, ground) ? lightInk : darkInk).name();
+    const QString source = result;
+    int offset = 0;
+    for (QRegularExpressionMatchIterator it = colorRx.globalMatch(source); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        const QColor color = parseInlineCssColor(m.captured(1));
+        if (!color.isValid() || color.alpha() == 0 || contrastRatio(color, ground) >= 3.0) {
+            continue;
+        }
+        result.replace(m.capturedStart(1) + offset, m.capturedLength(1), ink);
+        offset += ink.size() - m.capturedLength(1);
     }
     return result;
 }
 
-// Keep only basic text-formatting tags, drop everything that could
-// trigger resource loading or heavy layout (images, styles, SVGs,
-// shadow DOM templates, scripts, etc.).
 QString simplifyHtmlForRendering(const QString &html) {
     static const QSet<QString> allowed = {
         QStringLiteral("p"), QStringLiteral("br"),
@@ -262,7 +270,7 @@ QString simplifyHtmlForRendering(const QString &html) {
                         QStringLiteral("(?:src|srcset)\\s*=\\s*[\"'][^\"']*[\"']"),
                         QRegularExpression::CaseInsensitiveOption);
                     tagStr.replace(remoteSrc, QString());
-                    tagStr = neutralizeExtremeColors(tagStr);
+                    tagStr = adaptInlineColorsToCard(tagStr);
                     tagStr = normalizeInlineTypography(tagStr);
                     result += tagStr;
                 }
@@ -636,16 +644,10 @@ QPixmap buildCardThumbnail(const ClipboardItem &item) {
         return fullImage;
     }
 
-    QPixmap scaled = fullImage.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    if (scaled.isNull()) {
+    QPixmap thumbnail = QPixmap::fromImage(cardPictureThumbnail(fullImage.toImage(), pixelTargetSize));
+    if (thumbnail.isNull()) {
         return QPixmap();
     }
-
-    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
-    QPixmap thumbnail = scaled.copy(x, y,
-                                    qMin(scaled.width(), pixelTargetSize.width()),
-                                    qMin(scaled.height(), pixelTargetSize.height()));
     thumbnail.setDevicePixelRatio(thumbnailDpr);
     return thumbnail;
 }
@@ -745,7 +747,9 @@ QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targ
 
     const QSize sourceSize = reader.size();
     if (sourceSize.isValid()) {
-        const QSize scaledSize = sourceSize.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding);
+        // Decode at the size cardPictureThumbnail will use.
+        const QSize scaledSize = sourceSize.scaled(pixelTargetSize,
+            cardPictureCovers(sourceSize, pixelTargetSize) ? Qt::KeepAspectRatioByExpanding : Qt::KeepAspectRatio);
         if (scaledSize.isValid()) {
             reader.setScaledSize(scaledSize);
         }
@@ -762,18 +766,10 @@ QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targ
         return QImage();
     }
 
-    if (decoded.size() != pixelTargetSize) {
-        decoded = decoded.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    }
-    if (decoded.isNull()) {
+    QImage thumbnail = cardPictureThumbnail(decoded, pixelTargetSize);
+    if (thumbnail.isNull()) {
         return QImage();
     }
-
-    const int x = qMax(0, (decoded.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (decoded.height() - pixelTargetSize.height()) / 2);
-    QImage thumbnail = decoded.copy(x, y,
-                                    qMin(decoded.width(), pixelTargetSize.width()),
-                                    qMin(decoded.height(), pixelTargetSize.height()));
     thumbnail.setDevicePixelRatio(targetDpr);
     return thumbnail;
 }

@@ -746,6 +746,7 @@ bool ClipboardCardDelegate::isCardCached(const QString &name) const {
 
 void ClipboardCardDelegate::invalidateCard(const QString &name) {
     cardPixmapCache_.remove(name);
+    CardRenderUtils::forgetCoverPixmaps(name);
 }
 
 void ClipboardCardDelegate::markOcrPending(const QString &name) {
@@ -1431,17 +1432,22 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
 
         const QFont metaFont = uiFont(8.5, QFont::Normal);
         const QFontMetrics metaMetrics(metaFont, painter->device());
-        // The right side says what it is; the left who and when, and gives way first.
-        const int detailWidth = qMin(metaMetrics.horizontalAdvance(detailText) + px(2), meta.width() / 2);
+        // The right side says what it is; the left who and when. Both take what
+        // they need when it fits; otherwise the app's name gives way first, down
+        // to a few characters, and then the right side is elided.
+        const int left = iconRect.right() + 1 + px(7);
+        const QFont nameFont = uiFont(8.5, QFont::Medium);
+        const int timeWidth = metaMetrics.horizontalAdvance(when) + px(2);
+        const int marksWidth = (card.favorite ? px(18) : 0) + (card.pinned ? px(18) : 0);
+        const int room = qMax(0, meta.right() + 1 - left - timeWidth - px(6) - px(8) - marksWidth);
+        const int nameNatural = QFontMetrics(nameFont, painter->device()).horizontalAdvance(title) + px(2);
+        const int detailWidth = qMin(metaMetrics.horizontalAdvance(detailText) + px(2),
+                                     qMax(0, room - qMin(nameNatural, px(40))));
         const QRect detailRect(meta.right() - detailWidth + 1, meta.top(), detailWidth, metaHeight);
         CardRenderUtils::drawElidedText(painter, detailRect, detailText, metaFont, muted,
                                         Qt::AlignRight | Qt::AlignVCenter, middleElide ? Qt::ElideMiddle : Qt::ElideRight);
         const int marksRight = drawMarks(detailRect.left() - px(8), meta.center().y() + 1, px(12));
-        const int left = iconRect.right() + 1 + px(7);
-        const QFont nameFont = uiFont(8.5, QFont::Medium);
-        const int timeWidth = metaMetrics.horizontalAdvance(when) + px(2);
-        const int nameWidth = qMax(0, qMin(QFontMetrics(nameFont, painter->device()).horizontalAdvance(title) + px(2),
-                                           marksRight - left - timeWidth - px(6)));
+        const int nameWidth = qMax(0, qMin(nameNatural, marksRight - left - timeWidth - px(6)));
         CardRenderUtils::drawElidedText(painter, QRect(left, meta.top(), nameWidth, metaHeight), title, nameFont, ink,
                                         Qt::AlignLeft | Qt::AlignVCenter);
         CardRenderUtils::drawElidedText(painter, QRect(left + nameWidth + px(6), meta.top(), timeWidth, metaHeight), when,
