@@ -609,12 +609,17 @@ QWidget *MPasteSettingsWidget::makeCardStyleChoices(QWidget *parent) {
         card.addRoundedRect(QRectF(0.5, 0.5, size.width() - 1, size.height() - 1), 10, 10);
         p.fillPath(card, QColor(aurora ? QStringLiteral("#17181E") : QStringLiteral("#18191D")));
         if (aurora) {
-            QRadialGradient light(QPointF(0, 0), size.width() * 0.9);
+            // As on the cards: across to the right edge, shallow down.
+            const qreal radiusX = size.width() * 1.25;
+            QRadialGradient light(QPointF(0, 0), radiusX);
             light.setColorAt(0.0, QColor(7, 193, 96, 110));
-            light.setColorAt(0.6, QColor(7, 193, 96, 0));
+            light.setColorAt(0.5, QColor(7, 193, 96, 50));
+            light.setColorAt(1.0, QColor(7, 193, 96, 0));
+            QBrush brush(light);
+            brush.setTransform(QTransform::fromScale(1.0, size.height() * 0.9 / radiusX));
             p.save();
             p.setClipPath(card);
-            p.fillRect(QRectF(QPointF(0, 0), QSizeF(size)), light);
+            p.fillRect(QRectF(QPointF(0, 0), QSizeF(size)), brush);
             p.restore();
             p.setPen(Qt::NoPen);
             p.setBrush(QColor(QStringLiteral("#07C160")));

@@ -4,7 +4,7 @@
 
 - Card foot lines are shorter: "1600 × 1000" without a unit, "58 chars" in English (字符 in Chinese), so the app's name keeps more room.
 - The favorites board is called "Favorites" in English (it read "Stared").
-- Aurora windows (preview, settings, OCR, details): the accent light from the top-left corner now reaches across to the right edge instead of fading out halfway, and stays as shallow.
+- Aurora cards and windows (preview, settings, OCR, details): the light from the top-left corner now reaches across to the right edge, still faintly lit there, instead of fading out halfway; it stays as shallow. The Aurora sample in Settings matches.
 - Rich text on Windows no longer shrinks after a search or a restart. When the source app also put a picture of the selection on the clipboard (Word, Outlook, WPS...), the save that adds the formats read after the copy could store that picture as the card's thumbnail; reloaded, the card showed it, about half size, instead of the text. Rich text now always keeps its HTML render, and thumbnails saved the old way are drawn again once (header flag 0x2).
 - README: new screenshots (taken in an isolated session with sample content), a Download section and an updated feature list.
 

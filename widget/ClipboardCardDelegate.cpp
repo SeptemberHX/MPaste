@@ -1326,17 +1326,20 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
                                          : (darkTheme ? QColor(QStringLiteral("#17181E")) : QColor(QStringLiteral("#FCFCFE"))));
         {
             // The app's colour as light from the top-left corner, not a painted band:
-            // an ellipse wide across the top and shallow down the card (130% of its
-            // width by 90% of its height, gone at 62%), so it stays near the header.
-            // On a picture it lights the header above it.
-            const qreal radiusX = cardRect.width() * 1.3;
-            const qreal radiusY = cardRect.height() * 0.9;
+            // an ellipse reaching across to the right edge (still faintly lit there)
+            // and shallow down the card, so it stays near the header. On a picture
+            // it lights the header above it.
+            const qreal radiusX = cardRect.width() * 1.25;
+            const qreal radiusY = cardRect.height() * 0.56;
             QRadialGradient light(QPointF(0, 0), radiusX);
             QColor glow = appLight;
-            glow.setAlpha(darkTheme ? 92 : 58);
+            const int peak = darkTheme ? 92 : 58;
+            glow.setAlpha(peak);
             light.setColorAt(0.0, glow);
+            glow.setAlpha(peak * 45 / 100);
+            light.setColorAt(0.5, glow);
             glow.setAlpha(0);
-            light.setColorAt(0.62, glow);
+            light.setColorAt(1.0, glow);
             QBrush brush(light);
             QTransform place;
             place.translate(cardRect.left(), cardRect.top());
