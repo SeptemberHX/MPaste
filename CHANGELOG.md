@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.8.0
+
+A new look (Still and Aurora cards, Aurora windows), the quick paste stack beside the caret, and the source app on every item. History files move to `.mpaste v7`: older MPaste builds cannot read them.
 
 ### Quick paste stack
 
