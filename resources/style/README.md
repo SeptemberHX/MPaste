@@ -16,7 +16,7 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## 文件说明
 
-- `defaultStyle.qss`：应用默认样式表。
+- `defaultStyle.qss`：应用默认样式表。顶栏的标签、搜索框和按钮自己写死 `min-height`、`margin`、`padding`：qt5ct/qt6ct 的桌面样式表排在它前面，否则会把这些控件撑高（Windows 没有这层样式表）。
 - `darkStyle.qss`：深色主题叠加样式，用于覆写默认外观。
 - `menuStyle.qss`：菜单样式，在 `defaultStyle.qss` 的 `/* @menuStyle.qss */` 处原位插入；桌面 Qt 样式自己绘制菜单时（ubuntu-tools 的 Yaru）不插入，菜单交给系统样式。
 - `README.md`：当前目录说明文档。
