@@ -56,7 +56,10 @@ inline QImage cardPictureThumbnail(const QImage &picture, const QSize &target) {
     QImage canvas(target, QImage::Format_ARGB32_Premultiplied);
     canvas.fill(Qt::transparent);
     QPainter painter(&canvas);
-    painter.drawImage((target.width() - fitted.width()) / 2, (target.height() - fitted.height()) / 2, fitted);
+    // By pixels: drawn at a point, a high-DPI source (a thumbnail read back from
+    // disk) would come out at its logical size, a fraction of the canvas.
+    painter.drawImage(QRect(QPoint((target.width() - fitted.width()) / 2, (target.height() - fitted.height()) / 2),
+                            fitted.size()), fitted);
     painter.end();
     return canvas;
 }
@@ -71,7 +74,9 @@ inline QImage cardTextThumbnail(const QImage &thumbnail, const QSize &target) {
     QImage canvas(target, QImage::Format_ARGB32_Premultiplied);
     canvas.fill(Qt::transparent);
     QPainter painter(&canvas);
-    painter.drawImage(0, 0, scaled);
+    // By pixels, as above: a 2x thumbnail drawn at a point filled only the top-left
+    // quarter, so the text came out at half size.
+    painter.drawImage(QRect(QPoint(0, 0), scaled.size()), scaled);
     painter.end();
     return canvas;
 }

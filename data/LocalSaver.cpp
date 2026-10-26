@@ -48,7 +48,12 @@ constexpr quint32 kFlagAdaptedRichTextThumbnail = 0x1;
 // used to take a picture from another format instead (on Windows the source
 // app's PNG of the selection), which then stood in for the text after a reload.
 constexpr quint32 kFlagHtmlRichTextThumbnail = 0x2;
-constexpr quint32 kRichTextThumbnailFlags = kFlagAdaptedRichTextThumbnail | kFlagHtmlRichTextThumbnail;
+// Header flag: the rich-text thumbnail is at its full size. Reshaping one read
+// back on a high-DPI screen (at a card scale other than 100%) used to draw it at
+// half size into a corner, and a later save kept that.
+constexpr quint32 kFlagFullSizeRichTextThumbnail = 0x4;
+constexpr quint32 kRichTextThumbnailFlags =
+    kFlagAdaptedRichTextThumbnail | kFlagHtmlRichTextThumbnail | kFlagFullSizeRichTextThumbnail;
 
 bool isCurrentRichTextThumbnail(quint32 flags) {
     return (flags & kRichTextThumbnailFlags) == kRichTextThumbnailFlags;
@@ -1089,9 +1094,9 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
                                      - thumb.height() * qreal(targetPixelSize.width()))
                                 > 0.02 * thumb.height() * targetPixelSize.width();
         if (effectiveType == RichText && (otherShape || !isCurrentRichTextThumbnail(flags))) {
-            // Rendered for the earlier card shape, or before inline colours were
-            // adapted to the card: left out, so the card makes it again from the
-            // HTML (it keeps its thumbnail hint).
+            // Rendered for the earlier card shape, or saved before one of the
+            // fixes the flags record: left out, so the card makes it again from
+            // the HTML (it keeps its thumbnail hint).
             thumb = QPixmap();
         } else if (thumb.size() != targetPixelSize) {
             // A thumbnail saved in another shape keeps its proportions: a picture

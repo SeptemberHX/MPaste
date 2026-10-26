@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Rich text no longer shrinks to half size after a search or a restart on a high-DPI screen when the card size is not 100% (as seen on Windows). A thumbnail read back from disk is reshaped to the current card size, and that drew a 2x image at its logical size, into the top-left quarter; a later save then kept the small one. It is now drawn by pixels, and rich-text thumbnails saved before are drawn again once from the HTML (header flag 0x4). Long pictures fitted whole on a card had the same flaw.
+
 ## 0.8.1
 
 Rich text on Windows keeps its size after a search or a restart, and the Aurora light reaches across cards and windows.
