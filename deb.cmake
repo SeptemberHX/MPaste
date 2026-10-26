@@ -12,7 +12,7 @@ set(CPACK_DEBIAN_PACKAGE_NAME "mpaste")
 set(CPACK_PACKAGE_VERSION_MAJOR "${_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${_VERSION_MINOR}")
 set(CPACK_PACKAGE_VERSION_PATCH "${_VERSION_PATCH}")
-# mpaste_0.8.1_amd64.deb; the architecture comes from dpkg on the build machine.
+# mpaste_0.8.2_amd64.deb; the architecture comes from dpkg on the build machine.
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
 # The libraries the binary links (Qt 6, libxdo, xcb...) are read from it by
