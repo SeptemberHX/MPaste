@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.8.1
+
+Rich text on Windows keeps its size after a search or a restart, and the Aurora light reaches across cards and windows.
 
 - Card foot lines are shorter: "1600 × 1000" without a unit, "58 chars" in English (字符 in Chinese), so the app's name keeps more room.
 - The favorites board is called "Favorites" in English (it read "Stared").
