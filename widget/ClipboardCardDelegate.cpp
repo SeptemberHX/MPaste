@@ -1406,8 +1406,11 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         if (visual) {
             // The caption sits in a small pill on the picture, leaving the rest of it clear.
             const QFont capFont = uiFont(8.5, QFont::Normal);
-            const QFontMetrics capMetrics(capFont, painter->device());
-            const int capWidth = qMin(capMetrics.horizontalAdvance(detailText) + px(16), cardRect.width() - pad * 2);
+            // Rounded up: horizontalAdvance rounds to the nearest pixel, and a text
+            // rect up to half a pixel short of the text got it elided ("1118 × …").
+            const QFontMetricsF capMetrics(capFont, painter->device());
+            const int capWidth = qMin(qCeil(capMetrics.horizontalAdvance(detailText)) + 1 + px(16),
+                                      cardRect.width() - pad * 2);
             const int capHeight = px(20);
             const QRect cap(cardRect.left() + px(8), cardRect.bottom() - px(8) - capHeight + 1, capWidth, capHeight);
             painter->save();

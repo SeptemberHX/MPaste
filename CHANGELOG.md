@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Aurora picture cards show their whole caption ("图片 · 1118 × 60"): the pill was sized to the text's width rounded to a whole pixel, often a fraction short, so the size was cut to "1118 × …".
+
 ## 0.8.2
 
 Thumbnails keep their size: rich text no longer shrinks to half on a high-DPI screen, cards above 100% stay sharp, and an upgraded copy no longer leaves a duplicate card.
