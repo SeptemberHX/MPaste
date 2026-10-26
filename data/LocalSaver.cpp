@@ -24,6 +24,7 @@
 #include <QSaveFile>
 #include <QSet>
 
+#include "utils/MPasteSettings.h"
 #include "utils/OcrService.h"
 
 namespace {
@@ -225,15 +226,19 @@ qreal maxThumbnailDevicePixelRatio() {
     return maxDpr;
 }
 
+// The preview area at the current card scale, in pixels: what ThumbnailBuilder
+// renders, so a thumbnail read back is not shrunk to 100% and blurred on a larger card.
+QSize currentPreviewPixelSize(qreal dpr) {
+    return cardPreviewSize(MPasteSettings::getInst()->getItemScale()) * dpr;
+}
+
 QPixmap buildCardThumbnailPixmap(const QPixmap &fullImage) {
     if (fullImage.isNull()) {
         return QPixmap();
     }
 
-    constexpr int cardW = kCardPreviewWidth;
-    constexpr int cardH = kCardPreviewHeight;
     const qreal thumbnailDpr = maxThumbnailDevicePixelRatio();
-    const QSize pixelTargetSize = QSize(cardW, cardH) * thumbnailDpr;
+    const QSize pixelTargetSize = currentPreviewPixelSize(thumbnailDpr);
     if (!pixelTargetSize.isValid()) {
         return fullImage;
     }
@@ -665,7 +670,7 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
         // (e.g. a raw OG image), scale it down with cover-crop to
         // avoid saving an oversized pixmap that renders incorrectly.
         const qreal dpr = maxThumbnailDevicePixelRatio();
-        const QSize maxPixelSize = QSize(kCardPreviewWidth, kCardPreviewHeight) * dpr;
+        const QSize maxPixelSize = currentPreviewPixelSize(dpr);
         if (thumbnail.width() > maxPixelSize.width() * 1.5
             || thumbnail.height() > maxPixelSize.height() * 1.5) {
             if (item.getContentType() == RichText) {
@@ -1089,7 +1094,7 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
         // current screen's card preview size so it always displays at
         // the correct logical dimensions.
         const qreal currentDpr = maxThumbnailDevicePixelRatio();
-        const QSize targetPixelSize = QSize(kCardPreviewWidth, kCardPreviewHeight) * currentDpr;
+        const QSize targetPixelSize = currentPreviewPixelSize(currentDpr);
         const bool otherShape = qAbs(thumb.width() * qreal(targetPixelSize.height())
                                      - thumb.height() * qreal(targetPixelSize.width()))
                                 > 0.02 * thumb.height() * targetPixelSize.width();

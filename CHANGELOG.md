@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Rich text no longer shrinks to half size after a search or a restart on a high-DPI screen when the card size is not 100% (as seen on Windows). A thumbnail read back from disk is reshaped to the current card size, and that drew a 2x image at its logical size, into the top-left quarter; a later save then kept the small one. It is now drawn by pixels, and rich-text thumbnails saved before are drawn again once from the HTML (header flag 0x4). Long pictures fitted whole on a card had the same flaw.
+- Cards above 100% (Settings → card size, up to 150%) keep sharp thumbnails after a restart: a thumbnail read back was reshaped to the 100% size and then stretched over the larger card.
+- Copying again something already in history, when the new copy carries more (rich text where plain text was saved, say), no longer leaves the old entry behind as a second card after a search or a restart; the entry also keeps its alias.
 
 ## 0.8.1
 

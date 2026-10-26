@@ -40,9 +40,7 @@ qreal htmlPreviewZoom(qreal devicePixelRatio) {
 }
 
 QSize previewLogicalSize(int itemScale) {
-    const int scale = qMax(50, itemScale);
-    return QSize(qMax(1, kCardPreviewWidth * scale / 100),
-                 qMax(1, kCardPreviewHeight * scale / 100));
+    return cardPreviewSize(itemScale);
 }
 
 // Unstyled text takes MPaste's own card text colour, not the platform palette's,

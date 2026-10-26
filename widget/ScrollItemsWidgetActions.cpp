@@ -44,7 +44,11 @@ bool ScrollItemsWidget::addOneItem(const ClipboardItem &nItem) {
             && existingItem.getContentType() != Color;
 
         if (richerIncomingRichText || contentTypeUpgrade || existingLacksContent) {
+            // Under the existing name, so the save replaces its file instead of
+            // leaving it on disk as a second entry, with what the user gave it.
             ClipboardItem updated = nItem;
+            updated.setName(existingItem.getName());
+            updated.setAlias(existingItem.getAlias());
             updated.setPinned(existingItem.isPinned());
             boardModel_->updateItem(row, updated);
             syncPreviewStateForRow(row);

@@ -1,6 +1,6 @@
 // input: Shared card sizing constants for thumbnail generation and UI layouts.
-// output: Exposes base card and preview dimensions, and how a picture or text
-//         thumbnail takes the preview's shape.
+// output: Exposes base card and preview dimensions (also at a card scale), and how
+//         a picture or text thumbnail takes the preview's shape.
 // pos: Data-layer shared metrics for preview sizing.
 // update: If I change, update data/README.md.
 #ifndef MPASTE_CARDPREVIEWMETRICS_H
@@ -22,6 +22,13 @@ constexpr int kCardPreviewWidth = 256;
 constexpr int kCardPreviewHeight = 180;
 
 static_assert(kCardPreviewHeight > 0, "Card preview height must be positive.");
+
+// The preview area at a card scale (Settings, 50-150%), in logical pixels:
+// thumbnails are made and kept at this size, so a card above 100% stays sharp.
+inline QSize cardPreviewSize(int itemScale) {
+    const int scale = qMax(50, itemScale);
+    return QSize(qMax(1, kCardPreviewWidth * scale / 100), qMax(1, kCardPreviewHeight * scale / 100));
+}
 
 // How far a picture's shape may be from the card's before it is fitted whole
 // rather than cut to the card's shape (a phone screenshot, about 3x, still fills).
