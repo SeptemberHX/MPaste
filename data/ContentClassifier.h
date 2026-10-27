@@ -122,11 +122,34 @@ inline ContentTraits analyze(const QMimeData *mimeData) {
             traits.hasVector = true;
         } else if (lower.startsWith(QStringLiteral("image/"))) {
             traits.hasBitmap = true;
+        } else if (lower == QStringLiteral("chromium/x-web-custom-data")) {
+            // WPS on Linux (a Chromium shell) carries a shape as "wps/objects" in
+            // Chromium's custom data, next to a PNG of it; text is "wps/texts".
+            // The type name comes first, in UTF-16.
+            static const QByteArray wpsObjects = QByteArray::fromRawData(
+                reinterpret_cast<const char *>(u"wps/objects"), 11 * sizeof(char16_t));
+            if (mimeData->data(format).left(512).contains(wpsObjects)) {
+                traits.hasOle = true;
+                traits.hasExplicitOfficeApp = true;
+            }
         }
     }
 
     if (traits.hasImage) {
         traits.hasBitmap = true;
+    }
+
+    // WPS's HTML names the formats of what was copied in its ksdocclipboard
+    // attribute: a shape lists "WPS Drawing Shape Format" / "Art::GVML ClipFormat",
+    // text "Art::Text ClipFormat".
+    if (traits.hasHtml) {
+        const QString html = mimeData->html();
+        if (html.contains(QStringLiteral("ksdocclipboard"), Qt::CaseInsensitive)
+            && (html.contains(QStringLiteral("WPS Drawing Shape Format"), Qt::CaseInsensitive)
+                || html.contains(QStringLiteral("Art::GVML ClipFormat"), Qt::CaseInsensitive))) {
+            traits.hasOle = true;
+            traits.hasExplicitOfficeApp = true;
+        }
     }
 
     return traits;
@@ -180,12 +203,16 @@ inline QImage decodeQtSerializedImage(const QByteArray &bytes) {
     return image;
 }
 
+// The first <img>'s src, quoted or not (WPS writes src=https://... bare).
 inline QString firstHtmlImageSource(const QString &html) {
     static const QRegularExpression srcRegex(
-        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
+        QStringLiteral(R"(<img[^>]+src\s*=\s*(?:["']([^"']+)["']|([^\s"'>]+)))"),
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch match = srcRegex.match(html);
-    return match.hasMatch() ? match.captured(1).trimmed() : QString();
+    if (!match.hasMatch()) {
+        return QString();
+    }
+    return (match.captured(1).isEmpty() ? match.captured(2) : match.captured(1)).trimmed();
 }
 
 inline bool hasFastImagePayload(const QMimeData *mimeData) {

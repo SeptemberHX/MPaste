@@ -1,5 +1,6 @@
 // input: HTML as an application put it on the clipboard.
-// output: The same HTML without a Windows CF_HTML header in front of it.
+// output: The same HTML without a Windows CF_HTML header in front of it, and
+//         (cleanClipboardHtml) without bytes trailing after the page.
 // pos: Data-layer helper shared by capture, thumbnails, preview and paste.
 // update: If I change, update data/README.md.
 #ifndef MPASTE_CFHTML_H
@@ -29,6 +30,28 @@ inline QString stripCfHtmlHeader(const QString &html) {
     }
     const int firstTag = html.indexOf(QLatin1Char('<'));
     return firstTag >= 0 ? html.mid(firstTag) : html;
+}
+
+// WPS on Linux can hand over text/html longer than its page: after "</html>"
+// come bytes of its memory, which a render shows as a line of garbled text.
+// This drops anything but white space after the last "</html>".
+inline QString dropTrailingAfterHtml(const QString &html) {
+    const int end = html.lastIndexOf(QStringLiteral("</html>"), -1, Qt::CaseInsensitive);
+    if (end < 0) {
+        return html;
+    }
+    const int after = end + 7;
+    for (int i = after; i < html.size(); ++i) {
+        if (!html.at(i).isSpace()) {
+            return html.left(after);
+        }
+    }
+    return html;
+}
+
+// HTML as MPaste keeps it: no CF_HTML header, nothing after the page.
+inline QString cleanClipboardHtml(const QString &html) {
+    return dropTrailingAfterHtml(stripCfHtmlHeader(html));
 }
 
 #endif // MPASTE_CFHTML_H

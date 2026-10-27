@@ -37,7 +37,7 @@ bool isPreviewCacheManagedContent(const ClipboardItem &item);
 bool usesVisualPreview(const ClipboardItem &item);
 
 QImage trimTransparentPadding(const QImage &source, int paddingPx);
-QImage scaleCropToTarget(const QImage &source, const QSize &pixelTargetSize);
+QImage scaleFitToTarget(const QImage &source, const QSize &pixelTargetSize);
 
 QImage buildLinkPreviewImage(const QString &urlString, const QString &title, qreal targetDpr, int itemScale);
 QImage buildTextPreviewImage(const QString &text, qreal targetDpr, int itemScale);

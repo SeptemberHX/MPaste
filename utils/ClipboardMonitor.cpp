@@ -735,14 +735,14 @@ QUrl ClipboardMonitor::extractWpsSingleImageUrl(const QMimeData *mimeData) {
     }
 
     static const QRegularExpression srcRegex(
-        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
+        QStringLiteral(R"(<img[^>]+src\s*=\s*(?:["']([^"']+)["']|([^\s"'>]+)))"),
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch match = srcRegex.match(html);
     if (!match.hasMatch()) {
         return {};
     }
 
-    return normalizeWpsImageUrl(match.captured(1));
+    return normalizeWpsImageUrl(match.captured(1).isEmpty() ? match.captured(2) : match.captured(1));
 }
 
 QMimeData *ClipboardMonitor::cloneMimeData(const QMimeData *mimeData) {
@@ -755,7 +755,7 @@ QMimeData *ClipboardMonitor::cloneMimeData(const QMimeData *mimeData) {
         copy->setText(mimeData->text());
     }
     if (mimeData->hasHtml()) {
-        copy->setHtml(stripCfHtmlHeader(mimeData->html()));
+        copy->setHtml(cleanClipboardHtml(mimeData->html()));
     }
     if (mimeData->hasUrls()) {
         copy->setUrls(mimeData->urls());

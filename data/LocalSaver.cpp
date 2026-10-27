@@ -21,6 +21,7 @@
 #include <QImageReader>
 #include <QScopedPointer>
 #include <QScreen>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
 
@@ -53,11 +54,30 @@ constexpr quint32 kFlagHtmlRichTextThumbnail = 0x2;
 // back on a high-DPI screen (at a card scale other than 100%) used to draw it at
 // half size into a corner, and a later save kept that.
 constexpr quint32 kFlagFullSizeRichTextThumbnail = 0x4;
+// Header flag: the rich-text thumbnail was drawn from cleaned HTML (no CF_HTML
+// header, nothing after </html>; WPS on Linux sends both), with a bare <img src>
+// read and its picture fitted whole rather than cut to a close-up.
+constexpr quint32 kFlagCleanHtmlRichTextThumbnail = 0x8;
 constexpr quint32 kRichTextThumbnailFlags =
-    kFlagAdaptedRichTextThumbnail | kFlagHtmlRichTextThumbnail | kFlagFullSizeRichTextThumbnail;
+    kFlagAdaptedRichTextThumbnail | kFlagHtmlRichTextThumbnail | kFlagFullSizeRichTextThumbnail
+    | kFlagCleanHtmlRichTextThumbnail;
 
 bool isCurrentRichTextThumbnail(quint32 flags) {
     return (flags & kRichTextThumbnailFlags) == kRichTextThumbnailFlags;
+}
+
+// Text saved from HTML that still had its CF_HTML header (WPS on Linux, before
+// capture removed it) starts with "Version:0.9", "StartHTML:..." lines: the card
+// counted them as its text and a search for "Version" found it.
+QString withoutCfHtmlHeaderLines(const QString &text) {
+    if (!text.startsWith(QStringLiteral("Version:")) || !text.left(400).contains(QStringLiteral("StartHTML:"))) {
+        return text;
+    }
+    static const QRegularExpression headerLine(
+        QStringLiteral(R"(^(?:(?:Version|StartHTML|EndHTML|StartFragment|EndFragment|StartSelection|EndSelection|SourceURL):[^\n]*\n?)+)"));
+    QString rest = text;
+    rest.remove(headerLine);
+    return rest.trimmed();
 }
 
 bool isKnownFormat(const QString &magic, quint32 version) {
@@ -173,6 +193,7 @@ bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHead
         header.normalizedUrls << QUrl(urlStr);
     }
     in >> header.fingerprint >> header.thumbnail >> header.mimeDataOffset;
+    header.normalizedText = withoutCfHtmlHeaderLines(header.normalizedText);
     // QDataStream does not preserve QPixmap devicePixelRatio.
     // Restore it so thumbnails render crisply on high-DPI screens.
     if (!header.thumbnail.isNull() && header.thumbnail.devicePixelRatio() == 1.0) {

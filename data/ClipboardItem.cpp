@@ -29,6 +29,9 @@ ClipboardItem::ClipboardItem(const QPixmap &icon, const QMimeData *mimeData) : i
         for (const QString &format : mimeData->formats()) {
             mimeData_->setData(format, mimeData->data(format));
         }
+        if (mimeData_->hasHtml()) {
+            mimeData_->setHtml(cleanClipboardHtml(mimeData_->html()));
+        }
 
         ClipboardImageDecoder::materializeCanonicalImage(
             mimeData_.data(),
@@ -602,7 +605,9 @@ ClipboardItem ClipboardItem::createLightweight(const QPixmap &icon, const QMimeD
             item.mimeData_->setText(mimeData->text());
         }
         if (mimeData->hasHtml()) {
-            item.mimeData_->setHtml(mimeData->html());
+            // Without a CF_HTML header (WPS on Linux), or its type and text would
+            // come from the header lines: a WPS shape then read as rich text.
+            item.mimeData_->setHtml(cleanClipboardHtml(mimeData->html()));
         }
         if (mimeData->hasUrls()) {
             item.mimeData_->setUrls(mimeData->urls());
@@ -844,19 +849,16 @@ QString ClipboardItem::htmlImageIdentity() const {
         return objectHashMatch.captured(1);
     }
 
-    static const QRegularExpression srcRegex(
-        QStringLiteral(R"(<img[^>]+src\s*=\s*["']([^"']+)["'])"),
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch srcMatch = srcRegex.match(html);
-    if (srcMatch.hasMatch()) {
-        QUrl url(srcMatch.captured(1).trimmed());
+    const QString source = ContentClassifier::firstHtmlImageSource(html);
+    if (!source.isEmpty()) {
+        QUrl url(source);
         if (url.isValid()) {
             QString normalized = url.toString(QUrl::RemoveQuery | QUrl::FullyEncoded);
             if (!normalized.isEmpty()) {
                 return normalized;
             }
         }
-        return srcMatch.captured(1).trimmed();
+        return source;
     }
 
     static const QRegularExpression idRegex(

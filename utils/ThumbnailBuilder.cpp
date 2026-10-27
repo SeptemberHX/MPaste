@@ -432,21 +432,40 @@ QImage trimTransparentPadding(const QImage &source, int paddingPx) {
     return image.copy(bounds);
 }
 
-QImage scaleCropToTarget(const QImage &source, const QSize &pixelTargetSize) {
+// Rich text with pictures, trimmed to what it draws: scaled whole into the card
+// and set on its top-left, where text cards start. Cut to fill instead, a wide
+// shape came out as a close-up of its middle and text lost its first letters.
+QImage scaleFitToTarget(const QImage &source, const QSize &pixelTargetSize) {
     if (source.isNull() || !pixelTargetSize.isValid()) {
         return source;
     }
 
-    QImage scaled = source.scaled(pixelTargetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    const QImage scaled = source.scaled(pixelTargetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     if (scaled.isNull()) {
         return source;
     }
 
-    const int x = qMax(0, (scaled.width() - pixelTargetSize.width()) / 2);
-    const int y = qMax(0, (scaled.height() - pixelTargetSize.height()) / 2);
-    return scaled.copy(x, y,
-                       qMin(scaled.width(), pixelTargetSize.width()),
-                       qMin(scaled.height(), pixelTargetSize.height()));
+    QImage canvas(pixelTargetSize, QImage::Format_ARGB32_Premultiplied);
+    canvas.fill(Qt::transparent);
+    QPainter painter(&canvas);
+    painter.drawImage(QRect(QPoint(0, 0), scaled.size()), scaled);
+    painter.end();
+    return canvas;
+}
+
+// True when nothing in the render is visible (a page that is only an <img>,
+// which the render leaves out).
+static bool drawsNothing(const QImage &render) {
+    const QImage image = render.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    for (int y = 0; y < image.height(); ++y) {
+        const QRgb *line = reinterpret_cast<const QRgb *>(image.constScanLine(y));
+        for (int x = 0; x < image.width(); ++x) {
+            if (qAlpha(line[x]) > 6) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 QImage buildLinkPreviewImage(const QString &urlString, const QString &title, qreal targetDpr, int itemScale) {
@@ -715,9 +734,19 @@ QPixmap buildRichTextThumbnail(const ClipboardItem &item) {
         snapshot.setDevicePixelRatio(thumbnailDpr);
         return snapshot;
     }
+    // Only a picture (a WPS shape saved as rich text): show the one it carries.
+    if (drawsNothing(snapshot.toImage()) && !imageBytes.isEmpty()) {
+        const QImage picture = buildCardThumbnailImageFromBytes(imageBytes, thumbnailDpr,
+                                                                MPasteSettings::getInst()->getItemScale());
+        if (!picture.isNull()) {
+            QPixmap pixmap = QPixmap::fromImage(picture);
+            pixmap.setDevicePixelRatio(thumbnailDpr);
+            return pixmap;
+        }
+    }
 
     QImage trimmed = trimTransparentPadding(snapshot.toImage(), qRound(2 * thumbnailDpr));
-    QImage scaled = scaleCropToTarget(trimmed, pixelTargetSize);
+    QImage scaled = scaleFitToTarget(trimmed, pixelTargetSize);
     QPixmap finalPixmap = QPixmap::fromImage(scaled.isNull() ? snapshot.toImage() : scaled);
     finalPixmap.setDevicePixelRatio(thumbnailDpr);
     return finalPixmap;
@@ -773,7 +802,7 @@ QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targ
 }
 
 QImage buildRichTextThumbnailImageFromHtml(const QString &rawHtml, const QByteArray &imageBytes, qreal thumbnailDpr, int itemScale) {
-    const QString html = stripCfHtmlHeader(rawHtml);
+    const QString html = cleanClipboardHtml(rawHtml);
     if (html.isEmpty()) {
         return QImage();
     }
@@ -829,9 +858,16 @@ QImage buildRichTextThumbnailImageFromHtml(const QString &rawHtml, const QByteAr
         snapshot.setDevicePixelRatio(thumbnailDpr);
         return snapshot;
     }
+    // Only a picture (a WPS shape saved as rich text): show the one it carries.
+    if (drawsNothing(snapshot) && !imageBytes.isEmpty()) {
+        const QImage picture = buildCardThumbnailImageFromBytes(imageBytes, thumbnailDpr, itemScale);
+        if (!picture.isNull()) {
+            return picture;
+        }
+    }
 
     QImage trimmed = trimTransparentPadding(snapshot, qRound(2 * thumbnailDpr));
-    QImage scaled = scaleCropToTarget(trimmed, pixelTargetSize);
+    QImage scaled = scaleFitToTarget(trimmed, pixelTargetSize);
     if (!scaled.isNull()) {
         scaled.setDevicePixelRatio(thumbnailDpr);
         return scaled;
