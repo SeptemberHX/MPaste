@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.8.3
+
+Copies from WPS on Linux show as they should, with shapes as Office cards; an older item copied again shows first at once.
 
 - Copying again something saved further back than the panel's first page (50 items) shows it first at once. It was moved to the front of the history but not into the panel, so it turned up only after a search or a page change, and copying it again did not help.
 - WPS on Linux: shapes copied from WPS are Office cards (Office shape), not pictures. The desktop app carries a shape as `wps/objects` in Chromium's custom data next to a PNG of it, the web one names "WPS Drawing Shape Format" in its HTML; text copies ("wps/texts", "Art::Text ClipFormat") stay rich text. Items saved before keep their type.
