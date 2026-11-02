@@ -13,7 +13,9 @@ the temporary artifact directory for diagnostics.
 Assertions cover native Wayland text (including Chinese), HTML, image and file-URL
 capture; Alt+Q activation; bottom panel geometry; pasting an older rich-text item after
 replacing the current clipboard; focus restoration; suppression of self-paste history
-duplicates; and extension disable/enable recovery without restarting MPaste.
+duplicates; extension disable/enable recovery without restarting MPaste; and copying
+again an item saved further back than the loaded page (after 50 newer copies), which
+must show first in the panel at once.
 
 The helper produces clipboard updates after a fresh keyboard event, matching real
 copy behavior. Reusing an old Wayland input serial can cause the compositor to reject

@@ -221,6 +221,20 @@ def main():
         key('Alt_L', 'q')
         wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste'"), 'reconnected shortcut')
         print('PASS extension reconnect', flush=True)
+        key('Alt_L', 'q')
+        wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste Test Target'"), 'panel dismissal')
+        time.sleep(.25)
+        # Copying again what is saved but no longer on the loaded page brings it
+        # to the front at once, not on the next reload.
+        for n in range(50):
+            copy({'text': f'Page filler {n}'}, f'"Page filler {n}"')
+        copy({'text': 'Wayland 中文 history'}, 'added=0')
+        key('Alt_L', 'q')
+        wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste'"), 'panel after re-copy')
+        key('Home')
+        key('Return')
+        wait_for(lambda: (base / 'pasted.txt').read_text().endswith('Wayland 中文 history'), 're-copied item pasted from the front')
+        print('PASS re-copied older item shown first', flush=True)
         if os.environ.get('MPASTE_MENU_BLUR_PROBE'):
             probe = launch([os.environ['MPASTE_MENU_BLUR_PROBE']], 'blur-probe.log')
             wait_for(lambda: evaluate("global.display.focus_window?.get_title() === 'MPaste Blur Test'"), 'blur test scene')

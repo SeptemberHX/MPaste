@@ -125,16 +125,42 @@ bool ScrollItemsWidget::addAndSaveItem(const ClipboardItem &nItem) {
         // that entry to the front instead of saving the same content again.
         // Only a backing file that is really gone makes this a new item.
         if (QFileInfo::exists(indexed->filePath)) {
+            // Copies: moving it to the front of the index invalidates `indexed`.
             const QString name = indexed->name;
+            const QString filePath = indexed->filePath;
+            LocalSaver saver;
             if (!indexed->pinned) {
                 const QDateTime now = QDateTime::currentDateTime();
-                LocalSaver saver;
-                saver.updateTimestamp(indexed->filePath, now, name);
+                saver.updateTimestamp(filePath, now, name);
                 boardService_->updateIndexedItemTime(name, now);
             }
             boardService_->moveIndexedItemToFront(name);
             qInfo().noquote() << QStringLiteral("[dedup] %1 already saved as %2, moved to front")
                 .arg(QString::fromLatin1(nItem.fingerprint().toHex().left(12)), name);
+
+            // The model holds one page, or the part of the history loaded so
+            // far, and this older entry is not in it: show it in front now
+            // instead of on the next reload (a search, a page change).
+            if (shouldEvictPages()) {
+                currentPage_ = 0;
+                reloadCurrentPageItems(true);
+                syncPageWindow(true);
+            } else if (boardModel_) {
+                const ClipboardItem loaded = saver.loadFromFileLight(filePath, true);
+                if (!loaded.getName().isEmpty() && boardModel_->rowForName(loaded.getName()) < 0) {
+                    const bool favorite = category == MPasteSettings::STAR_CATEGORY_NAME
+                        || favoriteFingerprints_.contains(loaded.fingerprint());
+                    const int insertRow = loaded.isPinned() ? 0 : pinnedInsertRow();
+                    boardModel_->insertItem(insertRow, loaded, favorite);
+                    syncPreviewStateForName(loaded.getName());
+                    const QScrollBar *sb = horizontalScrollbar();
+                    if (!sb || sb->value() <= sb->minimum()) {
+                        setCurrentProxyIndex(proxyIndexForSourceRow(insertRow));
+                    }
+                    scheduleThumbnailUpdate();
+                    refreshContentWidthHint();
+                }
+            }
             return false;
         }
     }

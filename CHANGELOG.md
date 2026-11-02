@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Copying again something saved further back than the panel's first page (50 items) shows it first at once. It was moved to the front of the history but not into the panel, so it turned up only after a search or a page change, and copying it again did not help.
 - WPS on Linux: shapes copied from WPS are Office cards (Office shape), not pictures. The desktop app carries a shape as `wps/objects` in Chromium's custom data next to a PNG of it, the web one names "WPS Drawing Shape Format" in its HTML; text copies ("wps/texts", "Art::Text ClipFormat") stay rich text. Items saved before keep their type.
 - WPS on Linux: shapes copied from WPS (a picture of the shape, with HTML that is only an `<img>`) are image cards again instead of blank rich-text cards. WPS puts Windows' CF_HTML header into `text/html`; capture kept it, so the item's text was "Version:0.9 StartHTML:..." and the shape did not read as a picture. The header is now removed at capture, an unquoted `<img src=...>` is read, and items saved before show the picture they carry, with the header lines dropped from their text ("103 chars", search hits for "Version").
 - WPS on Linux: rich text no longer turns into lines of garbled characters after its first line. WPS hands over `text/html` longer than the page, with bytes of its memory after `</html>`; they are dropped.
