@@ -40,7 +40,7 @@ model 中的 ClipboardItem 只持有 Level 0 + Level 1 数据。`normalizedText`
 | **RichText-VisualPreview** | HTML 渲染截图 | `drawManagedVisualPreview` → blit | loading 占位动画 | 粘贴、空格预览 |
 | **Image** | 图片缩放裁剪 | `drawManagedVisualPreview` → blit | loading 占位动画 | 粘贴、空格预览 |
 | **Office** | 同 Image | `drawManagedVisualPreview` → blit (contain) | loading 占位动画 | 粘贴 |
-| **Link** | 渐变背景+badge+域名；http(s) 异步获取 og:image 覆盖 | `drawCoverPixmap` → blit + `drawLinkLabel`×2 | `linkFallbackPreview` (QCache) + `drawLinkLabel`×2 | 粘贴 |
+| **Link** | 不生成；开启链接抓取（默认关）后为网页的 og:image | 有标题且有图：`drawCoverPixmap` | `paintWebAddress`：网站色书脊 + 站点、位置、页面名 | 粘贴 |
 | **File (单文件图片)** | 不生成（`localImageThumbnail` 内存 QCache） | QCache blit | 首次解码图片 | 粘贴 |
 | **File (单文件非图片)** | 不生成（`localFileIcon` 系统图标 QCache） | QCache blit | — | 粘贴 |
 | **File (多文件)** | 不生成 | — | 文件图标 + 文件名列表 | 粘贴 |

@@ -62,6 +62,11 @@ constexpr quint32 kRichTextThumbnailFlags =
     kFlagAdaptedRichTextThumbnail | kFlagHtmlRichTextThumbnail | kFlagFullSizeRichTextThumbnail
     | kFlagCleanHtmlRichTextThumbnail;
 
+// A link's thumbnail is its page's picture. Saving a link used to draw one from
+// its address (a browser window with the site's initials), the same size as a
+// page's picture; one without this flag is that drawing, and is left out.
+constexpr quint32 kFlagLinkPagePicture = 0x10;
+
 bool isCurrentRichTextThumbnail(quint32 flags) {
     return (flags & kRichTextThumbnailFlags) == kRichTextThumbnailFlags;
 }
@@ -744,6 +749,9 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
     // Loading leaves out a rich-text thumbnail without these flags, and a rich
     // text one here never comes from a picture, so any it has is the HTML render.
     header.flags = kRichTextThumbnailFlags;
+    if (header.contentType == quint32(Link) && !thumbnail.isNull()) {
+        header.flags |= kFlagLinkPagePicture;
+    }
 
     QDataStream out(&file);
     const qint64 mimeDataOffsetPos = writeCurrentFormatHeader(out, header);
@@ -839,6 +847,9 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
     if (thumbnailOverride) {
         header.thumbnail = *thumbnailOverride;
         header.flags |= kRichTextThumbnailFlags;
+        if (header.contentType == quint32(Link) && !header.thumbnail.isNull()) {
+            header.flags |= kFlagLinkPagePicture;
+        }
     }
     if (timeOverride && timeOverride->isValid()) {
         header.time = *timeOverride;
@@ -1081,6 +1092,13 @@ ClipboardItem loadFromStreamLight(QDataStream &in, const QString &filePath, bool
         && header.normalizedText.trimmed().isEmpty()
         && header.normalizedUrls.isEmpty()) {
         effectiveType = Image;
+    }
+    // Saved before plain-text addresses were links.
+    if (effectiveType == Text && ContentClassifier::isWebLinkText(header.normalizedText)) {
+        effectiveType = Link;
+    }
+    if (effectiveType == Link && !(flags & kFlagLinkPagePicture)) {
+        header.thumbnail = QPixmap();
     }
     {
         // Downscale icon to save memory — card header displays at ~40px.

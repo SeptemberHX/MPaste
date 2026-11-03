@@ -6,9 +6,6 @@
 class TextCardBody : public CardBodyRenderer {
 public:
     void paint(QPainter *painter, const CardBodyContext &ctx) const override;
-
-private:
-    static void paintAddress(QPainter *painter, const CardBodyContext &ctx, const QUrl &url);
 };
 
 #endif // MPASTE_TEXTCARDBODY_H

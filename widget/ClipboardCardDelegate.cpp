@@ -276,20 +276,6 @@ QString filePreviewCacheKey(const QString &filePath, const QFileInfo &info, cons
         .arg(qRound(targetDpr * 100.0));
 }
 
-QString linkFallbackCacheKey(const QUrl &url,
-                             const QString &title,
-                             const QSize &targetSize,
-                             qreal devicePixelRatio,
-                             const QPixmap &favicon) {
-    return QStringLiteral("%1|%2|%3|%4x%5@%6")
-        .arg(url.toString())
-        .arg(title)
-        .arg(QString::number(static_cast<qulonglong>(favicon.cacheKey())))
-        .arg(targetSize.width())
-        .arg(targetSize.height())
-        .arg(qRound(devicePixelRatio * 100.0));
-}
-
 QColor computeDominantHeaderColor(const QPixmap &iconPixmap) {
     QPixmap icon = iconPixmap;
     if (icon.isNull()) {
@@ -376,161 +362,6 @@ void drawShadow(QPainter *painter, const QRectF &cardRect, qreal radius) {
         painter->drawRoundedRect(cardRect.translated(layer.offset), radius, radius);
     }
     painter->restore();
-}
-
-QPixmap buildLinkFallbackPreviewUncached(const QUrl &url, const QString &title, const QSize &targetSize, qreal devicePixelRatio,
-                                         const QPixmap &favicon = QPixmap()) {
-    if (!targetSize.isValid()) {
-        return {};
-    }
-
-    const QSize pixelTargetSize = targetSize * devicePixelRatio;
-    QPixmap canvas(pixelTargetSize);
-    canvas.fill(Qt::transparent);
-    canvas.setDevicePixelRatio(devicePixelRatio);
-
-    const QString hostLabel = compactHostLabel(url);
-    const QString monogram = placeholderMonogram(url, title);
-    const QString headline = fallbackHeadline(title, url);
-    const auto palette = placeholderPalette(hostLabel + title);
-
-    QPainter painter(&canvas);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    const QRectF bounds(QPointF(0, 0), QSizeF(targetSize));
-    QLinearGradient background(bounds.topLeft(), bounds.bottomRight());
-    background.setColorAt(0.0, palette.first.lighter(120));
-    background.setColorAt(0.48, palette.second);
-    background.setColorAt(1.0, palette.first.darker(116));
-    painter.fillRect(bounds, background);
-
-    QRadialGradient glow(bounds.topRight() + QPointF(-bounds.width() * 0.18, bounds.height() * 0.12),
-                         bounds.width() * 0.88);
-    QColor glowColor(255, 255, 255, 138);
-    glow.setColorAt(0.0, glowColor);
-    glow.setColorAt(1.0, QColor(255, 255, 255, 0));
-    painter.fillRect(bounds, glow);
-
-    const QRectF browserRect = bounds.adjusted(14.0, 12.0, -14.0, -12.0);
-    QPainterPath browserPath;
-    browserPath.addRoundedRect(browserRect, 18.0, 18.0);
-    painter.fillPath(browserPath, QColor(255, 255, 255, 54));
-    painter.strokePath(browserPath, QPen(QColor(255, 255, 255, 52), 1.2));
-
-    const QRectF toolbarRect(browserRect.left() + 10.0, browserRect.top() + 10.0,
-                             browserRect.width() - 20.0, 26.0);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(255, 255, 255, 58));
-    painter.drawRoundedRect(toolbarRect, 13.0, 13.0);
-
-    const qreal dotY = toolbarRect.center().y();
-    const qreal firstDotX = toolbarRect.left() + 12.0;
-    const QColor dotColors[3] = {
-        QColor(255, 120, 120, 200),
-        QColor(255, 214, 102, 190),
-        QColor(107, 203, 119, 190)
-    };
-    for (int i = 0; i < 3; ++i) {
-        painter.setBrush(dotColors[i]);
-        painter.drawEllipse(QPointF(firstDotX + i * 10.0, dotY), 2.7, 2.7);
-    }
-
-    QFont chipFont = painter.font();
-    CardRenderUtils::applyUiFontDefaults(chipFont);
-    chipFont.setBold(true);
-    chipFont.setPointSizeF(qMax(8.0, bounds.height() * 0.048));
-    painter.setFont(chipFont);
-    const QString chipText = hostLabel.toUpper();
-    QFontMetricsF chipMetrics(chipFont);
-    const qreal chipPaddingX = 10.0;
-    const qreal chipHeight = chipMetrics.height() + 8.0;
-    const qreal chipWidth = qMin(toolbarRect.width() - 54.0, chipMetrics.horizontalAdvance(chipText) + chipPaddingX * 2.0);
-    const QRectF chipRect(toolbarRect.right() - chipWidth - 10.0,
-                          toolbarRect.center().y() - chipHeight / 2.0,
-                          chipWidth, chipHeight);
-    painter.setBrush(QColor(255, 255, 255, 64));
-    painter.drawRoundedRect(chipRect, chipHeight / 2.0, chipHeight / 2.0);
-    painter.setPen(QColor(255, 255, 255, 220));
-    painter.drawText(chipRect, Qt::AlignCenter, chipMetrics.elidedText(chipText, Qt::ElideRight, chipRect.width() - 10.0));
-
-    const QRectF heroRect(browserRect.left() + 18.0, toolbarRect.bottom() + 16.0,
-                          browserRect.width() - 36.0, browserRect.height() - toolbarRect.height() - 34.0);
-
-    QRadialGradient heroGlow(heroRect.center() + QPointF(0.0, -heroRect.height() * 0.12),
-                             qMin(heroRect.width(), heroRect.height()) * 0.52);
-    heroGlow.setColorAt(0.0, QColor(255, 255, 255, 116));
-    heroGlow.setColorAt(1.0, QColor(255, 255, 255, 0));
-    painter.fillRect(heroRect, heroGlow);
-
-    const bool hasFavicon = !favicon.isNull();
-    const qreal badgeScale = hasFavicon ? 0.56 : 0.38;
-    const qreal badgeSize = qMin(heroRect.width(), heroRect.height()) * badgeScale;
-    const QRectF badgeRect(heroRect.center().x() - badgeSize / 2.0,
-                           heroRect.top() + heroRect.height() * 0.10,
-                           badgeSize, badgeSize);
-    painter.setBrush(QColor(255, 255, 255, 214));
-    painter.drawEllipse(badgeRect);
-
-    QPen ringPen(QColor(72, 92, 110, 44));
-    ringPen.setWidthF(1.4);
-    painter.setPen(ringPen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(badgeRect.adjusted(-4.0, -4.0, 4.0, 4.0));
-
-    if (hasFavicon) {
-        const qreal iconScale = 0.60;
-        const QSize iconLogicalSize(qMax(8, qRound(badgeSize * iconScale)),
-                                    qMax(8, qRound(badgeSize * iconScale)));
-        QPixmap iconPixmap = favicon;
-        if (!iconLogicalSize.isEmpty()) {
-            iconPixmap = iconPixmap.scaled(iconLogicalSize * devicePixelRatio,
-                                           Qt::KeepAspectRatio,
-                                           Qt::SmoothTransformation);
-            iconPixmap.setDevicePixelRatio(devicePixelRatio);
-        }
-        const QRectF iconRect(badgeRect.center().x() - iconLogicalSize.width() / 2.0,
-                              badgeRect.center().y() - iconLogicalSize.height() / 2.0,
-                              iconLogicalSize.width(),
-                              iconLogicalSize.height());
-        painter.drawPixmap(iconRect, iconPixmap, QRectF());
-    } else {
-        QFont monoFont = painter.font();
-        CardRenderUtils::applyMonoFontDefaults(monoFont);
-        monoFont.setBold(true);
-        monoFont.setPointSizeF(qMax(18.0, badgeSize * 0.26));
-        monoFont.setLetterSpacing(QFont::PercentageSpacing, 105);
-        painter.setFont(monoFont);
-        painter.setPen(QColor(58, 72, 86));
-        painter.drawText(badgeRect, Qt::AlignCenter, monogram);
-    }
-
-    const QRectF headlineRect(heroRect.left(), badgeRect.bottom() + 16.0, heroRect.width(), 34.0);
-    QFont headlineFont = painter.font();
-#ifdef Q_OS_WIN
-    headlineFont.setFamily(QStringLiteral("Microsoft YaHei UI"));
-#endif
-    headlineFont.setBold(true);
-    headlineFont.setPointSizeF(qMax(9.0, bounds.height() * 0.048));
-    painter.setFont(headlineFont);
-    painter.setPen(QColor(255, 255, 255, 235));
-    const QFontMetricsF headlineMetrics(headlineFont);
-    painter.drawText(headlineRect, Qt::AlignCenter,
-                     headlineMetrics.elidedText(headline, Qt::ElideRight, headlineRect.width()));
-
-    const QRectF captionRect(heroRect.left() + 16.0, headlineRect.bottom() + 6.0,
-                             heroRect.width() - 32.0, 22.0);
-
-    painter.setBrush(QColor(255, 255, 255, 48));
-    painter.setPen(Qt::NoPen);
-    const qreal lineWidth = heroRect.width() * 0.42;
-    painter.drawRoundedRect(QRectF(heroRect.center().x() - lineWidth / 2.0,
-                                   captionRect.bottom() + 14.0,
-                                   lineWidth, 6.0), 3.0, 3.0);
-    painter.drawRoundedRect(QRectF(heroRect.center().x() - lineWidth * 0.34,
-                                   captionRect.bottom() + 26.0,
-                                   lineWidth * 0.68, 6.0), 3.0, 3.0);
-
-    return canvas;
 }
 
 QPixmap starPixmap(const QSize &size) {
@@ -679,7 +510,6 @@ ClipboardCardDelegate::ClipboardCardDelegate(const QColor &borderColor, QObject 
       cachedTheme_(CardTheme::forCurrentTheme()),
       borderColor_(borderColor),
       headerIconCache_(60),
-      linkFallbackCache_(60),
       cardPixmapCache_(18),
       localImageThumbnailCache_(60),
       localFileIconCache_(60),
@@ -722,7 +552,6 @@ void ClipboardCardDelegate::setLoadingPhase(int phase) {
 void ClipboardCardDelegate::clearIntermediateCaches() {
     headerColorCache_.clear();
     headerIconCache_.clear();
-    linkFallbackCache_.clear();
     CardRenderUtils::clearCoverPixmapCache();
     localImageThumbnailCache_.clear();
     // Keep localFileIconCache_ — file type icons are small, come from the
@@ -782,8 +611,6 @@ QString ClipboardCardDelegate::cacheMemoryStats() const {
                  .arg(cardPixmapCache_.size()).arg(estimateCache(cardPixmapCache_) / 1024);
     lines << QStringLiteral("  headerIconCache: %1 items, %2 KB")
                  .arg(headerIconCache_.size()).arg(estimateCache(headerIconCache_) / 1024);
-    lines << QStringLiteral("  linkFallbackCache: %1 items, %2 KB")
-                 .arg(linkFallbackCache_.size()).arg(estimateCache(linkFallbackCache_) / 1024);
     lines << QStringLiteral("  localImageThumbCache: %1 items, %2 KB")
                  .arg(localImageThumbnailCache_.size()).arg(estimateCache(localImageThumbnailCache_) / 1024);
     lines << QStringLiteral("  localFileIconCache: %1 items, %2 KB")
@@ -880,23 +707,6 @@ QPixmap ClipboardCardDelegate::headerIconForPixmap(const QPixmap &sourcePixmap,
     QPixmap result = buildHeaderIconPixmapUncached(icon, targetLogicalSize, targetDpr);
     if (!result.isNull()) {
         headerIconCache_.insert(cacheKey, new QPixmap(result), 1);
-    }
-    return result;
-}
-
-QPixmap ClipboardCardDelegate::linkFallbackPreview(const QUrl &url,
-                                                   const QString &title,
-                                                   const QSize &targetSize,
-                                                   qreal devicePixelRatio,
-                                                   const QPixmap &favicon) const {
-    const QString cacheKey = linkFallbackCacheKey(url, title, targetSize, devicePixelRatio, favicon);
-    if (QPixmap *cached = linkFallbackCache_.object(cacheKey)) {
-        return *cached;
-    }
-
-    QPixmap result = buildLinkFallbackPreviewUncached(url, title, targetSize, devicePixelRatio, favicon);
-    if (!result.isNull()) {
-        linkFallbackCache_.insert(cacheKey, new QPixmap(result), 1);
     }
     return result;
 }
@@ -1262,7 +1072,9 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     const QString when = compactTimeLabel(card.time);
     const bool middleElide = card.contentType == Link || (card.contentType == File && card.normalizedUrls.size() == 1);
     // Pictures sit in the card as pictures: framed in Still, edge to edge in Aurora.
-    const bool visual = card.contentType == Image || card.contentType == Office;
+    // A link with its page's picture is laid out as one.
+    const bool visual = card.contentType == Image || card.contentType == Office
+        || (card.contentType == Link && LinkCardBody::showsPagePicture(card));
 
     const QColor ink = darkTheme ? QColor(232, 233, 238, 190) : QColor(31, 33, 41, 200);
     const QColor muted = theme.footerTextColor;
@@ -1391,7 +1203,9 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         // Text keeps the icon's edge on the left and the same margin on the right.
         const QRect content(cardRect.left() + pad, header.bottom() + px(2), cardRect.width() - pad * 2,
                             footer.top() - header.bottom() - px(4));
-        if (visual) {
+        // A link without its page's picture has a band down the card's left edge.
+        const bool spineLink = card.contentType == Link && !visual;
+        if (visual || spineLink) {
             bodyRect = QRect(cardRect.left(), header.bottom() + 1, cardRect.width(), cardRect.bottom() - header.bottom());
         } else {
             // The renderers keep their own 12/8 px inset; start them so the text lands on the content edge.
@@ -1399,27 +1213,32 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         }
         painter->save();
         painter->setClipPath(cardPath);
-        const CardBodyContext ctx {bodyRect, visual ? bodyRect : content, card, scale, darkTheme, loadingPhase_, paintDpr,
+        const CardBodyContext ctx {bodyRect, (visual || spineLink) ? bodyRect : content, card, scale, darkTheme, loadingPhase_, paintDpr,
                                    theme.bodyTextColor, index, this, cachedTheme_};
         bodyRendererForType(card.contentType).paint(painter, ctx);
         painter->restore();
-        if (visual) {
-            // The caption sits in a small pill on the picture, leaving the rest of it clear.
+        if (visual || spineLink) {
+            // The caption sits in a small pill: on a picture, leaving the rest of
+            // it clear; on a link, beside its band.
             const QFont capFont = uiFont(8.5, QFont::Normal);
+            const int capLeft = spineLink ? CardRenderUtils::webSpineWidth(scale) + px(8) : px(8);
             // Rounded up: horizontalAdvance rounds to the nearest pixel, and a text
             // rect up to half a pixel short of the text got it elided ("1118 × …").
             const QFontMetricsF capMetrics(capFont, painter->device());
             const int capWidth = qMin(qCeil(capMetrics.horizontalAdvance(detailText)) + 1 + px(16),
-                                      cardRect.width() - pad * 2);
+                                      cardRect.width() - capLeft - px(8));
             const int capHeight = px(20);
-            const QRect cap(cardRect.left() + px(8), cardRect.bottom() - px(8) - capHeight + 1, capWidth, capHeight);
+            const QRect cap(cardRect.left() + capLeft, cardRect.bottom() - px(8) - capHeight + 1, capWidth, capHeight);
             painter->save();
             painter->setPen(Qt::NoPen);
-            painter->setBrush(QColor(12, 13, 17, 170));
+            painter->setBrush(visual ? QColor(12, 13, 17, 170)
+                                     : (darkTheme ? QColor(255, 255, 255, 16) : QColor(0, 0, 0, 12)));
             painter->drawRoundedRect(QRectF(cap), capHeight / 2.0, capHeight / 2.0);
             painter->restore();
+            const QColor capInk = visual ? QColor(255, 255, 255, 215)
+                                         : (darkTheme ? QColor(255, 255, 255, 185) : QColor(24, 26, 32, 185));
             CardRenderUtils::drawElidedText(painter, cap.adjusted(px(8), 0, -px(8), 0), detailText, capFont,
-                                            QColor(255, 255, 255, 215), Qt::AlignLeft | Qt::AlignVCenter,
+                                            capInk, Qt::AlignLeft | Qt::AlignVCenter,
                                             middleElide ? Qt::ElideMiddle : Qt::ElideRight);
         } else {
             CardRenderUtils::drawElidedText(painter, footer.adjusted(pad + px(2), 0, -pad, 0), detailText,

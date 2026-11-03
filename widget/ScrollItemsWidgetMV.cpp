@@ -517,12 +517,17 @@ void ScrollItemsWidget::executeLinkPreviewFetch(const QModelIndex &proxyIndex) {
         return;
     }
 
+    if (!MPasteSettings::getInst()->isFetchLinkPreviews()) {
+        return;
+    }
     ClipboardItem item = boardModel_->itemAt(sourceRow);
     if (item.getContentType() != Link) {
         return;
     }
-    // Skip if we already have OG data (title or preview image).
-    if (!item.getTitle().isEmpty() || item.hasThumbnail()) {
+    // Read already, with the page's picture. Without one it is read again (at
+    // most every ten minutes, below): the picture may have failed for now, as
+    // GitHub's does with 429 when busy, leaving the title and the site's icon.
+    if (!item.getTitle().isEmpty() && item.hasThumbnailHint()) {
         return;
     }
 
@@ -547,18 +552,20 @@ void ScrollItemsWidget::executeLinkPreviewFetch(const QModelIndex &proxyIndex) {
     }
 
     const QString requestKey = url.toString(QUrl::FullyEncoded);
-    if (pendingLinkPreviewUrls_.contains(requestKey)) {
+    // Each address at most every ten minutes.
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (const auto it = requestedLinkPreviewUrls_.constFind(requestKey);
+        it != requestedLinkPreviewUrls_.constEnd() && now - *it < 10 * 60 * 1000) {
         return;
     }
-    pendingLinkPreviewUrls_.insert(requestKey);
+    requestedLinkPreviewUrls_.insert(requestKey, now);
 
     // Use item name instead of fingerprint for the callback lookup —
     // fingerprint() computes SHA1 synchronously and adds ~15ms latency
     // to arrow-key navigation.
     const QString itemName = item.getName();
     auto *fetcher = new OpenGraphFetcher(url, this);
-    connect(fetcher, &OpenGraphFetcher::finished, this, [this, fetcher, requestKey, itemName, linkText](const OpenGraphItem &ogItem) {
-        pendingLinkPreviewUrls_.remove(requestKey);
+    connect(fetcher, &OpenGraphFetcher::finished, this, [this, fetcher, itemName, linkText](const OpenGraphItem &ogItem) {
         fetcher->deleteLater();
 
         if (ogItem.getImage().isNull() && ogItem.getTitle().isEmpty()) {
@@ -602,6 +609,7 @@ void ScrollItemsWidget::executeLinkPreviewFetch(const QModelIndex &proxyIndex) {
         }
 
         if (boardModel_->updateItem(row, updated)) {
+            syncPreviewStateForRow(row);
             if (cardDelegate_) {
                 cardDelegate_->invalidateCard(updated.getName());
             }
@@ -1809,6 +1817,11 @@ void ScrollItemsWidget::showEvent(QShowEvent *event) {
         boardService_->setVisibleHint(isVisible() && window() && window()->isVisible());
     }
     setFirstVisibleItemSelected();
+    // The selection may be the one it was last time (its page not read yet,
+    // with reading links switched on since): no change of it would ask.
+    if (listView_ && listView_->selectionModel()) {
+        ensureLinkPreviewForIndex(listView_->selectionModel()->currentIndex());
+    }
     scheduleThumbnailUpdate();
     updateLoadingOverlay();
 }

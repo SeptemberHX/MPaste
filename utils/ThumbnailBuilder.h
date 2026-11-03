@@ -39,7 +39,6 @@ bool usesVisualPreview(const ClipboardItem &item);
 QImage trimTransparentPadding(const QImage &source, int paddingPx);
 QImage scaleFitToTarget(const QImage &source, const QSize &pixelTargetSize);
 
-QImage buildLinkPreviewImage(const QString &urlString, const QString &title, qreal targetDpr, int itemScale);
 QImage buildTextPreviewImage(const QString &text, qreal targetDpr, int itemScale);
 QImage buildFileListPreviewImage(const QList<QUrl> &urls, qreal targetDpr, int itemScale);
 QImage buildCardThumbnailImageFromBytes(const QByteArray &imageBytes, qreal targetDpr, int itemScale);

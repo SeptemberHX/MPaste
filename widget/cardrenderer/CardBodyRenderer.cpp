@@ -7,12 +7,14 @@
 #include <QApplication>
 #include <QCache>
 #include <QFileInfo>
+#include <QHash>
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QLinearGradient>
 #include <QPainterPath>
 #include <QTextLayout>
 #include <QObject>
+#include <QSet>
 #include <QUrl>
 
 #include "widget/CardTheme.h"
@@ -557,6 +559,355 @@ QString CardRenderUtils::displayHost(const QUrl &url) {
         host = host.mid(4);
     }
     return host;
+}
+
+namespace {
+// "/a/b/" as "a", "b".
+QStringList webPathSegments(const QUrl &url) {
+    return url.path(QUrl::FullyDecoded).split(QLatin1Char('/'), Qt::SkipEmptyParts);
+}
+
+// A page title that only names the site ("Reddit" for reddit.com/r/gnome/,
+// what some sites give a reader that is not a browser) says less than the path.
+bool titleNamesOnlySite(const QString &title, const QString &host) {
+    QString name;
+    for (const QChar ch : title) {
+        if (ch.isLetterOrNumber()) {
+            name += ch.toLower();
+        }
+    }
+    if (name.isEmpty()) {
+        return true;
+    }
+    const QStringList labels = host.toLower().split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    QString hostName = labels.join(QString());
+    hostName.remove(QLatin1Char('-'));
+    const QString siteLabel = labels.size() >= 2 ? labels.at(labels.size() - 2) : hostName;
+    return name == hostName || name == QString(siteLabel).remove(QLatin1Char('-'));
+}
+
+// A colour of its own for each site, from its name.
+QColor webAccent(const QString &host) {
+    const uint h = qHash(host);
+    return QColor::fromHslF((h % 360) / 360.0, 0.55, 0.48);
+}
+
+// The site's colour: its icon's when that has one (the mean of its coloured
+// pixels), else one of its own from its name.
+QColor siteColor(const QString &host, const QPixmap &favicon) {
+    if (!favicon.isNull()) {
+        static QHash<qint64, QColor> cache;
+        if (const auto it = cache.constFind(favicon.cacheKey()); it != cache.constEnd()) {
+            if (it->isValid()) {
+                return *it;
+            }
+        } else {
+            const QImage image = favicon.toImage().scaled(24, 24, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                                     .convertToFormat(QImage::Format_ARGB32);
+            qreal r = 0, g = 0, b = 0, weight = 0;
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    const QColor c = QColor::fromRgba(image.pixel(x, y));
+                    if (c.alpha() < 128 || c.hsvSaturationF() < 0.25 || c.valueF() < 0.2) {
+                        continue;
+                    }
+                    const qreal w = c.alphaF() * c.hsvSaturationF();
+                    r += c.redF() * w;
+                    g += c.greenF() * w;
+                    b += c.blueF() * w;
+                    weight += w;
+                }
+            }
+            QColor found;
+            if (weight > 2.0) {
+                // Strong enough to carry white, as the band does.
+                const QColor hsl = QColor::fromRgbF(r / weight, g / weight, b / weight).toHsl();
+                found = QColor::fromHslF(qMax<qreal>(0.0, hsl.hslHueF()), qMax<qreal>(0.45, hsl.hslSaturationF()),
+                                         qBound<qreal>(0.38, hsl.lightnessF(), 0.55));
+            }
+            if (cache.size() > 256) {
+                cache.clear();
+            }
+            cache.insert(favicon.cacheKey(), found);
+            if (found.isValid()) {
+                return found;
+            }
+        }
+    }
+    return webAccent(host);
+}
+
+// The site's name without its kind and country: "news.example.com" as "example".
+QString siteName(const QString &host) {
+    QStringList labels = host.toLower().split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    if (labels.size() >= 3 && labels.at(labels.size() - 2).size() <= 3 && labels.last().size() == 2) {
+        labels.removeLast();   // example.co.uk
+    }
+    return labels.size() >= 2 ? labels.at(labels.size() - 2) : host;
+}
+
+// What an address says about its page, read from its path: a headline (the
+// last part that reads as words, "what_is_your_favourite_setup" as "What is
+// your favourite setup") and the context before it ("r/linux"), leaving out
+// numbers, ids ("1xjtutb") and words every site uses ("comments", "post").
+struct WebPathSummary {
+    QString headline;
+    QString context;
+};
+
+bool isPathNoise(const QString &segment) {
+    static const QSet<QString> noise = {
+        QStringLiteral("comments"), QStringLiteral("comment"), QStringLiteral("post"), QStringLiteral("posts"),
+        QStringLiteral("p"), QStringLiteral("article"), QStringLiteral("articles"), QStringLiteral("blob"),
+        QStringLiteral("tree"), QStringLiteral("status"), QStringLiteral("watch"), QStringLiteral("s"),
+        QStringLiteral("t"), QStringLiteral("en"), QStringLiteral("en-us"), QStringLiteral("zh-cn"),
+        QStringLiteral("index"), QStringLiteral("item"), QStringLiteral("items"), QStringLiteral("view"),
+        QStringLiteral("detail"), QStringLiteral("details"), QStringLiteral("d"), QStringLiteral("html"),
+    };
+    return noise.contains(segment.toLower());
+}
+
+bool isPathId(const QString &segment) {
+    int digits = 0;
+    int letters = 0;
+    for (const QChar ch : segment) {
+        if (ch.isDigit()) {
+            ++digits;
+        } else if (ch.isLetter()) {
+            ++letters;
+        } else {
+            return false;   // A separator: words, not an id.
+        }
+    }
+    // All digits (an id, a year, a day), or letters and digits mixed in one run.
+    return letters == 0 || (digits > 0 && segment.size() >= 5);
+}
+
+QString humanizedSlug(const QString &segment) {
+    QString text = segment;
+    text.replace(QRegularExpression(QStringLiteral("[_+]+")), QStringLiteral(" "));
+    const QStringList words = text.split(QRegularExpression(QStringLiteral("[\\s-]+")), Qt::SkipEmptyParts);
+    // Three words or more are a sentence; "example-repo" stays a name.
+    if (words.size() < 3) {
+        return text.simplified();
+    }
+    QString sentence = words.join(QLatin1Char(' '));
+    sentence[0] = sentence.at(0).toUpper();
+    return sentence;
+}
+
+WebPathSummary summarizeWebPath(const QUrl &url) {
+    QStringList segments = webPathSegments(url);
+    if (!segments.isEmpty()) {
+        static const QRegularExpression pageExtension(QStringLiteral("\\.(?:html?|php|aspx?|jsp)$"),
+                                                      QRegularExpression::CaseInsensitiveOption);
+        segments.last().remove(pageExtension);
+    }
+    // "r", "linux" as "r/linux": a one-letter part names the kind of the next.
+    QStringList parts;
+    for (int i = 0; i < segments.size(); ++i) {
+        const QString &segment = segments.at(i);
+        if (segment.size() == 1 && !isPathNoise(segment) && i + 1 < segments.size() && !isPathId(segments.at(i + 1))) {
+            parts << segment + QLatin1Char('/') + segments.at(++i);
+        } else if (!segment.isEmpty() && !isPathNoise(segment) && !isPathId(segment)) {
+            parts << segment;
+        }
+    }
+    WebPathSummary summary;
+    if (parts.isEmpty()) {
+        return summary;
+    }
+    // A section of a page ("example-repo/issues") names the page, the section
+    // goes with where it is: "example-user › Issues" over "example-repo".
+    static const QSet<QString> sections = {
+        QStringLiteral("issues"), QStringLiteral("pulls"), QStringLiteral("pull"), QStringLiteral("releases"),
+        QStringLiteral("wiki"), QStringLiteral("discussions"), QStringLiteral("actions"), QStringLiteral("commits"),
+        QStringLiteral("tags"), QStringLiteral("branches"), QStringLiteral("projects"), QStringLiteral("about"),
+    };
+    QString section;
+    if (parts.size() >= 2 && sections.contains(parts.last().toLower())) {
+        section = parts.takeLast();
+        section[0] = section.at(0).toUpper();
+    }
+    summary.headline = humanizedSlug(parts.takeLast());
+    if (parts.size() > 2) {
+        parts = parts.mid(parts.size() - 2);
+    }
+    if (!section.isEmpty()) {
+        parts << section;
+    }
+    summary.context = parts.join(QStringLiteral(" \u203A "));
+    return summary;
+}
+
+// Wrapped at words, at most `maxLines`, the last one elided when cut short.
+// Returns the height used.
+int drawClampedText(QPainter *painter, const QRect &rect, const QString &text, const QFont &font,
+                    const QColor &color, int maxLines, qreal lineSpacing = 1.15) {
+    if (text.isEmpty() || rect.isEmpty() || maxLines <= 0) {
+        return 0;
+    }
+    const QFontMetricsF fm(font, painter->device());
+    const qreal lineH = fm.height() * lineSpacing;
+    const int fitLines = qMax(1, qMin(maxLines, int(rect.height() / lineH)));
+    QTextLayout layout(text, font, painter->device());
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    layout.setTextOption(option);
+    layout.beginLayout();
+    QStringList lines;
+    int consumed = 0;
+    while (lines.size() < fitLines) {
+        QTextLine line = layout.createLine();
+        if (!line.isValid()) {
+            break;
+        }
+        line.setLineWidth(rect.width());
+        lines << text.mid(line.textStart(), line.textLength());
+        consumed = line.textStart() + line.textLength();
+    }
+    layout.endLayout();
+    if (!lines.isEmpty() && consumed < text.size()) {
+        lines.last() = fm.elidedText(lines.last().trimmed() + QStringLiteral(" ") + text.mid(consumed),
+                                     Qt::ElideRight, rect.width());
+    }
+    painter->save();
+    painter->setFont(font);
+    painter->setPen(color);
+    qreal y = rect.top();
+    for (const QString &line : lines) {
+        painter->drawText(QRectF(rect.left(), y, rect.width(), lineH), Qt::AlignLeft | Qt::AlignVCenter, line.trimmed());
+        y += lineH;
+    }
+    painter->restore();
+    return qRound(y - rect.top());
+}
+
+} // namespace
+
+int CardRenderUtils::webSpineWidth(int scale) {
+    return qMax(30, 46 * scale / 100);
+}
+
+void CardRenderUtils::paintWebAddress(QPainter *painter, const CardBodyContext &ctx, const QUrl &url,
+                                      const QString &title, const QPixmap &favicon) {
+    auto px = [&](int v) { return qMax(1, v * ctx.scale / 100); };
+    auto font = [&](qreal points, QFont::Weight weight) {
+        QFont f = painter->font();
+        applyUiFontDefaults(f);
+        f.setPointSizeF(qMax(7.0, points * ctx.scale / 100));
+        f.setWeight(weight);
+        return f;
+    };
+    const QString host = displayHost(url);
+    const QColor color = siteColor(host, favicon);
+    const WebPathSummary path = summarizeWebPath(url);
+    const bool hasTitle = !title.trimmed().isEmpty() && !titleNamesOnlySite(title, host);
+    // The page: its title, or what its path says, or for the site itself its name.
+    const QString headline = hasTitle ? title.simplified() : (!path.headline.isEmpty() ? path.headline : host);
+    const QString context = hasTitle ? QString() : path.context;
+
+    // A band in the site's colour down the left, like a book's spine, fading in
+    // below the header and out at the foot. Edge to edge when the card gives
+    // the body its full width (Aurora), else a rounded band inside it.
+    const bool fullBleed = ctx.previewRect == ctx.bodyRect;
+    const QRect spine = fullBleed
+        ? QRect(ctx.bodyRect.left(), ctx.bodyRect.top(), webSpineWidth(ctx.scale), ctx.bodyRect.height())
+        : QRect(ctx.bodyRect.left() + px(10), ctx.bodyRect.top() + px(8), webSpineWidth(ctx.scale) - px(6),
+                ctx.bodyRect.height() - px(14));
+    {
+        const QColor top = QColor::fromRgbF(color.redF() * 0.85, color.greenF() * 0.85, color.blueF() * 0.85);
+        const QColor mid = QColor::fromRgbF(color.redF() * 0.70, color.greenF() * 0.70, color.blueF() * 0.70);
+        QColor clear = top;
+        clear.setAlpha(0);
+        QColor foot = color;
+        foot.setAlpha(64);
+        QLinearGradient band(spine.topLeft(), spine.bottomLeft());
+        band.setColorAt(0.0, clear);
+        band.setColorAt(qMin(0.4, px(22) / qMax(1.0, qreal(spine.height()))), top);
+        band.setColorAt(0.6, mid);
+        band.setColorAt(1.0, foot);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(band);
+        if (fullBleed) {
+            painter->drawRect(spine);
+        } else {
+            painter->drawRoundedRect(QRectF(spine), px(10), px(10));
+        }
+        painter->restore();
+    }
+
+    // In it the site's icon on a white tile, or its first letter in its colour,
+    // and below that its name sideways, read from the top, fading out.
+    const int tileSize = px(26);
+    const QRect tile(spine.center().x() - tileSize / 2 + 1, spine.top() + px(10), tileSize, tileSize);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(QColor(255, 255, 255, 245));
+    painter->drawRoundedRect(QRectF(tile), px(8), px(8));
+    if (!favicon.isNull()) {
+        const int inset = qMax(2, tileSize * 11 / 100);
+        painter->drawPixmap(tile.adjusted(inset, inset, -inset, -inset), favicon);
+    } else {
+        painter->setFont(font(10.5, QFont::ExtraBold));
+        painter->setPen(color);
+        painter->drawText(tile, Qt::AlignCenter, host.left(1).toUpper());
+    }
+    painter->restore();
+
+    const QString name = siteName(host);
+    if (!name.isEmpty()) {
+        const QFont nameFont = font(16.5, QFont::Black);
+        const QFontMetrics nameMetrics(nameFont, painter->device());
+        const int nameTop = tile.bottom() + 1 + px(10);
+        const int run = spine.bottom() - nameTop - px(4);
+        if (run > nameMetrics.height()) {
+            painter->save();
+            painter->setClipRect(spine);
+            painter->translate(spine.center().x() + nameMetrics.height() / 2.0, nameTop);
+            painter->rotate(90);
+            // Turned, x runs down the band and y across it, from its right edge.
+            const QRectF line(0, 0, run, nameMetrics.height());
+            QLinearGradient fade(line.topLeft(), line.topRight());
+            fade.setColorAt(0.0, QColor(255, 255, 255, 230));
+            fade.setColorAt(0.7, QColor(255, 255, 255, 230));
+            fade.setColorAt(1.0, QColor(255, 255, 255, 0));
+            painter->setFont(nameFont);
+            painter->setPen(QPen(QBrush(fade), 1));
+            painter->drawText(line, Qt::AlignLeft | Qt::AlignVCenter, name);
+            painter->restore();
+        }
+    }
+
+    // Beside it: the site in its colour, where on it, then the page.
+    const int left = spine.right() + 1 + px(fullBleed ? 14 : 10);
+    const int right = ctx.bodyRect.right() - px(fullBleed ? 14 : 12);
+    const int width = qMax(0, right - left + 1);
+    // Aurora's body runs to the card's foot, with its footer line below the text.
+    const int bottom = fullBleed ? ctx.bodyRect.bottom() - px(34) : ctx.bodyRect.bottom() - px(6);
+    int y = ctx.bodyRect.top() + px(8);
+    {
+        const QColor hsl = color.toHsl();
+        const QColor soft = QColor::fromHslF(qMax<qreal>(0.0, hsl.hslHueF()), qMin<qreal>(1.0, hsl.hslSaturationF() + 0.1),
+                                             ctx.darkTheme ? 0.72 : 0.38);
+        const QFont siteFont = font(8.5, QFont::DemiBold);
+        const int h = QFontMetrics(siteFont, painter->device()).height() + px(1);
+        drawElidedText(painter, QRect(left, y, width, h), host, siteFont, soft, Qt::AlignLeft | Qt::AlignVCenter);
+        y += h + px(3);
+    }
+    if (!context.isEmpty()) {
+        const QFont contextFont = font(8.5, QFont::Normal);
+        const int h = QFontMetrics(contextFont, painter->device()).height() + px(1);
+        drawElidedText(painter, QRect(left, y, width, h), context, contextFont, ctx.theme.footerTextColor,
+                       Qt::AlignLeft | Qt::AlignVCenter, Qt::ElideMiddle);
+        y += h + px(3);
+    }
+    drawClampedText(painter, QRect(left, y + px(2), width, qMax(0, bottom - y - px(2))), headline,
+                    font(13.5, QFont::ExtraBold), ctx.bodyTextColor, 4, 1.16);
 }
 
 bool CardRenderUtils::looksLikeCode(const QString &text) {

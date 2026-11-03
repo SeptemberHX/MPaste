@@ -130,7 +130,7 @@ bool ScrollItemsWidget::isStaleCloseUpThumbnail(const ClipboardItem &item) const
 bool ScrollItemsWidget::shouldManageThumbnail(const ClipboardItem &item) const {
     const ContentType type = item.getContentType();
     return type == Image
-        || type == Link
+        || (type == Link && item.hasThumbnailHint())
         || type == Office
         || (type == RichText && item.getPreviewKind() == VisualPreview);
 }
@@ -292,6 +292,11 @@ bool ScrollItemsWidget::usesManagedVisualPreviewCard(const ClipboardItem &item) 
             return false;
         }
         return true;
+    }
+    // A link with its page's picture saved (the only thumbnail a link keeps):
+    // drawn as a picture whether or not the picture is loaded at the moment.
+    if (type == Link) {
+        return item.hasThumbnailHint();
     }
     return type == RichText && item.getPreviewKind() == VisualPreview;
 }

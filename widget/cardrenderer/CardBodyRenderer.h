@@ -64,6 +64,13 @@ namespace CardRenderUtils {
                         bool darkTheme, const QColor &textColor);
     // "github.com" from "https://www.github.com/...".
     QString displayHost(const QUrl &url);
+    // A web address as a card body: a band in the site's colour down the
+    // left with its icon and name, beside it the site, where on it and the
+    // page (its title, or what its path says).
+    void paintWebAddress(QPainter *painter, const CardBodyContext &ctx, const QUrl &url,
+                         const QString &title = QString(), const QPixmap &favicon = QPixmap());
+    // The band's width: a card puts its footer line beside it.
+    int webSpineWidth(int scale);
     void clearCoverPixmapCache();
     // Drops one item's scaled pictures, for when its thumbnail is replaced: they
     // are keyed by the item's name, not the pixmap.

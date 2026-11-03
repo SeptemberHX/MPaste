@@ -145,16 +145,6 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                        && previewKind == VisualPreview
                        && !resolvedHtml.isEmpty()) {
                 result.thumbnailImage = ThumbnailBuilder::buildRichTextThumbnailImageFromHtml(resolvedHtml, resolvedImageBytes, thumbnailDpr, itemScale);
-            } else if (contentType == Link) {
-                QString linkUrl;
-                const QList<QUrl> urls = baseItem.getNormalizedUrls();
-                if (!urls.isEmpty()) {
-                    const QUrl &first = urls.first();
-                    linkUrl = first.isLocalFile() ? first.toLocalFile() : first.toString();
-                } else {
-                    linkUrl = baseItem.getNormalizedText().left(512).trimmed();
-                }
-                result.thumbnailImage = ThumbnailBuilder::buildLinkPreviewImage(linkUrl, baseItem.getTitle(), thumbnailDpr, itemScale);
             }
         }
 

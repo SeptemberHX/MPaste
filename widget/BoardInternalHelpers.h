@@ -210,6 +210,18 @@ inline QString openContainingFolderLabel() {
     return label;
 }
 
+inline QString openInBrowserLabel() {
+    QString label = QObject::tr("Open in Browser");
+    const QLocale locale = QLocale::system();
+    if (label == QLatin1String("Open in Browser") || looksBrokenTranslation(label)) {
+        if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
+            return QString::fromUtf16(u"\u5728\u6D4F\u89C8\u5668\u4E2D\u6253\u5F00");
+        }
+        return QStringLiteral("Open in Browser");
+    }
+    return label;
+}
+
 inline QString aliasLabel() {
     QString label = QObject::tr("Alias");
     const QLocale locale = QLocale::system();

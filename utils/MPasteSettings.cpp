@@ -139,6 +139,7 @@ void MPasteSettings::loadSettings() {
     this->autoOcr = settings.value("ocr/autoOcr", false).toBool();
     this->skipSensitive = settings.value("privacy/skipSensitive", this->skipSensitive).toBool();
     setIgnoredApps(settings.value("privacy/ignoredApps", this->ignoredApps).toStringList());
+    this->fetchLinkPreviews = settings.value("privacy/fetchLinkPreviews", this->fetchLinkPreviews).toBool();
 }
 
 void MPasteSettings::saveSettings() {
@@ -163,6 +164,15 @@ void MPasteSettings::saveSettings() {
     settings.setValue("ocr/autoOcr", this->autoOcr);
     settings.setValue("privacy/skipSensitive", this->skipSensitive);
     settings.setValue("privacy/ignoredApps", this->ignoredApps);
+    settings.setValue("privacy/fetchLinkPreviews", this->fetchLinkPreviews);
+}
+
+bool MPasteSettings::isFetchLinkPreviews() const {
+    return fetchLinkPreviews;
+}
+
+void MPasteSettings::setFetchLinkPreviews(bool enabled) {
+    fetchLinkPreviews = enabled;
 }
 
 bool MPasteSettings::isSkipSensitive() const {

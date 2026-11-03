@@ -249,7 +249,7 @@ private:
     QPersistentModelIndex hoverProxyIndex_;
     QTimer *hoverHideTimer_ = nullptr;
     QSet<QByteArray> favoriteFingerprints_;
-    QSet<QString> pendingLinkPreviewUrls_;
+    QHash<QString, qint64> requestedLinkPreviewUrls_;   // Address -> when last fetched.
     QTimer *linkPreviewDebounceTimer_ = nullptr;
     QPersistentModelIndex pendingLinkPreviewIndex_;
     QSet<QString> pendingThumbnailNames_;

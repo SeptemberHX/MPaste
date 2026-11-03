@@ -93,11 +93,6 @@ public:
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
     // Delegate-level cache accessors used by card body renderers.
-    QPixmap linkFallbackPreview(const QUrl &url,
-                                const QString &title,
-                                const QSize &targetSize,
-                                qreal devicePixelRatio,
-                                const QPixmap &favicon) const;
     QPixmap localImageThumbnail(const QString &filePath,
                                 const QSize &targetLogicalSize,
                                 qreal targetDpr,
@@ -138,7 +133,6 @@ private:
     int loadingPhase_ = 0;
     mutable QHash<quint64, QColor> headerColorCache_;
     mutable QCache<QString, QPixmap> headerIconCache_;
-    mutable QCache<QString, QPixmap> linkFallbackCache_;
     mutable QCache<QString, QPixmap> cardPixmapCache_;
     mutable QCache<QString, QPixmap> localImageThumbnailCache_;
     mutable QCache<QString, QPixmap> localFileIconCache_;

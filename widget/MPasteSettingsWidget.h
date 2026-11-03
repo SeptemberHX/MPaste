@@ -74,6 +74,7 @@ private:
     QLabel *autoOcrLabel_ = nullptr;
     ToggleSwitch *autoOcrSwitch_ = nullptr;
     ToggleSwitch *sensitiveSwitch_ = nullptr;
+    ToggleSwitch *linkPreviewSwitch_ = nullptr;
     QLineEdit *ignoredAppsEdit_ = nullptr;
     QLabel *baiduApiKeyLabel_ = nullptr;
     QLineEdit *baiduApiKeyEdit_ = nullptr;

@@ -1089,15 +1089,24 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             ignoredAppsEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
             g->addWidget(appsLabel, 1, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
             g->addWidget(ignoredAppsEdit_, 2, 0, 1, 2);
+
+            auto *linkPreviewLabel = new QLabel(uiText("Fetch title and picture for links",
+                                                       QStringLiteral("为链接抓取网页标题和图片")), privacyPage);
+            linkPreviewLabel->setMinimumHeight(44);
+            linkPreviewSwitch_ = new ToggleSwitch(privacyPage);
+            g->addWidget(linkPreviewLabel, 3, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(linkPreviewSwitch_, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
             pLayout->addWidget(makeCard(g));
         }
         auto *privacyHelp = new QLabel(uiText(
             "Password managers such as KeePassXC mark the passwords they copy; those copies are left out of history. "
             "Copies from the apps listed are left out entirely; use the name a card shows as its source. "
-            "Items already in history stay until you delete them.",
+            "Items already in history stay until you delete them. "
+            "Fetching for links opens each copied address once, so its site learns of it.",
             QStringLiteral("KeePassXC 等密码管理器复制密码时会附带“敏感”标记，带标记的内容不会被记录。"
                            "列表里的应用复制的任何内容都不会被记录，名称与卡片上显示的来源应用一致。"
-                           "已经记录下来的条目不受影响，需要手动删除。")), privacyPage);
+                           "已经记录下来的条目不受影响，需要手动删除。"
+                           "开启链接抓取后，每个复制的网址都会被访问一次，对应网站会知道这次访问。")), privacyPage);
         privacyHelp->setObjectName(QStringLiteral("auroraHint"));
         privacyHelp->setWordWrap(true);
         pLayout->addWidget(privacyHelp);
@@ -1240,6 +1249,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     if (ocrBackendCombo_) connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, save);
     if (autoOcrSwitch_) connect(autoOcrSwitch_, &ToggleSwitch::toggled, this, save);
     if (sensitiveSwitch_) connect(sensitiveSwitch_, &ToggleSwitch::toggled, this, save);
+    if (linkPreviewSwitch_) connect(linkPreviewSwitch_, &ToggleSwitch::toggled, this, save);
     if (ignoredAppsEdit_) connect(ignoredAppsEdit_, &QLineEdit::editingFinished, this, save);
     connect(ui->daySpinBox, &QSpinBox::valueChanged, this, save);
     connect(ui->itemScaleSlider, &QSlider::valueChanged, this, save);
@@ -1347,6 +1357,9 @@ void MPasteSettingsWidget::loadSettings()
     if (sensitiveSwitch_) {
         sensitiveSwitch_->setChecked(settings->isSkipSensitive());
     }
+    if (linkPreviewSwitch_) {
+        linkPreviewSwitch_->setChecked(settings->isFetchLinkPreviews());
+    }
     if (ignoredAppsEdit_) {
         ignoredAppsEdit_->setText(settings->getIgnoredApps().join(QStringLiteral(", ")));
     }
@@ -1443,6 +1456,9 @@ void MPasteSettingsWidget::saveAllSettings()
     }
     if (sensitiveSwitch_) {
         settings->setSkipSensitive(sensitiveSwitch_->isChecked());
+    }
+    if (linkPreviewSwitch_) {
+        settings->setFetchLinkPreviews(linkPreviewSwitch_->isChecked());
     }
     if (ignoredAppsEdit_) {
         // Commas, or the Chinese ones a Chinese input method types.

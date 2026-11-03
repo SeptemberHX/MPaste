@@ -33,6 +33,8 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
         <file>resources/last_light.svg</file>
         <file>resources/preview.svg</file>
         <file>resources/preview_light.svg</file>
+        <file>resources/open_link.svg</file>
+        <file>resources/open_link_light.svg</file>
         <file>resources/quit.svg</file>
         <file>resources/info.svg</file>
         <file>resources/info_light.svg</file>

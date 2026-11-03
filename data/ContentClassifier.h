@@ -171,6 +171,22 @@ inline bool isImageLikeText(const QString &text) {
     return false;
 }
 
+// One web address and nothing else: "https://..." on one line, no spaces.
+inline bool isWebLinkText(const QString &text) {
+    const QString trimmed = text.trimmed();
+    if (!trimmed.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive)
+        && !trimmed.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
+        return false;
+    }
+    for (const QChar ch : trimmed) {
+        if (ch.isSpace()) {
+            return false;
+        }
+    }
+    const QUrl url(trimmed);
+    return url.isValid() && !url.host().isEmpty();
+}
+
 inline bool shouldSkipImageDecodeFormatName(const QString &format) {
     const QString lower = format.toLower();
     return lower.startsWith(QStringLiteral("text/"))
@@ -421,9 +437,7 @@ inline ContentType classify(const QMimeData *mimeData,
         if (shouldTreatOfficePayloadAsType(traits) && isImageLikeText(normalizedText)) {
             return Office;
         }
-        QString text = normalizedText.trimmed();
-        if (!text.contains(QLatin1Char('\n'))
-            && (text.startsWith(QStringLiteral("http://")) || text.startsWith(QStringLiteral("https://")))) {
+        if (isWebLinkText(normalizedText)) {
             return Link;
         }
         return RichText;
@@ -438,6 +452,12 @@ inline ContentType classify(const QMimeData *mimeData,
 
     if (shouldTreatOfficePayloadAsType(traits)) {
         return Office;
+    }
+
+    // A browser's address bar on Linux copies the address as plain text alone,
+    // without the HTML or URL formats it gives on Windows.
+    if (isWebLinkText(normalizedText)) {
+        return Link;
     }
 
     return Text;

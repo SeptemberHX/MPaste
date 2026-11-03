@@ -45,7 +45,7 @@ update: 修改本目录文件时，同步更新本 README。
 | **RichText-VisualPreview** | `drawManagedVisualPreview` → blit | loading 占位动画 | `buildRichTextThumbnailImageFromHtml` — HTML 渲染截图 | ✅ | 轻量 |
 | **RichText-TextPreview** | `drawCoverPixmap` → blit | `drawWrappedText(text.left(500))` | `buildTextPreviewImage` — 白底+前500字渲染 | ✅ | 有 thumb: int 长度；无 thumb: 500 字符串 |
 | **Text** | `drawCoverPixmap` → blit | `drawWrappedText(text.left(500))` | `buildTextPreviewImage` — 同上 | ✅ | 同上 |
-| **Link** | `drawCoverPixmap` → blit + `drawLinkLabel`×2（短 URL） | `linkFallbackPreview`（渐变+badge，QCache）+ `drawLinkLabel`×2 | `buildLinkPreviewImage` — 渐变背景+badge+域名 | ✅ | 有 thumb: URL 列表；无 thumb: 同+QCache |
+| **Link** | 已读到网页（有标题）且有 og:image：`drawCoverPixmap` | `CardRenderUtils::paintWebAddress`：左侧网站色「书脊」（图标 + 竖排站名，上下渐隐），右侧站点、位置和粗体页面名（网页标题，或从网址路径整理出的名字）；有网页图片时按图片卡排版 | 不生成；开启「为链接抓取网页标题和图片」后存 og:image | ✅ | 轻量 |
 | **Color** | — | `drawRoundedRect` + `drawElidedText(色值)` | 不生成（渲染极轻） | ❌ | 轻量 |
 | **File（单文件图片）** | — | `localImageThumbnail`（QCache）→ blit | 内存 QCache，首次解码 | 内存缓存 | QCache 查找 |
 | **File（单文件非图片）** | — | `localFileIcon`（系统图标，QCache） | 内存 QCache | 内存缓存 | QCache 查找 |
@@ -178,7 +178,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardCardDelegate` cache overhaul: `cardPixmapCache` now uses a count-based `QCache` (60 entries, cost=1 each) instead of byte-size budgeting; cache key simplified to just item name, with selection border and shortcut text drawn as overlays.
 - `ClipboardCardDelegate` now provides `preRenderAll()` to eagerly cache all visible cards, then release intermediate data (thumbnails, icons, favicons); separate `clearIntermediateCaches()` preserves `cardPixmapCache` across page reloads.
 - `ClipboardCardDelegate` now provides `invalidateCard()` for targeted cache invalidation (e.g., after og:image fetch) and `isCardCached()` / `drawSelectionBorder()` / `drawShortcutOverlay()` query/draw helpers.
-- Link cards now use a unified browser-window fallback style, favicon badge enlarged (0.56 scale), og:image checked via `isLikelyLinkPreviewImage`; link card footer now shows the URL (was hidden before).
+- Link cards draw the address (`CardRenderUtils::paintWebAddress`: a band in the site's colour down the left with its icon and its name sideways, beside it the site, where on it and the page, from its title or read from its path; a link with its page's picture is laid out like a picture card); the page's og:image is drawn only once the page was read (it gave a title). Reading pages is the `privacy/fetchLinkPreviews` setting, off by default; link card footer shows the URL.
 - Icon shadow now rendered as a black silhouette with alpha mask; header type text uses Microsoft YaHei font; app icon enlarged to 40px (downscaled to max 64px on load).
 - `ScrollItemsWidgetMV`: after `preRenderAll`, releases thumbnail/icon/favicon from model items and clears intermediate caches; pagination enforces `PAGE_SIZE` when new items arrive.
 - `ScrollItemsWidgetMV`: duplicate detection now checks `boardService` index with content-based fallback when the model is not fully loaded.

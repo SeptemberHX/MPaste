@@ -9,6 +9,16 @@
 #include <QPixmap>
 #include <QDomDocument>
 #include <QNetworkProxy>
+#include <QTextDocumentFragment>
+
+#include <algorithm>
+
+namespace {
+// A title cut out of the page source still has its entities ("&amp;", "&#39;").
+QString decodedTitle(const QString &raw) {
+    return QTextDocumentFragment::fromHtml(raw).toPlainText().simplified();
+}
+}
 
 OpenGraphFetcher::OpenGraphFetcher(const QUrl &url, QObject *parent)
     : QObject(parent)
@@ -152,7 +162,7 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                         content = titleMatch.captured(2);
                     }
                     if (!content.isEmpty()) {
-                        this->ogItem.setTitle(content);
+                        this->ogItem.setTitle(decodedTitle(content));
                         foundTitle = true;
                     }
                 }
@@ -188,8 +198,8 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                 }
             }
 
-            // 3. 最后选择 favicon
-            if (pendingImages.isEmpty()) {
+            // 3. 最后选择 favicon：也排在预览图之后，预览图取不到（如被限流）时仍有图标
+            {
                 QDomNodeList linkNodes = doc.elementsByTagName("link");
                 for (int i = 0; i < linkNodes.size(); ++i) {
                     QDomElement link = linkNodes.at(i).toElement();
@@ -216,13 +226,13 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                     content = match.captured(2);
                 }
                 if (!content.isEmpty()) {
-                    this->ogItem.setTitle(content);
+                    this->ogItem.setTitle(decodedTitle(content));
                 }
             } else {
                 // 如果没有 og:title，尝试普通标题
                 match = this->titleReg.match(body);
                 if (match.hasMatch()) {
-                    this->ogItem.setTitle(match.captured(1));
+                    this->ogItem.setTitle(decodedTitle(match.captured(1)));
                 }
             }
 
@@ -235,8 +245,8 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
                 }
             }
 
-            // 如果没有 og:image，尝试 favicon
-            if (pendingImages.isEmpty()) {
+            // favicon 排在 og:image 之后，og:image 取不到时用它
+            {
                 auto processFaviconMatch = [this](const QRegularExpressionMatch& match) {
                     QString url = match.captured(1);
                     if (!url.isEmpty()) {
@@ -261,7 +271,9 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
         }
 
         // 4. 最后添加默认的 favicon 路径
-        if (pendingImages.isEmpty()) {
+        const bool hasIconCandidate = std::any_of(pendingImages.cbegin(), pendingImages.cend(),
+            [](const PendingImage &pending) { return pending.kind == OpenGraphItem::IconImage; });
+        if (!hasIconCandidate) {
             for (const QString &path : getHighQualityIconPaths()) {
                 appendPendingImage(targetUrl.toString() + path, OpenGraphItem::IconImage);
             }

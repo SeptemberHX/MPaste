@@ -97,6 +97,10 @@ public:
     const QStringList &getIgnoredApps() const;
     void setIgnoredApps(const QStringList &apps);
     bool isIgnoredApp(const QString &appName) const;
+    // Link cards read the page they point to (title, picture). Off by default:
+    // it sends every copied address to its site.
+    bool isFetchLinkPreviews() const;
+    void setFetchLinkPreviews(bool enabled);
 
     bool isTerminalTitle(const QString &title);
 
@@ -139,6 +143,7 @@ private:
     QString baiduOcrSecretKey;
     bool autoOcr = false;
     bool skipSensitive = true;
+    bool fetchLinkPreviews = false;
     QStringList ignoredApps;
 
     int currFocusWinId;

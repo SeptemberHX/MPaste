@@ -4,6 +4,7 @@
 #include <QFileDialog>
 #include <QScopeGuard>
 #include <QApplication>
+#include <QDesktopServices>
 #include <QListView>
 #include <QMenu>
 #include <QMessageBox>
@@ -123,6 +124,33 @@ void ScrollItemsWidget::populateSingleSelectionMenu(QMenu *menu, const QModelInd
         && !urls.isEmpty()
         && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) { return url.isLocalFile(); });
     const bool canSaveToFile = supportsSaveToFile(contentType);
+
+    // A web address, as a link card or a bare address saved as text.
+    QUrl webUrl;
+    if (contentType == Link || contentType == Text) {
+        QString address = item.getUrl().trimmed();
+        if (address.isEmpty() && !urls.isEmpty() && !urls.first().isLocalFile()) {
+            address = urls.first().toString();
+        }
+        if (address.isEmpty()) {
+            address = item.getNormalizedText().trimmed();
+        }
+        if (ContentClassifier::isWebLinkText(address)) {
+            webUrl = QUrl(address);
+        }
+    }
+    if (webUrl.isValid()) {
+        menu->addAction(IconResolver::themedIcon(QStringLiteral("open_link"), dark), openInBrowserLabel(), [this, webUrl]() {
+            // Opened first, while MPaste still has the click (Windows lets the
+            // process with the last input bring the browser forward); then the
+            // panel, which stays on top, gives way to it.
+            QDesktopServices::openUrl(webUrl);
+            if (QWidget *panel = window()) {
+                panel->hide();
+            }
+        });
+        menu->addSeparator();
+    }
 
     menu->addAction(IconResolver::themedIcon(QStringLiteral("text_plain"), dark), plainTextPasteLabel(), [this]() {
         const ClipboardItem *selectedItem = selectedByEnter();
