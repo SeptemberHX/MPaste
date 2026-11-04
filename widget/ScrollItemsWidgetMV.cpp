@@ -524,10 +524,9 @@ void ScrollItemsWidget::executeLinkPreviewFetch(const QModelIndex &proxyIndex) {
     if (item.getContentType() != Link) {
         return;
     }
-    // Read already, with the page's picture. Without one it is read again (at
-    // most every ten minutes, below): the picture may have failed for now, as
-    // GitHub's does with 429 when busy, leaving the title and the site's icon.
-    if (!item.getTitle().isEmpty() && item.hasThumbnailHint()) {
+    // A page is read once: what it gave (a title, a picture) is kept, and a
+    // page without a picture is not read again for one.
+    if (!item.getTitle().isEmpty() || item.hasThumbnailHint()) {
         return;
     }
 
@@ -552,13 +551,12 @@ void ScrollItemsWidget::executeLinkPreviewFetch(const QModelIndex &proxyIndex) {
     }
 
     const QString requestKey = url.toString(QUrl::FullyEncoded);
-    // Each address at most every ten minutes.
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (const auto it = requestedLinkPreviewUrls_.constFind(requestKey);
-        it != requestedLinkPreviewUrls_.constEnd() && now - *it < 10 * 60 * 1000) {
+    // Each address once while MPaste runs, even when the page gave nothing
+    // (no title, a bot check, no network).
+    if (requestedLinkPreviewUrls_.contains(requestKey)) {
         return;
     }
-    requestedLinkPreviewUrls_.insert(requestKey, now);
+    requestedLinkPreviewUrls_.insert(requestKey);
 
     // Use item name instead of fingerprint for the callback lookup —
     // fingerprint() computes SHA1 synchronously and adds ~15ms latency
@@ -594,18 +592,30 @@ void ScrollItemsWidget::executeLinkPreviewFetch(const QModelIndex &proxyIndex) {
             }
         }
 
-        if (!ogItem.getTitle().isEmpty()) {
+        // Only what is new is kept and saved: a page read again (one with
+        // no picture is, every ten minutes) need not rewrite its file.
+        bool changed = false;
+        if (!ogItem.getTitle().isEmpty() && ogItem.getTitle() != updated.getTitle()) {
             updated.setTitle(ogItem.getTitle());
+            changed = true;
         }
-        if (!linkText.isEmpty()) {
+        if (!linkText.isEmpty() && linkText != updated.getUrl()) {
             updated.setUrl(linkText);
+            changed = true;
         }
         if (!ogItem.getImage().isNull()) {
             if (ogItem.getImageKind() == OpenGraphItem::IconImage) {
-                updated.setFavicon(ogItem.getImage());
+                if (updated.getFavicon().isNull()) {
+                    updated.setFavicon(ogItem.getImage());
+                    changed = true;
+                }
             } else {
                 updated.setThumbnail(ogItem.getImage());
+                changed = true;
             }
+        }
+        if (!changed) {
+            return;
         }
 
         if (boardModel_->updateItem(row, updated)) {

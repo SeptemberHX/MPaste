@@ -18,6 +18,7 @@ OcrModelDownloader::~OcrModelDownloader() {
     if (reply_) {
         reply_->disconnect(this);
         reply_->abort();
+        reply_->deleteLater();
     }
     if (part_.isOpen()) {
         part_.close();
@@ -47,6 +48,7 @@ void OcrModelDownloader::cancel() {
     if (reply_) {
         reply_->disconnect(this);
         reply_->abort();
+        reply_->deleteLater();
         reply_ = nullptr;
     }
     if (part_.isOpen()) {
@@ -92,8 +94,10 @@ void OcrModelDownloader::startNext() {
         const QByteArray chunk = reply_->readAll();
         hash_.addData(chunk);
         if (part_.write(chunk) != chunk.size()) {
-            reply_->disconnect(this);
-            reply_->abort();
+            QNetworkReply *reply = reply_;
+            reply->disconnect(this);
+            reply->abort();
+            reply->deleteLater();
             fail(part_.errorString());
         }
     });
@@ -110,8 +114,16 @@ void OcrModelDownloader::startNext() {
         }
         const QByteArray rest = reply->readAll();
         hash_.addData(rest);
-        part_.write(rest);
+        if (part_.write(rest) != rest.size() || !part_.flush()) {
+            fail(part_.errorString());
+            return;
+        }
         part_.close();
+        if (QFileInfo(part_.fileName()).size() != file.size) {
+            part_.remove();
+            fail(QStringLiteral("%1: incomplete").arg(file.name));
+            return;
+        }
         if (hash_.result().toHex() != file.sha256) {
             part_.remove();
             fail(QStringLiteral("%1: checksum does not match").arg(file.name));

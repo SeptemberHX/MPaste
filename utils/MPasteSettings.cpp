@@ -109,6 +109,8 @@ int MPasteSettings::getPort() const {
 
 void MPasteSettings::loadSettings() {
     QSettings settings("MPaste", "MPaste");
+    // Settings with no guide mark are from before the guide: seen.
+    this->onboardingVersion = settings.value("main/onboardingVersion", settings.allKeys().isEmpty() ? 0 : 1).toInt();
 
     // maxSize is no longer configurable via UI; remove stale registry
     // key and keep the field at its default (-1 = disabled).
@@ -164,6 +166,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("ocr/baiduSecretKey", this->baiduOcrSecretKey);
     settings.setValue("ocr/autoOcr", this->autoOcr);
     settings.setValue("ocr/localModel", this->ocrLocalModel);
+    settings.setValue("main/onboardingVersion", this->onboardingVersion);
     settings.setValue("privacy/skipSensitive", this->skipSensitive);
     settings.setValue("privacy/ignoredApps", this->ignoredApps);
     settings.setValue("privacy/fetchLinkPreviews", this->fetchLinkPreviews);
@@ -345,6 +348,8 @@ void MPasteSettings::setBaiduOcrSecretKey(const QString &key) { baiduOcrSecretKe
 bool MPasteSettings::isAutoOcr() const { return autoOcr; }
 void MPasteSettings::setAutoOcr(bool enabled) { autoOcr = enabled; }
 QString MPasteSettings::getOcrLocalModel() const { return ocrLocalModel; }
+int MPasteSettings::getOnboardingVersion() const { return onboardingVersion; }
+void MPasteSettings::setOnboardingVersion(int version) { onboardingVersion = version; }
 void MPasteSettings::setOcrLocalModel(const QString &model) { ocrLocalModel = model; }
 
 bool MPasteSettings::isTerminalTitle(const QString &title) {

@@ -90,6 +90,10 @@ public:
     bool isAutoOcr() const;
     // Linux, recognition on this computer: "tiny" (in the package) or "small" (downloaded).
     QString getOcrLocalModel() const;
+    // The first-run guide shown: 0 never, 1 this one. Settings from before
+    // the guide count as seen, so an upgrade does not show it.
+    int getOnboardingVersion() const;
+    void setOnboardingVersion(int version);
     void setOcrLocalModel(const QString &model);
     void setAutoOcr(bool enabled);
 
@@ -146,6 +150,7 @@ private:
     QString baiduOcrSecretKey;
     bool autoOcr = false;
     QString ocrLocalModel = QStringLiteral("tiny");
+    int onboardingVersion = 0;
     bool skipSensitive = true;
     bool fetchLinkPreviews = false;
     QStringList ignoredApps;

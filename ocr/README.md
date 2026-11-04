@@ -2,7 +2,7 @@
 
 > `mpaste-ocr`：MPaste 在 Linux 上的文字识别助手程序。每次识别时由 MPaste 启动，读完一张图就退出，模型只在识别时占用内存。
 
-- `main.cpp`：命令行入口 `mpaste-ocr --models DIR [--model tiny|small] [--threads N] PICTURE`（模型文件名为 `PP-OCRv6_det_<model>.onnx`、`PP-OCRv6_rec_<model>.onnx`），用 Qt 读图（透明部分按白底），把识别出的文字以 UTF-8 输出到标准输出。退出码：0 成功，2 参数错误，3 模型加载失败，4 图片读不了，5 没装 ONNX Runtime。
+- `main.cpp`：命令行入口 `mpaste-ocr --models DIR [--model tiny|small] [--threads N] PICTURE`（模型文件名为 `PP-OCRv6_det_<model>.onnx`、`PP-OCRv6_rec_<model>.onnx`），用 Qt 读图（透明部分按白底），把识别出的文字以 UTF-8 输出到标准输出。退出码：0 成功，2 参数错误，3 模型加载失败，4 图片读不了，5 没装 ONNX Runtime，6 识别过程中 ONNX Runtime 出错（不会崩溃产生 core dump）。
 - `PaddleOcr.*`：识别引擎。运行时用 `dlopen` 加载 ONNX Runtime（`libonnxruntime.so.1`，C++ 接口以 `ORT_API_MANUAL_INIT` 手动初始化），跑 PaddleOCR 的 PP-OCRv6 tiny 模型（检测 1.8 MB + 识别 4.5 MB，Apache-2.0，来自 [RapidOCR](https://github.com/RapidAI/RapidOCR) 的 ONNX 版本）：DB 文字检测 → 把每个框按透视拉正裁出 → CRNN 识别 + CTC 解码 → 按阅读顺序排行（同一水平带的框从左到右，拉丁文字之间补空格）。流程参照 [RapidOcrOnnx](https://github.com/RapidAI/RapidOcrOnnx)（Apache-2.0），为 MPaste 做了简化：
   - 不用方向分类模型（复制来的图片都是正的）；
   - 字典直接从识别模型的元数据 `character` 读取，不另带 txt；

@@ -26,9 +26,13 @@ public:
     explicit MPasteSettingsWidget(QWidget *parent = nullptr);
     ~MPasteSettingsWidget();
     void applyTheme(bool dark);
+    // 0 General, 1 Shortcuts, 2 Sync, 3 Privacy, 4 Text recognition, 5 About.
+    void showPage(int page);
 
 signals:
     void shortcutChanged(const QString &newShortcut);
+    // About → "Show the guide again".
+    void onboardingRequested();
     void historyRetentionChanged();
     void themeChanged();
     void saveDirChanged();
@@ -75,6 +79,8 @@ private:
     ToggleSwitch *autoOcrSwitch_ = nullptr;
     // Linux: what recognition on this computer still needs, with a button
     // that copies the install command; hidden when it is ready.
+    class QButtonGroup *navGroup_ = nullptr;
+    class QStackedWidget *pageStack_ = nullptr;
     QWidget *ocrStatusRow_ = nullptr;
     void refreshOcrStatus();
     // Linux: which model recognition on this computer uses, and the row that

@@ -1,4 +1,5 @@
 #include "CardBodyRenderer.h"
+#include "data/ContentClassifier.h"
 
 #include <QRegularExpression>
 #include <cmath>
@@ -541,16 +542,8 @@ void CardRenderUtils::paintCodeBlock(QPainter *painter, const QRect &bodyRect, c
 }
 
 QUrl CardRenderUtils::singleWebUrl(const QString &text) {
-    const QString value = text.trimmed();
-    if (value.isEmpty() || value.size() > 2048 || value.contains(QRegularExpression(QStringLiteral("\\s")))) {
-        return {};
-    }
-    if (!value.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive)
-        && !value.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
-        return {};
-    }
-    const QUrl url(value, QUrl::StrictMode);
-    return url.isValid() && !url.host().isEmpty() ? url : QUrl();
+    // The same rule that makes it a link card and offers Open in Browser.
+    return ContentClassifier::isWebLinkText(text) ? QUrl(text.trimmed()) : QUrl();
 }
 
 QString CardRenderUtils::displayHost(const QUrl &url) {

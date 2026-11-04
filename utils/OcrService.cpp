@@ -417,8 +417,11 @@ OcrService::Result OcrService::runOcrLinux(const QImage &image, const QString &m
         proc.start(helper, {QStringLiteral("--models"), models,
                             QStringLiteral("--model"), useDownloaded ? model : QStringLiteral("tiny"),
                             tempFile.fileName()});
-        if (!proc.waitForFinished(60000)) {
+        // The precise model on a long screenshot takes a few seconds; two
+        // minutes is a hang.
+        if (!proc.waitForFinished(120000)) {
             proc.kill();
+            proc.waitForFinished(2000);
             result.status = Failed;
             result.errorMessage = chineseUi() ? QStringLiteral("文字识别超时") : QStringLiteral("Text recognition timed out");
             return result;

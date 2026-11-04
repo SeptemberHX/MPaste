@@ -9,7 +9,8 @@
 // Prints the text as UTF-8 on standard output. Exit 0 on success, 2 for bad
 // arguments, 3 when the models do not load, 4 when the picture does not, 5
 // when ONNX Runtime is not installed (it is loaded at run time, so the
-// package only suggests it). --check only loads ONNX Runtime.
+// package only suggests it), 6 when reading the picture fails inside it.
+// --check only loads ONNX Runtime.
 #include "PaddleOcr.h"
 
 #include <QCoreApplication>
@@ -100,7 +101,14 @@ int main(int argc, char **argv) {
     bgr.data = image.constBits();
     bgr.stride = std::size_t(image.bytesPerLine());
 
-    const std::string text = ocr.read(bgr);
+    std::string text;
+    try {
+        text = ocr.read(bgr);
+    } catch (const Ort::Exception &e) {
+        return fail(6, QString::fromUtf8(e.what()));
+    } catch (const std::exception &e) {
+        return fail(6, QString::fromUtf8(e.what()));
+    }
     std::fwrite(text.data(), 1, text.size(), stdout);
     std::fputc('\n', stdout);
     return 0;

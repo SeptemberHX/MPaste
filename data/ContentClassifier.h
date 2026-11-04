@@ -171,9 +171,13 @@ inline bool isImageLikeText(const QString &text) {
     return false;
 }
 
-// One web address and nothing else: "https://..." on one line, no spaces.
+// One web address and nothing else: "https://..." on one line, no spaces,
+// at most 2048 characters. CardRenderUtils::singleWebUrl() asks this too.
 inline bool isWebLinkText(const QString &text) {
     const QString trimmed = text.trimmed();
+    if (trimmed.size() > 2048) {
+        return false;
+    }
     if (!trimmed.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive)
         && !trimmed.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
         return false;

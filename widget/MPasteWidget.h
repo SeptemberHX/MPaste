@@ -30,6 +30,7 @@
 
 class ClipboardAppController;
 class QuickPasteStack;
+class OnboardingDialog;
 
 namespace Ui {
 class MPasteWidget;
@@ -49,6 +50,12 @@ public:
     bool isQuickStackVisible() const;
     // Paste an item into the window that was focused before MPaste.
     void pasteItem(const ClipboardItem &item, bool plainText);
+    // Settings, opened at a page (MPasteSettingsWidget::showPage).
+    void showSettingsPage(int page);
+    // The first-run guide; with the GNOME extension step when it is not enabled.
+    void showOnboarding(bool needsExtension = false);
+    // True when the guide is open: the hotkey went to it, not to the panel.
+    bool consumeHotkeyForOnboarding();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -71,6 +78,9 @@ private slots:
     void dumpMemoryStats();
 
 private:
+    QPointer<OnboardingDialog> onboarding_;
+
+private:
     void initializeWidget();
     void initStyle();
     void initUI();
@@ -82,6 +92,7 @@ private:
     AboutWidget *ensureAboutWidget();
     ClipboardItemDetailsDialog *ensureDetailsDialog();
     ClipboardItemPreviewDialog *ensurePreviewDialog();
+    template <typename Dialog> void wireItemActions(Dialog *dialog);
     MPasteSettingsWidget *ensureSettingsWidget();
     void applyTheme(bool dark);
     void scheduleStartupWarmup();

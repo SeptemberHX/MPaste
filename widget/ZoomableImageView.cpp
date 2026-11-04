@@ -23,8 +23,8 @@ class ZoomableImageCanvas : public QWidget {
 public:
     using QWidget::QWidget;
 
-    void setImage(const QImage &image) {
-        pixmap_ = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+    void setPixmap(const QPixmap &pixmap) {
+        pixmap_ = pixmap;
         update();
     }
 
@@ -63,11 +63,17 @@ ZoomableImageView::ZoomableImageView(QWidget *parent)
 }
 
 void ZoomableImageView::setImage(const QImage &image) {
-    image_ = image;
-    if (!image_.isNull()) {
-        image_.setDevicePixelRatio(1.0);
+    setPixmap(image.isNull() ? QPixmap() : QPixmap::fromImage(image));
+}
+
+void ZoomableImageView::setPixmap(const QPixmap &pixmap) {
+    // One full-size copy, the canvas's; the view keeps only its size.
+    QPixmap shown = pixmap;
+    if (!shown.isNull()) {
+        shown.setDevicePixelRatio(1.0);
     }
-    canvas_->setImage(image_);
+    imageSize_ = shown.size();
+    canvas_->setPixmap(shown);
     zoom_ = 1.0;
     relayout();
     horizontalScrollBar()->setValue(0);
@@ -75,7 +81,7 @@ void ZoomableImageView::setImage(const QImage &image) {
 }
 
 void ZoomableImageView::clear() {
-    setImage(QImage());
+    setPixmap(QPixmap());
 }
 
 void ZoomableImageView::setFitWidth(bool fitWidth) {
@@ -91,26 +97,29 @@ void ZoomableImageView::resetZoom() {
 }
 
 void ZoomableImageView::relayout() {
-    if (image_.isNull()) {
+    if (imageSize_.isEmpty()) {
         canvas_->resize(1, 1);
         return;
     }
     const QSize view = viewport()->size();
-    const QSize size = image_.size();
+    const QSize size = imageSize_;
     qreal fit = 1.0;
     if (view.isValid() && size.isValid()) {
         const qreal byWidth = view.width() / qreal(size.width());
         const qreal byHeight = view.height() / qreal(size.height());
         fit = fitWidth_ ? byWidth : qMin(byWidth, byHeight);
     }
-    const qreal scale = qBound(kMinScale, fit * zoom_, kMaxScale);
-    zoom_ = scale / qMax(kMinScale, fit);
+    // Fitted is always allowed, however small: a very long picture fits
+    // below the usual floor, and zooming from there must still move.
+    fit = qMax(fit, 1e-4);
+    const qreal scale = qBound(qMin(kMinScale, fit), fit * zoom_, qMax(kMaxScale, fit));
+    zoom_ = scale / fit;
     canvas_->resize((QSizeF(size) * scale).toSize().expandedTo(QSize(1, 1)));
     canvas_->update();
 }
 
 void ZoomableImageView::zoomBy(qreal factor, QPoint anchor) {
-    if (image_.isNull()) {
+    if (imageSize_.isEmpty()) {
         return;
     }
     if (anchor.x() < 0 || anchor.y() < 0) {

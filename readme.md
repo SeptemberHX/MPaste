@@ -42,6 +42,7 @@ Other Linux setups can build from source (below).
 - Every item records the app it was copied from (name and icon) and when; the list marks where the day changes.
 - Text cards recognise colours, single links and shell commands; long strips and tall pages are shown whole.
 - Separate clipboard and favorites boards, with independent pinning and favoriting.
+- A short first-run guide that has you press the hotkey and paste in a practice row; shown again from Settings → About.
 - Keyword search and content-type filters.
 - Paged and continuous history browsing modes.
 - Quick paste shortcuts: `Alt+[1-9, 0]` to paste by visible position.

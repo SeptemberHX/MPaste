@@ -51,7 +51,8 @@ namespace {
 QString uiText(const char *source, const QString &zhFallback) {
     const QString translated = QObject::tr(source);
     const QLocale locale = QLocale::system();
-    if (translated == QLatin1String(source) || BoardHelpers::looksBrokenTranslation(translated)) {
+    // Compared as UTF-8: a source with an arrow or an ellipsis is not Latin-1.
+    if (translated == QString::fromUtf8(source) || BoardHelpers::looksBrokenTranslation(translated)) {
         if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
             return zhFallback;
         }
@@ -953,6 +954,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         auto *navGroup = new QButtonGroup(this);
         navGroup->setExclusive(true);
+        navGroup_ = navGroup;
 
         auto makeNavBtn = [&](const QString &iconName, const QString &text, int id) {
             auto *btn = new QToolButton();
@@ -979,6 +981,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
 
         auto *stack = new QStackedWidget(ui->generalCard);
         stack->setObjectName(QStringLiteral("settingsStack"));
+        pageStack_ = stack;
 
         // ── General page ──
         auto *generalPage = new QWidget(stack);
@@ -1293,6 +1296,16 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         authorLabel->setStyleSheet(QStringLiteral("font-size: 13px; background: transparent; line-height: 1.8;"));
         aboutLayout->addWidget(authorLabel);
 
+        aboutLayout->addSpacing(20);
+        auto *guideButton = new QPushButton(uiText("Show the guide again", QStringLiteral("重看新手引导")), aboutPage);
+        guideButton->setObjectName(QStringLiteral("auroraSecondary"));
+        guideButton->setCursor(Qt::PointingHandCursor);
+        connect(guideButton, &QPushButton::clicked, this, [this]() {
+            hide();
+            emit onboardingRequested();
+        });
+        aboutLayout->addWidget(guideButton, 0, Qt::AlignHCenter);
+
         aboutLayout->addStretch(1);
         stack->addWidget(aboutPage);
 
@@ -1403,6 +1416,9 @@ void MPasteSettingsWidget::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
     loadSettings();
+    // ONNX Runtime may have been installed, or the model downloaded, since.
+    refreshOcrStatus();
+    refreshOcrModelRow();
     adjustSize();
     resize(width(), sizeHint().height());
 }
@@ -1698,4 +1714,14 @@ void MPasteSettingsWidget::refreshOcrModelRow(const QString &error) {
 #else
     Q_UNUSED(error);
 #endif
+}
+
+void MPasteSettingsWidget::showPage(int page) {
+    if (!navGroup_ || !pageStack_ || page < 0 || page >= pageStack_->count()) {
+        return;
+    }
+    if (QAbstractButton *button = navGroup_->button(page)) {
+        button->setChecked(true);
+    }
+    pageStack_->setCurrentIndex(page);
 }

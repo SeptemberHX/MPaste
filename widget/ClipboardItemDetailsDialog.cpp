@@ -809,13 +809,13 @@ void ClipboardItemDetailsDialog::fillPreview(const ClipboardItem &item, const Cl
     ui_.imageView->clear();
     ui_.previewCard->clear();
 
-    auto showPicture = [this](const QImage &image) {
+    auto showPicture = [this](const QPixmap &image) {
         if (image.isNull()) {
             return false;
         }
         // A long screenshot reads from its top, as wide as the pane.
         ui_.imageView->setFitWidth(image.height() > image.width() * 2.5);
-        ui_.imageView->setImage(image);
+        ui_.imageView->setPixmap(image);
         ui_.previewStack->setCurrentWidget(ui_.imageView);
         return true;
     };
@@ -834,14 +834,13 @@ void ClipboardItemDetailsDialog::fillPreview(const ClipboardItem &item, const Cl
     switch (type) {
         case Image:
         case Office: {
-            const QPixmap picture = full.getImage();
-            if (showPicture(picture.toImage()) || showPicture(item.thumbnail().toImage())) {
+            if (showPicture(full.getImage()) || showPicture(item.thumbnail())) {
                 return;
             }
             break;
         }
         case RichText:
-            if (item.hasThumbnail() && showPicture(item.thumbnail().toImage())) {
+            if (item.hasThumbnail() && showPicture(item.thumbnail())) {
                 return;
             }
             break;
@@ -876,7 +875,7 @@ void ClipboardItemDetailsDialog::fillPreview(const ClipboardItem &item, const Cl
                 if (picture && urls.size() == 1) {
                     QImageReader reader(info.filePath());
                     reader.setAutoTransform(true);
-                    if (showPicture(reader.read())) {
+                    if (showPicture(QPixmap::fromImage(reader.read()))) {
                         return;
                     }
                 }

@@ -21,9 +21,10 @@ public:
     explicit ZoomableImageView(QWidget *parent = nullptr);
 
     void setImage(const QImage &image);
+    void setPixmap(const QPixmap &pixmap);
     void clear();
-    bool hasImage() const { return !image_.isNull(); }
-    QSize imageSize() const { return image_.size(); }
+    bool hasImage() const { return !imageSize_.isEmpty(); }
+    QSize imageSize() const { return imageSize_; }
 
     // Zooms by factor, keeping the picture point under anchor (viewport
     // coordinates; the centre when none) where it is.
@@ -43,7 +44,7 @@ private:
     void relayout();
 
     ZoomableImageCanvas *canvas_ = nullptr;
-    QImage image_;
+    QSize imageSize_;
     qreal zoom_ = 1.0;   // relative to fitted
     bool fitWidth_ = false;
     bool dragging_ = false;

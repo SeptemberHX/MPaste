@@ -628,6 +628,11 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
     if (header.contentType == quint32(RichText) && !isCurrentRichTextThumbnail(flags)) {
         header.thumbnail = QPixmap();
     }
+    // As the light load: a link's picture is kept only when it is the
+    // page's, else a later save would mark the old drawing as one.
+    if (header.contentType == quint32(Link) && !(flags & kFlagLinkPagePicture)) {
+        header.thumbnail = QPixmap();
+    }
     in >> formatCount;
     if (in.status() != QDataStream::Ok) {
         return ClipboardItem();

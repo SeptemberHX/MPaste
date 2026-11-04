@@ -349,6 +349,9 @@ int main(int argc, char* argv[]) {
 
         auto toggleWidget = [&widget, &isShowingWidget, showWidget, shortcutUsesAlt]() {
             qInfo().noquote() << QStringLiteral("[wake] toggleWidget entered");
+            if (widget.consumeHotkeyForOnboarding()) {
+                return;
+            }
             const bool altHotkey = shortcutUsesAlt();
             if (widget.isVisible() || isShowingWidget) {
                 auto hideWidget = [&widget, &isShowingWidget]() {
@@ -401,8 +404,20 @@ int main(int argc, char* argv[]) {
             app.arguments().contains(QStringLiteral("--toggle"))) {
             QTimer::singleShot(0, &widget, [showWidget]() { showWidget(); });
         }
+        // First run: the guide, which also sets up the GNOME extension; the
+        // warning below is for later runs without it.
+        bool needsExtension = false;
 #ifdef Q_OS_LINUX
         if (GnomeBridge::isWayland()) {
+            needsExtension = GnomeBridge::instance()->call("CurrentWindow").type() == QDBusMessage::ErrorMessage;
+        }
+#endif
+        const bool firstRun = MPasteSettings::getInst()->getOnboardingVersion() < 1;
+        if (firstRun) {
+            QTimer::singleShot(600, &widget, [&widget, needsExtension]() { widget.showOnboarding(needsExtension); });
+        }
+#ifdef Q_OS_LINUX
+        if (GnomeBridge::isWayland() && !firstRun) {
             const auto reply = GnomeBridge::instance()->call("CurrentWindow");
             if (reply.type() == QDBusMessage::ErrorMessage) {
                 QTimer::singleShot(0, &widget, [&widget]() {

@@ -25,6 +25,7 @@
 #include <QFontDatabase>
 
 #include "MPasteWidget.h"
+#include "OnboardingDialog.h"
 #include "ui_MPasteWidget.h"
 #include "utils/MPasteSettings.h"
 #include "utils/ThemeManager.h"
@@ -69,7 +70,7 @@ QString topBarFontFamily() {
 QString menuText(const char *source, const QString &zhFallback) {
     const QString translated = QObject::tr(source);
     const QLocale locale = QLocale::system();
-    if (translated == QLatin1String(source) || BoardHelpers::looksBrokenTranslation(translated)) {
+    if (translated == QString::fromUtf8(source) || BoardHelpers::looksBrokenTranslation(translated)) {
         if (locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"), Qt::CaseInsensitive)) {
             return zhFallback;
         }
@@ -371,20 +372,7 @@ void MPasteWidget::initMenu() {
         IconResolver::themedIcon(QStringLiteral("settings"), ThemeManager::instance()->isDark()),
         menuText("Settings", QString::fromUtf16(u"\u8BBE\u7F6E")),
         this);
-    connect(ui_.settingsAction, &QAction::triggered, this, [this]() {
-        MPasteSettingsWidget *settingsWidget = ensureSettingsWidget();
-        QScreen *screen = QGuiApplication::primaryScreen();
-        if (const QWindow *window = windowHandle())
-            screen = window->screen();
-        if (!screen)
-            return;
-
-        QRect screenGeometry = screen->geometry();
-        int x = (screenGeometry.width() - settingsWidget->width()) / 2;
-        int y = (screenGeometry.height() - settingsWidget->height()) / 2;
-        settingsWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
-        settingsWidget->show();
-    });
+    connect(ui_.settingsAction, &QAction::triggered, this, [this]() { showSettingsPage(0); });
 
     ui_.quitAction = new QAction(
         QIcon(QStringLiteral(":/resources/resources/quit.svg")),
@@ -748,4 +736,43 @@ void MPasteWidget::updateItemCount(int itemCount) {
         ? QStringLiteral("%1/%2").arg(selectedCount).arg(itemCount)
         : (BoardHelpers::prefersChineseUi() ? QStringLiteral("%1 条").arg(itemCount) : QString::number(itemCount)));
     ui_.ui->countArea->updateGeometry();
+}
+
+void MPasteWidget::showSettingsPage(int page) {
+    MPasteSettingsWidget *settingsWidget = ensureSettingsWidget();
+    settingsWidget->showPage(page);
+    QScreen *screen = QGuiApplication::primaryScreen();
+    if (const QWindow *window = windowHandle())
+        screen = window->screen();
+    if (!screen)
+        return;
+
+    QRect screenGeometry = screen->geometry();
+    int x = (screenGeometry.width() - settingsWidget->width()) / 2;
+    int y = (screenGeometry.height() - settingsWidget->height()) / 2;
+    settingsWidget->move(screenGeometry.x() + x, screenGeometry.y() + y);
+    settingsWidget->show();
+    settingsWidget->raise();
+    settingsWidget->activateWindow();
+}
+
+void MPasteWidget::showOnboarding(bool needsExtension) {
+    if (!onboarding_) {
+        onboarding_ = new OnboardingDialog(needsExtension, nullptr);
+        onboarding_->setAttribute(Qt::WA_DeleteOnClose);
+        connect(onboarding_, &OnboardingDialog::changeShortcutRequested, this, [this]() { showSettingsPage(1); });
+        connect(onboarding_, &OnboardingDialog::privacyRequested, this, [this]() { showSettingsPage(3); });
+        connect(onboarding_, &OnboardingDialog::autostartRequested, this, [this]() { showSettingsPage(0); });
+        connect(onboarding_, &QObject::destroyed, this, [this]() { onboarding_ = nullptr; });
+    }
+    onboarding_->present();
+}
+
+bool MPasteWidget::consumeHotkeyForOnboarding() {
+    if (!onboarding_ || !onboarding_->isVisible()) {
+        return false;
+    }
+    // While the guide is open the hotkey is practised, not used.
+    onboarding_->hotkeyPressed();
+    return true;
 }

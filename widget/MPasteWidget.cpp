@@ -334,29 +334,36 @@ AboutWidget *MPasteWidget::ensureAboutWidget() {
     return ui_.aboutWidget;
 }
 
+// The preview and the details dialog offer the same actions on their item;
+// the board carries them out, the same way for both.
+template <typename Dialog>
+void MPasteWidget::wireItemActions(Dialog *dialog) {
+    connect(dialog, &Dialog::pasteRequested, this, [this](const ClipboardItem &item) {
+        if (controller_->setClipboard(item, false)) {
+            hideAndPaste();
+            currItemsWidget()->moveItemByNameToFirst(item.getName());
+        }
+    });
+    connect(dialog, &Dialog::copyRequested, this, [this](const ClipboardItem &item) {
+        controller_->setClipboard(item, false);
+    });
+    connect(dialog, &Dialog::ocrRequested, this, [this](const ClipboardItem &item) {
+        if (auto *board = currItemsWidget()) {
+            emit board->ocrRequested(item);
+        }
+    });
+    connect(dialog, &Dialog::saveRequested, this, [this](const ClipboardItem &item) {
+        if (auto *board = currItemsWidget()) {
+            board->saveItemToFile(item);
+        }
+    });
+}
+
 ClipboardItemDetailsDialog *MPasteWidget::ensureDetailsDialog() {
     if (!ui_.detailsDialog) {
         ui_.detailsDialog = new ClipboardItemDetailsDialog(this);
         ui_.detailsDialog->setWindowFlag(Qt::Tool);
-        connect(ui_.detailsDialog, &ClipboardItemDetailsDialog::pasteRequested, this, [this](const ClipboardItem &item) {
-            if (controller_->setClipboard(item, false)) {
-                hideAndPaste();
-                currItemsWidget()->moveItemByNameToFirst(item.getName());
-            }
-        });
-        connect(ui_.detailsDialog, &ClipboardItemDetailsDialog::copyRequested, this, [this](const ClipboardItem &item) {
-            controller_->setClipboard(item, false);
-        });
-        connect(ui_.detailsDialog, &ClipboardItemDetailsDialog::ocrRequested, this, [this](const ClipboardItem &item) {
-            if (auto *board = currItemsWidget()) {
-                emit board->ocrRequested(item);
-            }
-        });
-        connect(ui_.detailsDialog, &ClipboardItemDetailsDialog::saveRequested, this, [this](const ClipboardItem &item) {
-            if (auto *board = currItemsWidget()) {
-                board->saveItemToFile(item);
-            }
-        });
+        wireItemActions(ui_.detailsDialog);
         ui_.detailsDialog->hide();
     }
     return ui_.detailsDialog;
@@ -366,25 +373,7 @@ ClipboardItemPreviewDialog *MPasteWidget::ensurePreviewDialog() {
     if (!ui_.previewDialog) {
         ui_.previewDialog = new ClipboardItemPreviewDialog(this);
         ui_.previewDialog->setWindowFlag(Qt::Tool);
-        connect(ui_.previewDialog, &ClipboardItemPreviewDialog::pasteRequested, this, [this](const ClipboardItem &item) {
-            if (controller_->setClipboard(item, false)) {
-                hideAndPaste();
-                currItemsWidget()->moveItemByNameToFirst(item.getName());
-            }
-        });
-        connect(ui_.previewDialog, &ClipboardItemPreviewDialog::copyRequested, this, [this](const ClipboardItem &item) {
-            controller_->setClipboard(item, false);
-        });
-        connect(ui_.previewDialog, &ClipboardItemPreviewDialog::ocrRequested, this, [this](const ClipboardItem &item) {
-            if (auto *board = currItemsWidget()) {
-                emit board->ocrRequested(item);
-            }
-        });
-        connect(ui_.previewDialog, &ClipboardItemPreviewDialog::saveRequested, this, [this](const ClipboardItem &item) {
-            if (auto *board = currItemsWidget()) {
-                board->saveItemToFile(item);
-            }
-        });
+        wireItemActions(ui_.previewDialog);
         ui_.previewDialog->hide();
     }
     return ui_.previewDialog;
@@ -393,6 +382,7 @@ ClipboardItemPreviewDialog *MPasteWidget::ensurePreviewDialog() {
 MPasteSettingsWidget *MPasteWidget::ensureSettingsWidget() {
     if (!ui_.settingsWidget) {
         ui_.settingsWidget = new MPasteSettingsWidget(this);
+        connect(ui_.settingsWidget, &MPasteSettingsWidget::onboardingRequested, this, [this]() { showOnboarding(); });
         connect(ui_.settingsWidget, &MPasteSettingsWidget::shortcutChanged,
                 this, &MPasteWidget::shortcutChanged);
         connect(ui_.settingsWidget, &MPasteSettingsWidget::historyRetentionChanged,
