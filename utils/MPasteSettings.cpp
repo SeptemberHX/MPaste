@@ -137,6 +137,7 @@ void MPasteSettings::loadSettings() {
     this->baiduOcrApiKey = settings.value("ocr/baiduApiKey").toString();
     this->baiduOcrSecretKey = settings.value("ocr/baiduSecretKey").toString();
     this->autoOcr = settings.value("ocr/autoOcr", false).toBool();
+    this->ocrLocalModel = settings.value("ocr/localModel", QStringLiteral("tiny")).toString();
     this->skipSensitive = settings.value("privacy/skipSensitive", this->skipSensitive).toBool();
     setIgnoredApps(settings.value("privacy/ignoredApps", this->ignoredApps).toStringList());
     this->fetchLinkPreviews = settings.value("privacy/fetchLinkPreviews", this->fetchLinkPreviews).toBool();
@@ -162,6 +163,7 @@ void MPasteSettings::saveSettings() {
     settings.setValue("ocr/baiduApiKey", this->baiduOcrApiKey);
     settings.setValue("ocr/baiduSecretKey", this->baiduOcrSecretKey);
     settings.setValue("ocr/autoOcr", this->autoOcr);
+    settings.setValue("ocr/localModel", this->ocrLocalModel);
     settings.setValue("privacy/skipSensitive", this->skipSensitive);
     settings.setValue("privacy/ignoredApps", this->ignoredApps);
     settings.setValue("privacy/fetchLinkPreviews", this->fetchLinkPreviews);
@@ -342,6 +344,8 @@ const QString &MPasteSettings::getBaiduOcrSecretKey() const { return baiduOcrSec
 void MPasteSettings::setBaiduOcrSecretKey(const QString &key) { baiduOcrSecretKey = key; }
 bool MPasteSettings::isAutoOcr() const { return autoOcr; }
 void MPasteSettings::setAutoOcr(bool enabled) { autoOcr = enabled; }
+QString MPasteSettings::getOcrLocalModel() const { return ocrLocalModel; }
+void MPasteSettings::setOcrLocalModel(const QString &model) { ocrLocalModel = model; }
 
 bool MPasteSettings::isTerminalTitle(const QString &title) {
     return this->terminalNames.contains(title);

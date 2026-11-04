@@ -88,6 +88,9 @@ public:
     const QString &getBaiduOcrSecretKey() const;
     void setBaiduOcrSecretKey(const QString &key);
     bool isAutoOcr() const;
+    // Linux, recognition on this computer: "tiny" (in the package) or "small" (downloaded).
+    QString getOcrLocalModel() const;
+    void setOcrLocalModel(const QString &model);
     void setAutoOcr(bool enabled);
 
     // Privacy: content a password manager marks as not for history, and
@@ -142,6 +145,7 @@ private:
     QString baiduOcrApiKey;
     QString baiduOcrSecretKey;
     bool autoOcr = false;
+    QString ocrLocalModel = QStringLiteral("tiny");
     bool skipSensitive = true;
     bool fetchLinkPreviews = false;
     QStringList ignoredApps;

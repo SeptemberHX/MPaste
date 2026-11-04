@@ -50,9 +50,10 @@ void OcrService::requestOcr(const QString &itemName, const QImage &image) {
     const auto backend = settings->getOcrBackend();
     const QString baiduApiKey = settings->getBaiduOcrApiKey();
     const QString baiduSecretKey = settings->getBaiduOcrSecretKey();
+    const QString localModel = settings->getOcrLocalModel();
 
     QPointer<OcrService> guard(this);
-    QThread *thread = QThread::create([guard, itemName, image, backend, baiduApiKey, baiduSecretKey]() {
+    QThread *thread = QThread::create([guard, itemName, image, backend, baiduApiKey, baiduSecretKey, localModel]() {
         Result result;
         if (backend == MPasteSettings::OcrBaiduApi
             && !baiduApiKey.isEmpty() && !baiduSecretKey.isEmpty()) {
@@ -61,7 +62,7 @@ void OcrService::requestOcr(const QString &itemName, const QImage &image) {
 #ifdef Q_OS_WIN
             result = runOcrWindows(image);
 #else
-            result = runOcrLinux(image);
+            result = runOcrLinux(image, localModel);
 #endif
         }
         if (guard) {
@@ -348,6 +349,36 @@ QString OcrService::runtimeInstallCommand() {
 #endif
 }
 
+QList<OcrService::ModelFile> OcrService::modelFiles(const QString &model) {
+    const QString base = QStringLiteral("https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/");
+    if (model == QLatin1String("small")) {
+        return {
+            {QStringLiteral("PP-OCRv6_det_small.onnx"), base + QStringLiteral("det/PP-OCRv6_det_small.onnx"),
+             "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f", 9929594},
+            {QStringLiteral("PP-OCRv6_rec_small.onnx"), base + QStringLiteral("rec/PP-OCRv6_rec_small.onnx"),
+             "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884", 21234383},
+        };
+    }
+    return {};
+}
+
+QString OcrService::userModelsDir() {
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/MPaste/ocr-models");
+}
+
+bool OcrService::isModelDownloaded(const QString &model) {
+    const QList<ModelFile> files = modelFiles(model);
+    if (files.isEmpty()) {
+        return false;
+    }
+    for (const ModelFile &file : files) {
+        if (QFileInfo(userModelsDir() + QLatin1Char('/') + file.name).size() != file.size) {
+            return false;
+        }
+    }
+    return true;
+}
+
 OcrService::LocalState OcrService::localState() {
     const QString helper = findOcrHelper();
     if (helper.isEmpty() || findOcrModels(helper).isEmpty()) {
@@ -362,7 +393,7 @@ OcrService::LocalState OcrService::localState() {
     return proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0 ? LocalReady : LocalNoRuntime;
 }
 
-OcrService::Result OcrService::runOcrLinux(const QImage &image) {
+OcrService::Result OcrService::runOcrLinux(const QImage &image, const QString &model) {
     Result result;
 
     QTemporaryFile tempFile(QDir::tempPath() + QStringLiteral("/mpaste_ocr_XXXXXX.png"));
@@ -376,12 +407,16 @@ OcrService::Result OcrService::runOcrLinux(const QImage &image) {
 
     // PaddleOCR through mpaste-ocr, its own process: its models are in
     // memory only while it reads.
+    // The downloaded model when it is chosen and whole, else the one in the package.
     const QString helper = findOcrHelper();
-    const QString models = helper.isEmpty() ? QString() : findOcrModels(helper);
+    const bool useDownloaded = model != QLatin1String("tiny") && isModelDownloaded(model);
+    const QString models = helper.isEmpty() ? QString() : (useDownloaded ? userModelsDir() : findOcrModels(helper));
     bool runtimeMissing = false;
     if (!helper.isEmpty() && !models.isEmpty()) {
         QProcess proc;
-        proc.start(helper, {QStringLiteral("--models"), models, tempFile.fileName()});
+        proc.start(helper, {QStringLiteral("--models"), models,
+                            QStringLiteral("--model"), useDownloaded ? model : QStringLiteral("tiny"),
+                            tempFile.fileName()});
         if (!proc.waitForFinished(60000)) {
             proc.kill();
             result.status = Failed;

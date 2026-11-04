@@ -77,6 +77,13 @@ private:
     // that copies the install command; hidden when it is ready.
     QWidget *ocrStatusRow_ = nullptr;
     void refreshOcrStatus();
+    // Linux: which model recognition on this computer uses, and the row that
+    // downloads the larger one.
+    QLabel *ocrModelLabel_ = nullptr;
+    QComboBox *ocrModelCombo_ = nullptr;
+    QWidget *ocrModelRow_ = nullptr;
+    class OcrModelDownloader *ocrModelDownloader_ = nullptr;
+    void refreshOcrModelRow(const QString &error = QString());
     ToggleSwitch *sensitiveSwitch_ = nullptr;
     ToggleSwitch *linkPreviewSwitch_ = nullptr;
     QLineEdit *ignoredAppsEdit_ = nullptr;

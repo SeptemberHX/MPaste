@@ -13,6 +13,7 @@
 #include "ToggleSwitch.h"
 #include "utils/IconResolver.h"
 #include "utils/OcrService.h"
+#include "utils/OcrModelDownloader.h"
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QPointer>
@@ -1154,6 +1155,22 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         };
         connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, updateBaiduFieldsVisibility);
 
+#ifndef Q_OS_WIN
+        ocrModelLabel_ = new QLabel(uiText("Recognition model", QStringLiteral("识别模型")), maintenancePage);
+        ocrModelCombo_ = new QComboBox(maintenancePage);
+        ocrModelCombo_->setMinimumSize(QSize(180, 36));
+        ocrModelCombo_->setMaximumHeight(36);
+        ocrModelCombo_->addItem(uiText("Standard (built in)", QStringLiteral("标准（内置）")), QStringLiteral("tiny"));
+        ocrModelCombo_->addItem(uiText("Precise (30 MB download)", QStringLiteral("精确（需下载 30 MB）")), QStringLiteral("small"));
+        auto updateModelVisibility = [this]() {
+            const bool local = ocrBackendCombo_->currentData().toInt() == 0;
+            ocrModelLabel_->setVisible(local);
+            ocrModelCombo_->setVisible(local);
+        };
+        connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, updateModelVisibility);
+        updateModelVisibility();
+#endif
+
         autoOcrLabel_ = new QLabel(uiText("Auto OCR for images", QStringLiteral("图片自动 OCR")), maintenancePage);
         autoOcrSwitch_ = new ToggleSwitch(maintenancePage);
 
@@ -1162,12 +1179,16 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             auto *g = makeSettingsGrid();
             g->addWidget(ocrLabel_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
             g->addWidget(ocrBackendCombo_, 0, 1, Qt::AlignRight | Qt::AlignVCenter);
-            g->addWidget(baiduApiKeyLabel_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            g->addWidget(baiduApiKeyEdit_, 1, 1);
-            g->addWidget(baiduSecretKeyLabel_, 2, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            g->addWidget(baiduSecretKeyEdit_, 2, 1);
-            g->addWidget(autoOcrLabel_, 3, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            g->addWidget(autoOcrSwitch_, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
+            if (ocrModelCombo_) {
+                g->addWidget(ocrModelLabel_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
+                g->addWidget(ocrModelCombo_, 1, 1, Qt::AlignRight | Qt::AlignVCenter);
+            }
+            g->addWidget(baiduApiKeyLabel_, 2, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(baiduApiKeyEdit_, 2, 1);
+            g->addWidget(baiduSecretKeyLabel_, 3, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(baiduSecretKeyEdit_, 3, 1);
+            g->addWidget(autoOcrLabel_, 4, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            g->addWidget(autoOcrSwitch_, 4, 1, Qt::AlignRight | Qt::AlignVCenter);
             mLayout->addWidget(makeCard(g));
         }
 #ifndef Q_OS_WIN
@@ -1195,6 +1216,44 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             mLayout->addWidget(ocrStatusRow_);
             connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, &MPasteSettingsWidget::refreshOcrStatus);
             refreshOcrStatus();
+        }
+        {
+            // The precise model: what it is, where it comes from, and a
+            // button to download it (or cancel, or try again).
+            ocrModelRow_ = new QWidget(maintenancePage);
+            auto *row = new QHBoxLayout(ocrModelRow_);
+            row->setContentsMargins(4, 4, 0, 0);
+            row->setSpacing(12);
+            auto *text = new QLabel(ocrModelRow_);
+            text->setObjectName(QStringLiteral("auroraHint"));
+            text->setWordWrap(true);
+            row->addWidget(text, 1);
+            auto *button = new QPushButton(ocrModelRow_);
+            button->setObjectName(QStringLiteral("auroraSecondary"));
+            button->setCursor(Qt::PointingHandCursor);
+            row->addWidget(button, 0, Qt::AlignTop);
+            ocrModelRow_->hide();
+            mLayout->addWidget(ocrModelRow_);
+
+            ocrModelDownloader_ = new OcrModelDownloader(this);
+            connect(button, &QPushButton::clicked, this, [this]() {
+                if (ocrModelDownloader_->isRunning()) {
+                    ocrModelDownloader_->cancel();
+                } else {
+                    ocrModelDownloader_->start(ocrModelCombo_->currentData().toString());
+                    refreshOcrModelRow();
+                }
+            });
+            connect(ocrModelDownloader_, &OcrModelDownloader::progress, this, [this, text](qint64 received, qint64 total) {
+                text->setText(uiText("Downloading the precise model... %1 / %2 MB",
+                                     QStringLiteral("正在下载精确模型… %1 / %2 MB"))
+                                  .arg(QString::number(received / 1048576.0, 'f', 1), QString::number(total / 1048576.0, 'f', 1)));
+            });
+            connect(ocrModelDownloader_, &OcrModelDownloader::finished, this, [this](bool ok, const QString &error) {
+                refreshOcrModelRow(ok || error == QLatin1String("cancelled") ? QString() : error);
+            });
+            connect(ocrModelCombo_, &QComboBox::currentIndexChanged, this, [this]() { refreshOcrModelRow(); });
+            connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, [this]() { refreshOcrModelRow(); });
         }
 #endif
 
@@ -1285,6 +1344,7 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     if (activationLayoutCombo_) connect(activationLayoutCombo_, &QComboBox::currentIndexChanged, this, save);
     if (ocrBackendCombo_) connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, save);
     if (autoOcrSwitch_) connect(autoOcrSwitch_, &ToggleSwitch::toggled, this, save);
+    if (ocrModelCombo_) connect(ocrModelCombo_, &QComboBox::currentIndexChanged, this, save);
     if (sensitiveSwitch_) connect(sensitiveSwitch_, &ToggleSwitch::toggled, this, save);
     if (linkPreviewSwitch_) connect(linkPreviewSwitch_, &ToggleSwitch::toggled, this, save);
     if (ignoredAppsEdit_) connect(ignoredAppsEdit_, &QLineEdit::editingFinished, this, save);
@@ -1391,6 +1451,12 @@ void MPasteSettingsWidget::loadSettings()
     if (autoOcrSwitch_) {
         autoOcrSwitch_->setChecked(settings->isAutoOcr());
     }
+    if (ocrModelCombo_) {
+        const QSignalBlocker blocker(ocrModelCombo_);
+        const int index = ocrModelCombo_->findData(settings->getOcrLocalModel());
+        ocrModelCombo_->setCurrentIndex(index >= 0 ? index : 0);
+        refreshOcrModelRow();
+    }
     if (sensitiveSwitch_) {
         sensitiveSwitch_->setChecked(settings->isSkipSensitive());
     }
@@ -1491,6 +1557,9 @@ void MPasteSettingsWidget::saveAllSettings()
     if (autoOcrSwitch_) {
         settings->setAutoOcr(autoOcrSwitch_->isChecked());
     }
+    if (ocrModelCombo_) {
+        settings->setOcrLocalModel(ocrModelCombo_->currentData().toString());
+    }
     if (sensitiveSwitch_) {
         settings->setSkipSensitive(sensitiveSwitch_->isChecked());
     }
@@ -1581,5 +1650,52 @@ void MPasteSettingsWidget::refreshOcrStatus() {
     });
     connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     thread->start();
+#endif
+}
+
+void MPasteSettingsWidget::refreshOcrModelRow(const QString &error) {
+#ifndef Q_OS_WIN
+    if (!ocrModelRow_ || !ocrModelCombo_ || !ocrBackendCombo_) {
+        return;
+    }
+    const QString model = ocrModelCombo_->currentData().toString();
+    auto *text = ocrModelRow_->findChild<QLabel *>();
+    auto *button = ocrModelRow_->findChild<QPushButton *>();
+    const bool local = ocrBackendCombo_->currentData().toInt() == 0;
+    // The choice says whether it is here yet.
+    const int smallIndex = ocrModelCombo_->findData(QStringLiteral("small"));
+    if (smallIndex >= 0) {
+        ocrModelCombo_->setItemText(smallIndex, OcrService::isModelDownloaded(QStringLiteral("small"))
+                                                    ? uiText("Precise (downloaded)", QStringLiteral("精确（已下载）"))
+                                                    : uiText("Precise (30 MB download)", QStringLiteral("精确（需下载 30 MB）")));
+    }
+    if (ocrModelDownloader_->isRunning()) {
+        button->setText(uiText("Cancel", QStringLiteral("取消")));
+        ocrModelRow_->show();
+        return;
+    }
+    if (!local || model == QLatin1String("tiny") || OcrService::isModelDownloaded(model)) {
+        if (local && model != QLatin1String("tiny")) {
+            text->setText(uiText("The precise model is ready.", QStringLiteral("精确模型已就绪。")));
+            button->hide();
+            ocrModelRow_->show();
+        } else {
+            ocrModelRow_->hide();
+        }
+        return;
+    }
+    QString message = uiText("The precise model knows more characters (rare ones, traditional Chinese, Japanese) and reads photos better, "
+                             "but takes about three times as long. 30 MB from modelscope.cn; until it is here, the standard model is used.",
+                             QStringLiteral("精确模型认得的字更多（生僻字、繁体、日文），照片里的字也认得更好，但识别要慢约 3 倍。"
+                                            "需从 modelscope.cn 下载 30 MB；下载完成前仍用标准模型。"));
+    if (!error.isEmpty()) {
+        message = uiText("Download failed: %1", QStringLiteral("下载失败：%1")).arg(error);
+    }
+    text->setText(message);
+    button->setText(error.isEmpty() ? uiText("Download", QStringLiteral("下载")) : uiText("Try again", QStringLiteral("重试")));
+    button->show();
+    ocrModelRow_->show();
+#else
+    Q_UNUSED(error);
 #endif
 }

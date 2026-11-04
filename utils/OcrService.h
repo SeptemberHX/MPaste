@@ -56,13 +56,26 @@ public:
     /// The command that installs ONNX Runtime: "sudo apt install libonnxruntime1.23".
     static QString runtimeInstallCommand();
 
+    /// Linux: the models recognition on this computer can use. "tiny" comes
+    /// in the package; "small" is downloaded into userModelsDir().
+    struct ModelFile {
+        QString name;     // PP-OCRv6_det_small.onnx
+        QString url;
+        QByteArray sha256;   // hex
+        qint64 size = 0;
+    };
+    static QList<ModelFile> modelFiles(const QString &model);
+    static QString userModelsDir();
+    /// Every file of \a model is in userModelsDir() at its size.
+    static bool isModelDownloaded(const QString &model);
+
 signals:
     /// Emitted on the main thread when OCR completes or fails.
     void ocrFinished(const QString &itemName, const OcrService::Result &result);
 
 private:
     static Result runOcrWindows(const QImage &image);
-    static Result runOcrLinux(const QImage &image);
+    static Result runOcrLinux(const QImage &image, const QString &model);
     static Result runOcrBaidu(const QImage &image,
                               const QString &apiKey,
                               const QString &secretKey);

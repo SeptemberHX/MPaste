@@ -4,7 +4,7 @@
 //      recognition, so the models are in memory only while it reads.
 // update: If I change, update this header block and my folder README.md.
 //
-// mpaste-ocr --models DIR [--threads N] PICTURE
+// mpaste-ocr --models DIR [--model tiny|small] [--threads N] PICTURE
 // mpaste-ocr --check
 // Prints the text as UTF-8 on standard output. Exit 0 on success, 2 for bad
 // arguments, 3 when the models do not load, 4 when the picture does not, 5
@@ -23,8 +23,10 @@
 #include <cstdio>
 
 namespace {
-const char *const kDetModel = "PP-OCRv6_det_tiny.onnx";
-const char *const kRecModel = "PP-OCRv6_rec_tiny.onnx";
+// PP-OCRv6_det_<model>.onnx and PP-OCRv6_rec_<model>.onnx: tiny or small.
+QString modelFile(const QString &kind, const QString &model) {
+    return QStringLiteral("PP-OCRv6_%1_%2.onnx").arg(kind, model);
+}
 
 int fail(int code, const QString &message) {
     std::fprintf(stderr, "mpaste-ocr: %s\n", message.toLocal8Bit().constData());
@@ -37,6 +39,7 @@ int main(int argc, char **argv) {
     const QStringList args = app.arguments();
     QString modelsDir;
     QString picture;
+    QString model = QStringLiteral("tiny");
     int threads = qBound(1, QThread::idealThreadCount(), 4);
     if (args.contains(QStringLiteral("--check"))) {
         std::string why;
@@ -49,6 +52,11 @@ int main(int argc, char **argv) {
     for (int i = 1; i < args.size(); ++i) {
         if (args[i] == QLatin1String("--models") && i + 1 < args.size()) {
             modelsDir = args[++i];
+        } else if (args[i] == QLatin1String("--model") && i + 1 < args.size()) {
+            model = args[++i];
+            if (model != QLatin1String("tiny") && model != QLatin1String("small")) {
+                return fail(2, QStringLiteral("unknown model %1").arg(model));
+            }
         } else if (args[i] == QLatin1String("--threads") && i + 1 < args.size()) {
             threads = qBound(1, args[++i].toInt(), 16);
         } else if (!args[i].startsWith(QLatin1String("--"))) {
@@ -56,7 +64,7 @@ int main(int argc, char **argv) {
         }
     }
     if (modelsDir.isEmpty() || picture.isEmpty()) {
-        return fail(2, QStringLiteral("usage: mpaste-ocr --models DIR [--threads N] PICTURE"));
+        return fail(2, QStringLiteral("usage: mpaste-ocr --models DIR [--model tiny|small] [--threads N] PICTURE"));
     }
 
     std::string runtimeError;
@@ -65,8 +73,8 @@ int main(int argc, char **argv) {
     }
     const QDir dir(modelsDir);
     PaddleOcr ocr;
-    const std::string error = ocr.load(QFile::encodeName(dir.filePath(QLatin1String(kDetModel))).toStdString(),
-                                       QFile::encodeName(dir.filePath(QLatin1String(kRecModel))).toStdString(),
+    const std::string error = ocr.load(QFile::encodeName(dir.filePath(modelFile(QStringLiteral("det"), model))).toStdString(),
+                                       QFile::encodeName(dir.filePath(modelFile(QStringLiteral("rec"), model))).toStdString(),
                                        threads);
     if (!error.empty()) {
         return fail(3, QString::fromStdString(error));

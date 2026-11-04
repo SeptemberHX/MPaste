@@ -91,3 +91,4 @@ update: 修改本目录文件时，同步更新本 README。
 - `PlatformRelated::caretRect` 在 Windows 上通过 `GetGUIThreadInfo` 读取前台窗口的文本光标并换算为 Qt 逻辑坐标；Linux 返回空（Wayland 由扩展摆放，X11 退回鼠标位置）。
 - `MPasteSettings` 新增 `activationLayout`（`main/activationLayout`：0 面板，1 光标旁堆栈）。
 - `OcrService`：文字识别。Windows 用系统自带的 Windows.Media.Ocr；Linux 先找 `mpaste-ocr`（PaddleOCR，见 `ocr/README.md`）与其模型（MPaste 旁的 `ocr-models/`，或 `share/mpaste/ocr`），没装 ONNX Runtime（`mpaste-ocr` 退出码 5）或失败时退回 `tesseract`；`localState()` 供设置页检查本机识别缺什么，`runtimeInstallCommand()` 给出安装命令（按已装语言包传 `-l chi_sim+…+eng`），都没有时给出要安装什么的提示；也可选百度 OCR API。
+- `OcrModelDownloader`：Linux 设置里“识别模型”选“精确”时，把 PP-OCRv6 small（检测 9.9 MB + 识别 21.2 MB，modelscope.cn）下载到 `~/.local/share/MPaste/ocr-models/`：逐个文件写到 `.part`，边下边算 SHA-256，校验通过才改名；取消或失败不留半截文件，已下完的文件下次跳过。`OcrService::modelFiles()` 记录文件名、地址、哈希与大小，`isModelDownloaded()` 按大小判断是否齐全；没下齐时识别仍用内置的 tiny。
