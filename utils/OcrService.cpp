@@ -341,58 +341,6 @@ QString tesseractLanguages() {
 }
 }  // namespace
 
-QString OcrService::runtimeInstallCommand() {
-#ifdef MPASTE_ONNXRUNTIME_PACKAGE
-    return QStringLiteral("sudo apt install " MPASTE_ONNXRUNTIME_PACKAGE);
-#else
-    return QStringLiteral("sudo apt install libonnxruntime1.23");
-#endif
-}
-
-QList<OcrService::ModelFile> OcrService::modelFiles(const QString &model) {
-    const QString base = QStringLiteral("https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/");
-    if (model == QLatin1String("small")) {
-        return {
-            {QStringLiteral("PP-OCRv6_det_small.onnx"), base + QStringLiteral("det/PP-OCRv6_det_small.onnx"),
-             "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f", 9929594},
-            {QStringLiteral("PP-OCRv6_rec_small.onnx"), base + QStringLiteral("rec/PP-OCRv6_rec_small.onnx"),
-             "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884", 21234383},
-        };
-    }
-    return {};
-}
-
-QString OcrService::userModelsDir() {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/MPaste/ocr-models");
-}
-
-bool OcrService::isModelDownloaded(const QString &model) {
-    const QList<ModelFile> files = modelFiles(model);
-    if (files.isEmpty()) {
-        return false;
-    }
-    for (const ModelFile &file : files) {
-        if (QFileInfo(userModelsDir() + QLatin1Char('/') + file.name).size() != file.size) {
-            return false;
-        }
-    }
-    return true;
-}
-
-OcrService::LocalState OcrService::localState() {
-    const QString helper = findOcrHelper();
-    if (helper.isEmpty() || findOcrModels(helper).isEmpty()) {
-        return LocalNoHelper;
-    }
-    QProcess proc;
-    proc.start(helper, {QStringLiteral("--check")});
-    if (!proc.waitForFinished(10000)) {
-        proc.kill();
-        return LocalNoRuntime;
-    }
-    return proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0 ? LocalReady : LocalNoRuntime;
-}
-
 OcrService::Result OcrService::runOcrLinux(const QImage &image, const QString &model) {
     Result result;
 
@@ -475,6 +423,66 @@ OcrService::Result OcrService::runOcrLinux(const QImage &image, const QString &m
 }
 
 #endif // !Q_OS_WIN
+
+// The model table, the download folder and the local state are asked for
+// on every platform (Settings and the downloader are built everywhere).
+
+QString OcrService::runtimeInstallCommand() {
+#ifdef MPASTE_ONNXRUNTIME_PACKAGE
+    return QStringLiteral("sudo apt install " MPASTE_ONNXRUNTIME_PACKAGE);
+#else
+    return QStringLiteral("sudo apt install libonnxruntime1.23");
+#endif
+}
+
+QList<OcrService::ModelFile> OcrService::modelFiles(const QString &model) {
+    const QString base = QStringLiteral("https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/");
+    if (model == QLatin1String("small")) {
+        return {
+            {QStringLiteral("PP-OCRv6_det_small.onnx"), base + QStringLiteral("det/PP-OCRv6_det_small.onnx"),
+             "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f", 9929594},
+            {QStringLiteral("PP-OCRv6_rec_small.onnx"), base + QStringLiteral("rec/PP-OCRv6_rec_small.onnx"),
+             "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884", 21234383},
+        };
+    }
+    return {};
+}
+
+QString OcrService::userModelsDir() {
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/MPaste/ocr-models");
+}
+
+bool OcrService::isModelDownloaded(const QString &model) {
+    const QList<ModelFile> files = modelFiles(model);
+    if (files.isEmpty()) {
+        return false;
+    }
+    for (const ModelFile &file : files) {
+        if (QFileInfo(userModelsDir() + QLatin1Char('/') + file.name).size() != file.size) {
+            return false;
+        }
+    }
+    return true;
+}
+
+OcrService::LocalState OcrService::localState() {
+#ifdef Q_OS_WIN
+    return LocalReady;   // Windows.Media.Ocr comes with the system
+#else
+    const QString helper = findOcrHelper();
+    if (helper.isEmpty() || findOcrModels(helper).isEmpty()) {
+        return LocalNoHelper;
+    }
+    QProcess proc;
+    proc.start(helper, {QStringLiteral("--check")});
+    if (!proc.waitForFinished(10000)) {
+        proc.kill();
+        return LocalNoRuntime;
+    }
+    return proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0 ? LocalReady : LocalNoRuntime;
+#endif
+}
+
 
 // ---------------------------------------------------------------------------
 // Baidu OCR API backend (cross-platform)
