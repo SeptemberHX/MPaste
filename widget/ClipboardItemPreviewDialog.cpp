@@ -7,6 +7,7 @@
 #include "AuroraChrome.h"
 #include "ClipboardCardDelegate.h"
 #include "ClipboardItemPreviewDialog.h"
+#include "ZoomableImageView.h"
 
 #include <QCursor>
 #include <QBuffer>
@@ -69,37 +70,6 @@ public:
 
 // simplifyHtmlForPreview — use ThumbnailBuilder::simplifyHtmlForRendering()
 
-// The previewed image, drawn at whatever size the dialog gives it. Only the
-// part on screen is painted, so a long screenshot zoomed in costs no more
-// than the window it shows in.
-class PreviewImageCanvas : public QWidget {
-public:
-    using QWidget::QWidget;
-
-    void setImage(const QImage &image) {
-        pixmap_ = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
-        update();
-    }
-    void clear() { setImage(QImage()); }
-    bool isEmpty() const { return pixmap_.isNull(); }
-
-protected:
-    void paintEvent(QPaintEvent *event) override {
-        if (pixmap_.isNull() || width() <= 0) {
-            return;
-        }
-        QPainter painter(this);
-        painter.setClipRegion(event->region());
-        // Smooth until each image pixel covers several screen pixels; past
-        // that, sharp squares show the pixels the way an image viewer does.
-        const qreal devicePixelsPerPixel = width() * devicePixelRatioF() / pixmap_.width();
-        painter.setRenderHint(QPainter::SmoothPixmapTransform, devicePixelsPerPixel < 3.0);
-        painter.drawPixmap(rect(), pixmap_);
-    }
-
-private:
-    QPixmap pixmap_;
-};
 
 
 namespace {
@@ -123,8 +93,6 @@ void deliverPendingResizes(QWidget *widget) {
 constexpr int kPreviewDialogWidth = 980;
 constexpr int kPreviewDialogHeight = 760;
 constexpr int kPreviewBodyFontSize = 16;
-constexpr qreal kImageZoomMin = 0.1;
-constexpr qreal kImageZoomMax = 8.0;
 constexpr qreal kImageZoomStep = 1.15;
 
 QString joinUrls(const QList<QUrl> &urls) {
@@ -584,28 +552,13 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
     ui_.browser->viewport()->installEventFilter(this);
     ui_.browser->viewport()->setCursor(Qt::ArrowCursor);
 
-    ui_.imageCanvas = new PreviewImageCanvas(this);
-    ui_.imageCanvas->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-    ui_.imageCanvas->setFocusPolicy(Qt::NoFocus);
-
-    ui_.imageScrollArea = new QScrollArea(this);
-    ui_.imageScrollArea->setFrameShape(QFrame::NoFrame);
-    ui_.imageScrollArea->setWidgetResizable(false);
-    ui_.imageScrollArea->setAlignment(Qt::AlignCenter);
-    ui_.imageScrollArea->setFocusPolicy(Qt::NoFocus);
-    ui_.imageScrollArea->setWidget(ui_.imageCanvas);
-    ui_.imageScrollArea->setStyleSheet(QStringLiteral("QScrollArea { background: transparent; border: none; }"));
-    if (ui_.imageScrollArea->viewport()) {
-        ui_.imageScrollArea->viewport()->setAutoFillBackground(false);
-        ui_.imageScrollArea->viewport()->setCursor(Qt::OpenHandCursor);
-    }
-    ui_.imageScrollArea->viewport()->installEventFilter(this);
+    ui_.imageView = new ZoomableImageView(this);
 
     auto *contentHost = new QWidget(this);
     ui_.contentLayout = new QStackedLayout(contentHost);
     ui_.contentLayout->setContentsMargins(0, 0, 0, 0);
     ui_.contentLayout->addWidget(ui_.browser);
-    ui_.contentLayout->addWidget(ui_.imageScrollArea);
+    ui_.contentLayout->addWidget(ui_.imageView);
     ui_.contentLayout->setCurrentWidget(ui_.browser);
     cardLayout->addWidget(contentHost, 1);
 
@@ -890,15 +843,14 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
 
                 switch (payload.kind) {
                     case PreviewKind::Image: {
-                        guard->setImagePreview(payload.image);
-                        guard->ui_.contentLayout->setCurrentWidget(guard->ui_.imageScrollArea);
+                        guard->ui_.imageView->setImage(payload.image);
+                        guard->ui_.contentLayout->setCurrentWidget(guard->ui_.imageView);
                         // Viewport size may not be valid until after the
                         // layout switch.  Reset zoom and re-fit after
                         // the layout settles with the correct viewport.
                         QTimer::singleShot(0, guard.data(), [guard]() {
                             if (!guard) return;
-                            guard->imageZoomFactor_ = 1.0;
-                            guard->updateImagePreview();
+                            guard->ui_.imageView->resetZoom();
                         });
                         break;
                     }
@@ -976,9 +928,10 @@ int ClipboardItemPreviewDialog::heightForContent() const {
     const int chrome = height() - host->height();
     int content = host->height();
     if (isImagePreviewActive()) {
-        if (!imageOriginal_.isNull()) {
-            const qreal scale = qMin<qreal>(1.0, host->width() / qMax<qreal>(1.0, imageOriginal_.width()));
-            content = qCeil(imageOriginal_.height() * scale);
+        const QSize image = ui_.imageView->imageSize();
+        if (image.isValid()) {
+            const qreal scale = qMin<qreal>(1.0, host->width() / qMax<qreal>(1.0, image.width()));
+            content = qCeil(image.height() * scale);
         }
     } else if (ui_.browser) {
         // The browser's own box, not its viewport: the viewport also loses the
@@ -1010,8 +963,7 @@ void ClipboardItemPreviewDialog::revealSizedToContent() {
     activateWindow();
     if (isImagePreviewActive()) {
         QTimer::singleShot(0, this, [this]() {
-            imageZoomFactor_ = 1.0;
-            updateImagePreview();
+            ui_.imageView->resetZoom();
         });
     }
 }
@@ -1033,89 +985,8 @@ void ClipboardItemPreviewDialog::applyTheme(bool dark) {
 }
 
 bool ClipboardItemPreviewDialog::isImagePreviewActive() const {
-    return ui_.contentLayout && ui_.imageScrollArea
-        && ui_.contentLayout->currentWidget() == ui_.imageScrollArea;
-}
-
-void ClipboardItemPreviewDialog::setImagePreview(const QImage &image) {
-    if (!ui_.imageCanvas || !ui_.imageScrollArea) {
-        return;
-    }
-
-    imageOriginal_ = image;
-    if (!imageOriginal_.isNull()) {
-        imageOriginal_.setDevicePixelRatio(1.0);
-    }
-    ui_.imageCanvas->setImage(imageOriginal_);
-    imageZoomFactor_ = 1.0;
-    updateImagePreview();
-}
-
-void ClipboardItemPreviewDialog::updateImagePreview() {
-    if (!ui_.imageCanvas || imageOriginal_.isNull()) {
-        if (ui_.imageCanvas) {
-            ui_.imageCanvas->clear();
-        }
-        return;
-    }
-
-    QSize viewportSize;
-    if (ui_.imageScrollArea && ui_.imageScrollArea->viewport()) {
-        viewportSize = ui_.imageScrollArea->viewport()->size();
-    }
-    if (!viewportSize.isValid() && ui_.imageScrollArea) {
-        viewportSize = ui_.imageScrollArea->size();
-    }
-
-    const QSize imageSize = imageOriginal_.size();
-    qreal fitScale = 1.0;
-    if (viewportSize.isValid() && imageSize.isValid()) {
-        const qreal scaleX = viewportSize.width() / static_cast<qreal>(imageSize.width());
-        const qreal scaleY = viewportSize.height() / static_cast<qreal>(imageSize.height());
-        fitScale = qMin(scaleX, scaleY);
-    }
-    imageFitScale_ = fitScale;
-
-    qreal scale = imageFitScale_ * imageZoomFactor_;
-    scale = qBound(kImageZoomMin, scale, kImageZoomMax);
-    if (imageFitScale_ > 0.0) {
-        imageZoomFactor_ = scale / imageFitScale_;
-    }
-
-    const QSize shown = (QSizeF(imageSize) * scale).toSize().expandedTo(QSize(1, 1));
-    ui_.imageCanvas->resize(shown);
-    ui_.imageCanvas->update();
-}
-
-void ClipboardItemPreviewDialog::adjustImageZoom(qreal factor, QPoint anchor) {
-    if (imageOriginal_.isNull() || !ui_.imageScrollArea || !ui_.imageCanvas) {
-        return;
-    }
-    QWidget *viewport = ui_.imageScrollArea->viewport();
-    if (anchor.x() < 0 || anchor.y() < 0) {
-        anchor = viewport->rect().center();
-    }
-    // Where on the image the anchor is, as a fraction of its size.
-    const QSize before = ui_.imageCanvas->size();
-    const QPointF onCanvas = ui_.imageCanvas->mapFrom(viewport, anchor);
-    const QPointF fraction(qBound(0.0, onCanvas.x() / qMax(1, before.width()), 1.0),
-                           qBound(0.0, onCanvas.y() / qMax(1, before.height()), 1.0));
-
-    imageZoomFactor_ = qBound(kImageZoomMin, imageZoomFactor_ * factor, kImageZoomMax);
-    updateImagePreview();
-
-    // Scroll so that point is back under the anchor.
-    const QSize after = ui_.imageCanvas->size();
-    ui_.imageScrollArea->horizontalScrollBar()->setValue(qRound(fraction.x() * after.width() - anchor.x()));
-    ui_.imageScrollArea->verticalScrollBar()->setValue(qRound(fraction.y() * after.height() - anchor.y()));
-}
-
-void ClipboardItemPreviewDialog::resetImageZoom() {
-    if (imageOriginal_.isNull()) {
-        return;
-    }
-    imageZoomFactor_ = 1.0;
-    updateImagePreview();
+    return ui_.contentLayout && ui_.imageView
+        && ui_.contentLayout->currentWidget() == ui_.imageView;
 }
 
 bool ClipboardItemPreviewDialog::handleImageZoomKey(QKeyEvent *event) {
@@ -1130,15 +1001,15 @@ bool ClipboardItemPreviewDialog::handleImageZoomKey(QKeyEvent *event) {
     switch (event->key()) {
         case Qt::Key_Plus:
         case Qt::Key_Equal:
-            adjustImageZoom(kImageZoomStep);
+            ui_.imageView->zoomBy(kImageZoomStep);
             event->accept();
             return true;
         case Qt::Key_Minus:
-            adjustImageZoom(1.0 / kImageZoomStep);
+            ui_.imageView->zoomBy(1.0 / kImageZoomStep);
             event->accept();
             return true;
         case Qt::Key_0:
-            resetImageZoom();
+            ui_.imageView->resetZoom();
             event->accept();
             return true;
         default:
@@ -1159,78 +1030,6 @@ bool ClipboardItemPreviewDialog::eventFilter(QObject *watched, QEvent *event) {
             reject();
             keyEvent->accept();
             return true;
-        }
-    }
-
-    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::MouseButtonPress) {
-        auto *mouseEvent = static_cast<QMouseEvent *>(event);
-        if (mouseEvent->button() == Qt::LeftButton && isImagePreviewActive()) {
-            imageDragActive_ = true;
-            imageDragStartPos_ = mouseEvent->globalPosition().toPoint();
-            imageDragStartScroll_ = QPoint(ui_.imageScrollArea->horizontalScrollBar()->value(),
-                                           ui_.imageScrollArea->verticalScrollBar()->value());
-            ui_.imageScrollArea->viewport()->setCursor(Qt::ClosedHandCursor);
-            mouseEvent->accept();
-            return true;
-        }
-    }
-
-    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::MouseMove) {
-        auto *mouseEvent = static_cast<QMouseEvent *>(event);
-        if (imageDragActive_ && isImagePreviewActive()) {
-            const QPoint delta = mouseEvent->globalPosition().toPoint() - imageDragStartPos_;
-            ui_.imageScrollArea->horizontalScrollBar()->setValue(imageDragStartScroll_.x() - delta.x());
-            ui_.imageScrollArea->verticalScrollBar()->setValue(imageDragStartScroll_.y() - delta.y());
-            mouseEvent->accept();
-            return true;
-        }
-    }
-
-    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::MouseButtonRelease) {
-        auto *mouseEvent = static_cast<QMouseEvent *>(event);
-        if (mouseEvent->button() == Qt::LeftButton && imageDragActive_) {
-            imageDragActive_ = false;
-            ui_.imageScrollArea->viewport()->setCursor(Qt::OpenHandCursor);
-            mouseEvent->accept();
-            return true;
-        }
-    }
-
-    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::Wheel) {
-        auto *wheelEvent = static_cast<QWheelEvent *>(event);
-        // A mouse wheel zooms, as in an image viewer; a touchpad's two-finger
-        // scroll (which comes in phases) moves the image, and with Ctrl, as
-        // Windows sends a pinch, zooms too.
-        const bool fromWheel = wheelEvent->phase() == Qt::NoScrollPhase;
-        if (isImagePreviewActive() && (fromWheel || (wheelEvent->modifiers() & Qt::ControlModifier))) {
-            const QPoint angle = wheelEvent->angleDelta();
-            const qreal steps = (angle.y() != 0 ? angle.y() : angle.x()) / 120.0;
-            if (!qFuzzyIsNull(steps)) {
-                adjustImageZoom(std::pow(kImageZoomStep, steps), wheelEvent->position().toPoint());
-            }
-            wheelEvent->accept();
-            return true;
-        }
-    }
-
-    // A touchpad pinch, where the system reports one (GNOME, macOS).
-    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::NativeGesture) {
-        auto *gesture = static_cast<QNativeGestureEvent *>(event);
-        if (isImagePreviewActive() && gesture->gestureType() == Qt::ZoomNativeGesture) {
-            adjustImageZoom(1.0 + gesture->value(), gesture->position().toPoint());
-            gesture->accept();
-            return true;
-        }
-        if (isImagePreviewActive() && gesture->gestureType() == Qt::SmartZoomNativeGesture) {
-            resetImageZoom();
-            gesture->accept();
-            return true;
-        }
-    }
-
-    if (ui_.imageScrollArea && watched == ui_.imageScrollArea->viewport() && event->type() == QEvent::Resize) {
-        if (isImagePreviewActive()) {
-            updateImagePreview();
         }
     }
 
@@ -1300,18 +1099,11 @@ void ClipboardItemPreviewDialog::releasePreviewContent() {
         return;
     }
 
-    imageOriginal_ = QImage();
-    imageZoomFactor_ = 1.0;
-    imageFitScale_ = 1.0;
-    imageDragActive_ = false;
-    if (ui_.imageCanvas) {
-        ui_.imageCanvas->clear();
+    if (ui_.imageView) {
+        ui_.imageView->clear();
     }
     if (ui_.contentLayout && ui_.browser) {
         ui_.contentLayout->setCurrentWidget(ui_.browser);
-    }
-    if (ui_.imageScrollArea && ui_.imageScrollArea->viewport()) {
-        ui_.imageScrollArea->viewport()->setCursor(Qt::OpenHandCursor);
     }
 
     QPointer<QTextDocument> oldDocument = ui_.browser->document();

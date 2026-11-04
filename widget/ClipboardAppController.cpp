@@ -103,10 +103,7 @@ void ClipboardAppController::initClipboard() {
 }
 
 void ClipboardAppController::initSound() {
-    copySoundPlayer_ = new CopySoundPlayer(
-        MPasteSettings::getInst()->isPlaySound(),
-        QUrl(QStringLiteral("qrc:/resources/resources/sound.mp3")),
-        this);
+    copySoundPlayer_ = new CopySoundPlayer(QStringLiteral(":/resources/resources/sound.wav"), this);
 }
 
 void ClipboardAppController::setupSyncWatcher() {

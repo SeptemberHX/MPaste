@@ -47,14 +47,13 @@ file(GLOB SRCS CONFIGURE_DEPENDS
 # header later in the build.
 find_package(Qt6 COMPONENTS
         Widgets
-        Multimedia
         Network
         LinguistTools
         Xml
 )
 if(NOT Qt6_FOUND)
     message(FATAL_ERROR "Qt 6 development files are missing. On Debian/Ubuntu: "
-            "sudo apt install qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-tools-dev-tools")
+            "sudo apt install qt6-base-dev qt6-tools-dev qt6-tools-dev-tools")
 endif()
 
 set(TS_FILES
@@ -154,7 +153,6 @@ endif()
 if(WIN32)
     target_link_libraries(${BIN_NAME} PRIVATE
             Qt6::Widgets
-            Qt6::Multimedia
             Qt6::Network
             Qt6::Xml
             ${PLATFORM_SPECIFIC_LIBS}
@@ -164,11 +162,11 @@ if(WIN32)
             ole32
             psapi
             version
+            winmm
     )
 else()
     target_link_libraries(${BIN_NAME} PRIVATE
             Qt6::Widgets
-            Qt6::Multimedia
             Qt6::Network
             Qt6::Xml
             ${PLATFORM_SPECIFIC_LIBS}
@@ -251,27 +249,12 @@ if(WIN32)
                     COMMENT "Running windeployqt..."
             )
 
-            # Strip debug symbols from the exe in the package directory
-            # and remove FFmpeg DLLs pulled in by Qt6Multimedia (only
-            # audio playback is used, which does not need FFmpeg).
+            # Remove plugins windeployqt adds that MPaste does not use.
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E echo "Stripping and cleaning package..."
-                    COMMAND ${CMAKE_COMMAND} -E rm -f
-                        "${PACKAGE_DIR}/avcodec-61.dll"
-                        "${PACKAGE_DIR}/avformat-61.dll"
-                        "${PACKAGE_DIR}/avutil-59.dll"
-                        "${PACKAGE_DIR}/swscale-8.dll"
-                        "${PACKAGE_DIR}/swresample-5.dll"
-                        "${DEPLOY_DIR}/avcodec-61.dll"
-                        "${DEPLOY_DIR}/avformat-61.dll"
-                        "${DEPLOY_DIR}/avutil-59.dll"
-                        "${DEPLOY_DIR}/swscale-8.dll"
-                        "${DEPLOY_DIR}/swresample-5.dll"
                     COMMAND ${CMAKE_COMMAND} -E rm -rf
-                        "${PACKAGE_DIR}/multimedia/ffmpegmediaplugin.dll"
                         "${PACKAGE_DIR}/generic"
                         "${PACKAGE_DIR}/networkinformation"
-                        "${DEPLOY_DIR}/multimedia/ffmpegmediaplugin.dll"
                         "${DEPLOY_DIR}/generic"
                         "${DEPLOY_DIR}/networkinformation"
                     COMMENT "Removing unused DLLs and plugins..."

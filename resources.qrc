@@ -7,7 +7,7 @@ update: 一旦我被更新，务必更新我的开头注释，以及所属的文
 <!-- note: Added dark theme stylesheet, light icon variants, and rename icons. -->
 <RCC>
     <qresource prefix="/resources">
-        <file>resources/sound.mp3</file>
+        <file>resources/sound.wav</file>
         <file>resources/mpaste.svg</file>
         <file>resources/unknown.svg</file>
         <file>resources/search.svg</file>

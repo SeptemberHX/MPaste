@@ -1,8 +1,7 @@
 // input: Depends on Qt Widgets and ClipboardItem data to inspect normalized and raw clipboard content.
-// output: Exposes a lightweight details dialog for one clipboard item with a stable inspector width and no card shadow.
-// pos: Widget-layer inspector dialog declaration used to debug and understand clipboard items.
+// output: Exposes the details dialog for one clipboard item: its content on the left, what it is on the right.
+// pos: Widget-layer inspector dialog declaration used to understand and debug clipboard items.
 // update: If I change, update this header block and my folder README.md.
-// note: Added theme application support.
 #ifndef MPASTE_CLIPBOARDITEMDETAILSDIALOG_H
 #define MPASTE_CLIPBOARDITEMDETAILSDIALOG_H
 
@@ -12,12 +11,19 @@
 #include "data/ClipboardItem.h"
 
 class QFrame;
+class QGridLayout;
+class QLabel;
 class QMimeData;
 class QMouseEvent;
+class QPushButton;
+class QStackedWidget;
+class QButtonGroup;
 class QTextEdit;
-class QLabel;
 class QToolButton;
-class QTabWidget;
+class QVBoxLayout;
+class DetailsChips;
+class DetailsFormatsView;
+class ZoomableImageView;
 
 class ClipboardItemDetailsDialog : public QDialog {
     Q_OBJECT
@@ -27,55 +33,65 @@ public:
     void showItem(const ClipboardItem &item, int sequence = -1, int totalCount = -1);
     void applyTheme(bool dark);
 
+signals:
+    // The header's actions on the item shown; the board carries them out.
+    void pasteRequested(const ClipboardItem &item);
+    void copyRequested(const ClipboardItem &item);
+    void ocrRequested(const ClipboardItem &item);
+    void saveRequested(const ClipboardItem &item);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 private:
+    enum Page { PreviewPage = 0, TextPage, RawPage, HtmlPage, FormatsPage };
+
     QString uiText(const QString &source, const QString &zhFallback) const;
     QString contentTypeLabel(ContentType type) const;
-    QString joinUrls(const QList<QUrl> &urls) const;
-    QString byteCountLabel(qint64 bytes) const;
-    QString mimeFormatsReport(const QMimeData *mimeData) const;
-    qint64 totalMimeBytes(const QMimeData *mimeData) const;
-    QTextEdit *createReadOnlyEditor(bool noWrap = false) const;
-    void updatePreviewVisual(const ClipboardItem &item);
+    QTextEdit *createReader(bool noWrap) const;
+    void fillPreview(const ClipboardItem &item, const ClipboardItem &full);
+    void fillInfo(const ClipboardItem &item, const QMimeData *mimeData, int sequence, int totalCount);
+    void selectTab(int index);
+    void addSection(const QString &title, const QList<QPair<QString, QString>> &rows);
+    void clearInfo();
+    void showPage(int index);
 
     struct {
         QFrame *card = nullptr;
-        QLabel *titleLabel = nullptr;
-        QToolButton *closeButton = nullptr;
-        QTabWidget *tabs = nullptr;
-
-        QLabel *previewVisual = nullptr;
-        QLabel *previewThumbnail = nullptr;
-        QLabel *previewSummaryValue = nullptr;
-        QLabel *sequenceValue = nullptr;
-        QLabel *typeValue = nullptr;
-        QLabel *timeValue = nullptr;
-        QLabel *nameValue = nullptr;
-        QLabel *titleValue = nullptr;
-        QLabel *urlValue = nullptr;
-        QLabel *fingerprintValue = nullptr;
-        QLabel *formatCountValue = nullptr;
-        QLabel *mimeBytesValue = nullptr;
-        QLabel *textLengthValue = nullptr;
-        QLabel *urlCountValue = nullptr;
-
-        QTextEdit *normalizedTextEdit = nullptr;
-        QTextEdit *normalizedUrlsEdit = nullptr;
-        QTextEdit *rawTextEdit = nullptr;
-        QTextEdit *rawHtmlEdit = nullptr;
-        QTextEdit *rawUrlsEdit = nullptr;
-        QTextEdit *mimeFormatsEdit = nullptr;
-
         QLabel *iconLabel = nullptr;
+        QLabel *titleLabel = nullptr;
         QLabel *subtitleLabel = nullptr;
-        QLabel *sourceValue = nullptr;
-        QWidget *titleRow = nullptr;
-        QWidget *urlRow = nullptr;
+        QWidget *actions = nullptr;
+        QPushButton *pasteButton = nullptr;
+        QPushButton *ocrButton = nullptr;
+        QPushButton *saveButton = nullptr;
+        QPushButton *openButton = nullptr;
+        QToolButton *closeButton = nullptr;
+
+        QButtonGroup *tabGroup = nullptr;
+        QPushButton *tabs[5] = {};
+        QLabel *hintLabel = nullptr;
+        QStackedWidget *pages = nullptr;
+        QStackedWidget *previewStack = nullptr;
+        ZoomableImageView *imageView = nullptr;
+        QTextEdit *previewText = nullptr;
+        QLabel *previewCard = nullptr;
+        QTextEdit *textEdit = nullptr;
+        QTextEdit *rawEdit = nullptr;
+        QTextEdit *htmlEdit = nullptr;
+        DetailsFormatsView *formatsView = nullptr;
+
+        QVBoxLayout *infoLayout = nullptr;
+        QWidget *techSection = nullptr;
+        DetailsChips *chips = nullptr;
+        QLabel *fingerprintValue = nullptr;
     } ui_;
+    ClipboardItem currentItem_;
+    QString fingerprintHex_;
+    QString openTarget_;
     QColor accent_;
 
     QPoint dragOffset_;

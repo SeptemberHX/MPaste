@@ -19,7 +19,8 @@ update: 修改本目录文件时，同步更新本 README。
 
 - `AboutWidget.*`：关于窗口。
 - `ClipboardBoardActionService.*`：板块条目操作 helper，承接模型/持久化层的非视觉动作。
-- `ClipboardItemDetailsDialog.*`：条目详情与检查器弹窗。
+- `ClipboardItemDetailsDialog.*`：条目详情：顶部一行标签（预览 / 文本 / 原始 / HTML / 格式，没有内容的变灰；文本条目的预览就叫“文本”），下面左边是内容（图片用 `ZoomableImageView`，链接是图加标题，文件是图标、名称和所在文件夹），右边一栏按类型列出事实（图片的尺寸与原图大小格式、文本的字数行数、链接的标题地址网站、文件是否仍在原处），再是来源与技术（格式、指纹）。“格式”页逐个列出格式和大小，同一份数据被几个格式共用时只算一次（虚线、“同上”）。两栏顶边、底边对齐；间距在 4 px 网格上，圆角 20 / 14 / 8 / 6 逐层嵌套。
+- `ZoomableImageView.*`：适合窗口显示图片、滚轮或触控板捏合以指针为中心缩放、拖动平移、双击复原，只画可见部分；空格预览与详情共用。长图可按宽度适合（从顶部读起）。
 - `MPasteSettingsWidget.*`：设置窗口。侧栏依次为通用、快捷键、同步、隐私、文字识别、关于；按钮编号即页面顺序，`applyTheme` 的图标列表与之对应。
 - `MPasteWidget.*`：主窗口与主要交互入口。
 - `MTextBrowser.*`：用于卡片正文展示的轻量文本浏览控件。
@@ -141,8 +142,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `ClipboardItemDetailsDialog` 现在会对带缩略图的富文本条目直接显示其快照缩略图，而不是退回默认图标。
 - 图片与富文本缩略图现在统一按目标卡片框做 `KeepAspectRatioByExpanding` 的居中 cover 裁切，避免长条图生成过窄的缩略图。
 - `MPasteWidget` 现在会在短时间内抑制重复提示音，减少一次复制触发多次响声的问题。
-- `MPasteWidget` 现在会在每次播放提示音前按当前默认输出设备重建播放链路，减少运行中切换耳机后提示音仍走旧设备的问题，同时避免设备变化回调触发的重复重建。
-- `MPasteWidget` 现在会把提示音播放器指针初始化为 `nullptr`，避免重建播放链路时因未初始化指针导致的启动崩溃。
+- `CopySoundPlayer` 不用 Qt Multimedia：Windows 上用 `PlaySoundW` 从内存异步播放内嵌的 WAV，Linux 等系统上把它写到缓存目录，交给独立的 `pw-play`（没有则 `paplay`）进程播放；声音总走系统当前的默认输出设备。两者都没有时不响，并在日志里说明。
 - `MPasteSettingsWidget` 现在会在快捷键输入框里主动记录 `Win`/`Meta` 组合键，避免 `QKeySequenceEdit` 在 Windows 下录不进 `Win+...`。
 - `MPasteSettingsWidget` 现在将设置页重构为“常用设置 / 快捷与预览 / 同步与维护”三页签布局，提升操作按钮高度，并改为固定宽度 + 按内容自适应高度，避免底部空白和按钮裁切。
 - `MPasteWidget` 现在会在设置窗口打开期间临时停用全局唤起热键，避免编辑快捷键时被当前热键立即抢走。

@@ -338,6 +338,25 @@ ClipboardItemDetailsDialog *MPasteWidget::ensureDetailsDialog() {
     if (!ui_.detailsDialog) {
         ui_.detailsDialog = new ClipboardItemDetailsDialog(this);
         ui_.detailsDialog->setWindowFlag(Qt::Tool);
+        connect(ui_.detailsDialog, &ClipboardItemDetailsDialog::pasteRequested, this, [this](const ClipboardItem &item) {
+            if (controller_->setClipboard(item, false)) {
+                hideAndPaste();
+                currItemsWidget()->moveItemByNameToFirst(item.getName());
+            }
+        });
+        connect(ui_.detailsDialog, &ClipboardItemDetailsDialog::copyRequested, this, [this](const ClipboardItem &item) {
+            controller_->setClipboard(item, false);
+        });
+        connect(ui_.detailsDialog, &ClipboardItemDetailsDialog::ocrRequested, this, [this](const ClipboardItem &item) {
+            if (auto *board = currItemsWidget()) {
+                emit board->ocrRequested(item);
+            }
+        });
+        connect(ui_.detailsDialog, &ClipboardItemDetailsDialog::saveRequested, this, [this](const ClipboardItem &item) {
+            if (auto *board = currItemsWidget()) {
+                board->saveItemToFile(item);
+            }
+        });
         ui_.detailsDialog->hide();
     }
     return ui_.detailsDialog;

@@ -8,7 +8,7 @@
 #include <QDialog>
 #include "data/ClipboardItem.h"
 
-class PreviewImageCanvas;
+class ZoomableImageView;
 class QLabel;
 class QScrollArea;
 class QStackedLayout;
@@ -42,12 +42,6 @@ protected:
 private:
     QString uiText(const QString &source, const QString &zhFallback) const;
     void releasePreviewContent();
-    void setImagePreview(const QImage &image);
-    void updateImagePreview();
-    // Zooms by factor, keeping the image point under anchor (viewport
-    // coordinates; the viewport's centre when none) where it is.
-    void adjustImageZoom(qreal factor, QPoint anchor = QPoint(-1, -1));
-    void resetImageZoom();
     bool handleImageZoomKey(QKeyEvent *event);
     bool isImagePreviewActive() const;
     // The window height that shows the loaded content whole, within the screen.
@@ -60,8 +54,7 @@ private:
         QLabel *subtitleLabel = nullptr;
         QStackedLayout *contentLayout = nullptr;
         QTextBrowser *browser = nullptr;
-        QScrollArea *imageScrollArea = nullptr;
-        PreviewImageCanvas *imageCanvas = nullptr;
+        ZoomableImageView *imageView = nullptr;
         QToolButton *closeButton = nullptr;
         QLabel *iconLabel = nullptr;
         QWidget *actions = nullptr;
@@ -75,12 +68,6 @@ private:
     bool revealPending_ = false;
 
     QPoint dragOffset_;
-    bool imageDragActive_ = false;
-    QPoint imageDragStartPos_;
-    QPoint imageDragStartScroll_;
-    QImage imageOriginal_;
-    qreal imageZoomFactor_ = 1.0;
-    qreal imageFitScale_ = 1.0;
     quint64 previewToken_ = 0;
     bool darkTheme_ = false;
 };

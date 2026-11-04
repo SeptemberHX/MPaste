@@ -1,36 +1,37 @@
-// input: Depends on Qt Multimedia classes for audio playback.
-// output: Provides a self-contained copy-sound player that monitors audio device changes.
-// pos: Widget-layer helper owned by MPasteWidget.
+// input: Depends on MPasteSettings and the system's own sound playback.
+// output: Provides a copy-sound player with burst suppression.
+// pos: Widget-layer helper owned by ClipboardAppController.
 // update: If I change, update this header block.
 #ifndef COPYSOUNDPLAYER_H
 #define COPYSOUNDPLAYER_H
 
+#include <QByteArray>
 #include <QObject>
-#include <QAudioDevice>
-#include <QAudioOutput>
-#include <QMediaDevices>
-#include <QMediaPlayer>
-#include <QDateTime>
-#include <QUrl>
+#include <QString>
 
+// Plays the copy sound, a short WAV, through the system instead of Qt
+// Multimedia, which would load a media framework (FFmpeg and what it probes
+// for) for 0.1 s of sound: on Windows PlaySound from memory, on Linux and
+// other systems a short-lived pw-play or paplay on a copy of it in the cache.
 class CopySoundPlayer : public QObject {
     Q_OBJECT
 
 public:
-    explicit CopySoundPlayer(bool soundEnabled, const QUrl &soundSource, QObject *parent = nullptr);
-    ~CopySoundPlayer() override = default;
+    explicit CopySoundPlayer(const QString &resourcePath, QObject *parent = nullptr);
+    ~CopySoundPlayer() override;
 
     /// Play the copy sound unless the setting is disabled or burst-suppressed.
     void playCopySoundIfNeeded(int wId, const QByteArray &fingerprint = QByteArray());
 
 private:
-    void rebuildSoundPlaybackChain(const QAudioDevice &device);
-    void syncSoundOutputDevice();
+    bool play();
 
-    QMediaPlayer *player_ = nullptr;
-    QAudioOutput *audioOutput_ = nullptr;
-    QMediaDevices *mediaDevices_ = nullptr;
-    QUrl soundSource_;
+    QString resourcePath_;
+    QByteArray sound_;
+#ifndef Q_OS_WIN
+    QString soundFile_;
+    QString playerProgram_;
+#endif
     qint64 lastSoundPlayAtMs_ = 0;
 
     static constexpr qint64 SOUND_BURST_WINDOW_MS = 500;
