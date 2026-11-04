@@ -10,6 +10,7 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QImage>
+#include <QMimeData>
 #include <QMutexLocker>
 #include <QPixmap>
 #include <QPointer>
@@ -206,6 +207,24 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
                         }
                         preparedItem.setSourceFilePath(savedFilePath);
                         preparedItem.setMimeDataFileOffset(lightItem.mimeDataFileOffset());
+
+                        // A big copy, a screenshot above all, needn't stay in
+                        // memory now it is on disk: the row becomes what a page
+                        // load gives, which reads its data back from the file
+                        // when it is pasted, previewed or exported.
+                        constexpr qint64 kKeepInMemoryBytes = 1024 * 1024;
+                        qint64 payloadBytes = 0;
+                        if (const QMimeData *mime = preparedItem.getMimeData()) {
+                            for (const QString &format : mime->formats()) {
+                                payloadBytes += mime->data(format).size();
+                            }
+                        }
+                        if (payloadBytes > kKeepInMemoryBytes) {
+                            if (preparedItem.hasThumbnail()) {
+                                lightItem.setThumbnail(preparedItem.thumbnail());
+                            }
+                            preparedItem = lightItem;
+                        }
                     }
                     guard->lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
                     ++guard->internalWriteGen_;

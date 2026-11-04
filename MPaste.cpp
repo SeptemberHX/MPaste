@@ -16,6 +16,9 @@
 #include <QMutex>
 #include <QTextStream>
 #include <QMessageBox>
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
 #ifdef Q_OS_LINUX
 #include "utils/GnomeBridge.h"
 #endif
@@ -183,6 +186,13 @@ void configureOpenGLBackend() {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef __GLIBC__
+    // glibc serves a big block (a decoded screenshot, a card picture) from the
+    // heap once one of that size has been freed, and that heap then stays
+    // grown long after. A fixed threshold keeps big blocks separately mapped,
+    // so they go back to the system when freed.
+    mallopt(M_MMAP_THRESHOLD, 256 * 1024);
+#endif
     installFileLogger();
     configureOpenGLBackend();
 

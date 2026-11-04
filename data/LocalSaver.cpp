@@ -1364,7 +1364,9 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
     }
 
     constexpr quint32 kMaxPreviewHtmlBytes = 2 * 1024 * 1024;
-    constexpr quint32 kMaxPreviewImageBytes = 12 * 1024 * 1024;
+    // Room for an uncompressed copy (a BMP, as Windows apps and some Linux
+    // ones offer) of a long or 8K screenshot: 7680x4320 is 127 MB.
+    constexpr quint32 kMaxPreviewImageBytes = 160 * 1024 * 1024;
     QList<QByteArray> uniqueBlobs;
     QByteArray htmlBytes;
     QByteArray imageBytes;

@@ -8,6 +8,7 @@
 #include <QDialog>
 #include "data/ClipboardItem.h"
 
+class PreviewImageCanvas;
 class QLabel;
 class QScrollArea;
 class QStackedLayout;
@@ -43,7 +44,9 @@ private:
     void releasePreviewContent();
     void setImagePreview(const QImage &image);
     void updateImagePreview();
-    void adjustImageZoom(qreal factor);
+    // Zooms by factor, keeping the image point under anchor (viewport
+    // coordinates; the viewport's centre when none) where it is.
+    void adjustImageZoom(qreal factor, QPoint anchor = QPoint(-1, -1));
     void resetImageZoom();
     bool handleImageZoomKey(QKeyEvent *event);
     bool isImagePreviewActive() const;
@@ -58,7 +61,7 @@ private:
         QStackedLayout *contentLayout = nullptr;
         QTextBrowser *browser = nullptr;
         QScrollArea *imageScrollArea = nullptr;
-        QLabel *imageLabel = nullptr;
+        PreviewImageCanvas *imageCanvas = nullptr;
         QToolButton *closeButton = nullptr;
         QLabel *iconLabel = nullptr;
         QWidget *actions = nullptr;

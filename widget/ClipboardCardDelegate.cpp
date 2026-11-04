@@ -1218,10 +1218,10 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         bodyRendererForType(card.contentType).paint(painter, ctx);
         painter->restore();
         if (visual || spineLink) {
-            // The caption sits in a small pill: on a picture, leaving the rest of
-            // it clear; on a link, beside its band.
+            // The caption sits in a small pill at the card's foot, leaving the
+            // picture, or a link's band and text, clear above it.
             const QFont capFont = uiFont(8.5, QFont::Normal);
-            const int capLeft = spineLink ? CardRenderUtils::webSpineWidth(scale) + px(8) : px(8);
+            const int capLeft = px(8);
             // Rounded up: horizontalAdvance rounds to the nearest pixel, and a text
             // rect up to half a pixel short of the text got it elided ("1118 × …").
             const QFontMetricsF capMetrics(capFont, painter->device());
@@ -1231,14 +1231,12 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
             const QRect cap(cardRect.left() + capLeft, cardRect.bottom() - px(8) - capHeight + 1, capWidth, capHeight);
             painter->save();
             painter->setPen(Qt::NoPen);
-            painter->setBrush(visual ? QColor(12, 13, 17, 170)
-                                     : (darkTheme ? QColor(255, 255, 255, 16) : QColor(0, 0, 0, 12)));
+            // Dark and clear on a picture or across a link's band alike.
+            painter->setBrush(QColor(12, 13, 17, 170));
             painter->drawRoundedRect(QRectF(cap), capHeight / 2.0, capHeight / 2.0);
             painter->restore();
-            const QColor capInk = visual ? QColor(255, 255, 255, 215)
-                                         : (darkTheme ? QColor(255, 255, 255, 185) : QColor(24, 26, 32, 185));
             CardRenderUtils::drawElidedText(painter, cap.adjusted(px(8), 0, -px(8), 0), detailText, capFont,
-                                            capInk, Qt::AlignLeft | Qt::AlignVCenter,
+                                            QColor(255, 255, 255, 215), Qt::AlignLeft | Qt::AlignVCenter,
                                             middleElide ? Qt::ElideMiddle : Qt::ElideRight);
         } else {
             CardRenderUtils::drawElidedText(painter, footer.adjusted(pad + px(2), 0, -pad, 0), detailText,
