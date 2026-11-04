@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.8.4
+
+Text recognition on Linux with PaddleOCR, a first-run guide, a redrawn details window and link cards, and much less memory: saved screenshots are freed and the copy sound no longer loads a media framework.
 
 - A guide on first launch, about a minute long, that teaches by doing: press the hotkey and its keys light up; pick, paste and Alt+2 in a practice row of made-up cards (nothing is pasted); then search, Space, Tab and the menu, and a last check of starting with the system, privacy, and text recognition (with the install command when it needs ONNX Runtime). On GNOME Wayland without MPaste's extension it first offers to turn the extension on. It can be skipped at any step and shown again from Settings → About; settings from before it count as seen, so upgrading does not show it.
 - Labels whose English has an arrow or an ellipsis ("Downloading the precise model...", "Leave apps out…") showed in English on a Chinese desktop: the check for a missing translation compared them as Latin-1.
