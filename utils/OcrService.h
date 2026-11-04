@@ -14,7 +14,8 @@
 ///   - OCR text is merged into the search index but never into the
 ///     original MIME payload.
 ///   - On Windows: calls Windows.Media.Ocr via PowerShell (zero deps).
-///   - On Linux: calls external `tesseract` CLI.
+///   - On Linux: starts `mpaste-ocr` (PaddleOCR through ONNX Runtime, which
+///     is installed apart), else the `tesseract` CLI.
 class OcrService : public QObject {
     Q_OBJECT
 
@@ -47,6 +48,13 @@ public:
 
     /// Remove the sidecar file (called when an item is deleted).
     static bool removeSidecar(const QString &mpastePath);
+
+    /// Linux: whether recognition on this computer works, and if not, what
+    /// is missing. Starts `mpaste-ocr --check`, so call it off the main thread.
+    enum LocalState { LocalReady = 0, LocalNoHelper, LocalNoRuntime };
+    static LocalState localState();
+    /// The command that installs ONNX Runtime: "sudo apt install libonnxruntime1.23".
+    static QString runtimeInstallCommand();
 
 signals:
     /// Emitted on the main thread when OCR completes or fails.

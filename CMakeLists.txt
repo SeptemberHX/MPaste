@@ -176,6 +176,64 @@ endif()
 
 target_compile_definitions(${BIN_NAME} PRIVATE MPASTE_VERSION="${VERSION}")
 
+# Text recognition on Linux: mpaste-ocr, a helper MPaste starts for each
+# recognition, reading pictures with PaddleOCR's PP-OCRv6 tiny models. It
+# loads ONNX Runtime at run time, so building needs only its headers
+# (sudo apt install libonnxruntime-dev) and the package only suggests it;
+# MPaste says what to install when it is missing. The models (6.3 MB,
+# Apache-2.0) are downloaded at configure time and checked against their
+# SHA-256; MPASTE_OCR_MODELS_DIR names a folder that has them for a build
+# without network.
+if(UNIX AND NOT APPLE)
+    find_package(onnxruntime CONFIG QUIET)
+    if(onnxruntime_FOUND)
+        get_target_property(_ort_include onnxruntime::onnxruntime INTERFACE_INCLUDE_DIRECTORIES)
+        add_executable(mpaste-ocr ocr/main.cpp ocr/PaddleOcr.cpp ocr/PaddleOcr.h)
+        target_include_directories(mpaste-ocr PRIVATE ${_ort_include})
+        target_link_libraries(mpaste-ocr PRIVATE Qt6::Gui ${CMAKE_DL_LIBS})
+        # Its loops over pixels run 4-5x slower unoptimised; a build without a type gets none.
+        target_compile_options(mpaste-ocr PRIVATE $<$<NOT:$<CONFIG:Debug>>:-O2>)
+        set(MPASTE_OCR_BUILT ON)
+        # What to install for it, by the version built against: libonnxruntime1.23.
+        set(MPASTE_ONNXRUNTIME_PACKAGE "libonnxruntime${onnxruntime_VERSION_MAJOR}.${onnxruntime_VERSION_MINOR}")
+        target_compile_definitions(${BIN_NAME} PRIVATE
+                MPASTE_ONNXRUNTIME_PACKAGE="${MPASTE_ONNXRUNTIME_PACKAGE}")
+
+        set(MPASTE_OCR_MODELS_DIR "" CACHE PATH "Folder with PP-OCRv6_det_tiny.onnx and PP-OCRv6_rec_tiny.onnx")
+        set(_ocr_models "${CMAKE_BINARY_DIR}/ocr-models")
+        set(_ocr_base "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6")
+        foreach(_model
+                "det/PP-OCRv6_det_tiny.onnx|f42c0fbd294d95eac1a550e131b277dac97462c8025fa4b6c3cec1b7894bd3d5"
+                "rec/PP-OCRv6_rec_tiny.onnx|e16e242de5937ad92609223f19bc2aff3727ee40b095f996907c24749bad251b")
+            string(REPLACE "|" ";" _parts "${_model}")
+            list(GET _parts 0 _path)
+            list(GET _parts 1 _hash)
+            get_filename_component(_name "${_path}" NAME)
+            set(_target "${_ocr_models}/${_name}")
+            if(EXISTS "${_target}")
+                file(SHA256 "${_target}" _have)
+            else()
+                set(_have "")
+            endif()
+            if(NOT _have STREQUAL _hash)
+                if(MPASTE_OCR_MODELS_DIR AND EXISTS "${MPASTE_OCR_MODELS_DIR}/${_name}")
+                    file(COPY "${MPASTE_OCR_MODELS_DIR}/${_name}" DESTINATION "${_ocr_models}")
+                else()
+                    message(STATUS "Downloading OCR model ${_name}")
+                    file(DOWNLOAD "${_ocr_base}/${_path}" "${_target}" EXPECTED_HASH SHA256=${_hash} STATUS _status)
+                    list(GET _status 0 _code)
+                    if(NOT _code EQUAL 0)
+                        message(WARNING "OCR model ${_name} not downloaded (${_status}); text recognition will say it is missing.")
+                        file(REMOVE "${_target}")
+                    endif()
+                endif()
+            endif()
+        endforeach()
+    else()
+        message(STATUS "mpaste-ocr not built: needs ONNX Runtime's headers (libonnxruntime-dev); OCR falls back to tesseract.")
+    endif()
+endif()
+
 if(UNIX)
     include(deb.cmake)
     include(CPack)

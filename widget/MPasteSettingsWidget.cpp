@@ -12,6 +12,11 @@
 #include "SurfacePainter.h"
 #include "ToggleSwitch.h"
 #include "utils/IconResolver.h"
+#include "utils/OcrService.h"
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QPointer>
+#include <QThread>
 #include <QRegularExpression>
 #include <QShowEvent>
 #include <QMouseEvent>
@@ -1121,7 +1126,12 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         ocrBackendCombo_ = new QComboBox(maintenancePage);
         ocrBackendCombo_->setMinimumSize(QSize(180, 36));
         ocrBackendCombo_->setMaximumHeight(36);
+#ifdef Q_OS_WIN
         ocrBackendCombo_->addItem(uiText("Windows Built-in", QStringLiteral("Windows 内置")), 0);
+#else
+        // mpaste-ocr (PaddleOCR) on this machine, tesseract when it is missing.
+        ocrBackendCombo_->addItem(uiText("On this computer", QStringLiteral("本机识别")), 0);
+#endif
         ocrBackendCombo_->addItem(uiText("Baidu OCR API", QStringLiteral("百度 OCR API")), 1);
 
         baiduApiKeyLabel_ = new QLabel(QStringLiteral("API Key"), maintenancePage);
@@ -1160,6 +1170,33 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
             g->addWidget(autoOcrSwitch_, 3, 1, Qt::AlignRight | Qt::AlignVCenter);
             mLayout->addWidget(makeCard(g));
         }
+#ifndef Q_OS_WIN
+        {
+            // What recognition on this computer still needs: the command,
+            // and a button that copies it.
+            ocrStatusRow_ = new QWidget(maintenancePage);
+            auto *row = new QHBoxLayout(ocrStatusRow_);
+            row->setContentsMargins(4, 4, 0, 0);
+            row->setSpacing(12);
+            auto *status = new QLabel(ocrStatusRow_);
+            status->setObjectName(QStringLiteral("auroraHint"));
+            status->setWordWrap(true);
+            status->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            row->addWidget(status, 1);
+            auto *copy = new QPushButton(uiText("Copy command", QStringLiteral("复制命令")), ocrStatusRow_);
+            copy->setObjectName(QStringLiteral("auroraSecondary"));
+            copy->setCursor(Qt::PointingHandCursor);
+            connect(copy, &QPushButton::clicked, this, [copy, this]() {
+                QGuiApplication::clipboard()->setText(OcrService::runtimeInstallCommand());
+                copy->setText(uiText("Copied", QStringLiteral("已复制")));
+            });
+            row->addWidget(copy, 0, Qt::AlignTop);
+            ocrStatusRow_->hide();
+            mLayout->addWidget(ocrStatusRow_);
+            connect(ocrBackendCombo_, &QComboBox::currentIndexChanged, this, &MPasteSettingsWidget::refreshOcrStatus);
+            refreshOcrStatus();
+        }
+#endif
 
         mLayout->addStretch();
         stack->addWidget(maintenancePage);
@@ -1502,4 +1539,47 @@ void MPasteSettingsWidget::applyTheme(bool dark) {
     }
 
     update();
+}
+
+void MPasteSettingsWidget::refreshOcrStatus() {
+#ifndef Q_OS_WIN
+    if (!ocrStatusRow_ || !ocrBackendCombo_) {
+        return;
+    }
+    if (ocrBackendCombo_->currentData().toInt() != 0) {
+        ocrStatusRow_->hide();
+        return;
+    }
+    // mpaste-ocr --check loads ONNX Runtime: off the main thread.
+    QPointer<MPasteSettingsWidget> guard(this);
+    QThread *thread = QThread::create([guard]() {
+        const OcrService::LocalState state = OcrService::localState();
+        QMetaObject::invokeMethod(qApp, [guard, state]() {
+            if (!guard || !guard->ocrStatusRow_ || !guard->ocrBackendCombo_
+                || guard->ocrBackendCombo_->currentData().toInt() != 0) {
+                return;
+            }
+            auto *label = guard->ocrStatusRow_->findChild<QLabel *>();
+            auto *copy = guard->ocrStatusRow_->findChild<QPushButton *>();
+            const QString command = OcrService::runtimeInstallCommand();
+            if (state == OcrService::LocalNoRuntime) {
+                label->setText(uiText("Recognition on this computer needs ONNX Runtime (about 80 MB with what it needs). "
+                                             "Install it in a terminal, then it works at once: <b>%1</b>",
+                                             QStringLiteral("本机识别需要 ONNX Runtime（连同依赖约 80 MB）。在终端里安装后即可使用：<b>%1</b>"))
+                                   .arg(command.toHtmlEscaped()));
+                copy->show();
+                guard->ocrStatusRow_->show();
+            } else if (state == OcrService::LocalNoHelper) {
+                label->setText(uiText("This build has no recognition of its own (mpaste-ocr); tesseract is used if installed.",
+                                             QStringLiteral("这个版本没有自带的本机识别（mpaste-ocr），会改用已安装的 tesseract。")));
+                copy->hide();
+                guard->ocrStatusRow_->show();
+            } else {
+                guard->ocrStatusRow_->hide();
+            }
+        });
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+#endif
 }

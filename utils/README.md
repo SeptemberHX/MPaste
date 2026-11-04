@@ -90,3 +90,4 @@ update: 修改本目录文件时，同步更新本 README。
 - `PlatformRelated::getWindowAppName` 返回来源窗口的应用名（Wayland：扩展的 `SourceApp` 信号经 `GnomeBridge` 缓存；X11：WM_CLASS；Windows：exe 的 FileDescription），`ClipboardMonitor::sourcedItem` 在采集时写入条目。
 - `PlatformRelated::caretRect` 在 Windows 上通过 `GetGUIThreadInfo` 读取前台窗口的文本光标并换算为 Qt 逻辑坐标；Linux 返回空（Wayland 由扩展摆放，X11 退回鼠标位置）。
 - `MPasteSettings` 新增 `activationLayout`（`main/activationLayout`：0 面板，1 光标旁堆栈）。
+- `OcrService`：文字识别。Windows 用系统自带的 Windows.Media.Ocr；Linux 先找 `mpaste-ocr`（PaddleOCR，见 `ocr/README.md`）与其模型（MPaste 旁的 `ocr-models/`，或 `share/mpaste/ocr`），没装 ONNX Runtime（`mpaste-ocr` 退出码 5）或失败时退回 `tesseract`；`localState()` 供设置页检查本机识别缺什么，`runtimeInstallCommand()` 给出安装命令（按已装语言包传 `-l chi_sim+…+eng`），都没有时给出要安装什么的提示；也可选百度 OCR API。

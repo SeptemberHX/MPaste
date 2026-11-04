@@ -89,7 +89,8 @@ jobs:
             ca-certificates git build-essential cmake ninja-build pkg-config dpkg-dev file \
             qt6-base-dev qt6-base-private-dev qt6-tools-dev qt6-tools-dev-tools \
             qt6-wayland libx11-dev libxcb-keysyms1-dev libxdo-dev \
-            libwayland-dev libwayland-bin wayland-protocols
+            libwayland-dev libwayland-bin wayland-protocols \
+            libonnxruntime-dev
 
       - uses: actions/checkout@v4
 

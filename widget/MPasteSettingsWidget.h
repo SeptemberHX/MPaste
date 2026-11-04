@@ -73,6 +73,10 @@ private:
     QComboBox *ocrBackendCombo_ = nullptr;
     QLabel *autoOcrLabel_ = nullptr;
     ToggleSwitch *autoOcrSwitch_ = nullptr;
+    // Linux: what recognition on this computer still needs, with a button
+    // that copies the install command; hidden when it is ready.
+    QWidget *ocrStatusRow_ = nullptr;
+    void refreshOcrStatus();
     ToggleSwitch *sensitiveSwitch_ = nullptr;
     ToggleSwitch *linkPreviewSwitch_ = nullptr;
     QLineEdit *ignoredAppsEdit_ = nullptr;

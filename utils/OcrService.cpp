@@ -13,6 +13,10 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QProcess>
+#include <QFileInfo>
+#include <QLocale>
+#include <QRegularExpression>
+#include <QStandardPaths>
 #include <QUrlQuery>
 
 #include "MPasteSettings.h"
@@ -267,6 +271,97 @@ OcrService::Result OcrService::runOcrWindows(const QImage &image) {
 
 #ifndef Q_OS_WIN
 
+namespace {
+bool chineseUi() {
+    const QLocale locale = QLocale::system();
+    return locale.language() == QLocale::Chinese || locale.name().startsWith(QStringLiteral("zh"));
+}
+
+// mpaste-ocr and its models: next to MPaste in a build or a local install,
+// under share/mpaste/ocr when installed from the package.
+QString findOcrHelper() {
+    const QString beside = QCoreApplication::applicationDirPath() + QStringLiteral("/mpaste-ocr");
+    if (QFileInfo(beside).isExecutable()) {
+        return beside;
+    }
+    return QStandardPaths::findExecutable(QStringLiteral("mpaste-ocr"));
+}
+
+QString findOcrModels(const QString &helper) {
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+        QFileInfo(helper).absolutePath() + QStringLiteral("/ocr-models"),
+        appDir + QStringLiteral("/ocr-models"),
+        appDir + QStringLiteral("/../share/mpaste/ocr"),
+        QStringLiteral("/usr/share/mpaste/ocr"),
+    };
+    for (const QString &dir : candidates) {
+        if (QFileInfo::exists(dir + QStringLiteral("/PP-OCRv6_rec_tiny.onnx"))) {
+            return QDir::cleanPath(dir);
+        }
+    }
+    return QString();
+}
+
+// The last line the helper or tesseract wrote that says something: the
+// ONNX Runtime of some distributions writes pages of schema notices first.
+QString lastMeaningfulLine(const QByteArray &output) {
+    const QStringList lines = QString::fromUtf8(output).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (auto it = lines.crbegin(); it != lines.crend(); ++it) {
+        const QString line = it->trimmed();
+        if (!line.isEmpty() && !line.startsWith(QStringLiteral("Schema error"))) {
+            return line;
+        }
+    }
+    return QString();
+}
+
+QString runtimeMissingMessage() {
+    return chineseUi()
+        ? QStringLiteral("本机识别需要 ONNX Runtime（连同依赖约 80 MB），安装后即可使用：%1").arg(OcrService::runtimeInstallCommand())
+        : QStringLiteral("Recognition on this computer needs ONNX Runtime (about 80 MB with what it needs): %1").arg(OcrService::runtimeInstallCommand());
+}
+
+// tesseract's languages, Simplified Chinese first when it has them.
+QString tesseractLanguages() {
+    QProcess proc;
+    proc.start(QStringLiteral("tesseract"), {QStringLiteral("--list-langs")});
+    if (!proc.waitForFinished(5000)) {
+        return QStringLiteral("eng");
+    }
+    const QString list = QString::fromUtf8(proc.readAllStandardOutput() + proc.readAllStandardError());
+    QStringList langs;
+    for (const QString &lang : {QStringLiteral("chi_sim"), QStringLiteral("chi_tra"), QStringLiteral("eng")}) {
+        if (list.contains(QRegularExpression(QStringLiteral("(^|\\s)%1(\\s|$)").arg(lang)))) {
+            langs << lang;
+        }
+    }
+    return langs.isEmpty() ? QStringLiteral("eng") : langs.join(QLatin1Char('+'));
+}
+}  // namespace
+
+QString OcrService::runtimeInstallCommand() {
+#ifdef MPASTE_ONNXRUNTIME_PACKAGE
+    return QStringLiteral("sudo apt install " MPASTE_ONNXRUNTIME_PACKAGE);
+#else
+    return QStringLiteral("sudo apt install libonnxruntime1.23");
+#endif
+}
+
+OcrService::LocalState OcrService::localState() {
+    const QString helper = findOcrHelper();
+    if (helper.isEmpty() || findOcrModels(helper).isEmpty()) {
+        return LocalNoHelper;
+    }
+    QProcess proc;
+    proc.start(helper, {QStringLiteral("--check")});
+    if (!proc.waitForFinished(10000)) {
+        proc.kill();
+        return LocalNoRuntime;
+    }
+    return proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0 ? LocalReady : LocalNoRuntime;
+}
+
 OcrService::Result OcrService::runOcrLinux(const QImage &image) {
     Result result;
 
@@ -279,20 +374,57 @@ OcrService::Result OcrService::runOcrLinux(const QImage &image) {
     }
     tempFile.close();
 
-    // tesseract <input> stdout
-    QProcess proc;
-    proc.setProgram(QStringLiteral("tesseract"));
-    proc.setArguments({tempFile.fileName(), QStringLiteral("stdout")});
-    proc.start();
-    if (!proc.waitForFinished(30000)) {
+    // PaddleOCR through mpaste-ocr, its own process: its models are in
+    // memory only while it reads.
+    const QString helper = findOcrHelper();
+    const QString models = helper.isEmpty() ? QString() : findOcrModels(helper);
+    bool runtimeMissing = false;
+    if (!helper.isEmpty() && !models.isEmpty()) {
+        QProcess proc;
+        proc.start(helper, {QStringLiteral("--models"), models, tempFile.fileName()});
+        if (!proc.waitForFinished(60000)) {
+            proc.kill();
+            result.status = Failed;
+            result.errorMessage = chineseUi() ? QStringLiteral("文字识别超时") : QStringLiteral("Text recognition timed out");
+            return result;
+        }
+        if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0) {
+            result.status = Ready;
+            result.text = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+            return result;
+        }
+        runtimeMissing = proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 5;
+        qWarning().noquote() << QStringLiteral("[ocr] mpaste-ocr failed code=%1 %2")
+                                    .arg(proc.exitCode()).arg(lastMeaningfulLine(proc.readAllStandardError()));
+        // Falls through to tesseract, if there is one.
+    }
+
+    if (QStandardPaths::findExecutable(QStringLiteral("tesseract")).isEmpty()) {
         result.status = Failed;
-        result.errorMessage = QStringLiteral("tesseract timed out or not found");
+        if (runtimeMissing) {
+            result.errorMessage = runtimeMissingMessage();
+            return result;
+        }
+        result.errorMessage = chineseUi()
+            ? QStringLiteral("没有可用的文字识别：请安装 MPaste 的完整包（含 mpaste-ocr），或运行 sudo apt install tesseract-ocr tesseract-ocr-chi-sim")
+            : QStringLiteral("No text recognition available: install MPaste's full package (with mpaste-ocr), or run sudo apt install tesseract-ocr tesseract-ocr-chi-sim");
+        return result;
+    }
+
+    // tesseract <input> stdout -l <languages>
+    QProcess proc;
+    proc.start(QStringLiteral("tesseract"), {tempFile.fileName(), QStringLiteral("stdout"),
+                                             QStringLiteral("-l"), tesseractLanguages()});
+    if (!proc.waitForFinished(30000)) {
+        proc.kill();
+        result.status = Failed;
+        result.errorMessage = chineseUi() ? QStringLiteral("文字识别超时") : QStringLiteral("Text recognition timed out");
         return result;
     }
 
     if (proc.exitCode() != 0) {
         result.status = Failed;
-        result.errorMessage = QString::fromUtf8(proc.readAllStandardError()).trimmed();
+        result.errorMessage = lastMeaningfulLine(proc.readAllStandardError());
         if (result.errorMessage.isEmpty()) {
             result.errorMessage = QStringLiteral("tesseract exited with code %1").arg(proc.exitCode());
         }
@@ -300,7 +432,7 @@ OcrService::Result OcrService::runOcrLinux(const QImage &image) {
     }
 
     result.status = Ready;
-    result.text = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+    result.text = removeCjkSpaces(QString::fromUtf8(proc.readAllStandardOutput()).trimmed());
     return result;
 }
 

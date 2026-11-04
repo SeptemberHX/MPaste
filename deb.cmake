@@ -55,6 +55,15 @@ add_custom_target(changelog ALL DEPENDS "${CMAKE_BINARY_DIR}/changelog.gz")
 
 # As a target, so the build's RUNPATH (a local deps root, say) is dropped on install.
 install(TARGETS ${BIN_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# The text recognition helper and its models; MPaste finds them under
+# share/mpaste/ocr. ONNX Runtime it loads at run time (with what it pulls in,
+# about 80 MB), so it is only suggested; MPaste says how to install it.
+if(MPASTE_OCR_BUILT)
+    set(CPACK_DEBIAN_PACKAGE_SUGGESTS "${MPASTE_ONNXRUNTIME_PACKAGE}, tesseract-ocr-chi-sim")
+    install(TARGETS mpaste-ocr RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(DIRECTORY ${CMAKE_BINARY_DIR}/ocr-models/ DESTINATION ${CMAKE_INSTALL_DATADIR}/mpaste/ocr
+            FILES_MATCHING PATTERN "*.onnx")
+endif()
 install(FILES ${CMAKE_SOURCE_DIR}/MPaste.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 # Started with the session, as a clipboard history has to be running to record;
 # each user can turn it off in their startup applications.

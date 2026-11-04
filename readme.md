@@ -161,7 +161,7 @@ cmake --build build -j8
 System build dependencies (if not already installed):
 
 ```sh
-sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-wayland libx11-dev libxcb-keysyms1-dev libxdo-dev
+sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-wayland libx11-dev libxcb-keysyms1-dev libxdo-dev libonnxruntime-dev
 cmake -S . -B build
 cmake --build build -j4
 python3 tools/install_gnome_wayland.py --autostart

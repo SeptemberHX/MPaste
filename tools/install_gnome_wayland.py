@@ -32,6 +32,12 @@ def main():
     # Atomic replacement also permits updating an existing installation.
     shutil.copy2(binary, install / 'MPaste.new')
     (install / 'MPaste.new').replace(install / 'MPaste')
+    # Text recognition: the helper and its models, found beside MPaste.
+    if (binary.parent / 'mpaste-ocr').is_file():
+        shutil.copy2(binary.parent / 'mpaste-ocr', install / 'mpaste-ocr.new')
+        (install / 'mpaste-ocr.new').replace(install / 'mpaste-ocr')
+    if (binary.parent / 'ocr-models').is_dir():
+        shutil.copytree(binary.parent / 'ocr-models', install / 'ocr-models', dirs_exist_ok=True)
     if (binary.parent / 'translations').is_dir():
         shutil.copytree(binary.parent / 'translations', install / 'translations', dirs_exist_ok=True)
     shutil.copy2(repo / 'resources/mpaste.svg', install / 'mpaste.svg')

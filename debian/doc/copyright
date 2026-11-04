@@ -23,3 +23,13 @@ License: GPL-3+
  .
  On Debian systems, the complete text of the GNU General
  Public License version 3 can be found in "/usr/share/common-licenses/GPL-3".
+
+Files: ocr/PaddleOcr.*
+Copyright: 2021 SeptemberHX on GitHub; pipeline after RapidOcrOnnx, RapidAI
+License: GPL-3+ and Apache-2.0
+
+Files: usr/share/mpaste/ocr/*.onnx
+Copyright: PaddlePaddle Authors (PP-OCRv6), converted to ONNX by RapidAI
+License: Apache-2.0
+ On Debian systems, the complete text of the Apache License 2.0 can be
+ found in "/usr/share/common-licenses/Apache-2.0".
