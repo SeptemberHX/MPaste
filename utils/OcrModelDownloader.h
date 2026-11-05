@@ -8,13 +8,13 @@
 #include <QCryptographicHash>
 #include <QFile>
 #include <QList>
+#include <QNetworkReply>   // complete: Qt 6.8's QPointer compares through a static_cast
 #include <QObject>
 #include <QPointer>
 
 #include "OcrService.h"
 
 class QNetworkAccessManager;
-class QNetworkReply;
 
 // One file after the other, each into a .part file hashed as it arrives and
 // renamed when whole and right; nothing half-written is left as a model.

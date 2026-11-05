@@ -26,11 +26,11 @@
 #include "ClipboardItemDetailsDialog.h"
 #include "ClipboardItemPreviewDialog.h"
 #include "MPasteSettingsWidget.h"
+#include "OnboardingDialog.h"   // complete, for QPointer<OnboardingDialog>
 #include "ScrollItemsWidget.h"
 
 class ClipboardAppController;
 class QuickPasteStack;
-class OnboardingDialog;
 
 namespace Ui {
 class MPasteWidget;
