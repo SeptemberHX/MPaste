@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Rich-text cards are readable after the theme changes. Their thumbnail is drawn with the theme's text colour and was kept when the theme changed (as "Follow system" does each evening), so one copied in the dark theme was white on white in the light one, and the reverse. The header now records the theme it was drawn for (flag 0x20); one drawn for the other theme is drawn again, at start and when the theme changes while MPaste runs.
+- First-run guide: the note under "Bottom panel" wraps instead of being cut off in English.
+- README screenshots are new (link cards, the preview of a long picture, the details window, the first-run guide, Settings → Text recognition) and are taken by `tools/screenshots/take.py`, in an isolated GNOME session with made-up content, so they can be taken again after a change.
+
 ## 0.8.6
 
 Text recognition on Linux with PaddleOCR, a first-run guide, a redrawn details window and link cards, and much less memory: saved screenshots are freed and the copy sound no longer loads a media framework.

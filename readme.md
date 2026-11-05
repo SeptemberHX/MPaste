@@ -21,9 +21,13 @@ A modern clipboard manager for Windows and Linux, inspired by [Paste](https://pa
 |---|---|
 | ![Preview](./screenshot/preview.png) | ![Quick paste stack](./screenshot/quick-paste-stack.png) |
 
-![Settings](./screenshot/settings.png)
+| Details | First-run guide |
+|---|---|
+| ![Details](./screenshot/details.png) | ![First-run guide](./screenshot/onboarding.png) |
 
-<sub>Screenshots are taken in an isolated GNOME 51 session with made-up sample content.</sub>
+![Settings, text recognition](./screenshot/settings.png)
+
+<sub>Screenshots are taken in an isolated GNOME 51 session with made-up sample content, by `tools/screenshots/take.py`.</sub>
 
 ## Download
 

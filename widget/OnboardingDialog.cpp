@@ -527,6 +527,7 @@ QWidget *OnboardingDialog::hotkeyPage() {
         l->setContentsMargins(14, 12, 14, 12);
         auto *t = new QLabel(QStringLiteral("<b>%1</b><br><span style=\"font-size:12px\">%2</span>").arg(title.toHtmlEscaped(), note.toHtmlEscaped()), option);
         t->setObjectName(QStringLiteral("guideOptionText"));
+        t->setWordWrap(true);   // the note may be longer than the half width, in some languages
         t->setAttribute(Qt::WA_TransparentForMouseEvents);
         l->addWidget(t);
         option->setMinimumHeight(64);
@@ -539,7 +540,7 @@ QWidget *OnboardingDialog::hotkeyPage() {
         choice->addWidget(option);
     };
     addOption(uiText("Bottom panel", QStringLiteral("底部面板")),
-              uiText("A row of cards along the screen's foot; shows the most", QStringLiteral("屏幕底部一排卡片，看得最全")),
+              uiText("Cards along the foot of the screen; shows the most", QStringLiteral("屏幕底部一排卡片，看得最全")),
               MPasteSettings::LayoutPanel);
     addOption(uiText("Stack by the caret", QStringLiteral("光标旁堆栈")),
               uiText("The nine most recent, right where you type", QStringLiteral("在输入的位置弹出最近 9 条")),

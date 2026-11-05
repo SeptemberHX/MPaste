@@ -305,7 +305,21 @@ ScrollItemsWidget::~ScrollItemsWidget() {
 }
 
 void ScrollItemsWidget::applyTheme(bool dark) {
+    const bool themeFlipped = themeApplied_ && dark != darkTheme_;
+    themeApplied_ = true;
     darkTheme_ = dark;
+    if (themeFlipped && boardModel_) {
+        // Rich-text thumbnails carry the theme's text colour: the ones held
+        // now are drawn again from their HTML (the others are, as they load).
+        for (int row = 0; row < boardModel_->rowCount(); ++row) {
+            const ClipboardItem *item = boardModel_->itemPtrAt(row);
+            if (item && item->getContentType() == RichText && item->hasThumbnail()) {
+                desiredThumbnailNames_.insert(item->getName());
+                missingThumbnailNames_.remove(item->getName());
+                requestThumbnailForItem(*item);
+            }
+        }
+    }
 
     const int scale = MPasteSettings::getInst()->getItemScale();
     const int borderRadius = qMax(4, 6 * scale / 100);

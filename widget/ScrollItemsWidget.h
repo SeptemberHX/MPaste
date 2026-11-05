@@ -269,6 +269,7 @@ private:
     QString currentKeyword_;
     ContentType currentTypeFilter_ = All;
     bool darkTheme_ = false;
+    bool themeApplied_ = false;
     int currentPage_ = 0;
     int pageBaseOffset_ = 0;
     int loadedPage_ = -1;

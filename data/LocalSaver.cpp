@@ -26,6 +26,7 @@
 #include <QSet>
 
 #include "utils/MPasteSettings.h"
+#include "utils/ThemeManager.h"
 #include "utils/OcrService.h"
 
 namespace {
@@ -67,8 +68,19 @@ constexpr quint32 kRichTextThumbnailFlags =
 // page's picture; one without this flag is that drawing, and is left out.
 constexpr quint32 kFlagLinkPagePicture = 0x10;
 
+// Header flag: the rich-text thumbnail was drawn for the dark theme. Its text
+// takes the theme's colour, so one drawn for the other theme (copied before
+// the theme changed, as "Follow system" does each evening) is white on white
+// or dark on dark: it is left out and drawn again.
+constexpr quint32 kFlagDarkRichTextThumbnail = 0x20;
+
+quint32 richTextThemeFlag() {
+    return ThemeManager::instance()->isDark() ? kFlagDarkRichTextThumbnail : 0;
+}
+
 bool isCurrentRichTextThumbnail(quint32 flags) {
-    return (flags & kRichTextThumbnailFlags) == kRichTextThumbnailFlags;
+    return (flags & kRichTextThumbnailFlags) == kRichTextThumbnailFlags
+        && (flags & kFlagDarkRichTextThumbnail) == richTextThemeFlag();
 }
 
 // Text saved from HTML that still had its CF_HTML header (WPS on Linux, before
@@ -753,7 +765,7 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
     header.thumbnail = thumbnail;
     // Loading leaves out a rich-text thumbnail without these flags, and a rich
     // text one here never comes from a picture, so any it has is the HTML render.
-    header.flags = kRichTextThumbnailFlags;
+    header.flags = kRichTextThumbnailFlags | richTextThemeFlag();
     if (header.contentType == quint32(Link) && !thumbnail.isNull()) {
         header.flags |= kFlagLinkPagePicture;
     }
@@ -851,7 +863,7 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
     }
     if (thumbnailOverride) {
         header.thumbnail = *thumbnailOverride;
-        header.flags |= kRichTextThumbnailFlags;
+        header.flags = (header.flags & ~kFlagDarkRichTextThumbnail) | kRichTextThumbnailFlags | richTextThemeFlag();
         if (header.contentType == quint32(Link) && !header.thumbnail.isNull()) {
             header.flags |= kFlagLinkPagePicture;
         }
