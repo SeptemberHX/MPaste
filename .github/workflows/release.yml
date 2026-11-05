@@ -37,7 +37,7 @@ jobs:
           fi
 
   windows:
-    name: Windows (MinGW, Qt 6.8)
+    name: Windows (MinGW, Qt 6.11)
     needs: version
     runs-on: windows-latest
     steps:
@@ -46,7 +46,9 @@ jobs:
       - name: Install Qt and MinGW
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.3'
+          # The same Qt as the .deb's (Ubuntu 26.10's 6.11.2), so what builds
+          # on Linux builds here; its MinGW is 13.1.
+          version: '6.11.2'
           host: windows
           target: desktop
           arch: win64_mingw

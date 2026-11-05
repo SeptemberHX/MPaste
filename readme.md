@@ -191,7 +191,7 @@ autostart entry (`/etc/xdg/autostart`) and the companion under
 ### Windows
 
 ```sh
-cmake -B build -DMPASTE_QT_ROOT=C:/Qt/6.8.0/mingw_64
+cmake -B build -DMPASTE_QT_ROOT=C:/Qt/6.11.2/mingw_64
 cmake --build build
 ```
 
@@ -205,7 +205,7 @@ Optional CMake flags:
 
 ### Releasing
 
-`.github/workflows/release.yml` builds the Windows zip (MinGW, Qt 6.8) and the
+`.github/workflows/release.yml` builds the Windows zip (MinGW, Qt 6.11, the same Qt as the .deb) and the
 Ubuntu 26.10 `.deb` on GitHub Actions. To release:
 
 1. Set the version in `CMakeLists.txt` (`_VERSION_MAJOR/MINOR/PATCH`) and rename
