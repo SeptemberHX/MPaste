@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.4
+## 0.8.5
 
 Text recognition on Linux with PaddleOCR, a first-run guide, a redrawn details window and link cards, and much less memory: saved screenshots are freed and the copy sound no longer loads a media framework.
 
