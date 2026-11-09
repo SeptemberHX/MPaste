@@ -376,6 +376,43 @@ QSize probeImageSizeFromMimeData(const QMimeData *mimeData) {
     return {};
 }
 
+// The MIME offset is the header's last field, so the 8 bytes before the
+// section hold the section's own position. An item read before its header was
+// written again (its thumbnail drawn again, an alias set) holds the old
+// position, which now points into the header: the header is then read again
+// for the current one. Seeks the file there; false if neither checks out.
+bool seekToMimeSection(QFile &file, quint64 offset, quint64 *resolved = nullptr) {
+    auto holdsOwnPosition = [&file](quint64 candidate) {
+        if (candidate < sizeof(quint64) || candidate > static_cast<quint64>(file.size())
+            || !file.seek(static_cast<qint64>(candidate - sizeof(quint64)))) {
+            return false;
+        }
+        QDataStream in(&file);
+        quint64 stored = 0;
+        in >> stored;
+        return in.status() == QDataStream::Ok && stored == candidate;
+    };
+    quint64 actual = offset;
+    if (!holdsOwnPosition(actual)) {
+        if (!file.seek(0)) {
+            return false;
+        }
+        QDataStream in(&file);
+        quint32 flags = 0;
+        quint32 version = 0;
+        CurrentFormatHeader header;
+        if (!readCurrentFormatPrefix(in, flags, version) || !readCurrentFormatHeader(in, version, header)
+            || !holdsOwnPosition(header.mimeDataOffset)) {
+            return false;
+        }
+        actual = header.mimeDataOffset;
+    }
+    if (resolved) {
+        *resolved = actual;
+    }
+    return file.seek(static_cast<qint64>(actual));
+}
+
 QSize probeImageSizeFromMimeSection(const QString &filePath, quint64 offset) {
     if (filePath.isEmpty()) {
         return {};
@@ -386,7 +423,7 @@ QSize probeImageSizeFromMimeSection(const QString &filePath, quint64 offset) {
         return {};
     }
 
-    if (!file.seek(static_cast<qint64>(offset))) {
+    if (!seekToMimeSection(file, offset)) {
         file.close();
         return {};
     }
@@ -560,7 +597,7 @@ bool LocalSaver::mimeSectionContainsKeyword(const QString &filePath, quint64 off
         return false;
     }
 
-    if (!file.seek(static_cast<qint64>(offset))) {
+    if (!seekToMimeSection(file, offset)) {
         file.close();
         return false;
     }
@@ -745,8 +782,36 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
         }
     }
 
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    // Read the data first. An item read lightly loads it on demand from this
+    // same file, and once the file is opened for writing there is nothing
+    // left to load: a thumbnail drawn again used to save the item back with
+    // no formats at all. Written to a temporary file, so a failed save keeps
+    // the old one.
+    const QMimeData *mimeData = item.getMimeData();
+    QScopedPointer<QMimeData> fallbackMime;
+    if ((!mimeData || mimeData->formats().isEmpty()) && QFileInfo::exists(filePath)) {
+        // Nothing to save where the file has data: the item's data could not
+        // be read (from a moved section, say), and this would erase it.
+        ClipboardItem existing = loadFromFileLight(filePath, false);
+        existing.ensureMimeDataLoaded();
+        if (existing.getMimeData() && !existing.getMimeData()->formats().isEmpty()) {
+            qWarning() << "[LocalSaver] saveToFile refused: path=" << filePath
+                        << "reason=item has no data, the file has" << existing.getMimeData()->formats().size() << "formats";
+            return false;
+        }
+    }
+    if (!mimeData || !hasMeaningfulMimeData(mimeData)) {
+        const QString fallbackText = item.getNormalizedText();
+        const QList<QUrl> fallbackUrls = item.getNormalizedUrls();
+        if (!fallbackText.isEmpty() || !fallbackUrls.isEmpty()) {
+            fallbackMime.reset(new QMimeData);
+            if (!fallbackText.isEmpty()) fallbackMime->setText(fallbackText);
+            if (!fallbackUrls.isEmpty()) fallbackMime->setUrls(fallbackUrls);
+            mimeData = fallbackMime.data();
+        }
+    }
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
         qWarning() << "[LocalSaver] saveToFile failed: path=" << filePath
                     << "reason=cannot open for writing";
         return false;
@@ -779,18 +844,6 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
 
     quint64 mimeDataOffset = static_cast<quint64>(file.pos());
 
-    const QMimeData *mimeData = item.getMimeData();
-    QScopedPointer<QMimeData> fallbackMime;
-    if (!mimeData || !hasMeaningfulMimeData(mimeData)) {
-        const QString fallbackText = item.getNormalizedText();
-        const QList<QUrl> fallbackUrls = item.getNormalizedUrls();
-        if (!fallbackText.isEmpty() || !fallbackUrls.isEmpty()) {
-            fallbackMime.reset(new QMimeData);
-            if (!fallbackText.isEmpty()) fallbackMime->setText(fallbackText);
-            if (!fallbackUrls.isEmpty()) fallbackMime->setUrls(fallbackUrls);
-            mimeData = fallbackMime.data();
-        }
-    }
     if (mimeData) {
         const QStringList formats = mimeData->formats();
         out << quint32(formats.size());
@@ -818,10 +871,16 @@ bool LocalSaver::saveToFile(const ClipboardItem &item, const QString &filePath,
                     << "fileSize=" << file.size();
     }
     out << mimeDataOffset;
-    file.close();
     if (out.status() != QDataStream::Ok) {
         qWarning() << "[LocalSaver] saveToFile failed: path=" << filePath
                     << "reason=stream error, status=" << out.status();
+        file.cancelWriting();
+        file.commit();
+        return false;
+    }
+    if (!file.commit()) {
+        qWarning() << "[LocalSaver] saveToFile failed: path=" << filePath
+                    << "reason=commit failed," << file.errorString();
         return false;
     }
     return true;
@@ -1260,7 +1319,8 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
         return false;
     }
 
-    if (!file.seek(static_cast<qint64>(offset))) {
+    quint64 resolvedOffset = offset;
+    if (!seekToMimeSection(file, offset, &resolvedOffset)) {
         warnOnce("seek failed");
         file.close();
         return false;
@@ -1326,7 +1386,8 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
     const QPixmap savedThumbnail = item.thumbnail();
     const QByteArray savedFingerprint = item.fingerprint();
     const QString savedSourceFilePath = item.sourceFilePath();
-    const quint64 savedMimeOffset = item.mimeDataFileOffset();
+    // Where the section was found, which a rewritten header can have moved.
+    const quint64 savedMimeOffset = resolvedOffset;
 
     // Materialize canonical image formats through ClipboardItem(icon, mimeData)
     // and then restore the metadata that only exists on light-loaded items.
@@ -1366,7 +1427,7 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
         return false;
     }
 
-    if (!file.seek(static_cast<qint64>(offset))) {
+    if (!seekToMimeSection(file, offset)) {
         qWarning() << "[LocalSaver] loadMimePayloads failed: path=" << filePath
                     << "reason=seek failed, offset=" << offset
                     << "fileSize=" << file.size();
