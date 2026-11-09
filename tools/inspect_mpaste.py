@@ -108,7 +108,8 @@ def inspect(path):
                                          (0x4, "full-size rich-text thumbnail"),
                                          (0x8, "rich-text thumbnail from cleaned HTML"),
                                          (0x10, "link page picture"),
-                                         (0x20, "rich-text thumbnail drawn for the dark theme")) if flags & bit]
+                                         (0x20, "rich-text thumbnail drawn for the dark theme"),
+                                         (0x40, "rich-text thumbnail without <style> text")) if flags & bit]
     print(f"Magic: {magic}  Version: {version}  Flags: {flags}" + (f" ({', '.join(flag_names)})" if flag_names else ""))
 
     # QDateTime: julianDay(qint64) + msOfDay(qint32) + timeSpec(quint8)

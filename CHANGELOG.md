@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Rich-text cards are readable after the theme changes. Their thumbnail is drawn with the theme's text colour and was kept when the theme changed (as "Follow system" does each evening), so one copied in the dark theme was white on white in the light one, and the reverse. The header now records the theme it was drawn for (flag 0x20); one drawn for the other theme is drawn again, at start and when the theme changes while MPaste runs.
+- Rich text copied from Tencent Docs (and other pages that write CSS after a `<!-- -->` inside `<style>`) showed that CSS (`.td1 {background-color:…`) on its card and in its preview instead of the text. The contents of `<style>`, `<script>`, `<title>`, `<noscript>` and `<template>` are now dropped whole; a table's fixed widths no longer push its text off the card's right edge, and empty or table-structure tags no longer leave blank lines above it. Thumbnails drawn before (header without flag 0x40) are drawn again.
 - First-run guide: the note under "Bottom panel" wraps instead of being cut off in English.
 - README screenshots are new (link cards, the preview of a long picture, the details window, the first-run guide, Settings → Text recognition) and are taken by `tools/screenshots/take.py`, in an isolated GNOME session with made-up content, so they can be taken again after a change.
 

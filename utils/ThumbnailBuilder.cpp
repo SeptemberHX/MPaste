@@ -253,6 +253,21 @@ QString simplifyHtmlForRendering(const QString &html) {
                 ++nameEnd;
             }
             const QString tagName = html.mid(nameStart, nameEnd - nameStart).toLower();
+            // Elements whose content is not page text: drop them whole, up to
+            // their closing tag. Dropping only the tag would leave e.g. CSS
+            // written after a <!-- --> inside <style> to be drawn as text.
+            static const QSet<QString> rawContent = {
+                QStringLiteral("style"), QStringLiteral("script"),
+                QStringLiteral("title"), QStringLiteral("noscript"),
+                QStringLiteral("template"),
+            };
+            if (html[i + 1] != QLatin1Char('/') && rawContent.contains(tagName)
+                && html[tagEnd - 1] != QLatin1Char('/')) {
+                const int closeStart = html.indexOf(QStringLiteral("</") + tagName, tagEnd + 1, Qt::CaseInsensitive);
+                const int closeEnd = closeStart >= 0 ? html.indexOf(QLatin1Char('>'), closeStart) : -1;
+                i = closeEnd >= 0 ? closeEnd + 1 : len;
+                continue;
+            }
             if (allowed.contains(tagName)) {
                 if (html[i + 1] == QLatin1Char('/')) {
                     result += QStringLiteral("</%1>").arg(tagName);
@@ -268,6 +283,20 @@ QString simplifyHtmlForRendering(const QString &html) {
                         QStringLiteral("(?:src|srcset)\\s*=\\s*[\"'][^\"']*[\"']"),
                         QRegularExpression::CaseInsensitiveOption);
                     tagStr.replace(remoteSrc, QString());
+                    // A table's fixed widths are the source page's (a 566px
+                    // cell from a spreadsheet): wider than a card, its text
+                    // would run off the right. Sized to the content instead.
+                    if (tagName == QLatin1String("table") || tagName == QLatin1String("td")
+                        || tagName == QLatin1String("th")) {
+                        static const QRegularExpression widthAttr(
+                            QStringLiteral(R"(\swidth\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))"),
+                            QRegularExpression::CaseInsensitiveOption);
+                        static const QRegularExpression widthCss(
+                            QStringLiteral(R"((?<![-\w])width\s*:\s*[^;"']*;?)"),
+                            QRegularExpression::CaseInsensitiveOption);
+                        tagStr.remove(widthAttr);
+                        tagStr.remove(widthCss);
+                    }
                     tagStr = adaptInlineColorsToCard(tagStr);
                     tagStr = normalizeInlineTypography(tagStr);
                     result += tagStr;
@@ -288,8 +317,15 @@ QString simplifyHtmlForRendering(const QString &html) {
                     QStringLiteral("label"), QStringLiteral("object"),
                     QStringLiteral("embed"), QStringLiteral("iframe"),
                     QStringLiteral("template"), QStringLiteral("slot"),
+                    // Table structure: a line break there is a blank row.
+                    QStringLiteral("col"), QStringLiteral("colgroup"),
+                    QStringLiteral("thead"), QStringLiteral("tbody"),
+                    QStringLiteral("tfoot"),
                 };
-                if (!headOrInline.contains(tagName)) {
+                // An unknown empty element (<tdocs ... /> from Tencent Docs)
+                // has no content to set apart.
+                const bool selfClosing = html[tagEnd - 1] == QLatin1Char('/');
+                if (!headOrInline.contains(tagName) && !selfClosing) {
                     result += QStringLiteral("<br>");
                 }
             }

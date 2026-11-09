@@ -59,9 +59,13 @@ constexpr quint32 kFlagFullSizeRichTextThumbnail = 0x4;
 // header, nothing after </html>; WPS on Linux sends both), with a bare <img src>
 // read and its picture fitted whole rather than cut to a close-up.
 constexpr quint32 kFlagCleanHtmlRichTextThumbnail = 0x8;
+// Header flag: the rich-text thumbnail was drawn without the page's <style>
+// contents (CSS written after a <!-- --> inside it, as Tencent Docs does, used
+// to be drawn as text) and with tables fitted to the card.
+constexpr quint32 kFlagNoStyleTextRichTextThumbnail = 0x40;
 constexpr quint32 kRichTextThumbnailFlags =
     kFlagAdaptedRichTextThumbnail | kFlagHtmlRichTextThumbnail | kFlagFullSizeRichTextThumbnail
-    | kFlagCleanHtmlRichTextThumbnail;
+    | kFlagCleanHtmlRichTextThumbnail | kFlagNoStyleTextRichTextThumbnail;
 
 // A link's thumbnail is its page's picture. Saving a link used to draw one from
 // its address (a browser window with the site's initials), the same size as a
