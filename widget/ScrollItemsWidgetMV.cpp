@@ -718,7 +718,20 @@ void ScrollItemsWidget::handlePendingItemReady(const QString &expectedName, cons
         if (cardDelegate_) {
             cardDelegate_->invalidateCard(expectedName);
         }
+        // `item` is the snapshot taken when the save started. An alias or pin
+        // set since then lives only in the row (the file did not exist yet to
+        // take it), so carry it over and write it now that the file is there.
+        const ClipboardItem current = boardModel_->itemAt(row);
+        const bool metadataChanged = current.getAlias() != updated.getAlias()
+            || current.isPinned() != updated.isPinned();
+        if (metadataChanged) {
+            updated.setAlias(current.getAlias());
+            updated.setPinned(current.isPinned());
+        }
         boardModel_->updateItem(row, updated);
+        if (metadataChanged && boardService_) {
+            ClipboardBoardActionService::persistItemMetadata(boardService_, boardModel_, row, updated);
+        }
         syncPreviewStateForRow(row);
     }
     // The async save may have changed the service index count; keep
@@ -930,13 +943,28 @@ void ScrollItemsWidget::refreshContentWidthHint() {
     }
 }
 
+bool ScrollItemsWidget::boardIsLoading() const {
+    if (!boardService_) {
+        return false;
+    }
+    if (boardService_->deferredLoadActive()) {
+        return true;
+    }
+    // A paged board reads its pages from the index and never drains the
+    // pending list, so once the index is built those paths are not "loading".
+    if (paginationEnabled() && boardService_->isIndexReady()) {
+        return false;
+    }
+    return boardService_->hasPendingItems();
+}
+
 void ScrollItemsWidget::updateLoadingOverlay() {
     if (!loadingLabel_ || !ui || !ui->viewHost) {
         return;
     }
 
     const bool hasItems = boardModel_ && boardModel_->rowCount() > 0;
-    const bool isLoading = boardService_ && (boardService_->hasPendingItems() || boardService_->deferredLoadActive());
+    const bool isLoading = boardIsLoading();
     const bool shouldShow = isLoading && !hasItems;
     loadingLabel_->setVisible(shouldShow);
     if (shouldShow) {
@@ -954,7 +982,7 @@ void ScrollItemsWidget::updateEmptyState() {
     if (!emptyState_ || !proxyModel_) {
         return;
     }
-    const bool isLoading = boardService_ && (boardService_->hasPendingItems() || boardService_->deferredLoadActive());
+    const bool isLoading = boardIsLoading();
     const bool empty = proxyModel_->rowCount() == 0 && !isLoading;
     if (!empty) {
         emptyStateTimer_->stop();

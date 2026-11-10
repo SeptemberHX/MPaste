@@ -542,6 +542,11 @@ void ClipboardBoardService::startAsyncLoad(int initialBatchSize, int deferredBat
                     guard->deferredBatchSize_ = qMax(1, deferredBatchSize);
                     if (guard->deferredLoadActive_ && guard->deferredLoadTimer_) {
                         guard->deferredLoadTimer_->start(guard->visibleHint_ ? 0 : 8);
+                    } else if (!guard->deferredLoadActive_) {
+                        // No deferred batches were asked for (a paged board
+                        // reads its pages from the index), so nothing will
+                        // ever drain the pending list: this load is done now.
+                        emit guard->deferredLoadCompleted();
                     }
                 }
             }, Qt::QueuedConnection);

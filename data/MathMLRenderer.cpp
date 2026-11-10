@@ -606,8 +606,13 @@ Box layoutFrac(const Node &node, const Ctx &ctx) {
         (QPainter &p, qreal x, qreal baseline) {
         const qreal numX = x + (w - numShared->width) / 2.0;
         const qreal denX = x + (w - denShared->width) / 2.0;
-        numShared->draw(p, numX, baseline - numShift);
-        denShared->draw(p, denX, baseline + denShift);
+        // Either operand may be an empty Box (<mi/>, <msqrt/>), which has no draw.
+        if (numShared->draw) {
+            numShared->draw(p, numX, baseline - numShift);
+        }
+        if (denShared->draw) {
+            denShared->draw(p, denX, baseline + denShift);
+        }
         const qreal lineY = baseline - axis;
         p.save();
         QPen pen(p.pen().color());

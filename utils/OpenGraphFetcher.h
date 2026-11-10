@@ -47,6 +47,10 @@ private:
     OpenGraphItem::ImageKind currentImageKind = OpenGraphItem::ImageUnknown;
     void appendPendingImage(const QString &url, OpenGraphItem::ImageKind kind);
     void tryNextImage();
+    void capReplySize(QNetworkReply *reply, qint64 maxBytes);
+    static constexpr qint64 kMaxPageBytes = 4 * 1024 * 1024;
+    static constexpr qint64 kMaxImageBytes = 16 * 1024 * 1024;
+    bool pageParsed = false;
 
     QString findMetaContent(const QDomDocument &doc, const QString &property);
 

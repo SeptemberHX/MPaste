@@ -44,7 +44,7 @@ def main():
     env.update(XDG_CONFIG_HOME=str(base / 'config'), XDG_DATA_HOME=str(base / 'data'),
                GSETTINGS_BACKEND='keyfile', XDG_SESSION_TYPE='wayland',
                WAYLAND_DISPLAY=base.name, QT_QPA_PLATFORM='wayland', USER=base.name,
-               MPASTE_LOG_DIR=str(base / 'logs'))
+               MPASTE_LOG_DIR=str(base / 'logs'), MPASTE_LOG_CLIPBOARD_TEXT='1')
     extension_dir = base / 'data/gnome-shell/extensions'
     shutil.copytree(args.extension.resolve(), extension_dir / 'mpaste@mpaste.local')
     shutil.copytree(HERE / 'driver', extension_dir / 'test-driver@mpaste.local')

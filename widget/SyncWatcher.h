@@ -48,7 +48,9 @@ private:
     QTimer *reloadTimer_ = nullptr;
     bool pendingReload_ = false;
     qint64 suppressReloadUntilMs_ = 0;
-    quint64 pendingWriteGen_ = 0;
+    static constexpr int kReloadDebounceMs = 400;
+    // Longer than the service's 2 s "recent internal write" window.
+    static constexpr int kRecheckAfterOwnWriteMs = 2500;
 
     ClipboardBoardService *clipboardService_ = nullptr;
     ClipboardBoardService *starService_ = nullptr;

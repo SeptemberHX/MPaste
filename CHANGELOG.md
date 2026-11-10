@@ -12,6 +12,23 @@
   - Files: a slab in the kind's colour with its extension in giant letters and the kind's own mark (cells for a sheet, lines for a document, a zip's teeth, a record's grooves); a folder as a manila folder; several files as "×3" with the first names and their kinds' tags; a picture file as the picture, with its kind and name on tags.
   - Colours: a printer's chip, the colour above and its hex, RGB and HSL on the white below.
   Posters carry their own colours, the same in the light and the dark theme. Rich text is set from its plain words, so bold and links inside it are not shown. Still stays the default.
+- Fixes from a review of the whole code base:
+  - A formula with an empty numerator or denominator (`<mfrac><mi/><mn>2</mn></mfrac>`) closed MPaste when it was copied or previewed. It is now drawn with the empty part left blank.
+  - A damaged `.mpaste` file could close MPaste, or use all memory, at start and when its item was pasted or searched: the counts and indexes read from the file were trusted. A file whose format table points outside itself is now refused like any other unreadable file.
+  - Copying or pasting while a WPS / Kingsoft Docs picture was still being fetched could close MPaste.
+  - Paged view with more than 50 items: what was on the clipboard when MPaste started was not taken into the history, stars were missing on the Clipboard board with more than 50 favourites, and a search without results never said so. The end of the first load was only announced when the whole history fitted in one page.
+  - An item deleted while its thumbnail was still being made, or right after it was copied, came back at the next start: the save in progress wrote its file again. A name or a pin given in that moment was lost the same way. Both are now kept.
+  - Favourites board: the star on a card's hover bar removed the star of the next card on the Clipboard board, and its bin left the star there.
+  - Naming an item gave the name to its neighbour when something was copied while the dialog was open.
+  - Paged view: deleting one card with the hover bin or the menu left the page a card short and hid the item that moved up from the next page.
+  - Settings: the sync folder and the Baidu OCR keys were not saved unless another setting was changed afterwards. A shortcut without a modifier (a bare V or Space, which would stop that key from typing anywhere) is no longer accepted, function keys excepted.
+  - The Win / Super key in the shortcut was ignored on Windows and X11, so Win+V was registered as a bare V.
+  - X11: the global shortcut is grabbed on Qt's own connection (on a private one its key press was never read), also with NumLock or CapsLock on, and a combination another program holds is reported as not registered.
+  - Items synced in from another device while the panel was hidden did not show when something had been copied here in between, and a change arriving within two seconds of a local copy was never looked at again.
+  - Text that only mentions `x-special/nautilus-clipboard` (source code, notes) was read as a list of copied files, and its card showed only the lines that looked like addresses.
+  - Link previews: a site answering a missing icon with a web page made the fetch start over without end; site icons were asked for under the page's own path and query instead of the site root. A page's pictures are fetched over http(s) only, pages over 4 MB and pictures over 16 MB are given up on, and picture requests time out.
+  - Rich-text previews and thumbnails no longer keep a `background="..."` attribute or an unquoted `src=`, which could make Qt open a file or network path named by the copied page.
+  - The log no longer holds the first characters of every copied text, only its length. `MPASTE_LOG_CLIPBOARD_TEXT=1` brings the excerpt back for debugging.
 
 ## 0.8.9
 

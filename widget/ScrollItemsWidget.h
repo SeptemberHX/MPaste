@@ -92,6 +92,7 @@ public:
     QList<ClipboardItem> allItems();
     bool handleWheelScroll(QWheelEvent *event);
     void applyTheme(bool dark);
+    bool boardIsLoading() const;
     void updateLoadingOverlay();
     void updateEmptyState();
     void showEmptyState();

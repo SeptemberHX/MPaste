@@ -115,6 +115,13 @@ QString shortHex(const QByteArray &bytes, int chars = 12) {
 }
 
 QString elideForLog(QString text, int maxLen = 48) {
+    // The log outlives the item: a copied password must not sit in it after
+    // the card is deleted. Excerpts are for debugging and the test harness,
+    // which ask for them with MPASTE_LOG_CLIPBOARD_TEXT=1.
+    static const bool logText = qEnvironmentVariableIntValue("MPASTE_LOG_CLIPBOARD_TEXT") != 0;
+    if (!logText) {
+        return QStringLiteral("<%1 chars>").arg(text.size());
+    }
     text.replace(QLatin1Char('\n'), QLatin1Char(' '));
     text.replace(QLatin1Char('\r'), QLatin1Char(' '));
     if (text.size() > maxLen) {
@@ -798,10 +805,14 @@ void ClipboardMonitor::materializePng(QMimeData *mimeData, const QByteArray &png
 }
 
 void ClipboardMonitor::cancelPendingImageFetch() {
-    if (pendingImageFetchReply_) {
-        pendingImageFetchReply_->abort();
-        pendingImageFetchReply_->deleteLater();
-        pendingImageFetchReply_.clear();
+    // abort() emits finished() synchronously, and that handler reads
+    // pendingImageFetchReply_ (and would start the next candidate). Detach the
+    // reply first so the handler sees nothing pending and returns.
+    QNetworkReply *reply = pendingImageFetchReply_;
+    pendingImageFetchReply_.clear();
+    if (reply) {
+        reply->abort();
+        reply->deleteLater();
     }
 }
 

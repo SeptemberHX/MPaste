@@ -72,6 +72,9 @@ void ClipboardBoardService::removeItemFile(const QString &filePath) {
     if (filePath.isEmpty()) {
         return;
     }
+    if (inFlightSavePaths_.contains(filePath)) {
+        cancelledSavePaths_.insert(filePath);
+    }
     saver_->removeItem(filePath);
     const int index = indexedFilePaths_.indexOf(filePath);
     if (index >= 0) {
@@ -100,6 +103,10 @@ void ClipboardBoardService::deleteItemByPathInternal(const QString &filePath) {
 
     lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
     ++internalWriteGen_;
+    // A worker may still be writing this item; its result must not bring it back.
+    if (inFlightSavePaths_.contains(filePath)) {
+        cancelledSavePaths_.insert(filePath);
+    }
     saver_->removeItem(filePath);
     const int index = indexedFilePaths_.indexOf(filePath);
     if (index >= 0) {

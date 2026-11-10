@@ -207,10 +207,14 @@ bool readCurrentFormatHeader(QDataStream &in, quint32 version, CurrentFormatHead
     quint32 normalizedUrlCount = 0;
     in >> header.contentType >> header.normalizedText >> normalizedUrlCount;
     header.normalizedUrls.clear();
-    header.normalizedUrls.reserve(static_cast<int>(normalizedUrlCount));
-    for (quint32 i = 0; i < normalizedUrlCount; ++i) {
+    // The count is untrusted: no reserve, and stop at the first failed read
+    // so a corrupt one cannot spin through billions of empty entries.
+    for (quint32 i = 0; i < normalizedUrlCount && in.status() == QDataStream::Ok; ++i) {
         QString urlStr;
         in >> urlStr;
+        if (in.status() != QDataStream::Ok) {
+            break;
+        }
         header.normalizedUrls << QUrl(urlStr);
     }
     in >> header.fingerprint >> header.thumbnail >> header.mimeDataOffset;
@@ -442,6 +446,11 @@ QSize probeImageSizeFromMimeSection(const QString &filePath, quint64 offset) {
         quint32 dataIndex = 0;
         QByteArray data;
         in >> format >> dataIndex >> data;
+        // The writer hands out indexes densely, so entry i never points past i.
+        // A larger one is corruption, and would otherwise size the blob list.
+        if (dataIndex > i) {
+            in.setStatus(QDataStream::ReadCorruptData);
+        }
         if (in.status() != QDataStream::Ok) {
             file.close();
             return {};
@@ -617,6 +626,11 @@ bool LocalSaver::mimeSectionContainsKeyword(const QString &filePath, quint64 off
         QString format;
         quint32 dataIndex = 0;
         in >> format >> dataIndex;
+        // The writer hands out indexes densely, so entry i never points past i.
+        // A larger one is corruption, and would otherwise size the blob list.
+        if (dataIndex > i) {
+            in.setStatus(QDataStream::ReadCorruptData);
+        }
         if (in.status() != QDataStream::Ok) {
             file.close();
             return false;
@@ -698,6 +712,11 @@ ClipboardItem loadCurrentFormat(const QByteArray &rawData) {
         quint32 dataIndex = 0;
         QByteArray data;
         in >> format >> dataIndex >> data;
+        // The writer hands out indexes densely, so entry i never points past i.
+        // A larger one is corruption, and would otherwise size the blob list.
+        if (dataIndex > i) {
+            in.setStatus(QDataStream::ReadCorruptData);
+        }
         if (in.status() != QDataStream::Ok) {
             delete mimeData;
             return ClipboardItem();
@@ -957,12 +976,16 @@ bool rewriteCurrentFormatHeader(const QString &filePath,
             return false;
         }
         QList<QByteArray> uniqueBlobs;
-        uniqueBlobs.reserve(static_cast<int>(formatCount));
         for (quint32 i = 0; i < formatCount; ++i) {
             QString format;
             quint32 dataIndex = 0;
             QByteArray data;
             blobIn >> format >> dataIndex >> data;
+            // The writer hands out indexes densely, so entry i never points past i.
+            // A larger one is corruption, and would otherwise size the blob list.
+            if (dataIndex > i) {
+                blobIn.setStatus(QDataStream::ReadCorruptData);
+            }
             if (blobIn.status() != QDataStream::Ok) {
                 qWarning() << "[LocalSaver] rewriteCurrentFormatHeader failed: path=" << filePath
                             << "reason=stream error reading MIME entry, status=" << blobIn.status();
@@ -1346,6 +1369,11 @@ bool LocalSaver::loadMimeSection(const QString &filePath, quint64 offset, Clipbo
         quint32 dataIndex = 0;
         QByteArray data;
         in >> format >> dataIndex >> data;
+        // The writer hands out indexes densely, so entry i never points past i.
+        // A larger one is corruption, and would otherwise size the blob list.
+        if (dataIndex > i) {
+            in.setStatus(QDataStream::ReadCorruptData);
+        }
         if (in.status() != QDataStream::Ok) {
             warnOnce("stream error reading MIME entry");
             delete mimeData;
@@ -1457,6 +1485,11 @@ bool LocalSaver::loadMimePayloads(const QString &filePath,
         QString format;
         quint32 dataIndex = 0;
         in >> format >> dataIndex;
+        // The writer hands out indexes densely, so entry i never points past i.
+        // A larger one is corruption, and would otherwise size the blob list.
+        if (dataIndex > i) {
+            in.setStatus(QDataStream::ReadCorruptData);
+        }
         if (in.status() != QDataStream::Ok) {
             qWarning() << "[LocalSaver] loadMimePayloads failed: path=" << filePath
                         << "reason=stream error reading MIME entry, status=" << in.status();

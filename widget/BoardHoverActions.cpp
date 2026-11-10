@@ -120,12 +120,15 @@ void ScrollItemsWidget::createHoverActionBar() {
             return;
         }
         const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
-        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
-        if (!item) {
+        const ClipboardItem *itemPtr = boardModel_->itemPtrAt(sourceRow);
+        if (!itemPtr) {
             return;
         }
-        setItemPinned(*item, !item->isPinned());
-        updateHoverPinButton(!item->isPinned());
+        // Pinning moves or reloads rows, so work on a copy, not the model's entry.
+        const ClipboardItem item = *itemPtr;
+        const bool pinned = !item.isPinned();
+        setItemPinned(item, pinned);
+        updateHoverPinButton(pinned);
     });
 
     connect(hoverFavoriteBtn_, &QToolButton::clicked, this, [this]() {
@@ -133,16 +136,19 @@ void ScrollItemsWidget::createHoverActionBar() {
             return;
         }
         const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
-        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
-        if (!item) {
+        const ClipboardItem *itemPtr = boardModel_->itemPtrAt(sourceRow);
+        if (!itemPtr) {
             return;
         }
+        // The handlers remove this row on the Favorites board and then keep
+        // using the item, so they must get a copy, not the model's entry.
+        const ClipboardItem item = *itemPtr;
         const bool isFavorite = boardModel_->isFavorite(sourceRow);
-        setItemFavorite(*item, !isFavorite);
+        setItemFavorite(item, !isFavorite);
         if (isFavorite) {
-            emit itemUnstared(*item);
+            emit itemUnstared(item);
         } else {
-            emit itemStared(*item);
+            emit itemStared(item);
         }
         updateHoverFavoriteButton(!isFavorite);
     });
@@ -152,11 +158,18 @@ void ScrollItemsWidget::createHoverActionBar() {
             return;
         }
         const int sourceRow = sourceRowForProxyIndex(hoverProxyIndex_);
-        const ClipboardItem *item = boardModel_->itemPtrAt(sourceRow);
-        if (!item) {
+        const ClipboardItem *itemPtr = boardModel_->itemPtrAt(sourceRow);
+        if (!itemPtr) {
             return;
         }
-        removeItemByContent(*item);
+        const ClipboardItem item = *itemPtr;
+        if (category == MPasteSettings::STAR_CATEGORY_NAME) {
+            // Same path as the context menu and the Delete key, so the
+            // Clipboard board drops its star too.
+            emit itemUnstared(item);
+        } else {
+            removeItemByContent(item);
+        }
         hideHoverActionBar(false);
     });
 

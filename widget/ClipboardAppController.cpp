@@ -27,6 +27,12 @@
 namespace {
 
 QString elideClipboardLogText(QString text, int maxLen = 48) {
+    // Same rule as ClipboardMonitor's elideForLog: no clipboard text in the
+    // log unless MPASTE_LOG_CLIPBOARD_TEXT=1 asks for it.
+    static const bool logText = qEnvironmentVariableIntValue("MPASTE_LOG_CLIPBOARD_TEXT") != 0;
+    if (!logText) {
+        return QStringLiteral("<%1 chars>").arg(text.size());
+    }
     text.replace(QLatin1Char('\n'), QLatin1Char(' '));
     text.replace(QLatin1Char('\r'), QLatin1Char(' '));
     if (text.size() > maxLen) {

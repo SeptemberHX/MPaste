@@ -8,6 +8,7 @@
 
 #include <QDateTime>
 #include <QDebug>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QMimeData>
@@ -99,8 +100,17 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
     const qreal thumbnailDpr = ThumbnailBuilder::maxScreenDevicePixelRatio();
     const int itemScale = MPasteSettings::getInst()->getItemScale();
 
+    // Resolved here, on the GUI thread: the worker must not read settings, and
+    // a delete that lands before the save reports back has to find this entry.
+    checkSaveDir();
+    const QString savePath = filePathForItem(baseItem);
+    if (!savePath.isEmpty()) {
+        ++inFlightSavePaths_[savePath];
+        cancelledSavePaths_.remove(savePath);
+    }
+
     QPointer<ClipboardBoardService> guard(this);
-    startThumbnailTask([guard, expectedName, contentType, previewKind, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale]() mutable {
+    startThumbnailTask([guard, expectedName, contentType, previewKind, baseItem, imageBytes, richHtml, imageSize, sourceFilePath, mimeOffset, thumbnailDpr, itemScale, savePath]() mutable {
         PendingItemProcessingResult result;
         QByteArray resolvedImageBytes = imageBytes;
         QString resolvedHtml = richHtml;
@@ -151,18 +161,25 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
 
         // Save to disk in the worker thread.  Avoid QPixmap here — it
         // requires the GUI thread and would block the main event loop.
-        QString savedFilePath;
-        {
-            if (guard) {
-                savedFilePath = guard->filePathForItem(baseItem);
-                LocalSaver saver;
-                saver.saveToFile(baseItem, savedFilePath, result.thumbnailImage);
-            }
+        const QString savedFilePath = savePath;
+        if (guard && !savedFilePath.isEmpty()) {
+            LocalSaver saver;
+            saver.saveToFile(baseItem, savedFilePath, result.thumbnailImage);
         }
 
         if (guard) {
             QMetaObject::invokeMethod(guard.data(), [guard, expectedName, baseItem, result, thumbnailDpr, savedFilePath]() mutable {
                 if (!guard) {
+                    return;
+                }
+
+                // Deleted while the worker was saving: the worker has just
+                // written the file back, so take it away again and stop here
+                // rather than re-index and re-show the item.
+                if (guard->finishInFlightSave(savedFilePath)) {
+                    QFile::remove(savedFilePath);
+                    guard->lastInternalWriteMs_ = QDateTime::currentMSecsSinceEpoch();
+                    ++guard->internalWriteGen_;
                     return;
                 }
 
@@ -234,6 +251,19 @@ void ClipboardBoardService::processPendingItemAsync(const ClipboardItem &item, c
             }, Qt::QueuedConnection);
         }
     });
+}
+
+bool ClipboardBoardService::finishInFlightSave(const QString &filePath) {
+    if (filePath.isEmpty()) {
+        return false;
+    }
+    const bool cancelled = cancelledSavePaths_.contains(filePath);
+    auto it = inFlightSavePaths_.find(filePath);
+    if (it != inFlightSavePaths_.end() && --it.value() <= 0) {
+        inFlightSavePaths_.erase(it);
+        cancelledSavePaths_.remove(filePath);
+    }
+    return cancelled;
 }
 
 // --- Async thumbnail fetch ---
@@ -407,8 +437,18 @@ void ClipboardBoardService::requestThumbnailAsync(const QString &expectedName, c
                     // the file later via a deferred call so the current
                     // event-loop iteration stays responsive.
                     emit guard->thumbnailReady(expectedName, thumbnail);
-                    if (shouldPersistPreparedItem) {
-                        guard->saveItemQuiet(preparedItem);
+                    // The item may have been deleted, renamed or pinned since
+                    // the worker read it. Gone: do not write it back. Still
+                    // there: keep what the file says now for alias and pin.
+                    if (shouldPersistPreparedItem && QFile::exists(filePath)) {
+                        LocalSaver currentSaver;
+                        const ClipboardItem current = currentSaver.loadFromFileLight(filePath);
+                        if (!current.getName().isEmpty()) {
+                            ClipboardItem toSave = preparedItem;
+                            toSave.setAlias(current.getAlias());
+                            toSave.setPinned(current.isPinned());
+                            guard->saveItemQuiet(toSave);
+                        }
                     }
                     return;
                 }

@@ -27,7 +27,7 @@ void SyncWatcher::setup(const QString &rootDir, const QStringList &categoryDirs)
     if (!reloadTimer_) {
         reloadTimer_ = new QTimer(this);
         reloadTimer_->setSingleShot(true);
-        reloadTimer_->setInterval(400);
+        reloadTimer_->setInterval(kReloadDebounceMs);
         connect(reloadTimer_, &QTimer::timeout, this, [this]() {
             // The parent (MPasteWidget) checks visibility before acting on the signal.
             // If the widget is hidden, mark pending instead.
@@ -57,7 +57,6 @@ void SyncWatcher::setBoardServices(ClipboardBoardService *clipboardService, Clip
 
 void SyncWatcher::setPendingReload() {
     pendingReload_ = true;
-    pendingWriteGen_ = currentWriteGeneration();
 }
 
 bool SyncWatcher::checkPendingReload() {
@@ -65,9 +64,11 @@ bool SyncWatcher::checkPendingReload() {
         return false;
     }
     pendingReload_ = false;
-    // If write generations changed since the pending flag was set,
-    // the directory change was caused by our own async saves -- skip.
-    return currentWriteGeneration() == pendingWriteGen_;
+    // The flag is only set for a change scheduleSyncReload() let through, so
+    // it stands whatever we wrote since: a local copy made while the panel was
+    // hidden must not cancel a reload owed to another device. The reload is an
+    // incremental diff of the directory, cheap when there is nothing new.
+    return true;
 }
 
 quint64 SyncWatcher::currentWriteGeneration() const {
@@ -91,14 +92,16 @@ void SyncWatcher::scheduleSyncReload() {
     }
     // Honour the suppress window requested by the controller after
     // a local persistence change (e.g. save, delete, alias update).
-    if (suppressReloadUntilMs_ > 0
-        && QDateTime::currentMSecsSinceEpoch() < suppressReloadUntilMs_) {
+    // Inside either window the change is most likely our own write, but an
+    // external one can land there too and no later event will announce it.
+    // So look again once the windows have passed instead of dropping it.
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const bool suppressed = suppressReloadUntilMs_ > 0 && now < suppressReloadUntilMs_;
+    const bool recentInternalWrite = (clipboardService_ && clipboardService_->hasRecentInternalWrite())
+        || (starService_ && starService_->hasRecentInternalWrite());
+    if (suppressed || recentInternalWrite) {
+        reloadTimer_->start(kRecheckAfterOwnWriteMs);
         return;
     }
-    // Ignore directory changes caused by our own file writes.
-    if ((clipboardService_ && clipboardService_->hasRecentInternalWrite())
-        || (starService_ && starService_->hasRecentInternalWrite())) {
-        return;
-    }
-    reloadTimer_->start();
+    reloadTimer_->start(kReloadDebounceMs);
 }

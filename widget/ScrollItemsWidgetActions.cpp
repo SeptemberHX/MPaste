@@ -228,6 +228,17 @@ void ScrollItemsWidget::removeItemByContent(const ClipboardItem &item) {
         if (paginationEnabled() && loadedPageTotalItems_ > 0) {
             loadedPageTotalItems_ = totalItemCountForPagination();
         }
+        // A paged board is now one row short while later pages have moved up
+        // by one: refill it, or the item that slid into this page's last slot
+        // would be on no page at all. Same as removeItems(), selection kept.
+        if (paginationEnabled()) {
+            QScrollBar *scrollBar = horizontalScrollbar();
+            const int scrollValue = scrollBar ? scrollBar->value() : 0;
+            syncPageWindow(false);
+            if (scrollBar) {
+                scrollBar->setValue(qMin(scrollValue, scrollBar->maximum()));
+            }
+        }
         refreshContentWidthHint();
         emit itemCountChanged(itemCountForDisplay());
         emit pageStateChanged(currentPageNumber(), totalPageCount());
@@ -416,13 +427,22 @@ void ScrollItemsWidget::openAliasDialogForItem(const ClipboardItem &item) {
     if (!boardModel_) {
         return;
     }
-    const int row = boardModel_->rowForName(item.getName());
-    if (row < 0) {
+    if (boardModel_->rowForName(item.getName()) < 0) {
         return;
     }
+    const QString itemName = item.getName();
     ClipboardItemRenameDialog dialog(item.getAlias(), this);
     dialog.setSource(item.getIcon(), item.getSourceApp());
     if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    // Rows can shift while the dialog is open (a new copy, a page reload),
+    // so look the item up again instead of trusting the earlier row.
+    if (!boardModel_) {
+        return;
+    }
+    const int row = boardModel_->rowForName(itemName);
+    if (row < 0) {
         return;
     }
     ClipboardItem updated = boardModel_->itemAt(row);

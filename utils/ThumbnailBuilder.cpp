@@ -279,8 +279,11 @@ QString simplifyHtmlForRendering(const QString &html) {
                         QStringLiteral("url\\s*\\([^)]*\\)"),
                         QRegularExpression::CaseInsensitiveOption);
                     tagStr.replace(urlInStyle, QStringLiteral("none"));
+                    // Every attribute Qt would load a resource from, quoted
+                    // or not: src, srcset, and the background picture of
+                    // body / table / tr / td / th.
                     static const QRegularExpression remoteSrc(
-                        QStringLiteral("(?:src|srcset)\\s*=\\s*[\"'][^\"']*[\"']"),
+                        QStringLiteral("\\b(?:src|srcset|background)\\s*=\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s>]+)"),
                         QRegularExpression::CaseInsensitiveOption);
                     tagStr.replace(remoteSrc, QString());
                     // A table's fixed widths are the source page's (a 566px

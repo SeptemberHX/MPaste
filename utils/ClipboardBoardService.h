@@ -60,6 +60,7 @@
 #define MPASTE_CLIPBOARD_BOARD_SERVICE_H
 
 #include <QByteArray>
+#include <QHash>
 #include <QDateTime>
 #include <QList>
 #include <QPair>
@@ -224,6 +225,12 @@ private:
     qint64 lastInternalWriteMs_ = 0;
     quint64 internalWriteGen_ = 0;
     QList<ClipboardItem> pendingSaveQueue_;
+    // Saves handed to a worker and not yet reported back, by file path, and
+    // those among them whose item was deleted meanwhile. GUI thread only.
+    QHash<QString, int> inFlightSavePaths_;
+    QSet<QString> cancelledSavePaths_;
+    // True when the item at filePath was deleted while this save was running.
+    bool finishInFlightSave(const QString &filePath);
     QTimer *deferredSaveTimer_ = nullptr;
 };
 

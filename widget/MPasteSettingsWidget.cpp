@@ -946,6 +946,8 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
                 currentDir.isEmpty() ? QDir::homePath() : currentDir);
             if (!selected.isEmpty() && syncPathEdit_) {
                 syncPathEdit_->setText(QDir::cleanPath(selected));
+                // Settings save on change; there is no OK button to do it later.
+                saveAllSettings();
             }
         });
 
@@ -1439,6 +1441,10 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
     if (sensitiveSwitch_) connect(sensitiveSwitch_, &ToggleSwitch::toggled, this, save);
     if (linkPreviewSwitch_) connect(linkPreviewSwitch_, &ToggleSwitch::toggled, this, save);
     if (ignoredAppsEdit_) connect(ignoredAppsEdit_, &QLineEdit::editingFinished, this, save);
+    // textEdited, not editingFinished: closing the window with the field
+    // still focused must not lose the key.
+    if (baiduApiKeyEdit_) connect(baiduApiKeyEdit_, &QLineEdit::textEdited, this, save);
+    if (baiduSecretKeyEdit_) connect(baiduSecretKeyEdit_, &QLineEdit::textEdited, this, save);
     connect(ui->daySpinBox, &QSpinBox::valueChanged, this, save);
     connect(ui->itemScaleSlider, &QSlider::valueChanged, this, save);
     connect(ui->shortcutEdit, &QKeySequenceEdit::editingFinished, this, save);
@@ -1598,6 +1604,18 @@ void MPasteSettingsWidget::saveAllSettings()
     settings->setHistoryRetentionUnit(newRetentionUnit);
 
     QString newShortcut = ui->shortcutEdit->keySequence().toString();
+    // A bare key (V, Space) as a global hotkey would stop that key from
+    // typing anywhere. Only function keys may stand without a modifier.
+    const QKeySequence newSequence = ui->shortcutEdit->keySequence();
+    if (newSequence.count() == 1) {
+        const QKeyCombination combo = newSequence[0];
+        const bool functionKey = combo.key() >= Qt::Key_F1 && combo.key() <= Qt::Key_F35;
+        if (combo.keyboardModifiers() == Qt::NoModifier && !functionKey) {
+            const QSignalBlocker blocker(ui->shortcutEdit);
+            ui->shortcutEdit->setKeySequence(QKeySequence(settings->getShortcutStr()));
+            newShortcut.clear();
+        }
+    }
     if (!newShortcut.isEmpty() && newShortcut != settings->getShortcutStr()) {
         settings->setShortcutStr(newShortcut);
         emit shortcutChanged(newShortcut);

@@ -68,7 +68,18 @@ void OpenGraphFetcher::handle() {
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setTransferTimeout(10000);
     this->realCalledUrl = tUrl;
-    this->naManager->get(request);
+    this->pageParsed = false;
+    capReplySize(this->naManager->get(request), kMaxPageBytes);
+}
+
+void OpenGraphFetcher::capReplySize(QNetworkReply *reply, qint64 maxBytes) {
+    // The transfer timeout only catches a stalled transfer; a copied link to
+    // an ISO or a video would otherwise be read whole into memory.
+    connect(reply, &QNetworkReply::downloadProgress, reply, [reply, maxBytes](qint64 received, qint64) {
+        if (received > maxBytes) {
+            reply->abort();
+        }
+    });
 }
 
 void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
@@ -95,7 +106,21 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
         return;
     }
 
-    if (isHtmlReply || looksLikeHtml || reply->request().url() == this->realCalledUrl) {
+    // Only the first reply is the page. A picture or icon request answered
+    // with HTML (a soft 404, a login page) is a failed picture: parsing it as
+    // a page would queue the same candidates again, without end.
+    const bool isPageReply = !this->pageParsed;
+    this->pageParsed = true;
+    if (!isPageReply && (isHtmlReply || looksLikeHtml)) {
+        if (!pendingImages.isEmpty()) {
+            tryNextImage();
+        } else {
+            Q_EMIT finished(this->ogItem);
+        }
+        return;
+    }
+
+    if (isPageReply) {
         QDomDocument doc;
         const QString body = QString::fromUtf8(payload);
 
@@ -275,7 +300,8 @@ void OpenGraphFetcher::requestFinished(QNetworkReply *reply) {
             [](const PendingImage &pending) { return pending.kind == OpenGraphItem::IconImage; });
         if (!hasIconCandidate) {
             for (const QString &path : getHighQualityIconPaths()) {
-                appendPendingImage(targetUrl.toString() + path, OpenGraphItem::IconImage);
+                // From the site root, not appended to the page's own path and query.
+                appendPendingImage(targetUrl.resolved(QUrl(path)).toString(), OpenGraphItem::IconImage);
             }
         }
 
@@ -331,8 +357,20 @@ void OpenGraphFetcher::tryNextImage() {
         }
     }
 
-    QNetworkRequest request{QUrl(imageUrl)};
+    // The page chooses these addresses, so only fetch over the web: never
+    // file:, qrc: or anything else QNetworkAccessManager would open locally.
+    const QUrl finalUrl(imageUrl);
+    const QString scheme = finalUrl.scheme().toLower();
+    if (!finalUrl.isValid() || finalUrl.host().isEmpty()
+        || (scheme != QLatin1String("http") && scheme != QLatin1String("https"))) {
+        tryNextImage();
+        return;
+    }
+
+    QNetworkRequest request{finalUrl};
     request.setRawHeader("User-Agent",
         "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0");
-    this->naManager->get(request);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(10000);
+    capReplySize(this->naManager->get(request), kMaxImageBytes);
 }

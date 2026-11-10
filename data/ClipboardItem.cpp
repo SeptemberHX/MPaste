@@ -121,7 +121,9 @@ QList<QUrl> ClipboardItem::buildNormalizedUrls() const {
     }
 
     const QString text = mimeData_->text();
-    if (text.contains(QStringLiteral("x-special/nautilus-clipboard"))) {
+    // The marker is the protocol's first line. Text that merely mentions it
+    // (source code, documentation) is ordinary text.
+    if (text.trimmed().startsWith(QStringLiteral("x-special/nautilus-clipboard"))) {
         return ClipboardUrlParser::parseProtocolTextUrls(text, false);
     }
 
@@ -134,7 +136,7 @@ QList<QUrl> ClipboardItem::buildNormalizedUrls() const {
             continue;
         }
         const QString rawText = QString::fromUtf8(mimeData_->data(format));
-        if (rawText.contains(QStringLiteral("x-special/nautilus-clipboard"))) {
+        if (rawText.trimmed().startsWith(QStringLiteral("x-special/nautilus-clipboard"))) {
             const QList<QUrl> parsed = ClipboardUrlParser::parseProtocolTextUrls(rawText, false);
             if (!parsed.isEmpty()) {
                 return parsed;

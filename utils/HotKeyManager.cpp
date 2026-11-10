@@ -29,10 +29,15 @@ public:
                              q, &HotkeyManager::hotkeyPressed);
             return;
         }
-        // Initialize XCB connection
-        connection = xcb_connect(nullptr, nullptr);
-        if (xcb_connection_has_error(connection)) {
-            qWarning("Failed to connect to X server");
+        // Grab on Qt's own connection: X delivers the grabbed KeyPress to the
+        // client that grabbed it, and the native event filter below only sees
+        // events read from Qt's connection. A private one would never be read.
+        if (auto *x11 = qGuiApp->nativeInterface<QNativeInterface::QX11Application>()) {
+            connection = x11->connection();
+        }
+        if (!connection || xcb_connection_has_error(connection)) {
+            qWarning("No X11 connection for the global hotkey");
+            connection = nullptr;
             return;
         }
 
@@ -54,9 +59,7 @@ public:
         if (keySymbols) {
             xcb_key_symbols_free(keySymbols);
         }
-        if (connection) {
-            xcb_disconnect(connection);
-        }
+        // The connection is Qt's; it is not ours to close.
 #endif
         qApp->removeNativeEventFilter(eventFilter);
         delete eventFilter;
@@ -77,6 +80,8 @@ public:
             modifiers |= MOD_CONTROL;
         if (qtMods & Qt::ShiftModifier)
             modifiers |= MOD_SHIFT;
+        if (qtMods & Qt::MetaModifier)
+            modifiers |= MOD_WIN;
 
         // Get the key
         int key = keySequence[0] & ~Qt::KeyboardModifierMask;
@@ -124,6 +129,8 @@ public:
             modifiers |= XCB_MOD_MASK_CONTROL;
         if (qtMods & Qt::AltModifier)
             modifiers |= XCB_MOD_MASK_1;
+        if (qtMods & Qt::MetaModifier)
+            modifiers |= XCB_MOD_MASK_4;
 
         // Get keycode
         int key = keySequence[0] & ~Qt::KeyboardModifierMask;
@@ -135,11 +142,28 @@ public:
         keycode = keycodes[0];
         free(keycodes);
 
-        // Register global hotkey
-        xcb_grab_key(connection, 1, root,
-                     modifiers, keycode,
+        // Register global hotkey. A passive grab matches the modifier state
+        // exactly, so also grab the NumLock / CapsLock variants.
+        bool grabbed = true;
+        for (uint32_t lockMask : kLockMasks) {
+            xcb_void_cookie_t cookie = xcb_grab_key_checked(connection, 1, root,
+                     modifiers | lockMask, keycode,
                      XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
-
+            if (xcb_generic_error_t *error = xcb_request_check(connection, cookie)) {
+                // BadAccess: another client already owns this combination.
+                free(error);
+                grabbed = false;
+            }
+        }
+        if (!grabbed) {
+            for (uint32_t lockMask : kLockMasks) {
+                xcb_ungrab_key(connection, keycode, root, modifiers | lockMask);
+            }
+            xcb_flush(connection);
+            keycode = 0;
+            modifiers = 0;
+            return false;
+        }
         xcb_flush(connection);
         return true;
 #else
@@ -159,7 +183,9 @@ public:
             return;
         }
         if (connection && keycode != 0) {
-            xcb_ungrab_key(connection, keycode, root, modifiers);
+            for (uint32_t lockMask : kLockMasks) {
+                xcb_ungrab_key(connection, keycode, root, modifiers | lockMask);
+            }
             xcb_flush(connection);
             keycode = 0;
             modifiers = 0;
@@ -186,8 +212,9 @@ private:
                 xcb_generic_event_t *event = static_cast<xcb_generic_event_t *>(message);
                 if ((event->response_type & ~0x80) == XCB_KEY_PRESS) {
                     xcb_key_press_event_t *kp = (xcb_key_press_event_t *)event;
-                    if (kp->detail == d->keycode &&
-                        (kp->state & d->modifiers) == d->modifiers) {
+                    // Compare the real modifiers only; NumLock / CapsLock vary.
+                    if (d->keycode != 0 && kp->detail == d->keycode &&
+                        (kp->state & kHotkeyModifierMask) == d->modifiers) {
                         emit d->q->hotkeyPressed();
                         return true;
                     }
@@ -207,6 +234,12 @@ private:
 #ifdef Q_OS_WIN
     int hotkeyId;
 #elif defined(Q_OS_LINUX)
+    // Shift, Control, Alt (Mod1) and Super (Mod4): what a hotkey is made of.
+    static constexpr uint32_t kHotkeyModifierMask =
+        XCB_MOD_MASK_SHIFT | XCB_MOD_MASK_CONTROL | XCB_MOD_MASK_1 | XCB_MOD_MASK_4;
+    // CapsLock (Lock) and NumLock (Mod2), in every combination.
+    static constexpr uint32_t kLockMasks[4] = {
+        0, XCB_MOD_MASK_LOCK, XCB_MOD_MASK_2, XCB_MOD_MASK_LOCK | XCB_MOD_MASK_2};
     xcb_connection_t *connection = nullptr;
     xcb_window_t root = 0;
     xcb_key_symbols_t *keySymbols = nullptr;

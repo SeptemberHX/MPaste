@@ -176,7 +176,9 @@ python3 tools/install_gnome_wayland.py --autostart
 
 Log out and back in once to load the new extension. Alt+Q opens the panel;
 selecting an item restores the original window and pastes it. `--show` opens the
-panel on first launch. `MPASTE_LOG_DIR` optionally redirects application logs.
+panel on first launch. `MPASTE_LOG_DIR` optionally redirects application logs. The log records
+the size of copied text, not the text; `MPASTE_LOG_CLIPBOARD_TEXT=1` adds a
+short excerpt for debugging.
 To run the isolated desktop regression, use `python3 tests/gnome-wayland/run.py`.
 
 To build the Debian package instead of installing for one user:
