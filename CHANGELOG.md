@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.8.7
+
+A preview for links, a fix for items that lost their data on saving, and rich-text cards that follow the theme.
 
 - Space on a link shows the page, not just its address: the page's picture (or the site's icon on a band) beside its site, title and address, the address's parts set apart and decoded (中文 instead of %E4%B8%AD), and its parameters listed. Parameters that only track a share (utm_*, spm, vd_source, fbclid, ...) are struck through, with "Copy clean link" (C) to copy the address without them. Shift+Enter pastes it as Markdown, O opens it in the browser, and buttons copy the address, the Markdown or the title.
 - GNOME Wayland: restarting MPaste could show "Enable the MPaste Wayland Integration GNOME extension ... python3 tools/install_gnome_wayland.py" with the extension on. The extension still held the previous MPaste's connection for a moment and refused the new one, and the check took that refusal for a missing extension. MPaste now tries again until the extension lets the old connection go, and the warning shows only when the extension is not running, checked 3 s after start.
