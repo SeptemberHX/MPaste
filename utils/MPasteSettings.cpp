@@ -128,8 +128,8 @@ void MPasteSettings::loadSettings() {
     this->shortcutStr = settings.value("main/shortcut", this->shortcutStr).toString();
     this->itemScale = settings.value("main/itemScale", this->itemScale).toInt();
     this->playSound = settings.value("main/playSound", this->playSound).toBool();
-    this->cardStyle = settings.value("main/cardStyle", static_cast<int>(CardStill)).toInt() == CardAurora
-        ? CardAurora : CardStill;
+    const int savedCardStyle = settings.value("main/cardStyle", static_cast<int>(CardStill)).toInt();
+    this->cardStyle = savedCardStyle >= CardStill && savedCardStyle <= CardBorealis ? static_cast<CardStyle>(savedCardStyle) : CardStill;
     this->themeMode = static_cast<ThemeMode>(
         settings.value("main/themeMode", static_cast<int>(this->themeMode)).toInt());
     this->historyViewMode = static_cast<HistoryViewMode>(

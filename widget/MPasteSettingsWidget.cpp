@@ -24,6 +24,8 @@
 #include <QWindow>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRadialGradient>
+#include <QLinearGradient>
 #include <QGridLayout>
 #include <QApplication>
 #include <QDir>
@@ -598,24 +600,94 @@ QWidget *MPasteSettingsWidget::makeSegmentFor(QComboBox *combo, QWidget *parent)
 
 QWidget *MPasteSettingsWidget::makeCardStyleChoices(QWidget *parent) {
     auto *row = new QWidget(parent);
-    auto *layout = new QHBoxLayout(row);
+    // Three to a row.
+    auto *layout = new QGridLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(12);
     auto *group = new QButtonGroup(row);
     group->setExclusive(true);
     const qreal dpr = devicePixelRatioF();
-    // A miniature of each style: Still a neutral card, Aurora a coloured corner light.
-    auto miniature = [dpr](bool aurora) {
+    // A miniature of each style: Still a neutral card, Aurora a coloured corner
+    // light, Poster a cover with letters that run off its corner. Drawn at
+    // 220 x 72 and shown smaller, so three sit side by side.
+    const qreal shrink = 0.75;
+    const QSize shown(qRound(220 * shrink), qRound(72 * shrink));
+    auto miniature = [dpr, shrink, shown](MPasteSettings::CardStyle style) {
+        const bool aurora = style == MPasteSettings::CardAurora;
         const QSize size(220, 72);
-        QPixmap pixmap(size * dpr);
+        QPixmap pixmap(shown * dpr);
         pixmap.setDevicePixelRatio(dpr);
         pixmap.fill(Qt::transparent);
         QPainter p(&pixmap);
         p.setRenderHint(QPainter::Antialiasing, true);
+        p.scale(shrink, shrink);
         QPainterPath card;
         card.addRoundedRect(QRectF(0.5, 0.5, size.width() - 1, size.height() - 1), 10, 10);
         p.fillPath(card, QColor(aurora ? QStringLiteral("#17181E") : QStringLiteral("#18191D")));
-        if (aurora) {
+        if (style == MPasteSettings::CardGlow || style == MPasteSettings::CardBorealis) {
+            const bool borealis = style == MPasteSettings::CardBorealis;
+            p.save();
+            p.setClipPath(card);
+            if (borealis) {
+                // Three lights behind a pane of glass.
+                p.fillRect(QRectF(QPointF(0, 0), QSizeF(size)), QColor(QStringLiteral("#0D0A18")));
+                const struct { qreal x; const char *color; } lights[] = {{20, "#19C7A8"}, {110, "#6A4DFF"}, {200, "#FF4FA3"}};
+                for (const auto &light : lights) {
+                    QRadialGradient glow(QPointF(light.x, 50), 90);
+                    QColor c(QString::fromLatin1(light.color));
+                    c.setAlpha(170);
+                    glow.setColorAt(0.0, c);
+                    c.setAlpha(0);
+                    glow.setColorAt(1.0, c);
+                    p.fillRect(QRectF(QPointF(0, 0), QSizeF(size)), glow);
+                }
+                p.setPen(QPen(QColor(255, 255, 255, 70), 1));
+                p.setBrush(QColor(14, 12, 24, 130));
+                p.drawRoundedRect(QRectF(10, 10, 200, 52), 8, 8);
+            } else {
+                // The app's colour washed down from the top.
+                QLinearGradient wash(QPointF(0, 0), QPointF(0, 46));
+                wash.setColorAt(0.0, QColor(7, 193, 96, 120));
+                wash.setColorAt(1.0, QColor(7, 193, 96, 0));
+                p.fillRect(QRectF(QPointF(0, 0), QSizeF(size)), wash);
+                QRadialGradient halo(QPointF(19, 19), 18);
+                halo.setColorAt(0.0, QColor(7, 193, 96, 200));
+                halo.setColorAt(1.0, QColor(7, 193, 96, 0));
+                p.fillRect(QRectF(0, 0, 40, 40), halo);
+            }
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(QStringLiteral("#07C160")));
+            p.drawRoundedRect(QRectF(borealis ? 20 : 12, borealis ? 18 : 12, 14, 14), 4, 4);
+            p.setBrush(QColor(255, 255, 255, 130));
+            p.drawRoundedRect(QRectF(borealis ? 40 : 32, borealis ? 22 : 16, 80, 6), 3, 3);
+            p.setBrush(QColor(255, 255, 255, 70));
+            p.drawRoundedRect(QRectF(borealis ? 20 : 12, borealis ? 44 : 40, 150, 5), 2.5, 2.5);
+            p.restore();
+        } else if (style == MPasteSettings::CardPoster) {
+            p.save();
+            p.setClipPath(card);
+            QLinearGradient ground(QPointF(0, 0), QPointF(size.width(), size.height()));
+            ground.setColorAt(0.0, QColor(QStringLiteral("#F2C14E")));
+            ground.setColorAt(0.55, QColor(QStringLiteral("#B9831A")));
+            ground.setColorAt(1.0, QColor(QStringLiteral("#2A1D06")));
+            p.fillRect(QRectF(QPointF(0, 0), QSizeF(size)), ground);
+            QFont giant = p.font();
+            giant.setWeight(QFont::Black);
+            giant.setPixelSize(120);
+            QPainterPath letter;
+            letter.addText(0, 0, giant, QStringLiteral("M"));
+            const QRectF bounds = letter.boundingRect();
+            p.fillPath(letter.translated(size.width() - bounds.width() - bounds.left() + 10, 96 - bounds.bottom()),
+                       QColor(18, 15, 10, 60));
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(18, 15, 10, 235));
+            p.drawRoundedRect(QRectF(12, 12, 14, 14), 4, 4);
+            p.drawRoundedRect(QRectF(32, 16, 60, 6), 3, 3);
+            p.drawRoundedRect(QRectF(12, 36, 120, 13), 2, 2);
+            p.setBrush(QColor(255, 248, 228, 220));
+            p.drawRoundedRect(QRectF(12, 58, 70, 4), 2, 2);
+            p.restore();
+        } else if (aurora) {
             // As on the cards: across to the right edge, shallow down.
             const qreal radiusX = size.width() * 1.25;
             QRadialGradient light(QPointF(0, 0), radiusX);
@@ -651,23 +723,26 @@ QWidget *MPasteSettingsWidget::makeCardStyleChoices(QWidget *parent) {
         p.drawPath(card);
         return pixmap;
     };
-    const struct { const char *name; QString zhName; const char *note; QString zhNote; bool aurora; } styles[] = {
-        {"Still", QStringLiteral("静物"), "A neutral card, the content first", QStringLiteral("中性卡片，内容优先"), false},
-        {"Aurora", QStringLiteral("流光"), "The app's colour as a corner light", QStringLiteral("应用色化作角落的光"), true},
+    const struct { const char *name; QString zhName; const char *note; QString zhNote; MPasteSettings::CardStyle style; } styles[] = {
+        {"Still", QStringLiteral("静物"), "A neutral card, the content first", QStringLiteral("中性卡片，内容优先"), MPasteSettings::CardStill},
+        {"Aurora", QStringLiteral("流光"), "The app's colour as a corner light", QStringLiteral("应用色化作角落的光"), MPasteSettings::CardAurora},
+        {"Poster", QStringLiteral("海报"), "Each item set as a poster", QStringLiteral("每条内容排成一张海报"), MPasteSettings::CardPoster},
+        {"Glow", QStringLiteral("光晕"), "The app's colour washed from the top", QStringLiteral("应用色从卡片顶部晕下来"), MPasteSettings::CardGlow},
+        {"Borealis", QStringLiteral("极光"), "Glass cards over northern lights", QStringLiteral("玻璃卡片，面板里有极光"), MPasteSettings::CardBorealis},
     };
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 5; ++i) {
         auto *button = new QToolButton(row);
         button->setObjectName(QStringLiteral("cardStyleChoice"));
         button->setCheckable(true);
         button->setCursor(Qt::PointingHandCursor);
         button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-        button->setIcon(QIcon(miniature(styles[i].aurora)));
-        button->setIconSize(QSize(220, 72));
+        button->setIcon(QIcon(miniature(styles[i].style)));
+        button->setIconSize(shown);
         button->setText(uiText(styles[i].name, styles[i].zhName) + QStringLiteral("\n")
                         + uiText(styles[i].note, styles[i].zhNote));
         button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        group->addButton(button, cardStyleCombo_->findData(styles[i].aurora ? MPasteSettings::CardAurora : MPasteSettings::CardStill));
-        layout->addWidget(button, 1);
+        group->addButton(button, cardStyleCombo_->findData(static_cast<int>(styles[i].style)));
+        layout->addWidget(button, i / 3, i % 3);
     }
     if (auto *current = group->button(cardStyleCombo_->currentIndex())) {
         current->setChecked(true);
@@ -776,6 +851,9 @@ MPasteSettingsWidget::MPasteSettingsWidget(QWidget *parent)
         cardStyleCombo_->setMinimumSize(QSize(140, 32));
         cardStyleCombo_->addItem(uiText("Still", QStringLiteral("静物")), static_cast<int>(MPasteSettings::CardStill));
         cardStyleCombo_->addItem(uiText("Aurora", QStringLiteral("流光")), static_cast<int>(MPasteSettings::CardAurora));
+        cardStyleCombo_->addItem(uiText("Poster", QStringLiteral("海报")), static_cast<int>(MPasteSettings::CardPoster));
+        cardStyleCombo_->addItem(uiText("Glow", QStringLiteral("光晕")), static_cast<int>(MPasteSettings::CardGlow));
+        cardStyleCombo_->addItem(uiText("Borealis", QStringLiteral("极光")), static_cast<int>(MPasteSettings::CardBorealis));
         connect(themeCombo_, &QComboBox::currentIndexChanged, this, [this]() {
             if (!themeCombo_) {
                 return;

@@ -38,6 +38,9 @@
 #include <QStyle>
 #include <QStyleFactory>
 #include "utils/MPasteSettings.h"
+#include <QLinearGradient>
+#include <QRadialGradient>
+#include <QPixmap>
 #include "utils/ThemeManager.h"
 #include "WindowBlurHelper.h"
 #include "utils/IconResolver.h"
@@ -638,6 +641,85 @@ void MPasteWidget::paintEvent(QPaintEvent *) {
         body.addRoundedRect(r, radius, radius);
         const int alpha = nativeBackdropBlur_ ? (darkTheme_ ? 150 : 175) : 255;
         p.fillPath(body, SurfacePainter::bodyColor(darkTheme_, true, 255, alpha));
+    }
+
+    const MPasteSettings::CardStyle cardStyle = MPasteSettings::getInst()->getCardStyle();
+    if (cardStyle == MPasteSettings::CardBorealis) {
+        // Northern lights across the panel, behind the glass cards: three
+        // lights and two ribbons, soft, under a veil that keeps the bar readable.
+        // Painted once for a size and theme, then blitted.
+        static QPixmap lights;
+        static QString lightsKey;
+        const qreal dpr = devicePixelRatioF();
+        const QString key = QStringLiteral("%1x%2@%3:%4").arg(width()).arg(height()).arg(dpr).arg(darkTheme_);
+        if (lightsKey != key) {
+            lights = QPixmap(size() * dpr);
+            lights.setDevicePixelRatio(dpr);
+            lights.fill(Qt::transparent);
+            QPainter a(&lights);
+            a.setRenderHint(QPainter::Antialiasing, true);
+            const qreal w = width();
+            const qreal h = height();
+            a.fillRect(QRectF(0, 0, w, h), darkTheme_ ? QColor(13, 10, 24, 215) : QColor(248, 247, 252, 200));
+            const struct { qreal x, y, r; const char *color; } blobs[] = {
+                {0.12, 0.66, 0.30, "#19C7A8"}, {0.50, 0.50, 0.32, "#6A4DFF"}, {0.88, 0.70, 0.30, "#FF4FA3"},
+            };
+            for (const auto &blob : blobs) {
+                QRadialGradient light(QPointF(blob.x * w, blob.y * h), blob.r * w);
+                QColor c(QString::fromLatin1(blob.color));
+                c.setAlpha(darkTheme_ ? 215 : 120);
+                light.setColorAt(0.0, c);
+                c.setAlpha(darkTheme_ ? 120 : 55);
+                light.setColorAt(0.5, c);
+                c.setAlpha(0);
+                light.setColorAt(1.0, c);
+                QBrush brush(light);
+                // Wider than tall: the lights lie along the panel.
+                QTransform flat;
+                flat.translate(0, blob.y * h);
+                flat.scale(1.0, 0.9);
+                flat.translate(0, -blob.y * h);
+                brush.setTransform(flat);
+                a.fillRect(QRectF(0, 0, w, h), brush);
+            }
+            const struct { qreal y0, y1, y2, y3; const char *color; } ribbons[] = {
+                {0.72, 0.30, 0.86, 0.28, "#5CF5D6"}, {0.86, 0.55, 0.45, 0.72, "#B79BFF"},
+            };
+            for (const auto &ribbon : ribbons) {
+                QPainterPath path;
+                path.moveTo(-0.03 * w, ribbon.y0 * h);
+                path.cubicTo(0.25 * w, ribbon.y1 * h, 0.45 * w, ribbon.y2 * h, 0.70 * w, ribbon.y3 * h);
+                path.cubicTo(0.82 * w, (ribbon.y3 - 0.12) * h, 0.92 * w, (ribbon.y3 + 0.10) * h, 1.03 * w, (ribbon.y3 - 0.05) * h);
+                for (const int width : {46, 30, 18, 9}) {
+                    QColor c(QString::fromLatin1(ribbon.color));
+                    c.setAlpha(darkTheme_ ? 24 : 30);
+                    a.setPen(QPen(c, width, Qt::SolidLine, Qt::RoundCap));
+                    a.drawPath(path);
+                }
+            }
+            QLinearGradient veil(QPointF(0, 0), QPointF(0, h));
+            const QColor shade = darkTheme_ ? QColor(13, 10, 24) : QColor(250, 249, 253);
+            auto veiled = [shade](int alpha) { QColor c = shade; c.setAlpha(alpha); return c; };
+            veil.setColorAt(0.0, veiled(darkTheme_ ? 150 : 150));
+            veil.setColorAt(0.28, veiled(darkTheme_ ? 20 : 40));
+            veil.setColorAt(1.0, veiled(darkTheme_ ? 30 : 20));
+            a.fillRect(QRectF(0, 0, w, h), veil);
+            lightsKey = key;
+        }
+        QPainterPath body;
+        body.addRoundedRect(r, radius, radius);
+        p.save();
+        p.setClipPath(body);
+        p.drawPixmap(0, 0, lights);
+        p.restore();
+    } else if (cardStyle == MPasteSettings::CardGlow) {
+        // A hairline of the selection's colours across the top edge.
+        QLinearGradient line(QPointF(r.left() + r.width() * 0.18, 0), QPointF(r.left() + r.width() * 0.82, 0));
+        line.setColorAt(0.0, QColor(91, 157, 255, 0));
+        line.setColorAt(0.35, QColor(91, 157, 255, 230));
+        line.setColorAt(0.65, QColor(168, 123, 255, 230));
+        line.setColorAt(1.0, QColor(168, 123, 255, 0));
+        p.fillRect(QRectF(r.left() + r.width() * 0.18, r.top(), r.width() * 0.64, 1.5), line);
     }
 
     if (darkTheme_) {

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Two more card styles (Settings → General → Card style, now five to choose from, three to a row). Glow: the source app's colour washed down from the card's top edge, its icon lit from behind in that colour, the card's edge tinted with it; the selected card's ring runs from blue to violet with its light around it, and a hairline of the same colours crosses the panel's top edge. Borealis: northern lights across the panel (three lights, teal, violet and pink, and two ribbons, under a veil that keeps the bar readable) and the cards as panes of glass over them, the lights showing through; the selected card's ring runs teal, violet, pink. Both have light-theme versions.
+- A third card style, Poster (Settings → General → Card style, beside Still and Aurora). Every card keeps the same header and the same caption pill at its foot; between them, edge to edge, each item is set as a poster of its own, by what it is:
+  - Plain text: a few words in heavy type as large as they fit on the source app's colour, their first character run off the corner (blues and violets go deep under light type); a number ("2.8B", "42%") fills the card, its unit in red; a paragraph is set on paper with a dropped capital in the app's colour; two to six short lines are a numbered list; a key or hash is a ticket stub, its characters in fours over a bar code drawn from them; a path steps in folder by folder, its last name large.
+  - Code: one command glows on a phosphor screen behind a `$` prompt; several lines sit in an editor with line numbers, keywords, strings, numbers and comments in their colours.
+  - Rich text: a pull quote on paper; an article when its first line is a heading; a table as it was drawn, a sheet taped to the desk; a draw.io drawing pinned on a blueprint.
+  - Links: a cover in the site's colour with its initial run off the corner; with the page's picture, the picture with the site and title across its foot; a bare site as its own name in large type; a long headline as a newspaper's, in a serif face beside a spine of the site's colour.
+  - Pictures: edge to edge; a long page as a sheet laid at an angle on a dark desk, read from its top; a small picture or icon at its own size, mounted on white card; an Office shape whole, on squared paper.
+  - Files: a slab in the kind's colour with its extension in giant letters and the kind's own mark (cells for a sheet, lines for a document, a zip's teeth, a record's grooves); a folder as a manila folder; several files as "×3" with the first names and their kinds' tags; a picture file as the picture, with its kind and name on tags.
+  - Colours: a printer's chip, the colour above and its hex, RGB and HSL on the white below.
+  Posters carry their own colours, the same in the light and the dark theme. Rich text is set from its plain words, so bold and links inside it are not shown. Still stays the default.
+
 ## 0.8.9
 
 A preview for links, a fix for items that lost their data on saving, and rich-text cards that follow the theme.

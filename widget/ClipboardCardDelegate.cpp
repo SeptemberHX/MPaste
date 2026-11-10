@@ -45,6 +45,7 @@
 #include "cardrenderer/RichTextCardBody.h"
 #include "cardrenderer/ColorCardBody.h"
 #include "cardrenderer/LinkCardBody.h"
+#include "cardrenderer/PosterCard.h"
 #include "cardrenderer/FileCardBody.h"
 #include "cardrenderer/TextCardBody.h"
 #include "utils/MPasteSettings.h"
@@ -863,10 +864,30 @@ void ClipboardCardDelegate::drawSelectionBorder(QPainter *painter, const QStyleO
     const qreal offset = margin - borderWidth / 2.0;
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
-    painter->setPen(QPen(borderColor_, borderWidth));
+    const QRectF ring = QRectF(cardRect).adjusted(-offset, -offset, offset, offset);
+    const MPasteSettings::CardStyle cardStyle = MPasteSettings::getInst()->getCardStyle();
     painter->setBrush(Qt::NoBrush);
-    painter->drawRoundedRect(QRectF(cardRect).adjusted(-offset, -offset, offset, offset),
-                             cardRadius + offset, cardRadius + offset);
+    if (cardStyle == MPasteSettings::CardGlow || cardStyle == MPasteSettings::CardBorealis) {
+        // A ring of running colour with its light spilling around it.
+        QLinearGradient colours(ring.topLeft(), ring.bottomRight());
+        if (cardStyle == MPasteSettings::CardGlow) {
+            colours.setColorAt(0.0, QColor(QStringLiteral("#5B9DFF")));
+            colours.setColorAt(1.0, QColor(QStringLiteral("#A87BFF")));
+        } else {
+            colours.setColorAt(0.0, QColor(QStringLiteral("#6FF5DC")));
+            colours.setColorAt(0.5, QColor(QStringLiteral("#A48BFF")));
+            colours.setColorAt(1.0, QColor(QStringLiteral("#FF86C2")));
+        }
+        painter->setOpacity(0.22);
+        painter->setPen(QPen(QBrush(colours), borderWidth * 3.5));
+        painter->drawRoundedRect(ring, cardRadius + offset, cardRadius + offset);
+        painter->setOpacity(1.0);
+        painter->setPen(QPen(QBrush(colours), borderWidth));
+        painter->drawRoundedRect(ring, cardRadius + offset, cardRadius + offset);
+    } else {
+        painter->setPen(QPen(borderColor_, borderWidth));
+        painter->drawRoundedRect(ring, cardRadius + offset, cardRadius + offset);
+    }
     painter->restore();
 }
 
@@ -1034,7 +1055,14 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     // Two looks share one card: Still (a neutral card, the content first and a
     // single quiet line of who and when) and Aurora (the app's colour as light
     // in the corner, a header with its icon). Neither paints a colour band.
-    const bool aurora = MPasteSettings::getInst()->getCardStyle() == MPasteSettings::CardAurora;
+    const MPasteSettings::CardStyle cardStyle = MPasteSettings::getInst()->getCardStyle();
+    // Poster: each kind of content set as a poster, in the Aurora card's shape.
+    const bool poster = cardStyle == MPasteSettings::CardPoster;
+    // Glow: the app's colour washed down from the card's top, its icon lit.
+    // Borealis: a pane of glass over the panel's northern lights.
+    const bool glow = cardStyle == MPasteSettings::CardGlow;
+    const bool borealis = cardStyle == MPasteSettings::CardBorealis;
+    const bool aurora = cardStyle == MPasteSettings::CardAurora || poster || glow || borealis;
     auto px = [scale](int value) { return qMax(1, value * scale / 100); };
     const QSize innerSize(kCardBaseWidth * scale / 100, kCardBaseHeight * scale / 100);
     const QRect cardRect(option.rect.topLeft() + cardOriginForScale(scale), innerSize);
@@ -1064,7 +1092,8 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     const QString title = !alias.isEmpty() ? alias : (!card.sourceApp.isEmpty() ? card.sourceApp : typeLabel);
     // When the title already names the kind (no app known), the detail line does not repeat it.
     const bool titleIsKind = title == typeLabel && kindText == typeLabel;
-    QString detailText = countLabel.isEmpty() ? kindText
+    // "3 Files" is both the kind and the count of several files: said once.
+    QString detailText = countLabel.isEmpty() || countLabel == kindText ? kindText
         : (titleIsKind ? countLabel : kindText + QStringLiteral(" · ") + countLabel);
     if (isOcrPending(card.name)) {
         detailText += QStringLiteral(" · OCR...");
@@ -1106,7 +1135,7 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         painter->restore();
     };
     // Favourite and pinned marks, right to left from `right`; returns the new right edge.
-    auto drawMarks = [&](int right, int centerY, int size) {
+    auto drawMarks = [&](int right, int centerY, int size, bool onDark) {
         if (card.favorite) {
             const QRect starRect(right - size + 1, centerY - size / 2, size, size);
             painter->drawPixmap(starRect, starPixmap(starRect.size()));
@@ -1114,7 +1143,7 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         }
         if (card.pinned) {
             const QRect pinRect(right - size + 1, centerY - size / 2, size, size);
-            painter->drawPixmap(pinRect, pinPixmap(pinRect.size(), darkTheme));
+            painter->drawPixmap(pinRect, pinPixmap(pinRect.size(), onDark));
             right = pinRect.left() - px(6);
         }
         return right;
@@ -1133,10 +1162,30 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     painter->setClipPath(cardPath);
     painter->setPen(Qt::NoPen);
     if (aurora) {
-        const bool deep = visual && darkTheme;
-        painter->fillPath(cardPath, deep ? QColor(QStringLiteral("#0D0E12"))
-                                         : (darkTheme ? QColor(QStringLiteral("#17181E")) : QColor(QStringLiteral("#FCFCFE"))));
-        {
+        // A poster is a panel between the header and the foot line: the card
+        // around it stays the plain one, whatever the panel shows.
+        const bool deep = visual && darkTheme && !poster && !borealis;
+        if (borealis) {
+            // Glass: the lights behind show through, a sheen falls from its top.
+            painter->fillPath(cardPath, darkTheme ? QColor(14, 12, 24, 112) : QColor(255, 255, 255, 150));
+            QLinearGradient sheen(cardRect.topLeft(), QPointF(cardRect.left(), cardRect.top() + cardRect.height() * 0.45));
+            sheen.setColorAt(0.0, QColor(255, 255, 255, darkTheme ? 38 : 90));
+            sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
+            painter->fillRect(cardRect, sheen);
+        } else {
+            painter->fillPath(cardPath, deep ? QColor(QStringLiteral("#0D0E12"))
+                                             : (darkTheme ? QColor(QStringLiteral("#17181E")) : QColor(QStringLiteral("#FCFCFE"))));
+        }
+        if (glow) {
+            // The app's colour down from the top edge, gone by a third of the card.
+            QLinearGradient wash(cardRect.topLeft(), QPointF(cardRect.left(), cardRect.top() + px(76)));
+            QColor tint = appLight;
+            tint.setAlpha(darkTheme ? 78 : 60);
+            wash.setColorAt(0.0, tint);
+            tint.setAlpha(0);
+            wash.setColorAt(1.0, tint);
+            painter->fillRect(cardRect, wash);
+        } else if (!borealis) {
             // The app's colour as light from the top-left corner, not a painted band:
             // an ellipse reaching across to the right edge (still faintly lit there)
             // and shallow down the card, so it stays near the header. On a picture
@@ -1168,10 +1217,17 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
     {
         const QRectF edgeRect = QRectF(cardRect).adjusted(0.5, 0.5, -0.5, -0.5);
         painter->setBrush(Qt::NoBrush);
-        painter->setPen(QPen(darkTheme ? QColor(255, 255, 255, aurora ? 18 : 15) : QColor(0, 0, 0, 18), 1.0));
+        QColor edge = darkTheme ? QColor(255, 255, 255, aurora ? 18 : 15) : QColor(0, 0, 0, 18);
+        if (glow) {
+            edge = appLight;
+            edge.setAlpha(darkTheme ? 60 : 70);
+        } else if (borealis) {
+            edge = darkTheme ? QColor(255, 255, 255, 48) : QColor(255, 255, 255, 200);
+        }
+        painter->setPen(QPen(edge, 1.0));
         painter->drawRoundedRect(edgeRect, cardRadius, cardRadius);
         QLinearGradient rim(edgeRect.topLeft(), QPointF(edgeRect.left(), edgeRect.top() + px(40)));
-        rim.setColorAt(0.0, QColor(255, 255, 255, darkTheme ? (aurora ? 34 : 22) : 120));
+        rim.setColorAt(0.0, QColor(255, 255, 255, darkTheme ? (borealis ? 84 : (glow ? 60 : (aurora ? 34 : 22))) : 120));
         rim.setColorAt(1.0, QColor(255, 255, 255, 0));
         painter->setPen(QPen(QBrush(rim), 1.0));
         painter->drawRoundedRect(edgeRect, cardRadius, cardRadius);
@@ -1186,11 +1242,25 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         const QRect footer(cardRect.left(), cardRect.bottom() - footerHeight + 1, cardRect.width(), footerHeight);
         const int iconSize = px(22);
         const QRect iconRect(header.left() + pad, header.center().y() - iconSize / 2 + 1, iconSize, iconSize);
+        if (glow) {
+            // The icon is lit from behind in its own colour.
+            QRadialGradient halo(QPointF(iconRect.center()) + QPointF(0.5, 0.5), iconSize * 1.15);
+            QColor lit = appLight;
+            lit.setAlpha(darkTheme ? 150 : 110);
+            halo.setColorAt(0.0, lit);
+            halo.setColorAt(0.45, lit);
+            lit.setAlpha(0);
+            halo.setColorAt(1.0, lit);
+            painter->save();
+            painter->setClipPath(cardPath);
+            painter->fillRect(QRectF(iconRect).adjusted(-iconSize, -iconSize, iconSize, iconSize), halo);
+            painter->restore();
+        }
         drawAppIcon(iconRect, px(6));
         const QFont timeFont = uiFont(8.5, QFont::Normal);
         const int timeWidth = QFontMetrics(timeFont, painter->device()).horizontalAdvance(when) + px(4);
         const QRect timeRect(header.right() - pad - timeWidth + 1, header.top(), timeWidth, headerHeight);
-        const int titleRight = drawMarks(timeRect.left() - px(8), header.center().y() + 1, px(13));
+        const int titleRight = drawMarks(timeRect.left() - px(8), header.center().y() + 1, px(13), darkTheme);
         const int titleLeft = iconRect.right() + 1 + px(10);
         const QColor headInk = visual && darkTheme ? QColor(255, 255, 255, 235)
                                                    : (darkTheme ? QColor(255, 255, 255, 235) : QColor(24, 26, 32, 235));
@@ -1204,20 +1274,40 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         const QRect content(cardRect.left() + pad, header.bottom() + px(2), cardRect.width() - pad * 2,
                             footer.top() - header.bottom() - px(4));
         // A link without its page's picture has a band down the card's left edge.
-        const bool spineLink = card.contentType == Link && !visual;
-        if (visual || spineLink) {
+        const bool spineLink = card.contentType == Link && !visual && !poster;
+        if (poster) {
+            // Poster: the same header on every card and the same caption pill at
+            // its foot; below the header, edge to edge and down to the card's
+            // foot, each kind of content set as a poster of its own.
+            bodyRect = QRect(cardRect.left(), header.bottom() + 1, cardRect.width(), cardRect.bottom() - header.bottom());
+            painter->save();
+            QPainterPath panel;
+            panel.addRect(QRectF(bodyRect));
+            painter->setClipPath(cardPath.intersected(panel));
+            PosterCard::Words words;
+            words.kind = kindText;
+            words.count = countLabel;
+            words.code = isCode;
+            words.darkTheme = darkTheme;
+            PosterCard::paint(painter, bodyRect, card, words, appTile, scale, paintDpr, loadingPhase_, index, this);
+            painter->restore();
+        }
+        if (visual || spineLink || poster) {
             bodyRect = QRect(cardRect.left(), header.bottom() + 1, cardRect.width(), cardRect.bottom() - header.bottom());
         } else {
             // The renderers keep their own 12/8 px inset; start them so the text lands on the content edge.
             bodyRect = content.adjusted(-px(12), -px(8), px(12), px(4));
         }
-        painter->save();
-        painter->setClipPath(cardPath);
-        const CardBodyContext ctx {bodyRect, (visual || spineLink) ? bodyRect : content, card, scale, darkTheme, loadingPhase_, paintDpr,
-                                   theme.bodyTextColor, index, this, cachedTheme_};
-        bodyRendererForType(card.contentType).paint(painter, ctx);
-        painter->restore();
-        if (visual || spineLink) {
+        if (!poster) {
+            painter->save();
+            painter->setClipPath(cardPath);
+            const CardBodyContext ctx {bodyRect, (visual || spineLink) ? bodyRect : content, card, scale, darkTheme, loadingPhase_, paintDpr,
+                                       theme.bodyTextColor, index, this, cachedTheme_};
+            bodyRendererForType(card.contentType).paint(painter, ctx);
+            painter->restore();
+        }
+        // A poster's foot is Aurora's picture caption, on every card alike.
+        if (visual || spineLink || poster) {
             // The caption sits in a small pill at the card's foot, leaving the
             // picture, or a link's band and text, clear above it.
             const QFont capFont = uiFont(8.5, QFont::Normal);
@@ -1270,7 +1360,7 @@ void ClipboardCardDelegate::paintCardContent(QPainter *painter, const QStyleOpti
         const QRect detailRect(meta.right() - detailWidth + 1, meta.top(), detailWidth, metaHeight);
         CardRenderUtils::drawElidedText(painter, detailRect, detailText, metaFont, muted,
                                         Qt::AlignRight | Qt::AlignVCenter, middleElide ? Qt::ElideMiddle : Qt::ElideRight);
-        const int marksRight = drawMarks(detailRect.left() - px(8), meta.center().y() + 1, px(12));
+        const int marksRight = drawMarks(detailRect.left() - px(8), meta.center().y() + 1, px(12), darkTheme);
         const int nameWidth = qMax(0, qMin(nameNatural, marksRight - left - timeWidth - px(6)));
         CardRenderUtils::drawElidedText(painter, QRect(left, meta.top(), nameWidth, metaHeight), title, nameFont, ink,
                                         Qt::AlignLeft | Qt::AlignVCenter);

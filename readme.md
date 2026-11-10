@@ -17,6 +17,8 @@ A modern clipboard manager for Windows and Linux, inspired by [Paste](https://pa
   </tr>
 </table>
 
+![Poster cards: each item set as a poster](./screenshot/panel-poster-dark.png)
+
 | Preview (`Space`) | Quick paste stack beside the caret |
 |---|---|
 | ![Preview](./screenshot/preview.png) | ![Quick paste stack](./screenshot/quick-paste-stack.png) |
@@ -42,7 +44,7 @@ Other Linux setups can build from source (below).
 ## Features
 
 - Clipboard history for text, links, rich text, images, files, colors, and Office clipboard payloads.
-- Two card styles: **Still**, a neutral card with the content first, and **Aurora**, the source app's colour as a light in the card's corner. Light and dark themes.
+- Five card styles: **Still**, a neutral card with the content first; **Aurora**, the source app's colour as a light in the card's corner; **Glow**, that colour washed down from the card's top with its icon lit; **Borealis**, glass cards over northern lights across the panel; and **Poster**, where each item is set as a poster of its own between the same header and caption (code on a phosphor screen or in an editor, a number that fills the card, a key as a ticket stub, a link as a cover in its site's colour, rich text as a pull quote or an article, a file as a slab with its extension in giant letters, a folder as a manila folder, a colour as a printer's chip). Light and dark themes.
 - Every item records the app it was copied from (name and icon) and when; the list marks where the day changes.
 - Text cards recognise colours, single links and shell commands; long strips and tall pages are shown whole.
 - Separate clipboard and favorites boards, with independent pinning and favoriting.

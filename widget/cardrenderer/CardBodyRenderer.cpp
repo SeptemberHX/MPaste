@@ -782,6 +782,20 @@ int CardRenderUtils::webSpineWidth(int scale) {
     return qMax(30, 46 * scale / 100);
 }
 
+QColor CardRenderUtils::webSiteColor(const QUrl &url, const QPixmap &favicon) {
+    return siteColor(displayHost(url), favicon);
+}
+
+QString CardRenderUtils::webHeadline(const QUrl &url, const QString &title, QString *context) {
+    const QString host = displayHost(url);
+    const WebPathSummary path = summarizeWebPath(url);
+    const bool hasTitle = !title.trimmed().isEmpty() && !titleNamesOnlySite(title, host);
+    if (context) {
+        *context = hasTitle ? QString() : path.context;
+    }
+    return hasTitle ? title.simplified() : (!path.headline.isEmpty() ? path.headline : host);
+}
+
 void CardRenderUtils::paintWebAddress(QPainter *painter, const CardBodyContext &ctx, const QUrl &url,
                                       const QString &title, const QPixmap &favicon) {
     auto px = [&](int v) { return qMax(1, v * ctx.scale / 100); };

@@ -25,7 +25,7 @@ public:
     // What the activation shortcut opens: the bottom panel or the stack by the caret.
     enum ActivationLayout { LayoutPanel = 0, LayoutStack = 1 };
     // How cards look: Still (neutral, content first) or Aurora (the app's colour as light).
-    enum CardStyle { CardStill = 0, CardAurora = 1 };
+    enum CardStyle { CardStill = 0, CardAurora = 1, CardPoster = 2, CardGlow = 3, CardBorealis = 4 };
 
     static MPasteSettings* getInst();
 

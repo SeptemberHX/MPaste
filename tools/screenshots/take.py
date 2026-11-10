@@ -246,7 +246,8 @@ def main():
             time.sleep(.3)
 
         panel_box = (0, LOGICAL[1] - 450, LOGICAL[0], 450)
-        for theme, card, name in ((2, 0, 'panel-still-dark'), (2, 1, 'panel-aurora-dark'), (1, 0, 'panel-still-light')):
+        for theme, card, name in ((2, 0, 'panel-still-dark'), (2, 1, 'panel-aurora-dark'), (1, 0, 'panel-still-light'),
+                                  (2, 2, 'panel-poster-dark')):
             start_mpaste(theme, card)
             show_panel()
             image, scale = shot(name)

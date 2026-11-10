@@ -69,6 +69,11 @@ namespace CardRenderUtils {
     // page (its title, or what its path says).
     void paintWebAddress(QPainter *painter, const CardBodyContext &ctx, const QUrl &url,
                          const QString &title = QString(), const QPixmap &favicon = QPixmap());
+    // The site's colour (its icon's, else one from its name), and the page's
+    // headline as paintWebAddress words it: its title, what its path says, or the
+    // site's name; `context` gets where on the site, when the path gave the headline.
+    QColor webSiteColor(const QUrl &url, const QPixmap &favicon);
+    QString webHeadline(const QUrl &url, const QString &title, QString *context = nullptr);
     // The band's width: a card puts its footer line beside it.
     int webSpineWidth(int scale);
     void clearCoverPixmapCache();
