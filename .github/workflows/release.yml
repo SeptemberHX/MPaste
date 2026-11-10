@@ -43,32 +43,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # install-qt-action's own setup-python asks for '>=3.14.0', which became
-      # 3.15 on the runners, where py7zr's pyppmd, pybcj and inflate64 have no
-      # wheels yet and aqtinstall failed to install: 0.8.7 had no Windows zip.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-
+      # Qt 6.11.2 and MinGW 13.1 straight from download.qt.io, each archive
+      # checked against the .sha1 published beside it and unpacked where the
+      # repository's Updates.xml says. The same Qt as the .deb's (Ubuntu
+      # 26.10's 6.11.2), so what builds on Linux builds here. Not through
+      # install-qt-action: aqtinstall's last release (3.3.0) does not know the
+      # repository layout Qt 6.11 moved to (qt6_6112/qt6_6112_mingw/), so
+      # 0.8.7 and 0.8.8 had no Windows zip.
       - name: Install Qt and MinGW
-        uses: jurplel/install-qt-action@v4
-        with:
-          setup-python: false
-          # The same Qt as the .deb's (Ubuntu 26.10's 6.11.2), so what builds
-          # on Linux builds here; its MinGW is 13.1.
-          version: '6.11.2'
-          host: windows
-          target: desktop
-          arch: win64_mingw
-          tools: tools_mingw1310
-          cache: true
-
-      - name: Put MinGW on PATH
         shell: pwsh
         run: |
-          $mingw = Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter 'mingw*' | Select-Object -First 1
-          if (-not $mingw) { throw "MinGW was not installed under $env:IQTA_TOOLS" }
-          "$($mingw.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $repo = 'https://download.qt.io/online/qtsdkrepository/windows_x86/desktop'
+          $root = 'C:\Qt'
+          $prefix = "$root\6.11.2\mingw_64"
+          $stamp = '6.11.2-0-202608131017'
+          $suffix = 'Windows-Windows_11_24H2-Mingw-Windows-Windows_11_24H2-X86_64.7z'
+          $qt = "$repo/qt6_6112/qt6_6112_mingw/qt.qt6.6112.win64_mingw"
+          $archives = @(
+            @{ url = "$qt/${stamp}qtbase-$suffix"; to = $prefix },
+            @{ url = "$qt/${stamp}qtsvg-$suffix"; to = $prefix },
+            @{ url = "$qt/${stamp}qttools-$suffix"; to = $prefix },
+            @{ url = "$qt/${stamp}qttranslations-$suffix"; to = $prefix },
+            @{ url = "$qt/${stamp}MinGW-w64-x86_64-13.1.0-release-posix-seh-msvcrt-rt_v11-rev1-runtime.7z"; to = "$prefix\bin" },
+            @{ url = "$qt/${stamp}d3dcompiler_47-x64.7z"; to = "$prefix\bin" },
+            @{ url = "$qt/${stamp}opengl32sw-64-mesa_11_2_2-signed_sha256.7z"; to = "$prefix\bin" },
+            @{ url = "$repo/tools_mingw1310/qt.tools.win64_mingw1310/13.1.0-202407240918mingw1310.7z"; to = $root }
+          )
+          $download = "$env:RUNNER_TEMP\qt-archives"
+          New-Item -ItemType Directory -Force $download | Out-Null
+          foreach ($a in $archives) {
+            $file = Join-Path $download ([IO.Path]::GetFileName($a.url))
+            Write-Host "Downloading $($a.url)"
+            Invoke-WebRequest -Uri $a.url -OutFile $file -MaximumRetryCount 3 -RetryIntervalSec 5
+            $expected = (Invoke-WebRequest -Uri "$($a.url).sha1" -MaximumRetryCount 3 -RetryIntervalSec 5).Content
+            if ($expected -is [byte[]]) { $expected = [Text.Encoding]::ASCII.GetString($expected) }
+            $expected = $expected.Trim().Split(' ')[0].ToLower()
+            $actual = (Get-FileHash $file -Algorithm SHA1).Hash.ToLower()
+            if ($actual -ne $expected) { throw "SHA-1 mismatch for $file`: $actual, expected $expected" }
+            New-Item -ItemType Directory -Force $a.to | Out-Null
+            7z x $file "-o$($a.to)" -y -bso0 -bsp0
+            if ($LASTEXITCODE -ne 0) { throw "7z failed on $file" }
+          }
+          if (-not (Test-Path "$prefix\lib\cmake\Qt6\Qt6Config.cmake")) { throw "Qt was not unpacked into $prefix" }
+          $gxx = Get-ChildItem $root -Recurse -Filter 'g++.exe' | Where-Object { $_.DirectoryName -like '*\Tools\mingw*\bin' } | Select-Object -First 1
+          if (-not $gxx) { throw "MinGW was not unpacked under $root\Tools" }
+          "QT_ROOT_DIR=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $gxx.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          "$prefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & $gxx.FullName --version
 
       - name: Build and package
         shell: pwsh

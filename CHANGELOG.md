@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.8
+## 0.8.9
 
 A preview for links, a fix for items that lost their data on saving, and rich-text cards that follow the theme.
 
