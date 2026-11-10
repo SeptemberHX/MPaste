@@ -1,5 +1,5 @@
 // input: Depends on ClipboardItemPreviewDialog.h, Qt widgets/layout, and ClipboardItem payload accessors.
-// output: Screen-centered 980x760 previews with an independent compositor identity and capability-aware frosted surface.
+// output: Screen-centered 980x760 previews (links on their own page, LinkPreviewPane) with an independent compositor identity and capability-aware frosted surface.
 // pos: Widget-layer preview dialog implementation for larger clipboard inspection.
 // update: If I change, update this header block and my folder README.md (tuned preview font size + hidden caret/focus).
 // note: Adds fallback decoding for Qt serialized image payloads and image zoom interactions.
@@ -8,8 +8,10 @@
 #include "ClipboardCardDelegate.h"
 #include "ClipboardItemPreviewDialog.h"
 #include "ZoomableImageView.h"
+#include "LinkPreviewPane.h"
 
 #include <QCursor>
+#include <QDesktopServices>
 #include <QBuffer>
 #include <cmath>
 #include <QFileInfo>
@@ -512,6 +514,11 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
         reject();
         emit copyRequested(item);
     });
+    ui_.openButton = addAction(uiText(QStringLiteral("Open in Browser"), QStringLiteral("在浏览器中打开")), false, [this]() {
+        const QUrl url = ui_.linkPane->url();
+        reject();
+        QDesktopServices::openUrl(url);
+    });
     ui_.ocrButton = addAction(uiText(QStringLiteral("Read text"), QStringLiteral("识别文字")), false, [this]() {
         const ClipboardItem item = currentItem_;
         reject();
@@ -554,18 +561,24 @@ ClipboardItemPreviewDialog::ClipboardItemPreviewDialog(QWidget *parent)
 
     ui_.imageView = new ZoomableImageView(this);
 
+    ui_.linkPane = new LinkPreviewPane(this);
+    connect(ui_.linkPane, &LinkPreviewPane::copyTextRequested, this, [this](const QString &text) {
+        reject();
+        emit copyTextRequested(text);
+    });
+
     auto *contentHost = new QWidget(this);
     ui_.contentLayout = new QStackedLayout(contentHost);
     ui_.contentLayout->setContentsMargins(0, 0, 0, 0);
     ui_.contentLayout->addWidget(ui_.browser);
     ui_.contentLayout->addWidget(ui_.imageView);
+    ui_.contentLayout->addWidget(ui_.linkPane);
     ui_.contentLayout->setCurrentWidget(ui_.browser);
     cardLayout->addWidget(contentHost, 1);
 
     ui_.footerLabel = new QLabel(this);
     ui_.footerLabel->setObjectName(QStringLiteral("auroraHint"));
-    ui_.footerLabel->setText(uiText(QStringLiteral("Enter  paste      Space / Esc  close"),
-                                    QStringLiteral("↵  粘贴      Space / Esc  关闭")));
+    setFooterHint(false);
     cardLayout->addWidget(ui_.footerLabel);
 
     applyTheme(ThemeManager::instance()->isDark());
@@ -598,7 +611,8 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
     ui_.iconLabel->setPixmap(ClipboardCardDelegate::appIconTile(
         item.getIcon(), item.getSourceApp().isEmpty() ? QStringLiteral("M") : item.getSourceApp(), 32, devicePixelRatioF()));
     ui_.ocrButton->setVisible(contentType == Image || contentType == Office);
-    ui_.saveButton->setVisible(contentType != File);
+    ui_.saveButton->setVisible(contentType != File && contentType != Link);
+    ui_.openButton->setVisible(false);
 
     // The card's own name, then what it is and when it was copied (the stored file name means nothing to people).
     const QString alias = item.getAlias().trimmed();
@@ -631,6 +645,10 @@ void ClipboardItemPreviewDialog::showItem(const ClipboardItem &item) {
         facts << uiText(QStringLiteral("%1 files"), QStringLiteral("%1 个文件")).arg(item.getNormalizedUrls().size());
     }
     ui_.subtitleLabel->setText(facts.join(QStringLiteral(" \u00B7 ")));
+
+    if (contentType == Link && showLink(item)) {
+        return;
+    }
 
     ui_.browser->clear();
     ui_.browser->document()->clear();
@@ -927,7 +945,9 @@ int ClipboardItemPreviewDialog::heightForContent() const {
     }
     const int chrome = height() - host->height();
     int content = host->height();
-    if (isImagePreviewActive()) {
+    if (isLinkPreviewActive()) {
+        content = ui_.linkPane->preferredHeight(host->width());
+    } else if (isImagePreviewActive()) {
         const QSize image = ui_.imageView->imageSize();
         if (image.isValid()) {
             const qreal scale = qMin<qreal>(1.0, host->width() / qMax<qreal>(1.0, image.width()));
@@ -981,12 +1001,72 @@ void ClipboardItemPreviewDialog::applyTheme(bool dark) {
     }
     setStyleSheet(AuroraChrome::styleSheet(darkTheme_)
                   + QStringLiteral("QTextBrowser#auroraWell { font-size: 15px; padding: 12px 14px; }"));
+    if (ui_.linkPane) {
+        ui_.linkPane->applyTheme(darkTheme_);
+    }
     update();
 }
 
 bool ClipboardItemPreviewDialog::isImagePreviewActive() const {
     return ui_.contentLayout && ui_.imageView
         && ui_.contentLayout->currentWidget() == ui_.imageView;
+}
+
+bool ClipboardItemPreviewDialog::isLinkPreviewActive() const {
+    return ui_.contentLayout && ui_.linkPane
+        && ui_.contentLayout->currentWidget() == ui_.linkPane;
+}
+
+bool ClipboardItemPreviewDialog::showLink(const ClipboardItem &item) {
+    QString address = item.getUrl().trimmed();
+    if (address.isEmpty()) {
+        address = item.getNormalizedText().trimmed();
+    }
+    if (!ContentClassifier::isWebLinkText(address)) {
+        return false;
+    }
+    const QUrl url(address);
+    if (!url.isValid() || url.host().isEmpty()) {
+        return false;
+    }
+    // The card's picture is the page's own (a link's thumbnail is nothing else).
+    ui_.linkPane->setLink(url, item.getTitle(), item.getFavicon(),
+                          item.hasThumbnail() ? item.thumbnail() : QPixmap(),
+                          accent_, BoardHelpers::prefersChineseUi());
+    ui_.contentLayout->setCurrentWidget(ui_.linkPane);
+    ui_.openButton->setVisible(true);
+    setFooterHint(true);
+    ++previewToken_;   // a load still running for the previous item is dropped
+
+    QScreen *targetScreen = nullptr;
+    if (QWidget *anchor = parentWidget()) {
+        if (QWindow *windowHandle = anchor->window()->windowHandle()) {
+            targetScreen = windowHandle->screen();
+        }
+    }
+    if (!targetScreen) targetScreen = QGuiApplication::screenAt(QCursor::pos());
+    if (!targetScreen) targetScreen = QGuiApplication::primaryScreen();
+    if (targetScreen) {
+        screenArea_ = targetScreen->availableGeometry();
+        resize(qMin(kPreviewDialogWidth, qMax(1, screenArea_.width() - 32)), height());
+    }
+    revealSizedToContent();
+    return true;
+}
+
+void ClipboardItemPreviewDialog::setFooterHint(bool link) {
+    if (!link) {
+        ui_.footerLabel->setText(uiText(QStringLiteral("Enter  paste      Space / Esc  close"),
+                                        QStringLiteral("↵  粘贴      Space / Esc  关闭")));
+        return;
+    }
+    QString hint = uiText(QStringLiteral("Enter  paste      Shift+Enter  paste as Markdown      O  open in browser"),
+                          QStringLiteral("↵  粘贴      Shift ↵  粘贴为 Markdown      O  在浏览器中打开"));
+    if (ui_.linkPane->hasTrackingParameters()) {
+        hint += uiText(QStringLiteral("      C  copy clean link"), QStringLiteral("      C  复制干净链接"));
+    }
+    hint += uiText(QStringLiteral("      Space / Esc  close"), QStringLiteral("      Space / Esc  关闭"));
+    ui_.footerLabel->setText(hint);
 }
 
 bool ClipboardItemPreviewDialog::handleImageZoomKey(QKeyEvent *event) {
@@ -1046,6 +1126,31 @@ void ClipboardItemPreviewDialog::keyPressEvent(QKeyEvent *event) {
         event->accept();
         return;
     }
+    if (isLinkPreviewActive()) {
+        const bool shift = event->modifiers() == Qt::ShiftModifier;
+        const bool plain = event->modifiers() == Qt::NoModifier;
+        if (shift && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)) {
+            const QString text = ui_.linkPane->markdown();
+            reject();
+            emit pasteTextRequested(text);
+            event->accept();
+            return;
+        }
+        if (plain && event->key() == Qt::Key_O) {
+            const QUrl url = ui_.linkPane->url();
+            reject();
+            QDesktopServices::openUrl(url);
+            event->accept();
+            return;
+        }
+        if (plain && event->key() == Qt::Key_C && ui_.linkPane->hasTrackingParameters()) {
+            const QString text = ui_.linkPane->cleanAddress();
+            reject();
+            emit copyTextRequested(text);
+            event->accept();
+            return;
+        }
+    }
     if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         const ClipboardItem item = currentItem_;
         reject();
@@ -1101,6 +1206,10 @@ void ClipboardItemPreviewDialog::releasePreviewContent() {
 
     if (ui_.imageView) {
         ui_.imageView->clear();
+    }
+    if (ui_.linkPane) {
+        ui_.linkPane->clear();
+        setFooterHint(false);
     }
     if (ui_.contentLayout && ui_.browser) {
         ui_.contentLayout->setCurrentWidget(ui_.browser);

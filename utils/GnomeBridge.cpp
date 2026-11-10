@@ -7,6 +7,7 @@
 #include "GnomeBridge.h"
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusServiceWatcher>
 #include <QDebug>
 #include <QTimer>
@@ -68,6 +69,10 @@ bool GnomeBridge::needsDesktopShortcut() {
     return isWayland() || (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
         && qEnvironmentVariable("XDG_CURRENT_DESKTOP").contains("GNOME", Qt::CaseInsensitive));
 }
+bool GnomeBridge::companionRunning() {
+    const auto *bus = QDBusConnection::sessionBus().interface();
+    return bus && bus->isServiceRegistered(QString::fromLatin1(service)).value();
+}
 GnomeBridge *GnomeBridge::instance() {
     static auto *bridge = new GnomeBridge;
     return bridge;
@@ -102,9 +107,17 @@ bool GnomeBridge::registerShortcut(const QString &accelerator) {
     accelerator_ = accelerator;
     const auto registration = call("Register", {uint(QCoreApplication::applicationPid())});
     if (registration.type() == QDBusMessage::ErrorMessage) {
+        // Right after a restart the companion may still hold the previous
+        // MPaste's connection until it notices that one is gone: try again.
+        if (registration.errorMessage().contains(QStringLiteral("already connected"))
+            && registerRetries_ < 20) {
+            ++registerRetries_;
+            QTimer::singleShot(250, this, &GnomeBridge::reconnect);
+        }
         qInfo() << "[gnome-shortcut] using GNOME Settings launcher until the companion loads";
         return desktopShortcut(accelerator);
     }
+    registerRetries_ = 0;
     desktopShortcut(QString()); // Release the temporary compositor binding before grabbing it.
     auto reply = call("BindShortcut", {accelerator});
     return reply.type() != QDBusMessage::ErrorMessage && !reply.arguments().isEmpty()

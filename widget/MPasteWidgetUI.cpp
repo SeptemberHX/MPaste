@@ -389,7 +389,12 @@ void MPasteWidget::initMenu() {
         menu->addAction(ui_.quitAction);
     };
     addActions(ui_.menu);
-    addActions(ui_.trayMenu);
+    // The tray menu goes without icons: the same entries as text alone.
+    if (ui_.trayMenu) {
+        ui_.trayMenu->addAction(ui_.settingsAction->text(), ui_.settingsAction, &QAction::trigger);
+        ui_.trayMenu->addSeparator();
+        ui_.trayMenu->addAction(ui_.quitAction->text(), ui_.quitAction, &QAction::trigger);
+    }
 
     BoardHelpers::applyMenuTheme(ui_.menu);
     BoardHelpers::applyMenuTheme(ui_.trayMenu);

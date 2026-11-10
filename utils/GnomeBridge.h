@@ -18,6 +18,9 @@ public:
     static bool isWayland();
     static bool needsDesktopShortcut();
     static GnomeBridge *instance();
+    // Whether the companion extension is running (its D-Bus name is on the bus),
+    // whether or not this MPaste has registered with it yet.
+    static bool companionRunning();
     QDBusMessage call(const QString &method, const QVariantList &args = {});
     bool registerShortcut(const QString &accelerator);
     void unregisterShortcut();
@@ -35,6 +38,7 @@ private slots:
 private:
     GnomeBridge();
     QString accelerator_;
+    int registerRetries_ = 0;
     QCache<uint, QPixmap> sourceIcons_{64};
     QCache<uint, QString> sourceNames_{64};
 };

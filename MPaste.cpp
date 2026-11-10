@@ -409,7 +409,7 @@ int main(int argc, char* argv[]) {
         bool needsExtension = false;
 #ifdef Q_OS_LINUX
         if (GnomeBridge::isWayland()) {
-            needsExtension = GnomeBridge::instance()->call("CurrentWindow").type() == QDBusMessage::ErrorMessage;
+            needsExtension = !GnomeBridge::companionRunning();
         }
 #endif
         const bool firstRun = MPasteSettings::getInst()->getOnboardingVersion() < 1;
@@ -418,17 +418,19 @@ int main(int argc, char* argv[]) {
         }
 #ifdef Q_OS_LINUX
         if (GnomeBridge::isWayland() && !firstRun) {
-            const auto reply = GnomeBridge::instance()->call("CurrentWindow");
-            if (reply.type() == QDBusMessage::ErrorMessage) {
-                QTimer::singleShot(0, &widget, [&widget]() {
+            // Only when the extension is not running at all: a failed or late
+            // registration (a restart, the extension loading after MPaste at
+            // login) is retried by GnomeBridge and needs nothing from the user.
+            QTimer::singleShot(3000, &widget, [&widget]() {
+                if (!GnomeBridge::companionRunning()) {
                     QMessageBox::warning(&widget, QStringLiteral("MPaste — GNOME Wayland"),
                         QStringLiteral("Enable the MPaste Wayland Integration GNOME extension, "
                                        "then log out and log back in.\n\n"
                                        "Setup: python3 tools/install_gnome_wayland.py\n\n"
                                        "Background clipboard capture, the global shortcut and automatic "
                                        "paste require this extension on GNOME Wayland."));
-                });
-            }
+                }
+            });
         }
 #endif
         return app.exec();

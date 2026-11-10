@@ -22,6 +22,7 @@ update: 修改本目录文件时，同步更新本 README。
 - `MPasteSettings.h` / `MPasteSettings.cpp`：运行配置、持久化设置与默认值管理。`privacy/skipSensitive`（默认开）与 `privacy/ignoredApps`（默认预填 Bitwarden、KeePassXC、KeePass、1Password，按来源应用名不区分大小写匹配）。
 - `ThemeManager.h` / `ThemeManager.cpp`：统一管理应用主题切换、调色板更新与 QSS token 替换。
 - `IconResolver.h` / `IconResolver.cpp`：解析亮色 / 暗色图标资源并提供主题化图标。
+- `UrlTidy.h` / `UrlTidy.cpp`：网址的参数列表与“干净链接”：标出只记录分享来源的参数（`utm_*`、`spm`、`vd_source`、`spm_id_from`、`share_source` 等、`fbclid`/`gclid` 等；`si` 只在 YouTube/Spotify、`s`/`t` 只在 X、`scene`/`srcid` 只在微信文章），去掉它们时其余参数保持原顺序和编码。`share_token`、`xsec_token` 这类有的网站要用的参数不算跟踪。
 - `OpenGraphFetcher.h` / `OpenGraphFetcher.cpp`：抓取网页 Open Graph 元数据，供链接卡片预览使用。
 - `PlatformRelated.h` / `PlatformRelated.cpp`：平台相关辅助能力，例如粘贴注入、窗口行为和系统交互。
 - `ClipboardExportService.h` / `ClipboardExportService.cpp`：剪贴板导出服务，提供 `buildMimeData()` 用于从条目构建导出载荷。
@@ -78,7 +79,7 @@ update: 修改本目录文件时，同步更新本 README。
 
 ## GNOME 51 Wayland integration
 
-- `GnomeBridge.h/.cpp` provides the Qt DBus client for the bundled Shell companion, directed MIME snapshots, shortcut signals and automatic reconnect.
+- `GnomeBridge.h/.cpp` provides the Qt DBus client for the bundled Shell companion, directed MIME snapshots, shortcut signals and automatic reconnect (retrying `Register` while the extension still holds a previous MPaste's connection); `companionRunning()` tells whether the extension is on the bus at all.
 - `ClipboardMonitor` consumes complete bridge snapshots on Wayland instead of reading the unfocused Qt clipboard; self-paste and duplicate guards remain active.
 - `HotKeyManager` delegates Wayland accelerators to GNOME. XCB members are initialized even when the X11 backend is skipped.
 - `PlatformRelated` routes focus, panel activation and paste injection through GNOME; compositor IDs use a separate numeric namespace from Qt window IDs.

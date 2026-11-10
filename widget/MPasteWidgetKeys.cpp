@@ -317,7 +317,17 @@ bool MPasteWidget::eventFilter(QObject *watched, QEvent *event) {
         }
     } else if (event->type() == QEvent::InputMethod && watched == ui_.ui->searchEdit) {
         // Unfold as soon as an input method starts composing, so the preedit shows.
-        const auto *imEvent = static_cast<QInputMethodEvent *>(event);
+        auto *imEvent = static_cast<QInputMethodEvent *>(event);
+        // With an input method (fcitx), Space on the empty box reaches it as a
+        // committed " " rather than as a key, and was typed into the box: the
+        // space opens the preview, as the key does.
+        if (ui_.ui->searchEdit->text().isEmpty() && imEvent->preeditString().isEmpty()
+            && !imEvent->commitString().isEmpty() && imEvent->commitString().trimmed().isEmpty()) {
+            qInfo() << "[search] input-method space on the empty box -> preview";
+            imEvent->accept();
+            handlePreviewKey();
+            return true;
+        }
         if (!ui_.searchExpanded && (!imEvent->preeditString().isEmpty() || !imEvent->commitString().isEmpty())) {
             setFocusOnSearch(true);
         }

@@ -8,6 +8,7 @@
 #include <QDialog>
 #include "data/ClipboardItem.h"
 
+class LinkPreviewPane;
 class ZoomableImageView;
 class QLabel;
 class QScrollArea;
@@ -31,6 +32,10 @@ signals:
     void copyRequested(const ClipboardItem &item);
     void ocrRequested(const ClipboardItem &item);
     void saveRequested(const ClipboardItem &item);
+    // A link's text forms (its address as Markdown, without tracking, ...):
+    // pasted or put on the clipboard as plain text.
+    void pasteTextRequested(const QString &text);
+    void copyTextRequested(const QString &text);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -44,6 +49,10 @@ private:
     void releasePreviewContent();
     bool handleImageZoomKey(QKeyEvent *event);
     bool isImagePreviewActive() const;
+    bool isLinkPreviewActive() const;
+    // Links get their own page: picture, site, title, address and parameters.
+    bool showLink(const ClipboardItem &item);
+    void setFooterHint(bool link);
     // The window height that shows the loaded content whole, within the screen.
     int heightForContent() const;
     // Sizes the window to its content and puts it on screen (centred on first show).
@@ -55,6 +64,8 @@ private:
         QStackedLayout *contentLayout = nullptr;
         QTextBrowser *browser = nullptr;
         ZoomableImageView *imageView = nullptr;
+        LinkPreviewPane *linkPane = nullptr;
+        QWidget *openButton = nullptr;
         QToolButton *closeButton = nullptr;
         QLabel *iconLabel = nullptr;
         QWidget *actions = nullptr;

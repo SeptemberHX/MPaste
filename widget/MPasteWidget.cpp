@@ -42,6 +42,7 @@
 #include "WindowBlurHelper.h"
 #include "utils/IconResolver.h"
 #include "MPasteWidget.h"
+#include <QMimeData>
 #include "SurfacePainter.h"
 #include "AuroraChrome.h"
 #include "ClipboardCardDelegate.h"
@@ -374,6 +375,21 @@ ClipboardItemPreviewDialog *MPasteWidget::ensurePreviewDialog() {
         ui_.previewDialog = new ClipboardItemPreviewDialog(this);
         ui_.previewDialog->setWindowFlag(Qt::Tool);
         wireItemActions(ui_.previewDialog);
+        // A link's other forms (Markdown, without tracking): plain text, set
+        // the way an item is, so the copy does not come back as a new card.
+        auto textItem = [](const QString &text) {
+            QMimeData mimeData;
+            mimeData.setText(text);
+            return ClipboardItem(QPixmap(), &mimeData);
+        };
+        connect(ui_.previewDialog, &ClipboardItemPreviewDialog::pasteTextRequested, this, [this, textItem](const QString &text) {
+            if (controller_->setClipboard(textItem(text), true)) {
+                hideAndPaste();
+            }
+        });
+        connect(ui_.previewDialog, &ClipboardItemPreviewDialog::copyTextRequested, this, [this, textItem](const QString &text) {
+            controller_->setClipboard(textItem(text), true);
+        });
         ui_.previewDialog->hide();
     }
     return ui_.previewDialog;
